@@ -694,34 +694,53 @@ test("HTTP refusals never parse JSON/text/arrayBuffer error bodies or expose the
   }
 });
 
-test("private deadline includes body; cancelling a stalled reader cancels its stream and zeros consumed chunks", async () => {
+test("private deadline includes body; cancelling a stalled reader cancels its stream and zeros consumed chunks", async (context) => {
   let cancelled = 0;
+  let reachedStalledRead!: () => void;
+  const stalledRead = new Promise<void>((resolve) => {
+    reachedStalledRead = resolve;
+  });
   const chunk = new Uint8Array([1, 2]);
+  // No prefetch: pull occurs only when the transport requests its second
+  // read, after it has copied and zeroed the first consumed chunk.
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(chunk);
+      },
+      pull() {
+        reachedStalledRead();
+      },
+      cancel() {
+        cancelled++;
+      },
+    }, { highWaterMark: 0 }),
+    { headers: { "Content-Type": "application/pdf" } },
+  );
   const transport = new JsonTransport(
     "https://caseops.ai",
     false,
     true,
     { platform: "ios", version: "0.1.0" },
-    async () =>
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.enqueue(chunk);
-          },
-          cancel() {
-            cancelled++;
-          },
-        }),
-        { headers: { "Content-Type": "application/pdf" } },
-      ),
+    async () => response,
     10,
   );
-  await assert.rejects(
-    transport.requestBytes(privatePath, { maxBytes: 10 }, "fixture-access"),
-    byteError("request_aborted"),
-  );
-  assert.equal(cancelled, 1);
-  assert.deepEqual(chunk, new Uint8Array(2));
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1700000000000 });
+  try {
+    const request = transport.requestBytes(privatePath, { maxBytes: 10 }, "fixture-access");
+    const rejection = assert.rejects(request, byteError("request_aborted"));
+    await stalledRead;
+    assert.deepEqual(chunk, new Uint8Array(2), "the transport actually consumed its first chunk");
+    context.mock.timers.tick(9);
+    await Promise.resolve();
+    assert.equal(cancelled, 0, "the original ten-millisecond deadline has not elapsed");
+    context.mock.timers.tick(1);
+    await rejection;
+    assert.equal(cancelled, 1);
+    assert.deepEqual(chunk, new Uint8Array(2));
+  } finally {
+    context.mock.timers.reset();
+  }
 });
 
 test("caller abort is bounded even for a fetcher ignoring its signal; late response is cancelled", async () => {

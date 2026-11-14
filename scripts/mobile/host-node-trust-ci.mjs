@@ -185,7 +185,7 @@ export function appendCITrustOutputs(file, root, environment, context = undefine
 // Executed copies must independently pass the unchanged strict owner rule.
 const REVIEWED_RUNTIME_SOURCES = Object.freeze([
   Object.freeze({ role: 'helper', name: 'host-node-trust.mjs', gitMode: '100644', gitBlobSha1: 'b659d65faca119a0cc78ab12c8d41a224bf6d112', sha256: '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18', sizeBytes: 29741 }),
-  Object.freeze({ role: 'bootstrap', name: 'host-node-trust-start.mjs', gitMode: '100644', gitBlobSha1: '1ec73b3c42d8b79d93775d56ffad383645c55ce8', sha256: 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1', sizeBytes: 6068 }),
+  Object.freeze({ role: 'bootstrap', name: 'host-node-trust-start.mjs', gitMode: '100644', gitBlobSha1: '3f08aeb00815650e61beaa32faf097af0b05602e', sha256: '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a', sizeBytes: 6068 }),
 ]);
 const sha = data => createHash('sha256').update(data).digest('hex');
 function sourceAclFrames(objects, check) {

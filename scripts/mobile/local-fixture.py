@@ -61,7 +61,7 @@ def initial_gateway_routes(matter_id, draft_id):
     # Exact method/path admission only. Query validation and native authority
     # remain API contracts; this public policy GET still needs the no-paid marker.
     return {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
-            "GET /api/auth/native/compatibility",
+            "GET /api/auth/native/compatibility", "GET /api/account/workspace-conduct",
             "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
             "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
             "GET /api/auth/native/sessions", f"GET /api/matters/{matter_id}",

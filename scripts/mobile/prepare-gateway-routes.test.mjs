@@ -50,7 +50,8 @@ test('gateway evidence Windows dev-zero portability preserves pre-read identity 
     }
   }
 });
-function input(t, { receiptPatch = {}, statusPatch = {}, routes = ['GET /api/build', 'GET /api/auth/native/sessions'] } = {}) {
+function input(t, { receiptPatch = {}, statusPatch = {}, routes = ['GET /api/build', 'GET /api/auth/native/sessions'],
+  routeConfig = {} } = {}) {
   const cache = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-gateway-export-')));
   t.after(() => rmSync(cache, { recursive: true, force: true }));
   const write = (name, value) => {
@@ -66,7 +67,7 @@ function input(t, { receiptPatch = {}, statusPatch = {}, routes = ['GET /api/bui
     fixtureSourceHashes: { 'scripts/mobile/local-gateway.py': implementationSha256 }, ...receiptPatch };
   const status = { runId: receipt.gatewayRunId, implementationSha256, accepted: 0, lastSequence: 0, markerRejected: 0,
     routeRejected: 0, overflow: false, requests: [], sessionDeleteAdmissions: [], ...statusPatch };
-  write('gateway-routes.json', { routes });
+  write('gateway-routes.json', { routes, ...routeConfig });
   return { cache, dockerReceipt: write('receipt.json', receipt), statusEvidence: write('actual-status.json', status),
     output: path.join(cache, 'gateway-descriptor.json'), receipt, status, write };
 }
@@ -114,6 +115,39 @@ test('export refuses invented static DELETE IDs, wildcard routes, duplicate inve
     const fixture = input(t, { routes });
     assert.throws(() => prepareGatewayRoutes(fixture));
     assert.equal(existsSync(fixture.output), false);
+  }
+});
+
+test('export binds the exact optional Core Matter-read scope without admitting a generic path', (t) => {
+  const runId = 'caseops-mobile-unit-core-a1b2c3d4';
+  const digest = (target) => createHash('sha256').update(target).digest('hex');
+  const targets = ['/api/matters/?limit=25',
+    ...Array.from({ length: 8 }, (_, index) => '/api/matters/?limit=25&q=fixture-' + index)].map(digest);
+  const statusPatch = { v1ControlsEnabled: false, v1ControlRunClosed: false };
+  const fixture = (admission, options = {}) => input(t, { receiptPatch: { gatewayRunId: runId }, statusPatch,
+    routeConfig: { coreMatterReadAdmission: admission }, ...options });
+  const consent = { runId, stage: 'consent', targetSha256: targets.slice(0, 2) };
+  for (const admission of [consent, { runId, stage: 'full-core', targetSha256: targets }]) {
+    const valid = fixture(admission);
+    prepareGatewayRoutes(valid);
+    const descriptor = JSON.parse(readFileSync(valid.output));
+    assert.ok(!descriptor.routes.includes('GET /api/matters/'));
+    const retained = JSON.parse(readFileSync(descriptor.routeInventoryEvidence.path));
+    assert.deepEqual(retained.coreMatterReadAdmission, admission);
+    assert.ok(!JSON.stringify(retained).includes('fixture-0'));
+  }
+  const refusals = [
+    fixture({ ...consent, runId: 'caseops-mobile-unit-core-d4c3b2a1' }),
+    fixture({ ...consent, targetSha256: targets }),
+    fixture({ ...consent, targetSha256: targets.slice(0, 1).concat(targets[0]) }),
+    fixture({ ...consent, targetSha256: [targets[1], targets[0]] }),
+    fixture({ ...consent, targetSha256: [targets[0], '/api/matters/?limit=25&q=private'] }),
+    fixture(consent, { routes: ['GET /api/auth/native/sessions', 'GET /api/matters/'] }),
+    fixture(consent, { statusPatch: { ...statusPatch, v1ControlsEnabled: true } }),
+  ];
+  for (const refused of refusals) {
+    assert.throws(() => prepareGatewayRoutes(refused), /EXACT_CORE_MATTER_READ_ADMISSION_REQUIRED/);
+    assert.equal(existsSync(refused.output), false);
   }
 });
 

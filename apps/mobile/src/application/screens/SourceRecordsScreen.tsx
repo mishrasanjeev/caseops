@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Fact, RecordRow } from "../../components/Content";
@@ -38,6 +38,10 @@ export type SourceRecordsScreenProps = {
   active: boolean;
   openSource: (source: SourceRef, locator?: SourceLocator) => void;
 };
+type SourcePage = { history: (string | null)[]; number: number };
+type SourceListProps = SourceRecordsScreenProps & {
+  pagination: [SourcePage, Dispatch<SetStateAction<SourcePage>>];
+};
 
 function useSourceInteraction(active: boolean) {
   const committed = useRef<object | null>(null);
@@ -68,9 +72,13 @@ function useSourceInteraction(active: boolean) {
 export function SourceRecordsScreen(props: SourceRecordsScreenProps) {
   const { kind } = props;
   const interaction = useSourceInteraction(props.active);
+  // The navigation host retains this cursor while detail is open. Children
+  // unmount when inactive, so no result/cache or old request survives Back.
+  const pagination = useState<SourcePage>({ history: [null], number: 1 });
   if (!props.active) return null;
   const listProps = {
     ...props,
+    pagination,
     openSource: (...args: Parameters<SourceRecordsScreenProps["openSource"]>) =>
       interaction.run(() => props.openSource(...args)),
   };
@@ -104,15 +112,10 @@ function useSourcePagination<T>(
   key: string,
   load: (cursor: string | null, signal: AbortSignal) => Promise<T>,
   active: boolean,
+  pagination: SourceListProps["pagination"],
 ) {
   const interaction = useSourceInteraction(active);
-  const [page, setPage] = useState<{
-    history: (string | null)[];
-    number: number;
-  }>({
-    history: [null],
-    number: 1,
-  });
+  const [page, setPage] = pagination;
   const [pageError, setPageError] = useState<ReturnType<
     typeof readFailure
   > | null>(null);
@@ -163,11 +166,13 @@ function ContractRecords({
   repository,
   active,
   openSource,
-}: SourceRecordsScreenProps) {
+  pagination,
+}: SourceListProps) {
   const paging = useSourcePagination(
     `contract-source-page:${repository.companyId}`,
     (cursor, signal) => repository.contracts(cursor, signal),
     active,
+    pagination,
   );
   return (
     <ScrollView
@@ -239,11 +244,13 @@ function IpRecords({
   repository,
   active,
   openSource,
-}: SourceRecordsScreenProps) {
+  pagination,
+}: SourceListProps) {
   const paging = useSourcePagination(
     `ip-source-page:${repository.companyId}`,
     (cursor, signal) => repository.ipPage(cursor, signal),
     active,
+    pagination,
   );
   return (
     <ScrollView

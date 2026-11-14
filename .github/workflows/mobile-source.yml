@@ -40,6 +40,37 @@ jobs:
           cache-dependency-path: apps/mobile/package-lock.json
       - uses: ./.github/actions/node-trust
         id: node_trust
+      - name: Protect the exact pinned public npm archive on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        timeout-minutes: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz'
+          $item = Get-Item -LiteralPath $archive -Force
+          if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 4043346) { throw 'NPM_ARCHIVE_TYPE_OR_EXTENT' }
+          $rights = [Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions
+          $stream = [IO.FileStream]::new($archive, [IO.FileMode]::Open, $rights, [IO.FileShare]::Read, 4096, [IO.FileOptions]::None)
+          $hash = [Security.Cryptography.SHA256]::Create()
+          try {
+            $expected = 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'
+            $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+            if ($actual -ne $expected) { throw 'NPM_ARCHIVE_DIGEST' }
+            $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+            $acl = [Security.AccessControl.FileSecurity]::new()
+            $acl.SetAccessRuleProtection($true, $false)
+            foreach ($sid in @($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+              $principal = [Security.Principal.SecurityIdentifier]::new($sid)
+              $rule = [Security.AccessControl.FileSystemAccessRule]::new($principal, [Security.AccessControl.FileSystemRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow)
+              $acl.AddAccessRule($rule)
+            }
+            $stream.SetAccessControl($acl)
+            if (-not $stream.GetAccessControl().AreAccessRulesProtected) { throw 'NPM_ARCHIVE_ACL_NOT_PROTECTED' }
+            $stream.Position = 0
+            $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+            if ($actual -ne $expected -or $stream.Length -ne 4043346) { throw 'NPM_ARCHIVE_CHANGED' }
+            Write-Output 'Protected only the held, digest-pinned public installer archive; installer ACL checks remain mandatory.'
+          } finally { $hash.Dispose(); $stream.Dispose() }
       - name: Install this platform's exact locked mobile graph
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
@@ -279,7 +310,7 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/camera-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs apps/mobile/e2e/evidence.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/store-artifact-postflight.test.mjs scripts/mobile/store-packaging-execution.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/deepmerge-security.test.mjs scripts/mobile/deepmerge-installed.test.mjs scripts/mobile/npm-tooling.test.mjs scripts/mobile/privacy-policy.test.mjs scripts/mobile/prepare-source-exports.test.mjs apps/mobile/e2e/v1-workflows.test.mjs scripts/mobile/v1-workflows-credentials.test.mjs apps/mobile/e2e/queue-privacy.test.mjs scripts/mobile/client-extensions.test.mjs scripts/mobile/android-qa-observer.test.mjs scripts/mobile/android-qa-observer-build.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-files-facts.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/camera-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs apps/mobile/e2e/evidence.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/store-artifact-postflight.test.mjs scripts/mobile/store-packaging-execution.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/deepmerge-security.test.mjs scripts/mobile/deepmerge-installed.test.mjs scripts/mobile/npm-tooling.test.mjs scripts/mobile/privacy-policy.test.mjs scripts/mobile/prepare-source-exports.test.mjs apps/mobile/e2e/v1-workflows.test.mjs scripts/mobile/v1-workflows-credentials.test.mjs apps/mobile/e2e/queue-privacy.test.mjs scripts/mobile/client-extensions.test.mjs scripts/mobile/android-qa-observer.test.mjs scripts/mobile/android-qa-observer-build.test.mjs
       - name: Verify guarded local store packaging child transport
         run: python3 scripts/mobile/store-packaging-host.test.py
       - name: Verify QA-only Android observer merged manifest projection
@@ -288,6 +319,8 @@ jobs:
         run: python3 scripts/mobile/local-fixture.test.py
       - name: Verify deterministic private deepmerge package
         run: python3 scripts/mobile/rebuild-deepmerge-compat.test.py
+      - name: Verify isolated nonbillable V1 entitlement authority
+        run: python3 scripts/mobile/local-v1-entitlements.test.py
       - name: Verify disabled-by-default synthetic V1 controls
         run: python3 scripts/mobile/local-v1-controls.test.py
       - name: Verify separate queue and account-request controls

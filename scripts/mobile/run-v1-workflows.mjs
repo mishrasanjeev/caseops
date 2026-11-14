@@ -11,19 +11,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { OBSERVER_IDENTITY, attestAndroidFilesContainers } from './android-files-privacy.mjs';
 import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
-import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
+import { attestAndroidBinary, attestLocalQAAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
-import { validateBuildReceipt, validateCoreFixture, admitApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { binaryHash, localJson, Journal, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { validateBuildReceipt, validateNativeFixtureAuthentication, admitApplication, admitLocalQAApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { binaryHash, localJson, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { traffic, delta } from '../../apps/mobile/e2e/journeys.mjs';
 import { find, visible, selector, dispatchNativeClick, restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { appiumSessionEvent, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
-import { requirePreparedV1, v1PrivateReference, readV1Reference, readV1Bytes, validateV1ExecutionFixture, validateV1FixtureAggregate, strictV1Routes, V1_CONTROL_CAPABILITIES, reconcileV1Sessions, reconcileV1ControlIdentities } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
+import { requirePreparedV1, v1PrivateReference, validateV1ActorPrivateMapping, readV1Reference, readV1Bytes, validateV1ExecutionFixture, validateV1FixtureAggregate, strictV1Routes, V1_CONTROL_CAPABILITIES, reconcileV1Sessions, reconcileV1ControlIdentities } from '../../apps/mobile/e2e/v1-workflows-contract.mjs';
 import { V1_BUDGETS, V1_CASE_CONTROL_LIMITS } from '../../apps/mobile/e2e/v1-workflows-inventory.mjs';
 import { collectV1Workflows, v1WorkflowScenarios, prepareV1Context } from '../../apps/mobile/e2e/v1-workflows.mjs';
+
+import { V1RunEvidence, V1OwnedSessions, finishV1Evidence, verifyV1SessionAbsence, readV1SessionStatus } from '../../apps/mobile/e2e/v1-run-evidence.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const INPUTS = [...OBSERVER_SOURCE_INPUTS, 'apps/mobile/e2e/v1-workflows-inventory.mjs', 'apps/mobile/e2e/v1-workflows-contract.mjs',
@@ -42,13 +44,22 @@ export function v1HarnessFingerprint(root = ROOT) {
 const toolEnvironment = environment => Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'DEVELOPER_DIR', 'SYSTEMROOT', 'TEMP', 'TMPDIR',
   'ANDROID_USER_HOME', 'ADB_SERVER_SOCKET', 'ANDROID_ADB_SERVER_PORT', 'ANDROID_SERIAL', 'CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE'].filter(k => typeof environment[k] === 'string').map(k => [k, environment[k]]));
 export function observeInstalled(fixture, platform, expectedHash, environment) {
+  return observeInstalledApplication(fixture, platform, expectedHash, environment, attestAndroidBinary);
+}
+
+export function observeLocalQAInstalled(fixture, platform, expectedHash, environment) {
+  admitLocalQAApplication(fixture, platform);
+  return observeInstalledApplication(fixture, platform, expectedHash, environment, attestLocalQAAndroidBinary);
+}
+
+function observeInstalledApplication(fixture, platform, expectedHash, environment, attestAndroid) {
   const tools = toolEnvironment(environment);
   if (platform === 'android' && tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE !== undefined) {
     assert.equal(tools.CASEOPS_MOBILE_ANDROID_TRANSPORT_MODE, fixture.androidTransport?.transportMode ?? 'emulator', 'V1_ANDROID_TRANSPORT_MODE_MISMATCH');
   }
   const command = (file, args, options) => execFileSync(file, args, { ...options, env: tools });
   if (platform === 'android') {
-    const installed = attestAndroidBinary(fixture, expectedHash, { install: false, command });
+    const installed = attestAndroid(fixture, expectedHash, { install: false, command });
     const containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, privacyObserver: fixture.privacyObserverEvidence, command, environment: tools });
     let layout;
     if (containers.transportMode === 'usb-reverse') {
@@ -154,7 +165,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   requirePreparedV1(config);
   const io = { read: readV1Reference, bytes: readV1Bytes, snapshot: sourceSnapshot, installed: observeInstalled, getJson: localJson,
     artifactHash: binaryHash, reader: readV1Member, environment: process.env, buildCheck: validateBuildReceipt,
-    fixtureCheck: validateV1ExecutionFixture, coreCheck: validateCoreFixture, harness: v1HarnessFingerprint, ...dependencies };
+    fixtureCheck: validateV1ExecutionFixture, memberCheck: validateNativeFixtureAuthentication, harness: v1HarnessFingerprint, ...dependencies };
   assert.equal(path.resolve(config.repoRoot), ROOT, 'EXACT_V1_CHECKOUT_REQUIRED');
   const fixture = io.read(config.fixtureEvidence), build = io.read(config.buildReceipt), isolation = io.read(config.dockerReceipt), device = io.read(config.deviceEvidence), expectedInstalled = io.read(config.installedEvidence);
   io.fixtureCheck(fixture, config.platform); admitApplication(fixture, config.platform);
@@ -196,7 +207,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   assert.deepEqual(registered.inboxNotifications, [{ id: inbox.notification.id, companyId: fixture.companyId, recipientMembershipId: fixture.membershipId,
     target: inbox.notification.target, deliveryEvidence: config.inboxEvidence }]);
   const identityAudit = reconcileV1ControlIdentities(fixture.v1.records, registered, producer.oracleIdentityEvidence);
-  for (const actor of Object.values(registered.actors)) v1PrivateReference(actor.credentialEvidence);
+  for (const actor of Object.values(registered.actors)) validateV1ActorPrivateMapping(actor, registered.authorityEvidence);
   v1PrivateReference(registered.authorityEvidence);
   for (const [index, actor] of ['member', 'second-company'].entries()) assert.deepEqual(registered.actors[actor].credentialEvidence, config.members[index].credentialEvidence, 'EXACT_NATIVE_ACTOR_PRIVATE_MAPPING_REQUIRED');
   const auth = io.read(config.authObservation); assert.equal(auth.observed, true); assert.equal(auth.udid, fixture.udid); assert.equal(auth.bundleId, fixture.appId);
@@ -220,7 +231,12 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   const actual = io.installed(fixture, config.platform, config.expectedBinaryHash, io.environment); assert.equal(actual.udid, device.udid);
   assert.equal(actual.binaryHash, config.expectedBinaryHash); assert.equal(actual.appId, fixture.appId);
   assert.equal(device.observed, true); assert.equal(device.platform, config.platform); assert.equal(device.appId, fixture.appId); assert.deepEqual(device.buildReceipt, config.buildReceipt);
-  assert.equal(expectedInstalled.udid, fixture.udid); assert.equal(expectedInstalled.appId, fixture.appId); assert.deepEqual(expectedInstalled.buildReceipt, config.buildReceipt);
+  assert.equal(expectedInstalled.udid, fixture.udid); assert.equal(expectedInstalled.appId, fixture.appId);
+  // Canonical producer observations bind the live native identity directly;
+  // their build receipt is independently admitted above and need not be copied
+  // inside the observation. Any optional copy must still match exactly.
+  if (Object.hasOwn(expectedInstalled, 'buildReceipt')) assert.deepEqual(expectedInstalled.buildReceipt, config.buildReceipt);
+  for (const [key, value] of Object.entries(actual)) assert.deepEqual(expectedInstalled[key], value, 'V1_INSTALLED_OBSERVATION_CHANGED');
   assert.equal(expectedInstalled.binaryHash ?? expectedInstalled.installedApkSha256, config.expectedBinaryHash);
   if (expectedInstalled.appDataPath) assert.equal(actual.appDataPath, expectedInstalled.appDataPath);
   if (config.platform === 'android') validateAndroidLayoutEvidence(fixture, actual, device, expectedInstalled);
@@ -266,7 +282,7 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
       for (const [key, field] of [['emailEnv', 'email'], ['passwordEnv', 'password'], ['totpSecretEnv', 'totp_secret']]) {
         assert.match(memberFixture.auth[key], /^CASEOPS_MOBILE_[A-Z0-9_]+$/); assert.ok(typeof value[field] === 'string' && value[field]); environment[memberFixture.auth[key]] = value[field];
       }
-      io.coreCheck(memberFixture, environment); members.push({ fixture: memberFixture, value });
+      io.memberCheck(memberFixture, environment); members.push({ fixture: memberFixture, value });
       for (const key of ['emailEnv', 'passwordEnv', 'totpSecretEnv']) delete environment[memberFixture.auth[key]];
     } finally { loaded.bytes.fill(0); }
   }
@@ -297,11 +313,27 @@ export async function runV1(config) {
   const admitted = await admitV1BeforeMembers(config), { fixture, isolation, source, members } = admitted;
   const collection = collectV1Workflows(config.platform), runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${config.platform}-v1-${randomUUID().slice(0, 8)}`;
   const report = path.join(config.reportRoot, runId); fs.mkdirSync(report, { recursive: false, mode: 0o700 });
-  const journal = new Journal(path.join(report, 'events.jsonl')), frozen = v1HarnessFingerprint();
+  const journal = new V1RunEvidence(report), ownedSessions = new V1OwnedSessions(), frozen = v1HarnessFingerprint();
   journal.write({ type: 'run_started', ...collection, ...source, harnessFingerprint: frozen, publicAdmission: admitted.publicAdmission });
-  let completed = false, preflightPassed = false, postflight;
-  const deadline = setTimeout(() => { journal.write({ type: 'run_interrupted', reason: 'V1_THIRTY_MINUTE_SERIAL_BOUND' }); journal.close(); process.exit(124); }, V1_BUDGETS.serialInventoryMs); deadline.unref();
-  let controls;
+  let completed = false, preflightPassed = false, postflight, sessionCleanup = [], sessionAbsence = { verified: false };
+  // Stop all further workflow dispatch at the original 30-minute deadline.
+  // Transport cleanup has a separate <=60s safety fence and cannot earn a pass.
+  let emergency;
+  const armCleanupFence = () => {
+    if (emergency) return;
+    emergency = setTimeout(() => {
+      journal.abort('V1_CLEANUP_SAFETY_BOUND');
+      const evidence = journal.close();
+      fs.writeFileSync(path.join(report, 'summary.json'), JSON.stringify({ ...collection, status: 'incomplete', completed: false,
+        reason: journal.failure, evidence, sessions: ownedSessions.snapshot(),
+        completeSuitePass: false, cleanupVerified: false }) + '\n', { flag: 'wx', mode: 0o600 });
+      process.exit(124);
+    }, V1_BUDGETS.transportMs);
+  };
+  const deadline = setTimeout(() => {
+    journal.abort('V1_THIRTY_MINUTE_SERIAL_BOUND'); armCleanupFence();
+  }, Math.max(1, journal.deadline - journal.now())); deadline.unref();
+  let controls, appium;
   try {
   const controlFile = admitted.controls.module; assert.ok(path.isAbsolute(controlFile.path) && controlFile.path.startsWith(ROOT + path.sep));
   readV1Bytes(controlFile);
@@ -310,7 +342,7 @@ export async function runV1(config) {
   const status = await localJson(isolation.gatewayUrl + '/__caseops_e2e/status'), baseline = gatewayBaseline(status, isolation);
   const tooling = process.env.CASEOPS_MOBILE_TOOLING_HOME || path.join(os.homedir(), '.cache/caseops-mobile/tooling');
   const remote = createRequire(path.join(tooling, 'package.json'))('webdriverio').remote;
-  const transport = androidSessionTransport(fixture, config.platform), appium = transport.appiumUrl;
+  const transport = androidSessionTransport(fixture, config.platform); appium = transport.appiumUrl;
   journal.write({ type: 'preflight_result', status: 'passed', buildReceipt: config.buildReceipt, dockerReceipt: config.dockerReceipt, installed: admitted.installed, harnessFingerprint: frozen });
   preflightPassed = true;
   const state = { dispatched: new Set(), versions: [], activeFixture: fixture }; let cleanupUncertain = false, previousFailed = false;
@@ -327,11 +359,12 @@ export async function runV1(config) {
             : { 'appium:appPackage': fixture.appId, 'appium:app': fixture.appPath, 'appium:dontStopAppOnReset': true, 'appium:ensureWebviewsHavePages': true, 'appium:enableWebviewDetailsCollection': true }) };
         driver = await remote({ hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1), path: appium.pathname,
           logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: V1_BUDGETS.transportMs, capabilities });
+        ownedSessions.add(driver);
         journal.write({ ...appiumSessionEvent(driver.sessionId, 'created'), id });
         if (config.platform === 'android') journal.write({ ...verifyAndroidSessionTransport(fixture, config.platform, driver.capabilities), id });
-        await configureNativeDriver(driver, config.platform); await driver.switchContext('NATIVE_APP');
+        await configureNativeDriver(driver, config.platform, event => journal.write({ ...event, id })); await driver.switchContext('NATIVE_APP');
         context = prepareV1Context({ fixture, platform: config.platform, driver, gatewayBaseline: baseline, controls, state, caseId: scenario.id,
-          record: value => journal.write({ ...value, id }), authenticate: async (wanted, options) => {
+          assertActive: () => journal.assertActive(), record: value => journal.write({ ...value, id }), authenticate: async (wanted, options) => {
             const member = members.find(value => value.fixture.membershipId === wanted.membershipId); assert.ok(member, 'ADMITTED_NATIVE_MEMBER_REQUIRED');
             return withMember(member, () => authenticate({ ...context, fixture: wanted }, options));
           } });
@@ -355,7 +388,7 @@ export async function runV1(config) {
           assert.equal((await driver.$$(selector(config.platform, 'id', 'quick-work-editor'))).length, 0);
           assert.equal((await driver.$$(selector(config.platform, 'id', 'source-detail'))).length, 0);
         }
-        const sessionId = driver.sessionId; await driver.deleteSession(); journal.write({ ...appiumSessionEvent(sessionId, 'deleted'), id });
+        await ownedSessions.remove(driver, sessionId => journal.write({ ...appiumSessionEvent(sessionId, 'deleted'), id }));
       }
       catch { cleanupUncertain = true; teardownPassed = false; }
       journal.write({ type: 'v1_case_budget_result', id, logical: context?.budget.counts || null, actualControlTransport: controls.publicState() });
@@ -371,7 +404,8 @@ export async function runV1(config) {
     assert.equal(web.release_sha, source.sourceSha); assert.equal(web.revision, isolation.webRevision);
     postflight = { type: 'postflight_result', status: 'passed', harnessFingerprint: frozen, installed: admitted.installed };
   } catch (error) {
-    if (preflightPassed) postflight = { type: 'postflight_result', status: 'failed', reason: safeFailure(error, 'V1_POSTFLIGHT_FAILED') };
+    if (journal.failure) { /* incomplete evidence is finalized after independent cleanup */ }
+    else if (preflightPassed) postflight = { type: 'postflight_result', status: 'failed', reason: safeFailure(error, 'V1_POSTFLIGHT_FAILED') };
     else {
       journal.write({ type: 'preflight_result', status: 'failed', reason: safeFailure(error, 'V1_CONTROL_PREFLIGHT_FAILED') });
       for (const id of collection.intended) for (const phase of ['setup', 'call', 'teardown']) {
@@ -381,7 +415,15 @@ export async function runV1(config) {
     }
   }
   finally {
-    completed = true; clearTimeout(deadline);
+    armCleanupFence();
+    sessionCleanup = await ownedSessions.close();
+    try {
+      if (appium) sessionAbsence = await verifyV1SessionAbsence(sessionCleanup, async (route, timeout) => {
+        const target = new URL(appium.pathname.replace(/\/$/, '') + route, appium);
+        return readV1SessionStatus(target, timeout);
+      });
+      assert.ok(sessionAbsence.verified);
+    } catch { journal.abort('V1_SESSION_ABSENCE_UNVERIFIED'); }
     try {
       if (controls) {
         const closed = await controls.closeRunControls({ caseId: 'INBOX-01' });
@@ -391,14 +433,29 @@ export async function runV1(config) {
       }
     }
     catch { if (preflightPassed) postflight = { type: 'postflight_result', status: 'failed', reason: 'V1_CONTROL_DISPOSAL_UNVERIFIED' }; }
-    finally { controls?.dispose(); for (const member of members) member.value = undefined; }
+    finally {
+      try { controls?.dispose(); } catch { journal.abort('V1_CONTROL_DISPOSAL_UNVERIFIED'); }
+      for (const member of members) member.value = undefined;
+      clearTimeout(emergency); clearTimeout(deadline);
+    }
   }
-  if (postflight) journal.write(postflight);
-  journal.write({ type: 'run_completed', platform: config.platform, intendedCount: 17 });
-  const result = reconcileResults(journal.events, collection.intended); journal.close();
+  let result, evidence, terminalFailure;
+  try {
+    journal.assertActive();
+    if (postflight) journal.write(postflight);
+    journal.write({ type: 'run_completed', platform: config.platform, intendedCount: 17 });
+  } catch { journal.abort('V1_EVIDENCE_OR_RESULT_INCOMPLETE'); }
+  const final = finishV1Evidence(journal, events => ({ ...reconcileResults(events, collection.intended),
+    ...reconcileV1Sessions(events) }));
+  ({ completed, evidence, result, reason: terminalFailure } = final);
   const preview = journal.events.find(row => row.type === 'v1_assertion' && row.boundary === 'retained-long-obligation-preview');
-  const summary = { ...collection, ...result, ...reconcileV1Sessions(journal.events), completed, harnessFingerprint: frozen, report, ...androidLayoutSummary(admitted.installed), core23PassedByThisRun: false, files17PassedByThisRun: false,
-    retainedLongObligationPreview: preview?.observed === true ? 'passed' : 'unverified' };
+  const summary = completed ? { ...collection, ...result, completed, evidence,
+    sessionCleanup, sessionAbsence, harnessFingerprint: frozen, report, ...androidLayoutSummary(admitted.installed),
+    core23PassedByThisRun: false, files17PassedByThisRun: false,
+    retainedLongObligationPreview: preview?.observed === true ? 'passed' : 'unverified' }
+    : { ...collection, status: 'incomplete', completed: false, completeSuitePass: false, reason: terminalFailure, evidence, sessionCleanup, sessionAbsence,
+      harnessFingerprint: frozen, report, core23PassedByThisRun: false, files17PassedByThisRun: false,
+      retainedLongObligationPreview: 'unverified' };
   fs.writeFileSync(path.join(report, 'summary.json'), JSON.stringify(summary, null, 2) + '\n', { flag: 'wx', mode: 0o600 }); return summary;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

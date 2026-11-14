@@ -1,3 +1,283 @@
+## November14 — CI optional notice audit consumer
+
+Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
+
+## November14 — Inbox native identity verification pending
+
+Partially implemented / Inconclusive; NO-GO. Actual Android setup exposed native button hosts outside their RN card's accessibility subtree. Preserve the failed setup and passive frame/tree observation. Add exact per-notification action identities and fail-closed typed/label/frame checks, with single protocol dispatch. Complete V1 replacement180/180 passes locally; native replacement and full83/platform remain unverified. See `docs/mobile/NATIVE_V1_SETUP_2026-11-14.md` for exact evidence and the earlier failed environment attempt.
+
+## 2026-11-14 — disposable native V1 setup gateway remains unverified
+
+J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;
+production verdict **Inconclusive**, complete native release **NO-GO**. Retain the
+unacknowledged synthetic bootstrap attempt; separate invalid probes measure403
+for its omitted setup route and501 for workspace PUT, while an independent
+read-only query finds zero target-tenant rows. Add only the exact API-origin
+workspace PUT handler, keeping explicit route admission, marker, normal authority,
+body and query/origin guards. Real TLS red/green proof retains seven original
+failures; all119 fixture cases and11 route consumers pass with pinned runtimes.
+The first ambient-Node child failures remain retained. Owner bootstrap, the
+canonical one-row nonbillable entitlement, normal governance and both actual
+83-case suites remain due; no role SQL, direct API bypass, expiry extension or
+native-pass transfer. Preserve both source4265240f builds and the77-container park.
+See [dated scope and evidence](mobile/NATIVE_V1_SETUP_2026-11-14.md).
+
+## 2026-11-14 — complete installed API audit and optional telemetry repair
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production verdict
+**Inconclusive**, native release **NO-GO**. After the separately retained DNS
+failure and repair, the expanded152-package audit found the optional telemetry
+API1.45.1 advisory GHSA-mf5v-w3w3-f6cg. Update the coherent official1.45.2/0.66b2
+cohort and retain the actual nine-case parser red/green proof. Add the omitted
+util-http Apache notice with tagged-source/artifact provenance and exact image,
+upload-context and deployment-fence checks. Security CI now installs the optional
+extra before its unchanged strict audit. Complete related coverage passes112
+cases/22subtests without failures/skips; all152 installed Mac distributions pass
+dependency validation and strict OSV audit, independently reconciled by unique
+canonical name and exact version. No waiver, native pass transfer or production
+closure. Preserve every prior failed report. New-source CI/image and both native
+suites remain due. See [telemetry evidence](security/otel-security-20261114.md).
+
+## 2026-11-14 — newly published dnspython WKS audit blocker
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production bug verdict
+**Inconclusive**, complete native release **NO-GO**. Exact4ca30702 Security found
+CVE-2026-128089 in the locked2.9.0 dependency after a compatible138-package
+installation. The official2.9.2 patch is hash/license/provenance verified; the
+API floor, targeted lock, image notice and integrity consumers are updated.
+Ten bounded parser regressions retain six red assertions on2.9.0 and pass on
+2.9.2. Complete scoped parser/notice/shared packaging coverage passes40cases
+plus17subtests with no failures/skips; the complete normal-fixture API selection
+also passes53cases/17subtests in the actual152-package Mac API installation,
+whose dependency validation passes. Preserve unrelated lock records, earlier
+notices, the original CI failure and all prior native evidence. Fresh complete
+API installed audit/image/CI and both exact-source native suites remain due;
+no advisory waiver or transferred native pass. See
+[dated scope and evidence](security/dnspython-security-20261114.md).
+
+## 2026-11-13 — foreground native session-expiry recovery remains unverified
+
+J20/M22, US-MOB-01/02/08 and NATIVE-13: **Partially implemented**; bug verdict
+**Inconclusive**; complete native release **NO-GO**. The actual c77076 iOS Core
+run passed12 calls, left11 unexecuted after foreground session expiry, reconciled
+all69 phases and23 closed/absent sessions, and passed postflight. Read-only native
+session timestamps prove expired MFA; the gateway403 body/individual timing was
+not captured and remains explicitly unmeasured. The root App now receives a
+completed-cleanup notification for foreground JSON/byte rejection as well as
+restore; only a separate public policy read may recover sign-in. No refresh,
+business mutation, MFA expiry or compatibility rule is relaxed. Focused70-case
+coverage passes; rebuilt complete Android/iOS acceptance remains required. See
+`docs/mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md` for exact evidence, failed
+fixture/isolation attempts, unchanged bounds and current publishing dependencies.
+
+## 2026-11-13 — iOS offscreen Files measurement replacement pending
+
+### 2026-11-13 actual iOS Queue/Privacy failures retained
+
+J20/M22, US-MOB-01..08, QUEUE-01/PRIVACY-01: the actual source391 QP attempt
+executed both calls and failed their native visibility waits; all sessions,
+controls and postflight cleaned up, with0 deletion submissions. Native hierarchy
+proved the tall queue wrapper invisible while its typed child controls were
+visible. The candidate now checks scoped visible controls, complete ordered row
+identities and measured pagination/privacy inputs. A separate read-only native
+candidate reached the older second-page task, exact parent and privacy cancel;
+130 adjacent regressions pass. Canonical QP credit remains0/2 until fresh full
+source/binary/backend/actor/registration acceptance. Implementation Partially
+implemented, bug verdict Inconclusive, full native release NO-GO. See
+`docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md` for exact evidence and
+preserved failed attempts; no source-based assumption is reported as measured.
+
+
+### 2026-11-13 native Files replacement remains incomplete
+
+J20/M22, US-MOB-01..08, FILES-01..17: source391 passed actual iOS Core23,
+but its fresh Files attempt passed5 calls, failed FILES-06 and left11 unexecuted.
+All14 created sessions closed; all21 provider originals were preserved with zero
+owned private copies. The aggregate lifecycle postflight correctly remained
+failed. An atomic WDA fact reader now preserves the existing identity, role,
+visibility, geometry and timing bounds; the clocked regression and separate
+read-only native candidate pass. Implementation Partially implemented, bug
+verdict Inconclusive, full native release NO-GO pending rebuilt full acceptance.
+See docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md for exact artifacts,
+original failure retention and the distinction between measured diagnostics and
+an unmeasured original transport cause. Android and iOS83-case suites remain due.
+
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Inconclusive; NO-GO**.
+Actual9d79 iOS Core23 passed; full Files17 retained16 passed calls and one
+failed FILES-11 call, with complete postflight and session cleanup. Passive
+native diagnostics separately measured redundant offscreen polling and a late
+read overlapping the next action. The helper now completes one measured
+observation before scrolling, preserves all visibility/identity/geometry guards
+and original deadlines, and passes unit and actual read-only Simulator candidate
+checks. Candidate credit is zero; a new source-bound cold full17 replacement is
+required. Current unique9d79 passes are39/83 iOS and36/83 Android, independently.
+Google Play version3 remains submitted/In review; Apple documentation review is
+pending. See [dated evidence](mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md).
+
+## 2026-11-13 — Android Files filename positioning remains under verification
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Partially fixed; NO-GO**.
+At source9d79, Android Core23 passed all69 phases, but Files17 retained13
+successful calls, three failed calls and one blocked case. The failures occur
+before finding the same older baseline filename. Native observation found16
+files, then independently revealed that exact row with bounded UiScrollable
+positioning; no pagination or network defect is claimed. The Android details
+helper now positions the filename before reading it, retaining exact identity,
+hash, source-expansion and lost-acknowledgement checks. A before-fix regression
+failed; the complete related60-case unit selection passed. A disclosed dirty
+host-candidate replay verified the exact row and hash on the unchanged APK and
+closed its session, with zero canonical case credit. Fresh complete native and
+store verification remains due. The earlier route-preparation failure, all
+failed case reports and the incomplete pagination hypothesis are retained.
+See [dated evidence and store dependencies](mobile/NATIVE_FILES_FILENAME_POSITION_2026-11-13.md).
+
+## 2026-11-12 — hosted timeout repair and static-analysis follow-up
+
+J20/M22 release remains **Inconclusive; NO-GO**. Hosted shard3/32 now passes
+in5 minutes48 seconds under the same12-minute limit. Three CodeQL test findings
+are addressed by moving the deliberate clone interruption into a helper;
+all identity, absence, recovery and original-source assertions remain. The
+complete10-case module passed on actual PostgreSQL in72.046 seconds/all30 phases,
+with source parity and complete database cleanup verified. Fresh CodeQL analysis
+and alert verdict, full CI and remaining native/store acceptance stay open.
+See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
+## 2026-11-12 — dated PostgreSQL setup verification
+
+J20/M22 release verification remains **Inconclusive; NO-GO**. CI shard3/32
+exceeded its unchanged12-minute budget;41/127 completed cases do not prove green.
+The two repeated historical setup paths now clone separately built, immutable
+dated templates into a fresh database per test. Historical boundaries, native
+DDL and race assertions remain unchanged. All145 cases across the three changed
+modules passed on actual PostgreSQL (435 passing phases,261.903 seconds), with
+fixture/source database absence and original server/database inventory verified.
+The first failed catalogue-ID oracle and original canceled CI artifact remain.
+The separate20-command logout source gate passed. Full new CI, native suites,
+distribution packages and both store submissions remain open; no native case
+credit comes from these database tests. See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
+## 2026-11-12 — native completion cleanup remains open
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented; Inconclusive;
+release NO-GO**. Actual c8dd Android Queue passed all phases; Privacy setup/call
+passed but final teardown exceeded the unchanged480-second suite budget.
+The narrow Android sweep correction passed70 protocol cases and an actual-app
+logout in6.124 seconds, with one204, private controls cleared and session deleted.
+This focused proof earns no full-suite credit. Original failed reports and
+unknown original cleanup acknowledgements remain preserved and independently
+reconciled. Main CI was canceled at PostgreSQL shard3/32's12-minute limit:
+41/127 complete cases is incomplete, despite green source/security/CodeQL gates.
+Neither store is submitted. See [dated proof](mobile/NATIVE_QP_CLEANUP_2026-11-12.md).
+
+## 2026-11-12 — native Matter marker and complete rejection diagnostics
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; unmeasured original causes Inconclusive**. Both actual407c QA
+builds and its complete source gate passed. Queue advanced through detail,
+filters, pagination and stale restoration, then waited for a nonexistent Matter
+marker. A corrected double reproduces it and an actual native diagnostic proves
+the real marker and exact Matter code. The full run still credits zero cases;
+Privacy stopped at the failed gateway counter. The candidate preserves normal
+auth refresh, adds bounded secret-free rejection evidence and batches the same
+native row facts without weaker guards or longer budgets. See [evidence and
+remaining gates](mobile/NATIVE_QUEUE_MARKER_2026-11-12.md).
+
+## 2026-11-12 — native Queue terminal publication and auth lease preparation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both actual718e QA builds passed.
+Android PRIVACY-01 passed completely and is independently reconciled as one
+case; QUEUE-01 failed awaiting detail, with paired cleanup and passed postflight.
+Later read-only geometry did not reproduce clipping. Three regressions reproduce
+an independent controller publication race; the candidate releases the completed
+read lease before publishing without invalidating its first callbacks or a
+successor lease. Hash-bound pre-registration auth retains original observations
+and verifies the exact runtime transition without extending budgets. All57
+Queue/Privacy Node cases pass; full source/native replacement remains required.
+See [evidence and remaining gates](mobile/NATIVE_QUEUE_PUBLICATION_2026-11-12.md).
+
+## 2026-11-12 — disposable native attempt claim isolation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual9d Android/iOS Simulator builds
+passed. Both Android Queue/Privacy calls failed; all setup/teardown pairs ran,
+and postflight rejected an incomplete gateway ledger. A retained older QA claim
+reproduces the Privacy admission collision. Candidate run-scoped durable claims
+preserve same-run replay refusal across all three profiles without deleting old
+evidence. A focused unchanged-build Queue diagnostic passed but does not explain
+or erase the full-run failure; opt-in rank/digest diagnostics preserve every
+native assertion and deadline. See [exact evidence and open gates](mobile/NATIVE_RUN_CLAIMS_2026-11-12.md).
+
+## 2026-11-12 — native Queue cursor evidence and restoration
+
+J20/M22, US-MOB-07/08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual b09f2523 Android and iOS
+Simulator builds passed. Android's new initial sign-in setup passed, but the
+complete Queue/Privacy run failed later: zero complete cases, Privacy suppressed
+after failed cleanup. The retained journal proves one native stale409 and no
+privacy POST, with closed authority. A serving-API probe reproduces why comparing
+independently encrypted cursor bytes is invalid. The candidate binds the actual
+native response/request digests and explicitly restores one acknowledged test
+change on failure without replaying an unknown mutation. Candidate modules pass
+49 Node and28 Python cases; full source/native replacement gates remain open.
+See [dated evidence and limits](mobile/NATIVE_QUEUE_CURSOR_2026-11-12.md).
+
+## 2026-11-12 — initial native consent visibility
+
+J20/M22, US-MOB-01/02 and MOB-01/02 remain **Partially implemented; release
+NO-GO**. Actual 288b2504 Android and iOS Simulator builds succeeded. The complete
+replacement Queue/Privacy attempt stopped in first sign-in setup: both calls
+were unexecuted, with zero native case credit. Reports remain under
+`native-release-20261111-ZzEIol4V/qp-288b-android-01/` outside Git. Normal login
+returned200; no privacy request or anchor PATCH was sent, and the run authority
+closed. These facts do not pass either native case or verify the journal race.
+
+A separate passive post-failure observation found the consent page with the
+keyboard still open and no visible Connect control. One normal Android Back
+revealed the enabled initial Connect button, without an authorization submit;
+retain `post-failed-initial-connect-keyboard-01/{before,after,result}.json` in
+that cache. This is the reproduced post-failure state, not an original failure
+screenshot or a measured network diagnosis.
+
+The candidate focuses the initial button only when current verified consent
+renders it enabled, as well as when it remounts after MFA. The existing current
+query/epoch, MFA, expiry, explicit-consent and no-replay fences remain unchanged.
+The complete component module first retained34passes/1focus failure, then
+passed35/35, including delayed initial identity and late-MFA focus preservation.
+A prior CLI startup failure selected an absent Vitest project and executed no
+cases; it remains separate. Native and deployed-production acceptance are still
+open, so the bug verdict remains **Inconclusive** and no store submission is
+claimed.
+
+## 2026-11-12 — native Queue/Privacy follow-up
+
+J20/M22, US-MOB-01/02/07/08 and QUEUE-01/PRIVACY-01 remain
+**Partially implemented; release NO-GO**. Exact a82ded25 Android acceptance
+completed Core23 and Files17 (40/83 cases, 120 unique passing phases). Hosted
+CI completed successfully, including the canonical browser union (753 passes,
+21 existing reviewed skips); browser passes are separate from native acceptance.
+The complete two-case Queue/Privacy run failed both calls and privacy teardown.
+Its original reports and gateway journal are retained under
+`native-release-20261111-ZzEIol4V/qp-a82d-android-01/` outside Git.
+
+Privacy actor switching and teardown looked for the account header without
+scrolling after the receipt assertions had moved it offscreen. The candidate
+restores that exact header with bounded upward scrolling before checking the
+same principal and dispatching one acknowledged sign-out. No identity or logout
+assertion is removed. A separate real-descriptor regression reproduces concurrent
+append/close races in the shared native/control journal; one lease now covers
+metadata validation, append, fsync, metadata reconciliation and close. The
+original Queue refusal has no retained exception detail, so that race remains a
+source-based hypothesis for the original dated failure, not measured causality.
+Original deadlines, operation limits, unknown-outcome fences and inventories
+remain unchanged. The focused scrolled-account logout also passed on the actual a82ded25 APK
+(`candidate-privacy-logout-native-01/result.json` in that retained cache), with
+normal logout204, no private credential read and a closed Appium session. This
+one focused check does not pass the two-case inventory. Fresh complete native
+replay, iOS and distribution remain open;
+no release AAB, review submission or publication is established by these fixes.
+
 # Strict Bug Task List - 2026-04-22
 
 ## November14: Workflow Consumer Missed; Current CI Failed
@@ -63,6 +343,29 @@ negative audit stay distinct. Safe 513-character baseline55=45P/10F on1.45.1;
 patched real-parser/workflow/floor suite69P on1.45.2, complete native journals.
 Fresh strict all-extras163-package audit reports0known vulnerabilities. These
 are focused results, not replacement full Docker or production certification.
+
+## November 12 Native MFA continuation focus
+
+**Inconclusive; native replacement and production verification pending.**
+J20/M22, US-MOB-01/02, MOB-01/02. Actual installed Android build b260802d
+completed NATIVE-01..20; NATIVE-21 setup failed finding Connect after the
+verified-code notice, NATIVE-22 setup failed, and NATIVE-23 was blocked.
+The original 69-phase report is retained under
+`native-release-20261111-ZzEIol4V/canonical-b260/core-full-01/current-full/core-reports/2026-11-12T02-59-30-888Z-android-2527f2a1`.
+Later bounded public-landmark observations found the verified notice with no
+accessible Connect button while the keyboard was reported open; one normal
+Back exposed the enabled button. These are post-failure observations, not the
+original failure frame or proof of its exact cause.
+
+The candidate focuses the newly mounted Connect button only after successful
+MFA and pending work have ended. It neither grants consent automatically nor
+replays authorization. The existing complete 33-case NativeSignIn component
+module first failed the added focus assertion (32 passed/1 failed), then passed
+33/33 with the candidate. Retained logs: `native-mfa-focus-original-unit-02.log`
+and `native-mfa-focus-candidate-unit-01.log` in the same private release cache.
+This proves DOM focus, not Firefox keyboard behavior, native acceptance or a
+store release. Preserve the original deadlines and independently replay both
+platforms; the complete 83 cases per platform and distribution remain open.
 
 ## November13: Full07 Capture Refusals And Native Runtime Isolation
 
@@ -6091,3 +6394,315 @@ The complete tooling inventory passed422 unique cases with zero failures/errors/
 Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
 
 These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.
+
+## QA30 — Canonical macOS native-gate fixture roots (November 11, 2026)
+
+Status: **Partially fixed; complete replacement release gates remain required**. PRD J20/M22 and US-MOB-01..08. This is test infrastructure, not a new application acceptance result.
+
+On the actual Mac, the complete 1,669-case native-harness inventory produced 1,666 passes, one failure and two declared Windows-only skips. The Expo Android mod compiler reached the QA observer with an aliased `/var/folders` fixture root; the observer correctly required its canonical `/private/var/folders` identity. A separate complete 103-case Python fixture run failed the four transport-loader producer subcases before their intended replacement assertions for the same reason. The retained original reports are `native-release-20261111-ZzEIol4V/full-harness.tap` and `local-fixture.test.py.log` under the external mobile evidence root.
+
+Resolve only the newly created fixture roots before passing them to production code. Preserve the production namespace/descriptor guards and every changed-byte, hardlink and symlink rejection. The original complete Expo build-config module now passes 94 cases with its two unchanged Windows-only skips on this Mac's original temporary-directory configuration; the complete Python fixture module passes 103 cases, including all four producers and their original negative controls. The adjacent store-host fixture's separate setup failure came from selecting Apple's Git shim while its intentionally empty environment omitted Xcode configuration; selecting the pinned Homebrew Git yields all 33 original passes. No production authentication, permission, source-integrity check or deadline changed. Full frozen Node/Python replay, hosted CI and actual native/store gates remain open.
+
+## QA31 — Mobile build-tool Forge advisories (November 11, 2026)
+
+Status: **Partially fixed; final release and native gates remain open**. A fresh complete installed mobile audit found node-forge 1.4.1 affected by GHSA-6889-vf6x-f3g5, GHSA-w4xr-hqv8-ch44, GHSA-6cv4-p8m7-4r25 and GHSA-j8rw-jp99-435v. The maintainer advisories and official npm distribution identify 1.4.3 as patched. Pin the override, regenerate the one affected locked identity and independently reinstall it. Retain the upstream BSD-3-Clause selection and unchanged complete dual-license text, with the actual 1.4.3 source commit and integrity in the existing build-tool notice and lock checks. The scoped host TLS fixture must use the same version.
+
+Six added parser cases reproduce the old identity-key forgery, unoffered TLS compression, sessionless handshake states and bounded hostile header/cookie parsing; the old-version failures remain outside Git. All 15 original-plus-added Forge checks pass on the actual installed 1.4.3 package, including real signatures, old RSA parser negatives, exact locked/installed identity and notice equality. A fresh audit with a low-severity threshold reports zero vulnerabilities. Preserve the earlier incomplete fixture candidate separately. This is dependency repair evidence, not APK/IPA or store acceptance.
+
+The complete replacement harness also correctly refused the older whole-lock pin in the iOS local archive catalogue. Rebind that catalogue to the reviewed regenerated lock and regenerate the Simulator entry with the canonical helper renderer; preserve all ten archive identities and their unchanged package/producer/license pins. The admission regression now rejects the exact older same-size lock before opening an archive, in addition to its original growth refusal. The first 71705867 source replay remains incomplete: its separate real Calendar TLS case failed without root-cause diagnostics. An isolated synthetic diagnostic copy passed and cannot close that failure. Add failure-only fixed route/status/count diagnostics to the original case, retaining the same request promise, all assertions, no replay and all existing time bounds.
+
+## QA32 — Preserve exact secret-scan provenance across a native test rename (November 11, 2026)
+
+Status: **Partially fixed; complete native scanner and hosted replay remain required**. PR612's original Security job 130554980553 retained 37 redacted tree findings: 36 matched existing reviewed immutable spans; one public synthetic Calendar step lookup did not. Git attributes that unchanged line to commit 60cc453557b7fe0ab1b5dbb106997729e2402273, line 199 of `v1-counsel-prerequisite.test.mjs`, subsequently renamed to `v1-counsel-prerequisite-cases.mjs`. The old scanner constructed the origin fingerprint using the destination filename, which did not exist in the origin commit.
+
+Review only that exact original public lookup span (SHA256 750b0f5b573323ce0208d0b132a29c1af8a79d4c3fa33a1af410ffa1bdc40e7c). Resolve the original filename from real Git attribution, validate its canonical relative path, require the complete span's identical origin/path and consecutive original lines, then compare the actual immutable original blob bytes. Keep every existing rule, selected-history fence, byte/cache bound and unknown-finding rejection. No branch, folder, rule, destination-path or value regex is excluded. The original scanner fails the new real-Git rename oracle; all nine public-vector controls pass after the repair, including changed-span refusal. The first complete local scanner attempt lacked the digest-pinned image and is incomplete, with its failed reports retained; it is not evidence of an application secret or a passing scanner. Real unmerged-secret canaries and the complete replacement scanner still must pass before closure.
+
+After independently preparing the exact official digest, the complete replacement native scanner regression suite passes 97 cases on the private Docker engine, including the actual scheduled/manual unmerged-secret refusals and the rename/changed-span controls. The original missing-image run and the interrupted public image download remain retained. Tracked-tree plus selected-history scanning of the final candidate and the new hosted Security run remain required.
+
+## QA33 — QA gateway permits survive unrelated directory activity (November 11, 2026)
+
+Status: **Partially fixed; final source/native gates remain required**. Preserve both complete source failures: the Calendar producer call on 71705867 and the fast-clock TLS probe on 127fd2a6. A separate 32-process diagnostic experiment with 64 independent synthetic TLS fixtures reproduced the Calendar failure once. Its passive, fixed-label exception trace identified `runtime_source_bytes` rejecting the final ancestor namespace comparison. That reader compared directory size, link count and modification/change times, so creating an unrelated sibling could invalidate an otherwise unchanged held source. The separate fast-probe failure had no original exception trace; it uses this same reader but is not independently attributed by that trace.
+
+A deterministic real-filesystem regression creates siblings during the held descriptor read: the original code refuses with `V1_RUNTIME_NAMESPACE_CHANGED`. Compare each directory's stable device/inode, owner/group and mode instead. Preserve complete before/after metadata for the source file itself, exact final pathname resolution, non-symlink directories, parent replacement/permission refusals, source hashes and descriptor closure. The POSIX permission-mutation control is explicitly unexecuted on Windows, where actual ACL acceptance remains separate. Rebind the canonical gateway implementation digest to the exact changed bytes.
+
+The deterministic positive and existing replacement plus permission negatives all pass on this Mac. Repeating the diagnostic experiment after the repair yields 64 of 64 independent synthetic fixture passes under the unchanged TLS/producer limits, including all original rejection/replay assertions. This is controlled QA gateway evidence, not Android/iOS case credit. Keep the original incomplete source runs and diagnostic copies; the complete frozen source inventory and actual native suites remain open.
+
+## QA34 — Windows Forge parser regression isolation (November 11, 2026)
+
+Status: **Partially fixed; hosted Windows acceptance remains required**. PR612 revision d01ba99a passed Security, all three CodeQL analyses and the Ubuntu installed dependency audit. Windows job 130584046255 failed the new hostile-whitespace parser case: its synchronous Node subprocess returned ETIMEDOUT at 1,522 ms under the 1,500 ms limit. The original output does not identify whether the parser started. Preserve that failure; it is not a measured parser regression in Forge 1.4.3.
+
+Use a terminable Node worker instead of launching a second operating-system process. Start the same 1,500 ms watchdog before worker construction and include worker startup, the unchanged 160,002-byte header/cookie input and exact decoded-value assertions. Inherit the reviewed Node bootstrap and environment without overriding execArgv or NODE_OPTIONS; retain worker errors and nonzero exits and await termination in every outcome. All 15 checks pass on this Mac. An independently staged, byte-identical copy against the actual old 1.4.1 installation still fails the watchdog and terminates; evidence is `native-release-20261111-ZzEIol4V/forge-worker-old-control`. This is local harness evidence, not actual Windows acceptance.
+
+Two separate d01ba99a browser jobs (130584046095 and 130584046214) failed before browser tests during operating-system dependency installation. Their logs explicitly report temporary DNS resolution failures for `azure.archive.ubuntu.com`. Preserve them as infrastructure failures with the browser journeys unexecuted; do not change application assertions, omit dependencies or count them as passes. A complete fresh hosted run is required.
+
+Actual hosted Windows acceptance on 65ce1aff succeeds: job 130593869141 passes the complete installed dependency audit, and its hostile header/cookie worker completes in 164.926 ms under the unchanged 1,500 ms startup-plus-parser watchdog. The complete local frozen source replacement also passes after explicitly activating the already reviewed Python dependency paths. Preserve its preceding operator invocation, which omitted cryptography and produced three setup errors; those are not application failures. Windows parser isolation is **Properly fixed** at this CI surface; native/store acceptance remains open.
+
+## QA35 — Browser CI Ubuntu mirror setup (November 11, 2026)
+
+Status: **Partially fixed; fresh hosted browser execution remains required**. The runner's upstream `configure-apt-sources.sh` installs a priority-one Azure HTTP mirror before the two official Ubuntu HTTPS archives. Both independent browser jobs failed during package installation with explicit DNS failures for that Azure hostname. The same dependency step remained pending in the next revision while Windows and Ubuntu dependency audits passed.
+
+Before each unchanged Playwright `install --with-deps chromium` invocation, verify the exact reviewed three-line runner mirror configuration, root ownership and regular-file/non-writable metadata. Select only its existing official HTTPS archive and security mirrors, read the exact new configuration back, and retain all existing APT signature/trust settings, Node trust environments, dependency installs, test assertions and job time limits. Unknown runner configuration refuses explicitly. The existing complete build-configuration module passes 94 cases with its two unchanged Windows-only skips and verifies identical setup ordering on both browser jobs. Actual package installation and the browser journeys still need the fresh hosted run; the original failed runs remain retained.
+
+The b36a02d3 source job 130602156440 subsequently failed with explicit DNS failures for `archive.ubuntu.com` as well. The mirror-only candidate did not repair this broader failure; retain its failed logs. Remove that speculative mirror mutation. Canonical main CI already documents this exact optional-font APT failure and instead downloads locked Chromium, then proves a native browser launch and rendered page before its application suite. Apply that existing Ubuntu 24.04 runtime contract byte-for-byte, including all nine trust outputs and its two-minute setup bound, to both mobile browser jobs. Keep every downstream renderer/browser assertion and the existing job time limits. No missing-library bypass is enabled; a broken browser launch still fails. Independently assert identical runtime steps, download-before-runtime ordering, matching runner identity, no continue-on-error and unchanged validation. Reconcile the exact cross-workflow Node inventory from 171 to 173 commands for the two added runtime probes. The complete impacted build-configuration/tooling run passes 542 cases with its two unchanged Windows-only skips. Full frozen source and actual hosted browser execution remain required.
+
+## QA36 — Windows checkout installer archive permissions (November 11, 2026)
+
+Status: **Partially fixed; actual Windows execution remains required**. Job 130598256967 on 748e89a9 refused before archive payload admission with `NPM_TOOLING_WINDOWS_OWNER_WRITE_SCOPE_REFUSED`. Its validated native diagnostic identifies ARCHIVE_PRE_READ, runtimeOwner=true, tokenUserPresent=true and writeScopeSafe=false (ACL SHA256 46d489c16dd3015ae56df51f72ed2758374c259d45b7e4caa9d58be0935e59fb). It does not identify the foreign writable principal; do not infer one. The following dependency tests were unexecuted and artifact retention correctly failed for their absent inventory. The preceding revision's complete Windows success remains independent evidence.
+
+Prepare only the exact public npm archive in the ephemeral Windows checkout. Reject a reparse point or wrong extent, hold a read/permission handle that denies concurrent writes/deletion, verify the unchanged pinned digest, and apply a protected DACL through that same handle for the current user, SYSTEM and Administrators. Preserve ownership. Re-read the protected ACL and hash the same held bytes again before closing. The existing installer still performs its complete native ACL, namespace, descriptor, archive and extracted-runtime verification; none of its refusals or deadlines change. Both exact workflow inventories include this preparation before installation. Complete build-configuration checks pass 94 cases with two unchanged Windows-only skips on this Mac; PowerShell parsing and actual Windows ACL acceptance require the next hosted run. Preserve the earlier local inventory mismatch from adding the step without updating its independent expected command list.
+
+The actual next Windows job 130602157034 passes the protected-handle preparation and completes installer execution, reaching the installed graph inventory. Its remaining audit and parser steps are not yet complete. The complete local b36a02d3 harness also exposed the existing command classifier matching the words “npm archive” in the PowerShell log message. Name that public object an “installer archive” in the diagnostic; retain the unchanged classifier, exact 171 Node command count and nine trust-output assertions. The focused classifier passes; preserve the earlier 1,672-pass/one-failure/two-skip full report until the complete replacement succeeds.
+
+Hosted Windows job 130602157034 subsequently completes successfully, including the protected archive, full installed inventory, installer and dependency audits, and parser regressions. The complete local d3648f17 replacement passes all 686 mobile cases, mobile TypeScript, the 1,675-case harness (1,673 passed and two unchanged Windows-only skips), and all 17 Python modules. These results close that specific environment failure on the observed runner; retain the original unsafe-ACL refusal. Each subsequent revision still needs its own hosted acceptance.
+
+## QA37 — Explicit local TLS context in the Calendar producer regression (November 11, 2026)
+
+Status: **Partially fixed; fresh CodeQL analysis and independent alert verdict remain required**. PR612 CodeQL alert 836 (`js/file-access-to-http`) reports the generated local public certificate flowing directly into `https.request` options in `calendar-producer-gateway-cases.mjs`. The helper uses a fixed 127.0.0.1 host, a bounded ephemeral port and synthetic payloads; the original alert alone does not prove certificate exfiltration or a production disclosure.
+
+Construct an explicit TLS 1.2 minimum secure context from that generated certificate, then pass the context as transport configuration. Keep the fixed loopback address, hostname/certificate verification, no-paid marker, authentication, exact bodies/receipts and original two-second request bound. Extend the existing real TLS case with an untrusted context that must reject the self-signed certificate before any upstream request. The complete 178-case V1 module passes with zero failures/skips/cancellations/todo, including byte-exact payload and negative permit controls. No CodeQL exclusion or alert dismissal is added. The complete frozen source replacement, new analysis and current-ref alert query remain required.
+
+The complete local 9865fc7b frozen source passes all 686 mobile cases, TypeScript, 1,673 of 1,675 harness cases with the two unchanged Windows-only skips, and all 17 Python modules. A subsequent authenticated query of open CodeQL alerts for `refs/pull/612/merge` returns an empty inventory after the new analysis. Keep this separate from the same revision's hosted source-harness failures below; there is no alert dismissal or new suppression.
+
+## QA38 — Provider-settling fixture mutations start after writing (November 11, 2026)
+
+Status: **Partially fixed; hosted replacement remains required**. On 9865fc7b, browser handoff, Windows setup and both installed dependency audits pass. Hosted source job 130610915077 then executes the full native harness and fails the two provider-settling fixtures. Their child processes start a 300 ms timer before staging begins. The actual stacks show ctime changing between the writer's fstat/lstat checks, and size already becoming 74 rather than 73 before the writer's completion assertion. These mutations reached the write phase instead of the settling phase named by the tests. Preserve the original strict writer refusals; they are not evidence of a production file-corruption bug.
+
+Schedule the fixture mutation after the first actual settling sleep. Before mutation, read and prove both completely staged public fixture payload hashes. Use the real sleep, filesystem writes and metadata observations; preserve the unchanged 1,200 ms settling window, production staging/writer code, full metadata assertions and exact size-change rejection. Prove one successful mutation and restore the scoped wait hook on both successful and rejecting paths. The complete 24-case privacy module passes with zero failures/skips/cancellations/todo. Complete frozen source and hosted replacement are still required; this gives no iOS native case credit.
+
+
+## QA39 — Native Files admission retains scoped matter reads (November 12, 2026)
+
+Status: **Partially fixed; fresh complete native replacement required**. The actual Android Files run on 40e20bff passed FILES-01 through FILES-03. FILES-04 received the native upload acknowledgement, then its isolated source-admission child rejected `Exact existing route inventory required`. The retained helper required a route object containing only `routes`; the live gateway also contains the reviewed `coreMatterReadAdmission` exact-query fence. A read-only replay of the original helper against those configuration bytes reproduces the same refusal. This is an admission-harness defect, not proof of failed upload persistence or a reader defect. FILES-05 through FILES-17 remain unexecuted; postflight proves the provider originals unchanged. Preserve the acknowledged upload and failed admission attempt without replay.
+
+Update both Android and iOS admission adapters to accept only the legacy shape or the reviewed scoped shape. Bind the scope to the current receipt's core epoch; require the existing stage, target count, default-target digest and unique exact hashes, forbid a bare matter collection route, and preserve the entire guard when adding the single acknowledged download route. Unknown shapes, malformed/foreign scopes, wildcard routes and replay remain refused. Regress both complete container flows with immutable before/after snapshots and compare the real gateway's native-bearer/query denials before and after admission. The focused Android 27-case and iOS 16-case modules pass on this Mac. This supplies no additional native acceptance credit.
+
+Evidence: private task root `native-release-20261111-ZzEIol4V`, `files-scoped-route-root-cause.json`, original `canonical-pinned/files-full-01/files-reports/2026-11-11T18-19-55-855Z-android-files-706f8e27`, and `files-scoped-route-original-regression.log`. The earlier canonical Core run remains separately incomplete at NATIVE-13 MFA-field visibility (12 passed, 11 unexecuted); two subsequent focused first-13 controls, including exact requested capabilities, did not reproduce that failure and do not close it. Current iOS native case credit is zero. Release verdict remains **NO-GO** pending complete replacement suites, real-device requirements, signed store artifacts and production verification.
+
+## QA40 — Retain native CI evidence before a stalled report upload (November 12, 2026)
+
+Status: **Partially fixed; complete replacement CI and downloaded artifacts required**. On630b81dc, job130761351165 completed browser execution successfully in51m22s and reconciliation successfully in1s. The following full-report upload ran10m31s and failed; the job exceeded its unchanged60-minute limit before the separate native-evidence upload completed. The hosted annotation confirms the job timeout. Actions job-detail requests initially returned502/read timeouts; the later job-log download returned BlobNotFound. These observations do not establish the transport root cause or supply the missing browser artifacts. Retain the original canceled job and missing evidence; its successful execution steps are not complete downloadable acceptance.
+
+Upload the small, invocation-owned native evidence immediately after reconciliation, before the full report. Bound the native upload to2minutes and the report upload to3minutes, both fail-closed with always(), under the unchanged60-minute job limit. Preserve every existing artifact name, exact raw/native path, retention period, missing-native refusal, independent project and union consumer. Browser inventory, retries, workers, assertions and interactive deadlines remain unchanged. Add negative contract controls for reversed ordering, omitted upload bounds, omitted raw paths and ignored upload failure. Full workflow-consumer and affected harness verification plus fresh hosted success and inspection of the downloaded artifact remain required; no native app case or store acceptance follows from this repair.
+
+The complete workflow-consumer module passes262cases, and the complete affected mobile build-configuration module passes94cases with its two unchanged Windows-only skips. Original local setup/contract failures remain retained: the offline checkout initially lacked the required origin/main witness; the first negative upload-bound controls raised KeyError rather than the required assertion; and the first Node invocation selected Apple's unavailable default command-line Git. Verify canonical main before adding its local witness, assert missing bounds through get(), and activate the pinned Git/Xcode environment. These corrections do not change application assertions. Fresh hosted upload and downloaded-artifact acceptance remain open.
+
+## QA41 — PowerShell metadata fixture dependency readiness (November 12, 2026)
+
+Status: **Inconclusive; environment-readiness candidate requires complete replacement verification**. Onfc4c4201, web job130876468785 executes292Vitest modules/2774cases:291modules and2773cases pass; the first PowerShell metadata-header case takes19,222ms and exceeds its unchanged15,000ms limit. Later PowerShell-backed cases take1,702ms/1,390ms. The successful40e20bff parent used the same Ubuntu26.04 image20261101.186.1 and reported5,513ms for that first case. This is not evidence of runner-image drift. The original failed report and its missing coverage artifact remain retained. Its exact slow native substage was not captured, so do not claim a measured startup, AST or network cause.
+
+An isolated official PowerShell7.6.9 Mac ARM64 runtime executes the original fixture and all five exact header arguments successfully in0.555s. That is not a reproduction of the hosted timeout. A proposed AST-scan reduction retained payload parity but took0.637s on this Mac; preserve it separately and do not promote it as a performance repair.
+
+Add an explicit, one-minute-bounded SDK readiness step before web coverage. It parses only a fixed synthetic assignment, executes only the fixed arithmetic literal6*7 and checks native AST callback/JSON support. It has no repository-root parameter, product-source reads or HTTP commands. The actual five Docker-source command invocations, embedded Node fetches and Python request remain in the original unchanged Vitest module, under its unchanged15-second test and30-second PowerShell child limits. No assertion, coverage threshold, test inventory, retry or job limit changes. This prepares the dependency; it does not certify cold PowerShell startup performance. Complete host frontend typechecks/coverage/build, independent workflow consumers and fresh hosted acceptance remain required. No native app or store acceptance follows.
+
+
+## QA42 — Windows SDK startup before command-file hardening (November 12, 2026)
+
+Status: **Inconclusive; release NO-GO**. On pushed c30eb82a, Mobile source run43132328078 job130899215047 failed before dependency installation with `CI_TRUST_COMMAND_HARDEN_REFUSED_TIMEOUT`; the composite trust step lasted4389ms. No Windows installed graph or audit executed, and the missing artifact remains a failure. The original decoded log is retained outside Git under `native-release-20261111-ZzEIol4V/c30-windows-installed-audit-original.log`. The exact slow subprocess stage was not measured; do not call this a proved ACL or SDK cold-start root cause.
+
+Prepare the exact Windows PowerShell5.1 SDK in a separate Windows-only composite-action step, with one10-second-bounded, fixed synthetic parser/identity/reflection probe. It has no repository-source or runner-command-file input, ACL mutation, network request, credential inheritance or retry. Readiness cannot substitute for hardening: the actual command-file operation still owns its original4-second child,3.5-second script,10-second hardening and30-second overall preparation limits, unchanged byte/handle/namespace/owner/ACL checks and fail-closed result decoder. Complete regression coverage includes strict output, timeout, signal, exit status, context, executable and isolated-environment guards. Fresh actual Windows execution and full installed-dependency audit are required before upgrading this candidate.
+
+Separate c30 evidence: all292 web modules/2774 cases, coverage, TypeScript and the production build passed locally; fresh hosted web coverage and Next-build steps also passed with QA41 SDK preparation. Its actual ARM64 APK built successfully in539seconds with a source-bound receipt; that is build evidence, not83-case device acceptance or a signed store artifact. The original failed host environment attempts remain retained.
+
+
+### Native Queue input follow-up — 2026-11-12
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented**; release
+**NO-GO**. Actual f4942cfd Android and iOS Simulator builds passed. The actual
+f494 Android Queue/Privacy run completed both setups and teardowns with paired
+sessions and passing postflight: Privacy passed completely, Queue failed at
+its first task-detail transition. One current Privacy case is independently
+reconciled; the whole suite remains failed. The ordinary native click had no
+corresponding detail-read request. A separate, source-bound native diagnostic
+found the exact task button fully visible and enabled; one documented Android
+clickGesture opened its exact detail and produced one successful queue read.
+This is measured input-path evidence, not proof of an original network cause.
+The narrower idle-scope candidate alone still failed and is retained. A fresh
+complete page/detail replay of the primary gesture passed, with normal logout,
+session deletion and settings restoration. It has zero full-suite credit. No full-suite,
+distribution-signing or store-submission completion is claimed. See
+`docs/mobile/NATIVE_QUEUE_TOUCH_2026-11-12.md`.
+
+
+## 2026-11-12 — exact native Matter reads and settled Queue input
+
+J20/M22, US-MOB-01..08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both dbd2 actual QA builds and the
+complete source gate passed. Its full Android QP attempt credits zero cases:
+Queue failed a retained unclassified403 after Matter navigation; Privacy stopped
+on the poisoned ledger. Source proves a missing exact owned drafts read, now
+admitted in both registration validators with strict foreign/write refusals.
+Candidate native replays preserve task/First-page input failures; one replay
+proved exact task facts, and a separate gesture reached all25 first-page rows
+before its collector failed. Settled-frame single primary input now covers the
+four fixed Queue navigation controls and task rows, without retries or longer
+bounds.70 JavaScript,30 controls and109 gateway cases pass. Replacement native
+acceptance and both store submissions remain open. See
+[dated evidence](mobile/NATIVE_QUEUE_WORK_READS_2026-11-12.md).
+
+The subsequent expanded native05 replay passed both complete pages, all nine
+filters, exact task facts/Matter identity and one owned drafts GET200, with
+settings restoration, normal exact-member logout and session deletion. The
+independent reconciliation retains the original rejection counter. This focused
+dirty-harness proof earns zero full-case credit; complete replacement acceptance
+and the release NO-GO remain unchanged.
+
+
+### 2026-11-12 native Core rules setup
+
+J20/M22 / US-MOB-01..08 remain Partially implemented, Inconclusive and release
+NO-GO. The full c8dd iOS Core23 run had 8 passing cases, 14 failed phases and
+8 unexecuted calls; all 23 sessions were closed. NATIVE-09 reached Add note, then
+the missing policy GET blocked its editor. Exact read admission and synthetic
+native consent setup now have focused actual Simulator proof; a complete
+replacement run is still pending. See
+[the dated evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md).
+The 300b CodeQL analyses and independent alert verdict pass without waiver;
+main CI, remaining native inventories, signing and store submission are not
+inferred from that result.
+
+
+### 2026-11-12 replacement iOS Core and CI diagnostic evidence
+
+J20/M22 / US-MOB-01..08 release remains Inconclusive / NO-GO. The separate full
+iOS Core23 replacement now passes all 69 phases, postflight, native exit 0 and
+all 23 unique session cleanups; the old failed run remains retained. See
+[Core evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md). The remaining
+60 iOS cases are not inferred. Android's remaining native work and both store
+submissions remain outstanding.
+
+300b CI shard 9 crashed on SIGSEGV during a partial 60-second thread dump; its
+127 selected cases include only 67 completed passes. The exact crash cause is
+Inconclusive without a core backtrace. An equally timed Python-owned observer,
+with fatal crash handling and all budgets/assertions intact, passed a physical
+60-second qualification plus all 147 affected native Python/PG cases (441 phases,
+native exit 0). See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
+New hosted CI is still required; no mobile/store case credit is granted by that
+infrastructure replay.
+
+## 2026-11-13 — native stored-session recovery and private Play qualification
+
+J20/M22, US-MOB-01/02/08 remain **Partially implemented; Inconclusive; NO-GO**.
+An actual iOS Files setup stopped after compatibility 200 / native refresh 403 /
+logout 204 and left an idle compatibility panel. One bounded public recheck after
+acknowledged authentication rejection now allows fresh secure sign-in; it never
+replays the rotating token and preserves cleanup, unknown-outcome and policy
+denials. The complete mobile suite passed 690 cases and type-checking passed;
+rebuilt native acceptance remains pending. Google Play version2 is available only
+to the owner on the internal test track, unreviewed and not publicly launched.
+See [dated evidence and limits](mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md).
+
+## 2026-11-13 — Android public compatibility auth proof
+
+J20/M22, US-MOB-01/02 and NATIVE-01 remain **Partially implemented; Inconclusive;
+NO-GO**. The rebuilt Android app completed normal MFA/PKCE and native identity
+checks, but its auth proof wrongly counted the credential-free compatibility GET
+as prior authenticated success. The consumer now applies the existing exact-GET
+public-policy exception;40 consumer/MFA/traffic checks passed, retaining every
+negative guard. Fresh native acceptance remains pending. Binaries/backend stay
+6fbcad12; this host-consumer revision is recorded separately, with no source
+guard relaxed or older failed report upgraded. See [dated evidence](mobile/NATIVE_AUTH_PUBLIC_POLICY_PROOF_2026-11-13.md).
+
+
+## 2026-11-13 — native MFA status viewport
+
+J20/M22 / US-MOB-01..08 / Android NATIVE-13: **Partially implemented**,
+bug **Partially fixed**, release **NO-GO**. The actual rebuilt Android Core run
+retains 12 passed calls and 11 unexecuted calls after the MFA success status
+was offscreen. Native fixed-control/frame observations revealed the exact
+message after one upward scroll; the gateway acknowledged MFA and identity
+reads with 200. The browser status now accompanies its connection action and
+is its accessible description. The complete 35-case component suite and web
+TypeScript passed; replacement native/production acceptance remains pending.
+No native assertions, timeouts, MFA/PKCE or authorization rules were relaxed.
+See [exact evidence and limits](mobile/NATIVE_MFA_STATUS_VIEWPORT_2026-11-13.md).
+
+
+## 2026-11-14 — Android native receipt-search latency
+
+J20/M22 / US-MOB-01/02/08 / QUEUE-01 and PRIVACY-01 remain **Partially
+implemented; Inconclusive; NO-GO**. Both source5 Android QP call bodies passed,
+but the original time window interrupted final cleanup; no full QP credit.
+A real native comparison found three unnecessary upward searches while reading
+ordered receipt fields (11.457seconds versus3.695seconds with downward search).
+The narrow harness correction preserves every receipt value, negative guard,
+request count, gesture limit and deadline. Two red regressions became green
+in the complete77-case module; fresh full native and source gates remain open.
+See [retained evidence and limits](mobile/ANDROID_RECEIPT_SEARCH_LATENCY_2026-11-14.md).
+
+
+## 2026-11-14 — CI observability audit contract reconciliation
+
+Status: Partially implemented. Release verdict: NO-GO pending complete native execution and remaining CI.
+
+CI run 43535689936, API coverage shard 13/13 (job 132264142381), exposed the older FastEmbed workflow source assertion still requiring the base-only sync command. The security workflow intentionally installs `--extra observability` so the strict physical installed-metadata audit includes the optional telemetry packages. Reproduced against frozen revision 723552ba: 13 passed, one failed in `test_fastembed_pillow_rebuild_20261021.py`; updated only the expected exact sync command. All existing `uv pip check`, strict OSV, installed-site-package and no-ignore/no-fix guards remain intact.
+
+Verification: complete FastEmbed module plus the unchanged explicit hearing-channel module: 48 passed, zero skips/errors (33.40 seconds), retained JUnit `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/ci723-contract-green-01.xml`. The second module independently verifies the backend's empty-channel contract; this is not a native or deployed-production acceptance claim. Native builds and executions remain bound to the separate clean 723552ba checkout; this test/document-only follow-up does not alter application, dependency, gateway, build or native harness bytes. Current native acceptance is still incomplete; no historical case credit is transferred.
+
+
+## 2026-11-14 — Native V1 raw matter DTO boundary
+
+Bug verdict: Partially fixed; native verification remains incomplete. The actual source-723552ba V1 producer created its 26 contracts, eight matter parents, three IP families, scoped grants and three confirmed deadlines, then refused its external fixture projection because raw MatterRecord omits the invented `is_disposed` and `restricted_access` keys. Retained failed run: `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/v1-723552ba-android-producer-01/phases`; it is incomplete, with zero native credit, and must not be resumed or renamed into a passing aggregate. A separate marked member GET returned all three exact deadline rows; that read does not complete the failed phase.
+
+Adjacent canonical viewer and inbox producers also assumed raw `is_disposed`. A shared strict boundary now validates actual company, UUID, lifecycle version, operational status and `is_active` before producing the internal `is_disposed: false` fixture field. Missing/unknown/closed/disposed status, missing/false activity, a foreign tenant or contradictory derived state remain rejected before any child write/worker. The external base plan must derive restriction from the acknowledged access response rather than MatterRecord. Raw API acknowledgements are not rewritten.
+
+Verification: complete 178-case V1 JavaScript module and the independent Python inventory passed at `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/v1-matter-record-contract-fix-01/`. Existing tests now exercise raw API-shaped matter responses without the derived key; the negative inbox journeys retain zero worker/child dispatch. The first focused attempt exposed an incomplete calendar composition double missing the actual lifecycle field (177 passed, one failed); the double now models the real required field, with original assertions and counts unchanged. Stronger fresh-profile API and native acceptance is still pending.
+
+
+## 2026-11-14 — Actual Android control and read-admission observations
+
+Partially implemented / Partially fixed / NO-GO. The installed19852a38 Android
+build exposed selection state on a checkable parent and uppercase native
+work-leave Alert buttons. Preserve those failed observations; the repaired
+canonical functions passed the exact parent and Stay/Leave boundaries on that
+installed build. The real Matter/privacy repository constructors independently
+reproduce missing exact read admissions; no wildcard, IP-as-Matter or deletion
+write route is added. The complete changed JavaScript module passes179/179,
+including the additional parent-selection regression and negative dialog guards.
+See [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--actual-android-control-and-read-admission-observations).
+Full current-candidate native acceptance remains0/83 per platform; no earlier
+native pass is transferred, and earlier unclassified network refusals stay
+incomplete. Fresh full source gates and native builds/execution remain due.
+
+## 2026-11-14 — Native Sources Back and V1 evidence closure
+
+**Partially fixed / NO-GO.** Actual e725017d Android Page2/detail/Back reset to
+Page1. Retain only the cursor while unmounting readers, then freshly authorize
+Back; preserve inactive leases and type/company/session/pop resets. Its V1 run
+also filled the original2,000-event journal:5calls passed,9failed,1interrupted,
+2unstarted, no summary. Original evidence is retained. Separate mandatory,
+bounded, hash-bound browser/native streams and independent owned-session cleanup
+now produce honest incomplete output without replaying mutations or lost acks.
+Measured Calendar normalization/clipping and viewer accessibility topology are
+repaired in the harness; diagnostic05 passed both exact readonly rows on M21,
+with zero candidate acceptance credit. See [scope, budgets, evidence and remaining
+verification](mobile/NATIVE_PAGINATION_EVIDENCE_2026-11-14.md). Fresh candidate
+builds and all83 cases per platform remain required; this entry does not close
+the native release gate.
+
+## 2026-11-14 — Sources cursor belongs to its navigation instance
+
+**Partially fixed / NO-GO.** The adjacent audit after2a053086 identified cursor
+aliasing across nested Sources entries, tabs and a same-index pop/push in one
+commit. The expanded harness executes the actual app JSX mapping: all3new
+journeys reproduced the wrong cursor before repair. Allocate a fresh explicit
+entry instance before navigation and retain one cursor-only host per entry
+across all tab stacks, activating only the exact current route object. Readers
+and inactive callbacks remain retired; previous results never transfer. Preserve
+[the failed source reproduction and exact follow-up scope](mobile/NATIVE_SOURCE_LIST_OWNERSHIP_2026-11-14.md).
+The preceding Android APK build/postflight passes remain historical source
+proof, with zero acceptance credit for this follow-up. Fresh gates/builds and
+complete independent83-case native suites remain required.
+
+## 2026-11-14 — Native release integration and gate fixture repairs
+
+**Partially fixed / NO-GO.** Preserve six concurrent Copilot Autofix commits
+through20bc62bb and the navigation-instance repair. Restore acknowledged handler
+completion before transport unpatch on interruption; the real new regression
+reproduces the lost-cleanup wait and the complete122-case Python module passes.
+Bind the real navigation helper in the two existing whole-app reader fixtures,
+keeping all assertions. Retain the failed706mobile/1807harness gate and all454
+Python inventories. Reduce redundant physical synchronization only in explicitly
+counted offline saturation fixtures; native synchronization and every original
+security/time/entry bound remain unchanged. [Exact proof and remaining gates](mobile/NATIVE_RELEASE_INTEGRATION_2026-11-14.md)
+keep quiet diagnostic success distinct from a causal diagnosis or native pass.
+Fresh full gates/builds/83-case suites remain required.

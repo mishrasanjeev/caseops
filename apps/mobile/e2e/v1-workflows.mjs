@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { openMatter, traffic, delta, readOnlyTraffic } from './journeys.mjs';
-import { home, find, findQuery, visible, selector, dispatchNativeClick, input, read, expectText, swipe } from './native-ui.mjs';
+import { home, find, findQuery, visible, selector, dispatchNativeClick, input, read, expectText, swipe, androidBehindTabBar, nativeAction } from './native-ui.mjs';
 import { readV1Reference, validateV1Fixture, validateV1MutationEvidence, v1Identity, v1Version,
   V1_CONTROL_CAPABILITIES, createV1CaseBudget, v1Hash } from './v1-workflows-contract.mjs';
 import { validateV1InboxMutationEvidence } from './v1-workflows-contract.mjs';
 import { collectV1, V1_BUDGETS } from './v1-workflows-inventory.mjs';
+import { admitV1SegmentPresentation } from './v1-native-presentation.mjs';
 
 const event = (c, boundary, facts = {}) => c.record?.({ type: 'v1_assertion', boundary, ...facts });
 const clone = value => structuredClone(value);
@@ -40,8 +41,47 @@ async function scopedIdFact(c, scopeId, fieldId, value) {
   const query = `//*[@${attr}=${xpathText(scopeId)}]//*[@${attr}=${xpathText(fieldId)}]`;
   const element = await findQuery(c, query, { scroll: true }); assert.equal(await element.getText(), value, 'EXACT_SCOPED_V1_VALUE_ID_REQUIRED');
 }
-async function scopedAction(c, scopeId, label) {
+export async function scopedAction(c, scopeId, label) {
   const observed = c.fixture.v1.nativeSelectors; assert.equal(observed.observed, true); assert.equal(observed.udid, c.fixture.udid); assert.deepEqual(observed.buildReceipt, c.fixture.buildReceipt);
+  const identityPattern = observed.scopedActionPatterns?.recipientInbox;
+  if (identityPattern?.controlIdentity === 'notification-action-id') {
+    assert.equal(identityPattern.observed, true);
+    assert.equal(identityPattern.scopePrefix, 'notification-');
+    assert.match(scopeId, /^notification-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i);
+    const suffix = { 'Open source record': 'open-source', 'Mark as read': 'mark-read',
+      'Dismiss notification': 'dismiss', 'Restore notification': 'restore' }[label];
+    assert.ok(suffix, 'EXACT_NOTIFICATION_ACTION_REQUIRED');
+    assert.equal(identityPattern.expectedType, c.platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View');
+    const scopes = await c.driver.$$(selector(c.platform, 'id', scopeId));
+    assert.equal(scopes.length, 1, 'UNIQUE_NATIVE_ACTION_SCOPE_REQUIRED');
+    assert.equal(await scopes[0].isDisplayed(), true);
+    const controlId = `${scopeId}-${suffix}`;
+    const matches = await c.driver.$$(selector(c.platform, 'id', controlId));
+    assert.equal(matches.length, 1, 'UNIQUE_NOTIFICATION_ACTION_ID_REQUIRED');
+    const element = matches[0];
+    assert.equal(await element.isDisplayed(), true); assert.equal(await element.isEnabled(), true);
+    assert.equal(await element.getAttribute(c.platform === 'ios' ? 'name' : 'resource-id'), controlId);
+    assert.equal(await element.getAttribute(c.platform === 'ios' ? 'type' : 'class'), identityPattern.expectedType);
+    if (c.platform === 'ios') {
+      assert.equal(await element.getAttribute('label'), label);
+      assert.ok([true, 'true'].includes(await element.getAttribute('accessible')));
+    } else {
+      assert.equal(await element.getAttribute('clickable'), 'true');
+      const leaf = await visible(element, `android=new UiSelector().text(${JSON.stringify(label)}).className("android.widget.TextView")`);
+      assert.ok(leaf, 'EXACT_NOTIFICATION_ACTION_LABEL_REQUIRED');
+      assert.equal(await leaf.getAttribute('text'), label);
+    }
+    // Expo's embedded native host may be a sibling of the RN card in the
+    // accessibility tree. Bind the exact native action ID and label to that
+    // card's actual frame instead of assuming descendant topology.
+    const valid = r => r && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(r[key])) && r.width > 0 && r.height > 0;
+    const contains = (a, b) => a.x <= b.x && a.y <= b.y && a.x + a.width >= b.x + b.width && a.y + a.height >= b.y + b.height;
+    const [card, button, window] = await Promise.all([
+      c.driver.getElementRect(scopes[0].elementId), c.driver.getElementRect(element.elementId), c.driver.getWindowRect()]);
+    assert.ok(valid(card) && valid(button) && valid(window) && contains(card, button) && contains(window, button), 'NOTIFICATION_ACTION_FRAME_REQUIRED');
+    event(c, 'scoped-native-action-observed-before-one-dispatch', { scopeId, label, type: identityPattern.expectedType, controlId });
+    c.budget.control(); await dispatchNativeClick(c, element, 'id', controlId); return;
+  }
   let recipe = observed.scopedActions?.[`${scopeId}:${label}`];
   if (!recipe) {
     const pattern = observed.scopedActionPatterns?.recipientInbox;
@@ -85,13 +125,42 @@ async function waitId(c, id) {
     { timeout: V1_BUDGETS.nativeTransitionMs, interval: V1_BUDGETS.pollMs, timeoutMsg: 'V1_NATIVE_TRANSITION_REQUIRED' });
   return element;
 }
-async function waitFact(c, id, expected) {
+export async function positionV1Visible(c, locate) {
+  const end = Date.now() + V1_BUDGETS.nativeTransitionMs;
+  let active = true, result, failure, moves = 0, lastMove = Date.now();
+  const check = () => { c.assertActive?.(); assert.ok(active && Date.now() < end, 'V1_NATIVE_POSITION_DEADLINE'); };
+  try {
+    await c.driver.waitUntil(async () => {
+      if (failure) return true;
+      try {
+      check(); const observed = await locate(check); check();
+      if (observed?.ready) { result = observed.element; return true; }
+      if (moves < V1_BUDGETS.maxScrolls && Date.now() - lastMove >= 1500) {
+        c.budget.control();
+        await swipe(c, observed?.direction || (moves < 3 ? 'up' : 'down'), check);
+        moves++; lastMove = Date.now();
+      }
+      return false;
+      } catch (error) { failure = error; return true; }
+    }, { timeout: V1_BUDGETS.nativeTransitionMs, interval: V1_BUDGETS.pollMs, timeoutMsg: 'EXACT_V1_VISIBLE_FACT_REQUIRED' });
+    if (failure) throw failure;
+    return result;
+  } catch (error) { throw failure || error;
+  } finally { active = false; }
+}
+async function waitFact(c, id, expected, { scroll = false } = {}) {
+  if (scroll) return positionV1Visible(c, async check => {
+    const element = await visible(c.driver, selector(c.platform, 'id', id));
+    check();
+    return { element, ready: !!element && await element.getText() === expected, direction: 'down' };
+  });
   await c.driver.waitUntil(async () => {
     const element = await visible(c.driver, selector(c.platform, 'id', id));
     return !!element && await element.getText() === expected;
   }, { timeout: V1_BUDGETS.nativeTransitionMs, interval: V1_BUDGETS.pollMs, timeoutMsg: 'EXACT_V1_VISIBLE_FACT_REQUIRED' });
 }
 async function control(c, capability, args) {
+  c.assertActive?.();
   assert.ok(V1_CONTROL_CAPABILITIES.includes(capability), 'REVIEWED_V1_CONTROL_REQUIRED'); c.budget.owner();
   assert.equal(typeof c.controls[capability], 'function', 'IMPLEMENTED_V1_CONTROL_REQUIRED');
   const result = await c.controls[capability]({ ...args, caseId: c.caseId });
@@ -107,72 +176,148 @@ async function workspace(c, matter, actor = c.actor || 'member') {
   assert.equal(result.value.matter.id, matter.id); assert.equal(result.value.matter.company_id, c.fixture.companyId);
   return clone(result.value);
 }
-async function segment(c, group, label) {
+export async function segment(c, group, label) {
   // Native/accessible segment implementations differ by measured width/font.
   // Consume an actual device/build-bound observation, never a guessed first match.
-  const observed = c.fixture.v1.nativeSelectors;
-  assert.equal(observed.observed, true, 'OBSERVED_V1_SEGMENTS_REQUIRED');
-  assert.equal(observed.udid, c.fixture.udid); assert.deepEqual(observed.buildReceipt, c.fixture.buildReceipt);
+  const observed = admitV1SegmentPresentation(c);
   const recipe = observed.segments[group]?.[label];
   assert.ok(recipe && recipe.label === label && recipe.group === group, 'EXACT_OBSERVED_SEGMENT_REQUIRED');
   assert.ok(typeof recipe.query === 'string' && recipe.query.startsWith(c.platform === 'ios' ? '-ios predicate string:' : 'android='), 'TYPED_OBSERVED_SEGMENT_REQUIRED');
-  const scope = recipe.scopeQuery ? await findQuery(c, recipe.scopeQuery, { scroll: true }) : c.driver;
-  const element = await visible(scope, recipe.query); assert.ok(element, 'OBSERVED_SEGMENT_NOT_VISIBLE');
+  if (recipe.scopeQuery) nativeAction(c, 'find');
+  const element = await positionV1Visible(c, async check => {
+    const scope = recipe.scopeQuery ? await visible(c.driver, recipe.scopeQuery) : c.driver;
+    check();
+    if (recipe.scopeQuery && scope && await androidBehindTabBar(c, scope)) return { direction: 'down' };
+    check();
+    const element = scope && await visible(scope, recipe.query);
+    check();
+    return { element, ready: !!element && !await androidBehindTabBar(c, element), direction: element ? 'down' : undefined };
+  });
+  assert.ok(element, 'OBSERVED_SEGMENT_NOT_VISIBLE');
   assert.ok(['label', 'name', 'text'].includes(recipe.labelAttribute), 'OBSERVED_SEGMENT_LABEL_ATTRIBUTE_REQUIRED');
   assert.equal(await element.getAttribute(recipe.labelAttribute), label, 'ACTUAL_SEGMENT_LABEL_MISMATCH');
   c.budget.control(); await dispatchNativeClick(c, element);
   return { recipe, element };
 }
-async function selectedSegment(c, group, label) {
-  const recipe = c.fixture.v1.nativeSelectors.segments[group]?.[label]; assert.ok(recipe);
+export async function selectedSegment(c, group, label) {
+  const recipe = admitV1SegmentPresentation(c).segments[group]?.[label]; assert.ok(recipe);
   const scope = recipe.scopeQuery ? await findQuery(c, recipe.scopeQuery) : c.driver;
   const element = await visible(scope, recipe.query); assert.ok(element);
-  const selected = await element.getAttribute(recipe.selectedAttribute);
+  assert.equal(await element.getAttribute(recipe.labelAttribute), label, 'RETAINED_SEGMENT_LABEL_REQUIRED');
+  let owner = element;
+  if (recipe.selectedOwner !== undefined) {
+    assert.equal(c.platform, 'android');
+    assert.equal(recipe.selectedOwner, 'checkable-label-parent', 'OBSERVED_SEGMENT_SELECTION_OWNER_REQUIRED');
+    assert.equal(recipe.selectedAttribute, 'checked'); assert.equal(recipe.selectedValue, 'true');
+    // Compose exposes the label as a TextView and checked state on its direct
+    // parent. Resolve that exact relationship globally: Android's scoped XPath
+    // root excludes ancestors. Never accept an arbitrary checked sibling.
+    const query = `//*[@text=${xpathText(label)}]/parent::*[@checkable='true']`;
+    owner = await visible(c.driver, query); assert.ok(owner, 'OBSERVED_CHECKABLE_SEGMENT_PARENT_REQUIRED');
+    assert.equal(await owner.getAttribute('class'), recipe.selectedType, 'OBSERVED_SEGMENT_PARENT_TYPE_REQUIRED');
+    assert.equal(await owner.getAttribute('checkable'), 'true');
+    const children = await owner.$$(recipe.query);
+    assert.equal(children.length, 1); assert.equal(children[0].elementId, element.elementId, 'EXACT_SEGMENT_LABEL_PARENT_REQUIRED');
+  }
+  const selected = await owner.getAttribute(recipe.selectedAttribute);
   assert.equal(String(selected), recipe.selectedValue, 'RETAINED_SEGMENT_SELECTION_REQUIRED');
 }
-async function row(c, id, fields) {
-  const element = await find(c, 'id', id, { scroll: true });
-  if (c.platform === 'ios') {
+export async function row(c, id, fields) {
+  nativeAction(c, 'find', 'id', id);
+  return positionV1Visible(c, async check => {
+    const element = await visible(c.driver, selector(c.platform, 'id', id));
+    check();
+    if (!element) return;
+    if (await androidBehindTabBar(c, element)) return { direction: 'down' };
+    check();
+    if (c.platform === 'ios') {
     assert.equal(await element.getAttribute('type'), 'XCUIElementTypeButton');
     assert.ok([true, 'true'].includes(await element.getAttribute('accessible')));
     assert.equal(await element.getAttribute('label'), fields.join(', '));
     assert.equal(await element.getText(), fields.join(', '));
-  } else for (const value of fields) assert.ok(await visible(element, selector(c.platform, 'text', value)), 'EXACT_V1_ROW_REQUIRED');
-  return element;
+      return { element, ready: true };
+    }
+    let ready = true;
+    for (const value of fields) {
+      check();
+      const leaf = await visible(element, selector(c.platform, 'text', value));
+      if (!leaf) { ready = false; continue; }
+      assert.equal(await leaf.getText(), value, 'EXACT_V1_ROW_REQUIRED');
+    }
+    check(); const rect = await c.driver.getElementRect(element.elementId);
+    check(); const window = await c.driver.getWindowRect();
+    return { element, ready, direction: rect.y < window.height / 2 ? 'up' : 'down' };
+  });
 }
 /** A readonly RecordRow is a View, not an accessible edit Button. Fabric can
  * flatten that wrapper; require its unique identity and visible contained facts. */
 export async function readOnlyV1Row(c, id, facts) {
   assert.ok(Array.isArray(facts) && facts.length === 3 && facts.every(value => typeof value === 'string' && value));
+  const end = Date.now() + V1_BUDGETS.nativeTransitionMs;
+  const check = () => { c.assertActive?.(); assert.ok(Date.now() < end, 'V1_NATIVE_POSITION_DEADLINE'); };
+  const observe = async action => { check(); const value = await action(); check(); return value; };
   const valid = r => r && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(r[key])) && r.width > 0 && r.height > 0;
   const contains = (outer, inner) => outer.x <= inner.x && outer.y <= inner.y && outer.x + outer.width >= inner.x + inner.width && outer.y + outer.height >= inner.y + inner.height;
+  const ancestorQuery = `//*[@resource-id=${xpathText(id)}]/ancestor::*[@scrollable="true"]`;
   for (let attempt = 0; attempt <= V1_BUDGETS.maxScrolls; attempt++) {
-    const matches = await c.driver.$$(selector(c.platform, 'id', id));
+    const matches = await observe(() => c.driver.$$(selector(c.platform, 'id', id)));
     assert.equal(matches.length, 1, 'UNIQUE_READONLY_WORK_ROW_REQUIRED');
     const element = matches[0];
     assert.ok(typeof element.elementId === 'string' && element.elementId, 'READONLY_WORK_ROW_ID_REQUIRED');
-    const rect = await c.driver.getElementRect(element.elementId), window = await c.driver.getWindowRect();
-    const ancestors = await element.$$(c.platform === 'ios' ? 'xpath=ancestor::XCUIElementTypeScrollView' : 'xpath=ancestor::*[@scrollable="true"]');
+    const rect = await observe(() => c.driver.getElementRect(element.elementId)), window = await observe(() => c.driver.getWindowRect());
+    const ancestors = await observe(() => c.platform === 'ios' ? element.$$('xpath=ancestor::XCUIElementTypeScrollView') : c.driver.$$(ancestorQuery));
     const mounted = [];
-    for (const ancestor of ancestors) if (await ancestor.isDisplayed()) mounted.push(ancestor);
+    for (const ancestor of ancestors) if (await observe(() => ancestor.isDisplayed())) mounted.push(ancestor);
     assert.equal(mounted.length, 1, 'EXACT_READONLY_ROW_SCROLL_ANCESTOR_REQUIRED');
-    const viewport = await c.driver.getElementRect(mounted[0].elementId);
+    const viewport = await observe(() => c.driver.getElementRect(mounted[0].elementId));
     assert.ok(valid(rect) && valid(window) && valid(viewport) && contains(window, viewport), 'READONLY_ROW_VISIBLE_GEOMETRY_REQUIRED');
-    if (!contains(viewport, rect)) {
+    const covered = await observe(() => androidBehindTabBar(c, element));
+    if (!contains(viewport, rect) || covered) {
       assert.ok(attempt < V1_BUDGETS.maxScrolls && rect.height <= viewport.height, 'READONLY_ROW_VISIBLE_GEOMETRY_REQUIRED');
-      c.budget.control(); await swipe(c, rect.y < viewport.y ? 'up' : 'down'); continue;
+      c.budget.control(); await swipe(c, rect.y < viewport.y ? 'up' : 'down', check); continue;
     }
-    if (c.platform === 'ios') assert.notEqual(await element.getAttribute('type'), 'XCUIElementTypeButton', 'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION');
-    else assert.ok([false, 'false'].includes(await element.getAttribute('clickable')), 'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION');
+    if (c.platform === 'ios') assert.notEqual(await observe(() => element.getAttribute('type')), 'XCUIElementTypeButton', 'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION');
+    else {
+      assert.equal(await observe(() => element.isDisplayed()), true, 'READONLY_ROW_NOT_VISIBLE');
+      assert.equal(await observe(() => element.getAttribute('resource-id')), id, 'EXACT_READONLY_ROW_IDENTITY_REQUIRED');
+      assert.ok([false, 'false'].includes(await observe(() => element.getAttribute('clickable'))), 'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION');
+    }
     for (const value of facts) {
-      const leaf = await visible(element, selector(c.platform, 'text', value)); assert.ok(leaf, 'EXACT_READONLY_ROW_FACT_REQUIRED');
-      assert.equal(await leaf.getText(), value); const frame = await c.driver.getElementRect(leaf.elementId);
+      let leaf;
+      if (c.platform === 'ios') leaf = await observe(() => visible(element, selector(c.platform, 'text', value)));
+      else {
+        // Fabric flattens readonly View children into accessibility siblings.
+        // Bind exact visible facts to the unique row frame, never a sibling.
+        const candidates = await observe(() => c.driver.$$(selector(c.platform, 'text', value)));
+        assert.ok(candidates.length <= 100, 'READONLY_ROW_FACT_LOOKUP_BOUND');
+        const contained = [];
+        for (const candidate of candidates) if (await observe(() => candidate.isDisplayed())) {
+          const frame = await observe(() => c.driver.getElementRect(candidate.elementId));
+          assert.ok(valid(frame), 'READONLY_ROW_VISIBLE_GEOMETRY_REQUIRED');
+          if (contains(rect, frame)) contained.push(candidate);
+        }
+        assert.equal(contained.length, 1, 'EXACT_READONLY_ROW_FACT_REQUIRED'); leaf = contained[0];
+      }
+      assert.ok(leaf, 'EXACT_READONLY_ROW_FACT_REQUIRED');
+      assert.equal(await observe(() => leaf.getText()), value);
+      const frame = await observe(() => c.driver.getElementRect(leaf.elementId));
       assert.ok(valid(frame) && contains(rect, frame), 'READONLY_ROW_FACT_OUTSIDE_IDENTITY');
     }
+    // Do not combine leaf observations with a different row or scroll epoch.
+    const current = await observe(() => c.driver.$$(selector(c.platform, 'id', id)));
+    assert.equal(current.length, 1); assert.equal(current[0].elementId, element.elementId);
+    assert.deepEqual(await observe(() => c.driver.getElementRect(element.elementId)), rect, 'READONLY_ROW_LAYOUT_CHANGED');
+    const currentAncestors = await observe(() => c.platform === 'ios' ? element.$$('xpath=ancestor::XCUIElementTypeScrollView') : c.driver.$$(ancestorQuery));
+    const currentMounted = [];
+    for (const ancestor of currentAncestors) if (await observe(() => ancestor.isDisplayed())) currentMounted.push(ancestor);
+    assert.equal(currentMounted.length, 1); assert.equal(currentMounted[0].elementId, mounted[0].elementId);
+    assert.deepEqual(await observe(() => c.driver.getElementRect(mounted[0].elementId)), viewport, 'READONLY_ROW_LAYOUT_CHANGED');
+    assert.equal(await observe(() => androidBehindTabBar(c, element)), false, 'READONLY_ROW_COVERED_BY_TABS');
     return element;
   }
   throw Error('READONLY_ROW_VISIBLE_GEOMETRY_REQUIRED');
 }
+
 async function sourceFacts(c, source, kind) {
   await waitFact(c, 'source-id', source.id);
   assert.equal(await ui(c, 'source-kind'), kind);
@@ -243,11 +388,30 @@ async function saveOnce(c, { target, kind, body, before, allowed = ['confirmed']
   return { id, record: matches[0], workspace: after, acknowledgement: acknowledged };
 }
 const targetAt = (c, index) => c.fixture.v1.records.work.targets[index];
+export async function confirmV1WorkLeave(c, action) {
+  assert.ok(['stay', 'leave'].includes(action), 'EXACT_WORK_LEAVE_ACTION_REQUIRED');
+  if (c.platform === 'android') {
+    assert.equal(await c.driver.getCurrentPackage(), c.fixture.appId, 'WORK_DIALOG_APP_REQUIRED');
+    const title = await read(c, 'id', `${c.fixture.appId}:id/alert_title`);
+    assert.ok(['Leave editor?', 'Save outcome unknown'].includes(title), 'EXACT_WORK_LEAVE_DIALOG_REQUIRED');
+    assert.equal(await read(c, 'id', 'android:id/button2'), 'STAY');
+    assert.equal(await read(c, 'id', 'android:id/button1'), 'LEAVE EDITOR');
+    await tap(c, action === 'stay' ? 'android:id/button2' : 'android:id/button1', { scroll: false });
+  } else {
+    assert.equal(c.platform, 'ios');
+    const titles = [];
+    for (const title of ['Leave editor?', 'Save outcome unknown'])
+      if (await visible(c.driver, selector('ios', 'text', title))) titles.push(title);
+    assert.equal(titles.length, 1, 'EXACT_WORK_LEAVE_DIALOG_REQUIRED');
+    await textTap(c, action === 'stay' ? 'Stay' : 'Leave editor');
+  }
+}
 export async function closeRejectedV1Editor(c, retainedDirtyFields) {
   assert.equal(typeof retainedDirtyFields, 'boolean');
   await tap(c, 'quick-close');
-  if (retainedDirtyFields) await textTap(c, 'Leave editor');
-  else assert.equal((await c.driver.$$(selector(c.platform, 'text', 'Leave editor'))).length, 0, 'PURGED_EDITOR_MUST_NOT_RETAIN_DIRTY_CONFIRMATION');
+  if (retainedDirtyFields) await confirmV1WorkLeave(c, 'leave');
+  else assert.equal((await c.driver.$$(selector(c.platform, c.platform === 'android' ? 'id' : 'text',
+    c.platform === 'android' ? 'android:id/button1' : 'Leave editor'))).length, 0, 'PURGED_EDITOR_MUST_NOT_RETAIN_DIRTY_CONFIRMATION');
   assert.equal(await rawCount(c, 'quick-work-editor'), 0, 'REJECTED_EDITOR_CLOSE_REQUIRED');
 }
 
@@ -372,31 +536,31 @@ export const v1WorkflowScenarios = Object.freeze([
     if (!c.fixture.v1.records.contracts.pages[0].contracts.some(record => record.id === parent.id)) await tap(c, 'source-next-page');
     await contractDetail(c, parent); await tap(c, 'source-open-obligations');
     for (const [index, page] of spec.pages.entries()) {
-      await waitFact(c, 'obligation-page', `Page ${index + 1}`);
+      await waitFact(c, 'obligation-page', `Page ${index + 1}`, { scroll: true });
       const witness = page.obligations.at(-1), element = await row(c, `obligation-row-${witness.id}`, spec.rowFacts[witness.id]);
       await dispatchNativeClick(c, element, 'id', `obligation-row-${witness.id}`);
       for (const [id, value] of Object.entries(spec.detailFacts[witness.id])) await scopedIdFact(c, `obligation-detail-${witness.id}`, id, value);
       const actual = await control(c, 'readObligations', { contractId: spec.contractId, after: index ? spec.pages[0].next_after : null }); assert.deepEqual(actual.value, page);
       if (index === 0) await tap(c, 'obligations-next');
     }
-    await tap(c, 'obligations-first'); await waitFact(c, 'obligation-page', 'Page 1'); await tap(c, 'obligations-reload'); await waitFact(c, 'obligation-page', 'Page 1');
+    await tap(c, 'obligations-first'); await waitFact(c, 'obligation-page', 'Page 1', { scroll: true }); await tap(c, 'obligations-reload'); await waitFact(c, 'obligation-page', 'Page 1', { scroll: true });
     let selectedPage = 0;
     for (const record of [spec.nullable, spec.assigned]) {
       const page = spec.pages.findIndex(value => value.obligations.some(item => item.id === record.id));
-      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`); selectedPage = page; }
+      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`, { scroll: true }); selectedPage = page; }
       const element = await row(c, `obligation-row-${record.id}`, spec.rowFacts[record.id]); await dispatchNativeClick(c, element, 'id', `obligation-row-${record.id}`);
       for (const [id, value] of Object.entries(spec.detailFacts[record.id])) await scopedIdFact(c, `obligation-detail-${record.id}`, id, value);
     }
     if (spec.retainedPreview) {
       const preview = spec.retainedPreview; assert.equal(preview.observed, true);
       const page = spec.pages.findIndex(value => value.obligations.some(record => record.id === preview.record.id));
-      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`); }
+      if (page !== selectedPage) { await tap(c, page === 0 ? 'obligations-first' : 'obligations-next'); await waitFact(c, 'obligation-page', `Page ${page + 1}`, { scroll: true }); }
       const element = await row(c, `obligation-row-${preview.record.id}`, spec.rowFacts[preview.record.id]); await dispatchNativeClick(c, element);
       await scopedFact(c, `obligation-detail-${preview.record.id}`, 'Description preview · first 4,000 characters');
       await scopedIdFact(c, `obligation-detail-${preview.record.id}`, 'obligation-description', preview.record.description);
       event(c, 'retained-long-obligation-preview', { id: preview.record.id, observed: true, evidence: preview.evidence });
     } else event(c, 'retained-long-obligation-preview', { observed: false, status: 'unverified', reason: 'NO_REVIEWED_RETAINED_LONG_SOURCE' });
-    await tap(c, 'obligations-close'); assert.equal(await rawCount(c, 'source-obligations'), 0); await tap(c, 'source-open-obligations'); await waitFact(c, 'obligation-page', 'Page 1');
+    await tap(c, 'obligations-close'); assert.equal(await rawCount(c, 'source-obligations'), 0); await tap(c, 'source-open-obligations'); await waitFact(c, 'obligation-page', 'Page 1', { scroll: true });
     assert.deepEqual((await control(c, 'readObligations', { contractId: spec.contractId, after: null })).value, spec.pages[0]);
     await tap(c, 'obligations-close'); readOnlyTraffic(delta(before, await traffic(c)));
     event(c, 'obligation-exact-parent-cursor-null-owner-date-detail-reload-close', { contractId: spec.contractId, pages: 2, records: 11 });
@@ -479,7 +643,7 @@ export const v1WorkflowScenarios = Object.freeze([
     const before = await traffic(c), arm = await control(c, 'armUnknownResponse', { method: 'POST', route: `/api/matters/${target.matter.id}/tasks`, mode: 'drop-after-successful-upstream-ack', maxUses: 1 });
     const key = `${c.caseId}:creation`; await dispatchV1SaveOnce(c, key); await outcome(c, ['unknown']);
     assert.equal(await rawCount(c, 'quick-save'), 0); assert.equal(await rawCount(c, 'quick-new-request'), 0);
-    await tap(c, 'quick-close'); await textTap(c, 'Stay'); await waitId(c, 'quick-unknown'); await tap(c, 'quick-reload'); await waitId(c, 'quick-unknown');
+    await tap(c, 'quick-close'); await confirmV1WorkLeave(c, 'stay'); await waitId(c, 'quick-unknown'); await tap(c, 'quick-reload'); await waitId(c, 'quick-unknown');
     assert.equal(await rawCount(c, 'quick-new-request'), 0, 'UNKNOWN_CREATION_MUST_NOT_REARM');
     const receipt = await control(c, 'readControlReceipt', { id: arm.id }); assert.equal(receipt.requestsForwarded, 1); assert.equal(receipt.upstreamStatus, 200); assert.equal(receipt.clientResponseWithheld, true); v1Identity(receipt.acknowledgedId);
     const trace = await control(c, 'readNativeRequest', { afterSequence: before.lastSequence, method: 'POST', route: `/api/matters/${target.matter.id}/tasks` });
@@ -487,7 +651,7 @@ export const v1WorkflowScenarios = Object.freeze([
       body: { ...target.create.body, expected_lifecycle_version: prior.matter.lifecycle_version }, expectedStatus: [200] });
     const current = await workspace(c, target.matter), created = current.tasks.filter(x => x.id === receipt.acknowledgedId); assert.equal(created.length, 1); assert.equal(created[0].title, target.create.fields.title);
     assert.deepEqual(current.tasks.filter(row => !prior.tasks.some(old => old.id === row.id)).map(row => row.id), [receipt.acknowledgedId]);
-    await tap(c, 'quick-close'); await textTap(c, 'Leave editor');
+    await tap(c, 'quick-close'); await confirmV1WorkLeave(c, 'leave');
     const finalTrace = await control(c, 'readNativeRequest', { afterSequence: before.lastSequence, method: 'POST', route: `/api/matters/${target.matter.id}/tasks` }); assert.equal(finalTrace.requests.filter(x => x.method === 'POST').length, 1);
     event(c, 'unknown-creation-stay-reload-leave-no-replay', { acknowledgedId: receipt.acknowledgedId, requestsForwarded: 1 });
   } },
@@ -606,7 +770,16 @@ export function prepareV1Context(context) {
   validateV1Fixture(context.fixture, context.platform);
   assert.ok(context.driver && context.controls && context.state, 'ACTUAL_V1_CONTEXT_REQUIRED');
   const budget = createV1CaseBudget();
-  return { ...context, budget, record: value => {
+  for (const method of ['control', 'read', 'owner']) {
+    const charge = budget[method];
+    budget[method] = () => { context.assertActive?.(); return charge(); };
+  }
+  // Presentation belongs to this admitted device/binary, not to a tenant's
+  // data fixture. Viewer fixtures deliberately do not contain the primary v1.
+  const observed = admitV1SegmentPresentation(context);
+  const segmentPresentation = Object.freeze({ platform: context.platform, sourceSha: context.fixture.binarySourceSha,
+    selectors: structuredClone({ observed: true, udid: observed.udid, buildReceipt: observed.buildReceipt, segments: observed.segments }) });
+  return { ...context, segmentPresentation, budget, record: value => {
     // Shared openMatter/home/browser-native helpers also emit this canonical
     // event. Charge their actions rather than count only this module's taps.
     if (value.type === 'native_ui_action') budget.control();

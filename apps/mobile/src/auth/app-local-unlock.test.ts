@@ -119,6 +119,25 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   let markerRead: (() => Promise<string | null>) | null = null;
   let captureReturn: Promise<null> | null = null;
   let invalidated = () => {};
+  let restoreRefusal: {
+    error: MobileApiError;
+    policy: "supported" | "update_required" | "unavailable";
+  } | null = null;
+  let sessionEnded: (cause: unknown) => Promise<void> = async () => {};
+  let businessRefusal: {
+    error: MobileApiError;
+    cleanup: Promise<void>;
+  } | null = null;
+  const rejectBusiness = async (kind: string): Promise<never> => {
+    events.push(kind);
+    assert.ok(businessRefusal);
+    serverIdentity = null;
+    serverBinding = null;
+    invalidated();
+    await businessRefusal.cleanup;
+    await sessionEnded(businessRefusal.error);
+    throw businessRefusal.error;
+  };
   const stateListeners = new Set<(state: string) => void>();
   let visibility = "active";
   let policyStatus: "supported" | "update_required" | "unavailable" =
@@ -139,8 +158,10 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
       _clock: unknown,
       onInvalidated: () => void,
       admit: typeof transportAdmission,
+      onSessionEnded: (cause: unknown) => Promise<void> = async () => {},
     ) {
       invalidated = onInvalidated;
+      sessionEnded = onSessionEnded;
       transportAdmission = admit;
     }
     get identity() {
@@ -154,6 +175,14 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
     }
     async restore() {
       events.push("restore-credential");
+      if (restoreRefusal) {
+        serverIdentity = null;
+        serverBinding = null;
+        invalidated();
+        policyStatus = restoreRefusal.policy;
+        await sessionEnded(restoreRefusal.error);
+        throw restoreRefusal.error;
+      }
       if (signedOut) return null;
       serverIdentity = restoreIdentity;
       serverBinding = restoreBinding;
@@ -175,10 +204,12 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
     }
     async request(path: string, init: RequestInit = {}) {
       transportAdmission(path, init.method || "GET", "business");
+      if (businessRefusal) return rejectBusiness("business-json");
       assert.fail("No business API is requested by this source control");
     }
     async requestBytes(path: string) {
       transportAdmission(path, "GET", "business");
+      if (businessRefusal) return rejectBusiness("business-bytes");
       assert.fail("No private file read is requested by this source control");
     }
   }
@@ -445,6 +476,19 @@ function host(cold = false, appVersion: unknown = "1.10.0", signedOut = false) {
   return {
     events,
     browserOpens,
+    refuseStoredSession(
+      error: MobileApiError,
+      nextPolicy: "supported" | "update_required" | "unavailable" = "supported",
+    ) {
+      serverIdentity = null;
+      serverBinding = null;
+      policy = null;
+      marker = null;
+      restoreRefusal = { error, policy: nextPolicy };
+    },
+    refuseBusinessSession(error: MobileApiError, cleanup = Promise.resolve()) {
+      businessRefusal = { error, cleanup };
+    },
     render,
     async flush() {
       await new Promise((resolve) => setImmediate(resolve));
@@ -1160,4 +1204,238 @@ test("actual App welcome browser lease ends on return from the background, not o
   f.render();
   assert.equal(f.browserOpens.length, 1);
   f.close();
+});
+
+test("actual App returns to secure sign-in after a rejected stored session and a fresh public policy check", async () => {
+  for (const status of [401, 403]) {
+    const f = host();
+    try {
+      f.refuseStoredSession(
+        new MobileApiError("Sign in again.", status, "native_mfa_required"),
+      );
+      f.render();
+      await f.flush();
+      await f.flush();
+      const signIn = f.props("SignInPanel");
+      assert.equal(signIn.busy, false);
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        2,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.equal(f.events.includes("browser-sign-in"), false);
+      assert.doesNotMatch(
+        f.text(),
+        /PrivateApplication|ClientCompatibilityPanel|Synthetic original person/,
+      );
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("actual App keeps cleanup failures and unknown refresh outcomes closed without automatic recovery", async () => {
+  for (const error of [
+    new MobileApiError("Clear failed.", 401, "native_storage_clear_failed"),
+    new MobileApiError("Cleanup failed.", 401, "native_session_cleanup_failed"),
+    new MobileApiError("Lost response.", 0, "network_failure", "unknown"),
+    new MobileApiError("Unknown mutation.", 403, "unknown_refresh", "unknown"),
+  ]) {
+    const f = host();
+    try {
+      f.refuseStoredSession(error);
+      f.render();
+      await f.flush();
+      await f.flush();
+      assert.equal(
+        f.props("ClientCompatibilityPanel").state.status,
+        "checking",
+      );
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        1,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("actual App rechecks the current public policy after session rejection and preserves denial or failure", async () => {
+  for (const policy of ["update_required", "unavailable"] as const) {
+    const f = host();
+    try {
+      f.refuseStoredSession(
+        new MobileApiError("Sign in again.", 403, "native_mfa_required"),
+        policy,
+      );
+      f.render();
+      await f.flush();
+      await f.flush();
+      assert.equal(f.props("ClientCompatibilityPanel").state.status, policy);
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        2,
+      );
+      assert.equal(
+        f.events.filter((x) => x === "restore-credential").length,
+        1,
+      );
+      assert.equal(f.events.includes("server-revalidate"), false);
+      assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("actual App recovers rejected foreground JSON and private-file sessions without replaying either operation", async () => {
+  for (const kind of ["json", "bytes"] as const)
+    for (const status of [401, 403]) {
+      const f = host();
+      try {
+        f.render();
+        await f.flush();
+        await f.flush();
+        const app = f.props("PrivateApplication"),
+          error = new MobileApiError(
+            "Sign in again.",
+            status,
+            "native_mfa_required",
+          );
+        f.refuseBusinessSession(error);
+        const operation =
+          kind === "json"
+            ? app.request("/api/account/deletion-requests")
+            : app.viewer.requestBytes(
+                "/api/matters/00000000-0000-4000-8000-000000000001/attachments/00000000-0000-4000-8000-000000000002/download",
+                { maxBytes: 100 },
+              );
+        await assert.rejects(operation, (e) => e === error);
+        await f.flush();
+        await f.flush();
+        assert.equal(f.props("SignInPanel").busy, false);
+        assert.equal(
+          f.events.filter((x) => x === "compatibility-public").length,
+          2,
+        );
+        assert.equal(
+          f.events.filter((x) => x === "business-" + kind).length,
+          1,
+        );
+        assert.equal(f.events.includes("browser-sign-in"), false);
+        assert.doesNotMatch(
+          f.text(),
+          /PrivateApplication|ClientCompatibilityPanel|Synthetic original person/,
+        );
+      } finally {
+        f.close();
+      }
+    }
+});
+
+test("foreground session recovery waits for completed private cleanup and refuses unknown or failed cleanup", async () => {
+  const f = host(),
+    cleanup = deferred<void>();
+  try {
+    f.render();
+    await f.flush();
+    await f.flush();
+    const app = f.props("PrivateApplication"),
+      error = new MobileApiError("Sign in again.", 403, "native_mfa_required");
+    f.refuseBusinessSession(error, cleanup.promise);
+    const rejection = assert.rejects(
+      app.request("/api/account/deletion-requests"),
+      (e) => e === error,
+    );
+    await f.flush();
+    assert.equal(
+      f.events.filter((x) => x === "compatibility-public").length,
+      1,
+    );
+    assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    cleanup.resolve();
+    await rejection;
+    await f.flush();
+    assert.equal(f.props("SignInPanel").busy, false);
+  } finally {
+    f.close();
+  }
+  for (const error of [
+    new MobileApiError("Clear failed.", 401, "native_storage_clear_failed"),
+    new MobileApiError("Cleanup failed.", 401, "native_session_cleanup_failed"),
+    new MobileApiError("Lost response.", 403, "unknown_refresh", "unknown"),
+  ]) {
+    const g = host();
+    try {
+      g.render();
+      await g.flush();
+      await g.flush();
+      const app = g.props("PrivateApplication");
+      g.refuseBusinessSession(error);
+      await assert.rejects(
+        app.request("/api/account/deletion-requests"),
+        (e) => e === error,
+      );
+      await g.flush();
+      assert.equal(
+        g.props("ClientCompatibilityPanel").state.status,
+        "checking",
+      );
+      assert.equal(
+        g.events.filter((x) => x === "compatibility-public").length,
+        1,
+      );
+      assert.doesNotMatch(g.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      g.close();
+    }
+  }
+});
+
+test("late foreground rejection recovery cannot run behind the app or across a newer identity", async () => {
+  for (const changed of ["background", "identity"] as const) {
+    const f = host(),
+      cleanup = deferred<void>();
+    try {
+      f.render();
+      await f.flush();
+      await f.flush();
+      const app = f.props("PrivateApplication");
+      const error = new MobileApiError(
+        "Sign in again.",
+        403,
+        "native_mfa_required",
+      );
+      f.refuseBusinessSession(error, cleanup.promise);
+      const failure = assert.rejects(
+        app.request("/api/account/deletion-requests"),
+        (e) => e === error,
+      );
+      await f.flush();
+      if (changed === "background") f.appState("background");
+      else f.adoptForeign();
+      cleanup.resolve();
+      await failure;
+      await f.flush();
+      assert.equal(
+        f.events.filter((x) => x === "compatibility-public").length,
+        1,
+      );
+      assert.equal(f.events.includes("browser-sign-in"), false);
+      assert.doesNotMatch(f.text(), /PrivateApplication|SignInPanel/);
+    } finally {
+      f.close();
+    }
+  }
 });

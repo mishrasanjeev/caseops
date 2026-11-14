@@ -134,7 +134,10 @@ async function enterFiles(context) {
   assert.equal(await read(context, 'id', 'files-matter-code', { scroll: true }), context.fixture.matter.identityLabel, 'ANDROID_FILES_WRONG_MATTER');
   assert.equal(await read(context, 'id', 'files-matter-title', { scroll: true }), context.fixture.matter.title, 'ANDROID_FILES_WRONG_MATTER_TITLE');
 }
-async function details(context, anchor) {
+export async function readAndroidFileDetails(context, anchor) {
+  // The filename is a short target too. Position it before the first read;
+  // a broad swipe sweep can pass it once uploads move an older row downward.
+  await scrollAndroidIntoView(context, `new UiSelector().resourceId(${JSON.stringify(`files-name-${anchor.attachmentId}`)})`);
   assert.equal(await read(context, 'id', `files-name-${anchor.attachmentId}`, { scroll: true }), anchor.filename, 'ANDROID_FILES_WRONG_FILENAME');
   // A swipe sweep can fling past this short row (files-25 FILES-09, files-26
   // FILES-04). Let UiAutomator position it first; readSourceHash still bounds
@@ -146,7 +149,7 @@ async function reload(context, anchor) {
   const before = await traffic(context); await click(context, 'id', 'files-reload', { scroll: true });
   await wait(context, async () => delta(before, await traffic(context)).some(row => row.method === 'GET'
     && row.route === `/api/matters/${anchor.matterId}/workspace` && row.status === 200), 10000, 'ANDROID_FILES_RELOAD_READ_REQUIRED');
-  await details(context, anchor);
+  await readAndroidFileDetails(context, anchor);
 }
 async function noSelection(context) { for (const id of ['files-selection', 'files-upload']) await absent(context, 'id', id); await find(context, 'id', 'files-choose', { scroll: true }); }
 export async function chooseAndroidFile(context, asset, { cancel = false } = {}) {
@@ -244,7 +247,7 @@ async function upload(context, kind) {
   const id = /^files-name-([a-f0-9-]{36})$/.exec(await names[0].getAttribute('resource-id'))?.[1];
   assert.ok(UUID.test(id || '') && id !== context.source.attachmentId, 'ANDROID_FILES_ACKNOWLEDGED_NEW_ID_REQUIRED');
   const anchor = { ...asset, matterId: context.source.matterId, attachmentId: id };
-  await details(context, anchor); await reload(context, anchor);
+  await readAndroidFileDetails(context, anchor); await reload(context, anchor);
   assert.equal(validateAndroidUploadAcknowledgement(delta(before, await traffic(context)), context.source.matterId, { requireRead: true }).requestId, ack.requestId,
     'ANDROID_FILES_ACK_CHANGED');
   assert.equal(typeof context.admitUploadedFileRead, 'function', 'ANDROID_FILES_OWNER_SOURCE_ADMISSION_REQUIRED');
@@ -261,7 +264,7 @@ export async function assertAndroidViewerAbsent(context) {
   for (const id of ['viewer-filename', 'viewer-text', 'viewer-isolated-renderer']) await absent(context, 'id', id);
 }
 async function openReader(context, anchor) {
-  await details(context, anchor); const before = await traffic(context);
+  await readAndroidFileDetails(context, anchor); const before = await traffic(context);
   const button = await find(context, 'id', `files-open-${anchor.attachmentId}`, { scroll: true });
   assert.equal(await button.isEnabled(), true, 'ANDROID_FILES_READER_UNAVAILABLE'); await dispatchNativeClick(context, button, 'id', `files-open-${anchor.attachmentId}`);
   await find(context, 'id', 'private-document-viewer'); assert.equal(await read(context, 'id', 'viewer-filename'), anchor.filename, 'ANDROID_FILES_WRONG_READER_SOURCE');
@@ -354,7 +357,7 @@ export const androidFilesScenarios = Object.freeze([
   ...KINDS.map((kind, index) => ({ id: `FILES-${String(index + 4).padStart(2, '0')}`, run: async c => { await upload(c, kind); if (kind === 'txt') await readText(c, uploadAnchor(c, kind)); await privacy(c, `uploaded-${kind}`); } })),
   { id: 'FILES-09', freshAuthentication: true, requires: ['FILES-05'], run: async c => { await enterFiles(c); const before = await traffic(c); await renderer(c, uploadAnchor(c, 'pdf'), 2); await noPosts(c, before); } },
   { id: 'FILES-10', requires: ['FILES-06', 'FILES-07'], run: async c => { await enterFiles(c); const before = await traffic(c); for (const kind of ['png', 'jpeg']) await renderer(c, uploadAnchor(c, kind), 1); await noPosts(c, before); } },
-  { id: 'FILES-11', requires: ['FILES-08'], run: async c => { const before = await traffic(c); await enterFiles(c); const anchor = uploadAnchor(c, 'docx'); await details(c, anchor); assert.equal(await (await find(c, 'id', `files-open-${anchor.attachmentId}`, { scroll: true })).isEnabled(), false, 'ANDROID_FILES_DOCX_READER_MUST_REMAIN_UNAVAILABLE'); await find(c, 'id', `files-viewer-unavailable-${anchor.attachmentId}`, { scroll: true }); await assertAndroidViewerAbsent(c); assert.equal(delta(before, await traffic(c)).filter(row => row.route.endsWith('/download') || row.route.endsWith('/preview')).length, 0, 'ANDROID_FILES_DOCX_WAS_OPENED'); await noPosts(c, before); } },
+  { id: 'FILES-11', requires: ['FILES-08'], run: async c => { const before = await traffic(c); await enterFiles(c); const anchor = uploadAnchor(c, 'docx'); await readAndroidFileDetails(c, anchor); assert.equal(await (await find(c, 'id', `files-open-${anchor.attachmentId}`, { scroll: true })).isEnabled(), false, 'ANDROID_FILES_DOCX_READER_MUST_REMAIN_UNAVAILABLE'); await find(c, 'id', `files-viewer-unavailable-${anchor.attachmentId}`, { scroll: true }); await assertAndroidViewerAbsent(c); assert.equal(delta(before, await traffic(c)).filter(row => row.route.endsWith('/download') || row.route.endsWith('/preview')).length, 0, 'ANDROID_FILES_DOCX_WAS_OPENED'); await noPosts(c, before); } },
   { id: 'FILES-12', run: async c => { await enterFiles(c); await openReader(c, c.source); await find(c, 'id', 'viewer-text'); const before = await traffic(c); await backgroundAndResume(c); await assertAndroidViewerAbsent(c); await enterFiles(c); await noPosts(c, before); await privacy(c, 'viewer-background'); } },
   { id: 'FILES-13', run: async c => { await enterFiles(c); const before = await traffic(c); await chooseAndroidFile(c, validateAndroidFileAsset(c, 'txt')); await backgroundAndResume(c); await enterFiles(c); await noSelection(c); await noPosts(c, before); await privacy(c, 'selection-background'); } },
   { id: 'FILES-14', run: async c => { await enterFiles(c); const before = await traffic(c); await chooseAndroidFile(c, validateAndroidFileAsset(c, 'txt')); await discardSelection(c, 'stay'); await find(c, 'id', 'files-selection', { scroll: true }); await discardSelection(c, 'leave'); await enterFiles(c); await noSelection(c); await noPosts(c, before); await privacy(c, 'selection-discard'); } },

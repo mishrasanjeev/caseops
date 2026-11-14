@@ -86,9 +86,11 @@ export async function visible(driver, query, probe = operation => operation()) {
   return matches[0];
 }
 
-export async function swipe(context, direction = 'down') {
+export async function swipe(context, direction = 'down', check = () => {}) {
+  check();
   nativeAction(context, 'swipe');
   const window = await context.driver.getWindowRect();
+  check();
   const { width, height } = window;
   let x = Math.round(width * 0.5);
   let top = Math.round(height * 0.28);
@@ -150,6 +152,10 @@ export async function swipe(context, direction = 'down') {
       assert.ok(x < rect.x || x >= rect.x + rect.width, 'NATIVE_SCROLL_GUTTER_INTERSECTS_INPUT');
     }
   }
+  // A polling owner may have timed out while geometry was in flight. Do not
+  // dispatch a late gesture, but always finish releaseActions after a started,
+  // acknowledged gesture even if its owner has expired in the meantime.
+  check();
   await context.driver.performActions([{ type: 'pointer', id: 'native-scroll', parameters: { pointerType: 'touch' }, actions: [
     { type: 'pointerMove', duration: 0, x, y: direction === 'down' ? bottom : top },
     { type: 'pointerDown', button: 0 },
@@ -161,6 +167,7 @@ export async function swipe(context, direction = 'down') {
     { type: 'pointerUp', button: 0 },
   ] }]);
   await context.driver.releaseActions();
+  check();
 }
 
 export async function find(context, kind, value, { scroll = false, scrollDirection } = {}) {

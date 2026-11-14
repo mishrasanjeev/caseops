@@ -420,7 +420,9 @@ jobs:
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=${{ matrix.total_shards }}
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
-            -o faulthandler_timeout=60
+            -p tests.postgres_thread_diagnostics
+            --postgres-thread-diagnostics-after=60
+            -o faulthandler_timeout=0
         run: uv run python ../../scripts/pytest_native_receipt.py "postgres-native-exit-${{ matrix.shard }}.json" -- -q -m postgres
 
       - name: Upload exact PostgreSQL collection and results
@@ -544,6 +546,10 @@ jobs:
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
         run: npm run typecheck:e2e
+
+      - name: Verify PowerShell metadata fixture runtime
+        timeout-minutes: 1
+        run: pwsh -NoProfile -NonInteractive -File tests/e2e/fixtures/metadata-marker-runtime.ps1
 
       - name: Vitest with coverage (AQ-002 reliability + threshold ratchet)
         env:
@@ -754,6 +760,20 @@ jobs:
           uv run --project apps/api --python 3.13 python scripts/prod_playwright_evidence.py
           validate --required ci-${{ matrix.project }}
 
+      # Retain the small source-bound receipt before the full report. Run
+      # 43079693201 passed browser execution/reconciliation, then exhausted the
+      # job during report upload before this receipt could be uploaded.
+      # Keep both uploads fail-closed and bounded within the unchanged job limit.
+      - name: Upload App native evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-native-${{ matrix.project }}
+          path: test-results/prod-native-evidence/ci-${{ matrix.project }}/
+          retention-days: 7
+          if-no-files-found: error
+
       # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
       # `failure()` and `!cancelled()` skip this step - verified on run
       # 32152575950, where the job hit its 30-minute budget and the upload was
@@ -763,6 +783,7 @@ jobs:
       # being thrown away.
       - name: Upload Playwright report
         if: always()
+        timeout-minutes: 3
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.project }}
@@ -771,17 +792,6 @@ jobs:
             test-results/
             test-results/prod-native-evidence/ci-${{ matrix.project }}/
           retention-days: 7
-
-      # Upload only this invocation's native files as a separate artifact.
-      # Full reports remain isolated; their shared fixture paths are never merged.
-      - name: Upload App native evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-native-${{ matrix.project }}
-          path: test-results/prod-native-evidence/ci-${{ matrix.project }}/
-          retention-days: 7
-          if-no-files-found: error
 
   e2e:
     name: Playwright app suite

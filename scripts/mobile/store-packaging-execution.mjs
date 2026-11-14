@@ -14,6 +14,13 @@ const { reference, validateStoreBuild, storeNumberReservations, reserveBuildNumb
 const { validateNativeLinkConfig, nativeLinkProjections } = require('../../apps/web/lib/native-link-policy.cjs');
 export const GATES = Object.freeze(['mobile', 'web', 'apiCommon', 'apiPostgres', 'nativeIos', 'nativeAndroid',
   'secretTreeHistory', 'codeqlAnalysis', 'codeqlAlertVerdict', 'wholeLockAdvisories', 'installedAdvisories', 'licenses', 'sdk', 'linuxImage', 'requiredCI', 'privacyPolicy']);
+// Submission is platform-specific. The other platform's unfinished native
+// run must not block this build; all shared product/security gates still do.
+export function storeGatesFor(platform) {
+  assert.ok(['android', 'ios'].includes(platform), 'STORE_PLATFORM_REQUIRED');
+  const native = platform === 'android' ? 'nativeAndroid' : 'nativeIos';
+  return GATES.filter(name => !['nativeIos', 'nativeAndroid'].includes(name) || name === native);
+}
 export const LIMITS = Object.freeze({ totalSeconds: 3600, cleanupSeconds: 30, commands: 48,
   outputPerStream: 16 * 1024 * 1024, aggregateOutput: 256 * 1024 * 1024, publicReferences: 256 });
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
@@ -213,8 +220,8 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
     source: { ...request.source, sourceDirty: false }, allowSynthetic: contractOnly });
   assert.equal(plan.platform, q.platform, 'STORE_PLATFORM_MISMATCH');
   const gates = jsonInput(reference(q.gates)).value;
-  objectKeys(gates, ['schemaVersion', 'kind', 'sourceSha', 'tree', 'sourceFingerprint', 'inputFileCount', 'reviewedAt', 'reservationDirectory', 'inputBindings', 'results', 'evidence'], 'STORE_REVIEWED_GATES_REQUIRED');
-  assert.ok(gates.schemaVersion === 1 && gates.kind === 'caseops-reviewed-store-gates'
+  objectKeys(gates, ['schemaVersion', 'kind', 'platform', 'sourceSha', 'tree', 'sourceFingerprint', 'inputFileCount', 'reviewedAt', 'reservationDirectory', 'inputBindings', 'results', 'evidence'], 'STORE_REVIEWED_GATES_REQUIRED');
+  assert.ok(gates.schemaVersion === 2 && gates.kind === 'caseops-reviewed-store-gates'
     && gates.sourceSha === source.sourceSha && gates.tree === source.tree
     && gates.sourceFingerprint === request.source.sourceFingerprint && gates.inputFileCount === request.source.inputFileCount
     && Date.parse(gates.reviewedAt) <= Date.now() && Date.now() - Date.parse(gates.reviewedAt) <= 86400000
@@ -222,9 +229,11 @@ export async function executeStorePackaging(requestRef, { root = ROOT, adapter }
   assert.deepEqual(gates.inputBindings, { toolsSha256: q.tools.sha256, nativeLinkConfigSha256: request.nativeLinks.sha256,
     storeBuildSha256: request.storeBuild.sha256, privacyPolicySha256: q.privacyPolicy.sha256,
     signingPublicInputs: request.signing, architecture: q.architecture }, 'STORE_REVIEWED_INPUT_BINDINGS_MISMATCH');
-  objectKeys(gates.results, GATES, 'STORE_COMPLETE_GATE_INVENTORY_REQUIRED');
-  assert.ok(GATES.every(name => gates.results[name] === 'passed'), 'STORE_REQUIRED_GATE_FAILED');
-  assert.ok(Array.isArray(gates.evidence) && gates.evidence.length >= GATES.length && gates.evidence.length <= LIMITS.publicReferences, 'STORE_GATE_EVIDENCE_REQUIRED');
+  assert.equal(gates.platform, q.platform, 'STORE_GATE_PLATFORM_MISMATCH');
+  const platformGates = storeGatesFor(q.platform);
+  objectKeys(gates.results, platformGates, 'STORE_COMPLETE_GATE_INVENTORY_REQUIRED');
+  assert.ok(platformGates.every(name => gates.results[name] === 'passed'), 'STORE_REQUIRED_GATE_FAILED');
+  assert.ok(Array.isArray(gates.evidence) && gates.evidence.length >= platformGates.length && gates.evidence.length <= LIMITS.publicReferences, 'STORE_GATE_EVIDENCE_REQUIRED');
   for (const ref of gates.evidence) { checkDeadline(admissionDeadline); jsonInput(reference(ref)); }
   const history = jsonInput(reference(q.storeHistory)).value;
   objectKeys(history, ['kind', 'identities', 'observedAt', 'iosBuildNumber', 'androidVersionCode', 'evidence'], 'STORE_HISTORY_REQUIRED');

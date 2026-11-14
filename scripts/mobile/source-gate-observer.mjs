@@ -20,6 +20,7 @@ export const SOURCE_GATE_WORKER_PATHS = Object.freeze([
   "apps/mobile/e2e/android-files.test.mjs",
   "scripts/mobile/ios-browser-context.test.mjs",
   "scripts/mobile/ios-native-locators.test.mjs",
+  "scripts/mobile/ios-files-facts.test.mjs",
   "scripts/mobile/ios-simulator-signing.test.mjs",
   "scripts/mobile/prepare-gateway-routes.test.mjs",
   "scripts/mobile/prepare-ios-local-run.test.mjs",

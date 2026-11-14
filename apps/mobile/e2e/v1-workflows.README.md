@@ -316,3 +316,32 @@ and is checked again before bytes are used. Missing, Boolean, negative or
 unmatched UID metadata refuses; no process-UID fallback is permitted. POSIX
 owner/mode controls do not certify Windows ACLs. Existing pending references
 remain null until the actual descriptor evidence exists.
+
+
+### Credential references across host and gateway mounts
+
+Keep each actor's `credentialEvidence` identical to its immutable producer and
+native host reference. If the mounted gateway state uses a different namespace,
+provide `runtimeCredentialEvidence` with exactly `path`, `sha256`, and actual
+mounted-descriptor `uid`. Its SHA must equal the original credential SHA and
+its path must be a direct child of the authority evidence's runtime directory.
+The gateway rechecks this directory against its own state root and applies the
+unchanged private-file descriptor checks. Create any mounted copy exclusively
+from the verified retained original buffer; never rewrite a producer receipt or
+substitute a hard link/symlink. Both references retain independently observed
+ownership. Omitting the runtime mapping preserves the existing single-namespace
+contract. Controls remain default-disabled and all normal API identity/MFA
+checks, exact routes and operation/deadline ceilings continue to apply.
+
+
+### Member authentication versus the Core dataset
+
+V1 member admission uses `validateNativeFixtureAuthentication` after complete V1
+fixture/source/artifact/backend and native-auth observation checks. The shared
+validator retains the synthetic Docker environment, dated fixture identity,
+serving origin, credential/MFA, browser recipe/marker and actual isolation receipt
+checks. V1 records come from its own complete normal-API producer and actual
+native presentation/selector observations. Core23 independently continues through
+`validateCoreFixture`, including all of its matter searches, task, draft,
+calendar and optional seed-ledger checks. Both inventories are still required
+separately for the complete83-case release qualification.

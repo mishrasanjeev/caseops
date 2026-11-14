@@ -25,6 +25,7 @@ import { selectTab } from "../domain/tab-selection";
 import type { Matter, MatterRef, WorkItem } from "../domain/contracts";
 import { createRepository } from "../domain/repository";
 import { createSourceRecordsRepository } from "../domain/source-records";
+import { sourceListEntries } from "../domain/source-navigation";
 import {
   workspaceConductRepository,
   type WorkspaceReportTarget,
@@ -86,7 +87,7 @@ type Route =
   | { type: "note"; matter: Matter }
   | { type: "quick-work"; matter: Matter; target: QuickTarget }
   | { type: "draft"; matterId: string; draftId: string }
-  | { type: "source-list" }
+  | { type: "source-list"; instance: number }
   | { type: "viewer"; source: ViewerSource }
   | { type: "source"; source: SourceRef; locator?: SourceLocator }
   | { type: "inbox" }
@@ -185,6 +186,7 @@ function ApplicationContent({
   );
   const [tab, setTab] = useState<Tab>("today");
   const [sourceKind, setSourceKind] = useState<SourceKind>("ip_docket");
+  const sourceListInstance = useRef(0);
   const [stacks, setStacks] = useState<Record<Tab, Route[]>>({
     today: initialAccount
       ? [{ type: "home" }, { type: "account" }]
@@ -266,6 +268,12 @@ function ApplicationContent({
         return { ...previous, [tab]: [...previous[tab], next] };
       }),
     );
+  const openSourceList = () => {
+    const instance = sourceListInstance.current + 1;
+    if (!Number.isSafeInteger(instance)) return;
+    sourceListInstance.current = instance;
+    push({ type: "source-list", instance });
+  };
   const linkState = recordLinks?.inbox.snapshot;
   const attemptedLink = useRef<{ inbox: RecordLinkInbox; id: number } | null>(
     null,
@@ -481,6 +489,20 @@ function ApplicationContent({
           </View>
         ) : null}
         <View style={styles.fill}>
+          {sourceListEntries(stacks, identity.company.id, sourceKind).map(
+            ({ entry, origin, key }) => (
+              <SourceRecordsScreen
+                key={key}
+                repository={sources}
+                kind={sourceKind}
+                onKindChange={setSourceKind}
+                active={origin === tab && entry === route}
+                openSource={(source, locator) =>
+                  push({ type: "source", source, locator })
+                }
+              />
+            ),
+          )}
           <View
             style={[
               styles.fill,
@@ -724,9 +746,7 @@ function ApplicationContent({
             />
           ) : route.type === "account" ? (
             <View style={styles.fill}>
-              <NativeSourcesButton
-                onPress={() => push({ type: "source-list" })}
-              />
+              <NativeSourcesButton onPress={openSourceList} />
               <AccountScreen
                 identity={identity}
                 request={request}
@@ -734,17 +754,7 @@ function ApplicationContent({
                 localUnlock={localUnlock}
               />
             </View>
-          ) : route.type === "source-list" ? (
-            <SourceRecordsScreen
-              repository={sources}
-              kind={sourceKind}
-              onKindChange={setSourceKind}
-              active
-              openSource={(source, locator) =>
-                push({ type: "source", source, locator })
-              }
-            />
-          ) : route.type === "source" ? (
+          ) : route.type === "source-list" ? null : route.type === "source" ? (
             <SourceRecordDetailScreen
               repository={sources}
               source={route.source}

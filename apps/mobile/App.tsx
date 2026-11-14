@@ -178,6 +178,24 @@ export default function App() {
         incompatible: (body) => compatibility?.incompatible(body),
       },
     );
+    const recoverEndedSession = async (cause: unknown) => {
+      // Session owns credential/private cleanup and calls this only after it
+      // finishes. Recover public policy, never an authenticated request or token.
+      if (
+        cause instanceof MobileApiError &&
+        [401, 403].includes(cause.status) &&
+        cause.outcome === "rejected" &&
+        ![
+          "native_storage_clear_failed",
+          "native_session_cleanup_failed",
+        ].includes(cause.code) &&
+        session.localBinding === null &&
+        compatibility?.getSnapshot().status === "checking" &&
+        alive.current &&
+        foreground.current
+      )
+        await compatibility.refresh();
+    };
     const session: NativeSession = new NativeSession(
       transport,
       credentialStore,
@@ -212,6 +230,7 @@ export default function App() {
             "local_device_locked",
           );
       },
+      recoverEndedSession,
     );
     compatibility = createClientCompatibility(
       { platform: Platform.OS, version: Constants.expoConfig?.version },
@@ -318,7 +337,7 @@ export default function App() {
     runtime.compatibility.admit("/api/auth/me", "GET");
     if (!runtime.session.identity && !(await runtime.session.restore()))
       return null;
-    return runtime.session.revalidate();
+    return await runtime.session.revalidate();
   }, [runtime]);
   const publishUnlocked = useCallback(
     (

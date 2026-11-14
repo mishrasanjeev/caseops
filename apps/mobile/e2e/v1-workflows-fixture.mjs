@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { totp } from './mfa.mjs';
-import { v1Hash, v1Identity, v1Reference, v1PrivateReference, v1Lifecycle, collectV1OracleIdentities, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, readV1Reference, readV1Bytes } from './v1-workflows-contract.mjs';
+import { v1Hash, v1Identity, v1Reference, v1PrivateReference, v1Lifecycle, collectV1OracleIdentities, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, v1OperationalMatter, readV1Reference, readV1Bytes } from './v1-workflows-contract.mjs';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory } from './v1-workflows-inventory.mjs';
+import { readV1CounselPrerequisite, V1_COUNSEL_PROFILE_ROUTE } from './v1-counsel-prerequisite.mjs';
+
+const COUNSEL_ASSIGNMENT_ROUTE = '/api/outside-counsel/assignments';
+const READTHROUGH_INPUTS = ['base', 'counsel-prerequisite', 'viewer', 'inbox'];
 
 export const V1_PRODUCER_LIMITS = Object.freeze({ totalMs: 180000, perRequestMs: 10000, requests: 96, writes: 64, responseBytes: 1048576 });
 const CREATE = [
   /^\/api\/clients\/$/, /^\/api\/contracts\/$/, /^\/api\/matters\/$/,
   /^\/api\/ip\/patents\/families$/, /^\/api\/ip\/specialist\/records$/,
-  /^\/api\/ip\/trademark-applications\/manual$/, /^\/api\/ip\/operational-deadlines$/,
+  /^\/api\/ip\/trademark-applications\/manual$/,
   /^\/api\/matters\/[a-f0-9-]{36}\/(?:tasks|hearings)$/,
   /^\/api\/matters\/[a-f0-9-]{36}\/access\/(?:restricted|grants)$/,
   /^\/api\/ip\/dockets\/[a-f0-9-]{36}\/matter-links$/,
@@ -36,6 +40,17 @@ function noSecrets(value) {
     noSecrets(item);
   }
 }
+function calendarProjection(value) {
+  assert.ok(value && typeof value === 'object', 'CALENDAR_PROJECTION_MUST_USE_TYPED_READBACK');
+  if (Object.hasOwn(value, '$response')) {
+    assert.deepEqual(value, { $response: 'calendar-catalogue' }, 'CALENDAR_PROJECTION_MUST_USE_TYPED_READBACK'); return;
+  }
+  assert.deepEqual(value.day, { $response: 'calendar-catalogue.day' }, 'CALENDAR_PROJECTION_MUST_USE_TYPED_READBACK');
+  assert.ok(Array.isArray(value.sources) && value.sources.length === 3, 'CALENDAR_PROJECTION_MUST_USE_TYPED_READBACK');
+  for (const [index, source] of value.sources.entries()) for (const field of ['family', 'docket', 'event', 'confirmation']) {
+    assert.deepEqual(source[field], { $response: `calendar-catalogue.sources.${index}.${field}` }, 'CALENDAR_PROJECTION_MUST_USE_TYPED_READBACK');
+  }
+}
 export function requireV1ProducerPlan(plan) {
   assert.equal(plan?.schemaVersion, 1); assert.equal(plan.readyForLive, true, 'V1_PRODUCER_PENDING_MUST_NOT_RUN');
   assert.equal(plan.preparedOnly, false, 'V1_PRODUCER_PENDING_MUST_NOT_RUN');
@@ -46,23 +61,53 @@ export function requireV1ProducerPlan(plan) {
   v1Identity(plan.companyId); v1Identity(plan.membershipId);
   v1Identity(plan.ownerMembershipId);
   v1Reference(plan.catalogueEvidence); v1Reference(plan.emptyNotificationPlanEvidence);
-  if (plan.phase === 'readthrough') for (const key of ['baseDatasetEvidence', 'baseProducerEvidence', 'viewerEvidence', 'inboxEvidence']) v1Reference(plan[key]);
+  if (plan.phase === 'readthrough') for (const key of ['baseDatasetEvidence', 'baseProducerEvidence', 'viewerEvidence', 'inboxEvidence', 'counselPrerequisiteEvidence']) v1Reference(plan[key]);
   assert.ok(Array.isArray(plan.steps) && plan.steps.length > 0 && plan.steps.length <= V1_PRODUCER_LIMITS.requests);
   assert.equal(new Set(plan.steps.map(step => step.key)).size, plan.steps.length, 'UNIQUE_PRODUCER_STEP_KEYS_REQUIRED');
   assert.ok(plan.steps.every(step => /^[a-z][a-z0-9-]{1,80}$/.test(step.key)));
   if (plan.phase === 'base') {
     assert.ok(plan.secondaryOwner && typeof plan.secondaryOwner.companySlug === 'string' && typeof plan.secondaryOwner.companyName === 'string'
       && typeof plan.secondaryOwner.fullName === 'string' && typeof plan.secondaryOwner.email === 'string', 'NORMAL_SECOND_COMPANY_OWNER_PLAN_REQUIRED');
-    assert.ok(plan.steps.length <= V1_PRODUCER_LIMITS.requests - 4, 'BASE_REQUESTS_MUST_RESERVE_FOUR_SECOND_COMPANY_CALLS');
-    assert.ok(plan.steps.filter(step => step.method === 'POST').length <= V1_PRODUCER_LIMITS.writes - 3);
-    assert.ok(plan.steps.every(step => !step.key.startsWith('secondary-')));
+    assert.ok(plan.steps.length <= V1_PRODUCER_LIMITS.requests - 4 - 22, 'BASE_REQUESTS_MUST_RESERVE_SECOND_OWNER_AND_CALENDAR_CALLS');
+    assert.ok(plan.steps.filter(step => step.method === 'POST').length <= V1_PRODUCER_LIMITS.writes - 3 - 12);
+    assert.ok(plan.steps.every(step => !/^(secondary-|calendar-|ip-(patent|design)-grant-)/.test(step.key)));
     assert.equal(plan.steps.filter(step => step.purpose === 'contract-create').length, 26, 'TWENTY_SIX_REAL_CONTRACT_CREATES_REQUIRED');
     assert.deepEqual(plan.steps.filter(step => step.purpose === 'ip-create').map(step => step.family).sort(), ['design', 'patent', 'trademark']);
     assert.equal(plan.steps.filter(step => step.purpose === 'work-parent-create').length, 8, 'SIX_PRIMARY_CONFLICT_AND_REVOKED_PARENTS_REQUIRED');
     assert.equal(plan.steps.filter(step => step.purpose === 'wall-matter-link').length, 1, 'ACTUAL_IP_OPERATIONAL_LINK_REQUIRED');
     assert.equal(plan.steps.filter(step => step.purpose === 'revoked-restricted').length, 1, 'ACTUAL_RESTRICTED_PARENT_REQUIRED');
     assert.equal(plan.steps.filter(step => step.purpose === 'revoked-grant').length, 1, 'ACTUAL_NATIVE_MEMBER_GRANT_REQUIRED');
+    const calendar = plan.calendarCatalogue;
+    assert.ok(calendar && typeof calendar === 'object', 'TYPED_CALENDAR_CATALOGUE_PLAN_REQUIRED');
+    assert.deepEqual(Object.keys(calendar).sort(), ['day', 'families']);
+    assert.match(calendar.day || '', /^(?!0000)\d{4}-\d{2}-\d{2}$/);
+    assert.equal(new Date(calendar.day + 'T00:00:00Z').toISOString().slice(0, 10), calendar.day);
+    assert.ok(Array.isArray(calendar.families) && calendar.families.length === 3);
+    assert.deepEqual(calendar.families.map(x => x.spec?.family).sort(), ['design', 'patent', 'trademark']);
+    for (const family of calendar.families) {
+      assert.deepEqual(Object.keys(family).sort(), ['parents', 'spec']);
+      assert.deepEqual(Object.keys(family.spec).sort(), ['baseDate', 'calendarSourceHash', 'calendarVersionId', 'family', 'jurisdiction', 'ruleSourceHash', 'ruleVersionId', 'title']);
+      for (const key of ['ruleVersionId', 'calendarVersionId']) v1Identity(family.spec[key]);
+      for (const key of ['ruleSourceHash', 'calendarSourceHash']) assert.match(family.spec[key] || '', /^[a-f0-9]{64}$/);
+      assert.match(family.spec.jurisdiction || '', /^[A-Z]{2}$/);
+      assert.ok(typeof family.spec.title === 'string' && family.spec.title === family.spec.title.trim() && family.spec.title.length > 0 && family.spec.title.length <= 255);
+      assert.match(family.spec.baseDate || '', /^(?!0000)\d{4}-\d{2}-\d{2}$/);
+      assert.equal(new Date(family.spec.baseDate + 'T00:00:00Z').toISOString().slice(0, 10), family.spec.baseDate);
+      assert.ok(family.spec.baseDate <= calendar.day);
+      assert.deepEqual(Object.keys(family.parents).sort(), ['creator', 'link', 'matter']);
+      const parents = Object.fromEntries(Object.entries(family.parents).map(([role, key]) => {
+        assert.match(key || '', /^[a-z][a-z0-9-]{1,80}$/);
+        const step = plan.steps.find(x => x.key === key);
+        assert.ok(step, 'ACTUAL_CALENDAR_PARENT_STEP_REQUIRED'); return [role, step];
+      }));
+      assert.equal(parents.creator.purpose, 'ip-create'); assert.equal(parents.creator.family, family.spec.family);
+      assert.equal(parents.matter.purpose, 'work-parent-create');
+      assert.ok(['wall-matter-link', 'calendar-matter-link'].includes(parents.link.purpose));
+    }
+    for (const role of ['creator', 'link', 'matter']) assert.equal(new Set(calendar.families.map(x => x.parents[role])).size, 3, 'DISTINCT_CALENDAR_PARENT_STEPS_REQUIRED');
+    calendarProjection(plan.fixtureProjection?.v1?.records?.calendar);
   } else {
+    assert.ok(plan.steps.every(step => !READTHROUGH_INPUTS.includes(step.key)), 'READTHROUGH_INPUT_NAMES_RESERVED');
     assert.equal(plan.steps.length, 54, 'EXACT_READTHROUGH_HTTP_INVENTORY_REQUIRED');
     const roles = { 'obligation-create': 11, 'counsel-profile': 1, 'counsel-assignment': 11, 'counsel-spend': 26, 'obligation-page': 2, 'counsel-page': 3 };
     assert.deepEqual(Object.fromEntries(Object.entries(roles).map(([role]) => [role, plan.steps.filter(step => step.purpose === role).length])), roles);
@@ -73,9 +118,17 @@ export function requireV1ProducerPlan(plan) {
   for (const step of plan.steps) {
     assert.ok(['GET', 'POST'].includes(step.method));
     assert.ok(Array.isArray(step.expectedStatuses) && step.expectedStatuses.length > 0 && step.expectedStatuses.every(status => Number.isInteger(status) && status >= 200 && status < 300));
+    if (step.purpose === 'counsel-profile' || step.route === V1_COUNSEL_PROFILE_ROUTE) {
+      assert.equal(plan.phase, 'readthrough'); assert.equal(step.method, 'POST');
+      assert.equal(step.purpose, 'counsel-profile'); assert.equal(step.route, V1_COUNSEL_PROFILE_ROUTE);
+    }
+    if (step.purpose === 'counsel-assignment' || step.route === COUNSEL_ASSIGNMENT_ROUTE) {
+      assert.equal(plan.phase, 'readthrough'); assert.equal(step.method, 'POST');
+      assert.equal(step.purpose, 'counsel-assignment'); assert.equal(step.route, COUNSEL_ASSIGNMENT_ROUTE);
+    }
     if (step.purpose === 'contract-create') assert.ok(step.method === 'POST' && step.route === '/api/contracts/', 'CONTRACT_ROLE_REQUIRES_CONTRACT_API');
     if (step.purpose === 'work-parent-create') assert.ok(step.method === 'POST' && step.route === '/api/matters/', 'WORK_PARENT_ROLE_REQUIRES_MATTER_API');
-    if (step.purpose === 'wall-matter-link') { assert.equal(step.method, 'POST'); assert.ok(step.route.endsWith('/matter-links')); assert.equal(step.body?.relation_role, 'operational');
+    if (['wall-matter-link', 'calendar-matter-link'].includes(step.purpose)) { assert.equal(step.method, 'POST'); assert.ok(step.route.endsWith('/matter-links')); assert.equal(step.body?.relation_role, 'operational');
       assert.ok(step.body.expected_docket_updated_at && typeof step.body.reason === 'string' && step.body.reason.length >= 8); }
     if (step.purpose === 'revoked-restricted') { assert.equal(step.method, 'POST'); assert.ok(step.route.endsWith('/access/restricted')); assert.equal(step.body?.restricted, true); }
     if (step.purpose === 'revoked-grant') { assert.equal(step.method, 'POST'); assert.ok(step.route.endsWith('/access/grants')); assert.equal(step.body?.membership_id, plan.membershipId); }
@@ -123,7 +176,7 @@ function routeFor(step, observed) {
  * writes a database row directly, or retries an API command. The caller must
  * persist every event outside Git; a stopped producer is never resumed.
  */
-export async function produceV1Dataset(plan, { request, catalogue, persistPrivate, persist, claim, aggregate, planEvidence, admit, readEvidence = readV1Reference, now = Date.now }) {
+export async function produceV1Dataset(plan, { request, catalogue, calendarCatalogue, persistPrivate, persist, claim, aggregate, planEvidence, admit, counselPrerequisiteBinding, readEvidence = readV1Reference, now = Date.now }) {
   requireV1ProducerPlan(plan); assert.equal(typeof request, 'function'); assert.equal(typeof persist, 'function');
   assert.deepEqual(catalogue, readEvidence(plan.catalogueEvidence), 'HASH_BOUND_ACTUAL_CATALOGUE_REQUIRED');
   assert.equal(catalogue.sourceSha, plan.sourceSha, 'ACTUAL_CATALOGUE_SOURCE_REQUIRED');
@@ -132,6 +185,12 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
   assert.equal(catalogue.trademarkManualAvailable, true, 'REAL_TRADEMARK_MANUAL_CONTRACT_REQUIRED');
   assert.ok(aggregate && typeof aggregate.begin === 'function' && typeof aggregate.request === 'function'); v1Reference(planEvidence);
   assert.equal(aggregate.publicState().runId, plan.runId, 'EXACT_FIXTURE_RUN_REQUIRED'); assert.equal(aggregate.publicState().sourceSha, plan.sourceSha, 'EXACT_FIXTURE_SOURCE_REQUIRED');
+  let seededCounselIds = [];
+  if (plan.phase === 'readthrough') {
+    assert.ok(counselPrerequisiteBinding, 'EXACT_COUNSEL_PREREQUISITE_BINDING_REQUIRED');
+    for (const key of ['sourceSha', 'runId', 'companyId', 'ownerMembershipId']) assert.equal(counselPrerequisiteBinding[key], plan[key]);
+    seededCounselIds = readV1CounselPrerequisite(plan.counselPrerequisiteEvidence, counselPrerequisiteBinding, { read: readEvidence });
+  }
   aggregate.begin(plan.phase, planEvidence);
   assert.equal(typeof admit, 'function', 'BEFORE_AFTER_ACTUAL_OWNER_ADMISSION_REQUIRED');
   const before = await admit(plan, { boundary: 'before', remaining: () => aggregate.remaining(plan.phase), charge: value => aggregate.request(plan.phase, { ...value, admission: true }) });
@@ -139,8 +198,10 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
   assert.equal(before.companyId, plan.companyId); assert.equal(before.membershipId, plan.ownerMembershipId); assert.equal(before.role, 'owner');
   assert.equal(typeof claim, 'function', 'PERSISTENT_EXCLUSIVE_PRODUCER_CLAIM_REQUIRED');
   const planSha256 = v1Hash(Buffer.from(JSON.stringify(plan))); claim(planSha256);
-  const start = now(), deadline = start + V1_PRODUCER_LIMITS.totalMs, observed = new Map(), attempted = new Set();
-  const oracleIds = new Set([plan.companyId, plan.membershipId, plan.ownerMembershipId]);
+  const start = now(), deadline = start + V1_PRODUCER_LIMITS.totalMs, observed = new Map(), parentAcks = new Map(), attempted = new Set();
+  const oracleIds = new Set([plan.companyId, plan.membershipId, plan.ownerMembershipId, ...seededCounselIds]);
+  const counselProfileIds = new Set(seededCounselIds), assignedCounselProfileIds = new Set();
+  let counselMatterId;
   if (plan.phase === 'readthrough') {
     const base = readEvidence(plan.baseDatasetEvidence), prior = readEvidence(plan.baseProducerEvidence), viewer = readEvidence(plan.viewerEvidence), inbox = readEvidence(plan.inboxEvidence);
     assert.equal(prior.kind, 'actual-normal-api-v1-base-fixture');
@@ -148,7 +209,10 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
     for (const receipt of [prior, viewer, inbox]) for (const id of validateV1OracleIdentityEvidence(receipt.oracleIdentityEvidence).identities) oracleIds.add(id);
     assert.equal(viewer.kind, 'actual-normal-api-v1-viewer'); assert.equal(viewer.role, 'viewer'); assert.equal(viewer.capabilities.includes('matters:write'), false);
     assert.equal(inbox.kind, 'actual-canonical-in-app-fixture'); assert.equal(inbox.externalCalls, 0); assert.equal(inbox.manualReceiptInsertion, false);
-    observed.set('base', structuredClone(base)); observed.set('viewer', structuredClone(viewer)); observed.set('inbox', structuredClone(inbox));
+    observed.set('base', structuredClone(base));
+    counselMatterId = v1Identity(lookup(observed, 'base.v1.records.counsel.matter.id'));
+    observed.set('counsel-prerequisite', { counselProfileIds: seededCounselIds });
+    observed.set('viewer', structuredClone(viewer)); observed.set('inbox', structuredClone(inbox));
   }
   const events = []; let writes = 0, uncertain = false;
   const record = value => { events.push(value); persist(structuredClone(value)); };
@@ -194,6 +258,12 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
       assert.ok(['GET', 'POST'].includes(step.method), 'EXACT_PRODUCER_METHOD_REQUIRED');
       assert.equal(attempted.has(step.key), false, 'PRODUCER_STEP_REPLAY_REFUSED'); attempted.add(step.key);
       const route = routeFor({ ...step, phase: plan.phase }, observed), body = resolveV1ResponseReferences(step.body, observed); noSecrets(body);
+      if (step.purpose === 'counsel-assignment') {
+        assert.equal(body?.matter_id, counselMatterId, 'EXACT_COUNSEL_ASSIGNMENT_MATTER_REQUIRED');
+        const counselId = v1Identity(body?.counsel_id);
+        assert.ok(counselProfileIds.has(counselId) && !assignedCounselProfileIds.has(counselId), 'FRESH_DISTINCT_COUNSEL_PROFILE_ACK_REQUIRED');
+        assignedCounselProfileIds.add(counselId);
+      }
       if (step.method === 'POST') { assert.ok(++writes <= V1_PRODUCER_LIMITS.writes, 'V1_PRODUCER_WRITE_BOUND'); uncertain = true; }
       const headers = { 'X-CaseOps-Automated-Test': 'no-paid-providers', ...(step.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         ...(step.idempotent ? { 'Idempotency-Key': `${plan.runId}-${step.key}-${randomUUID()}` } : {}) };
@@ -206,14 +276,68 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
       assert.equal(response.releaseSha, plan.sourceSha, 'V1_PRODUCER_SERVING_SOURCE_CHANGED');
       assert.ok(response.value && typeof response.value === 'object' && !Array.isArray(response.value), 'ACTUAL_PRODUCER_RESPONSE_REQUIRED');
       noSecrets(response.value);
+      if (step.purpose === 'work-parent-create' || step.key === 'matter-revoked-current') v1OperationalMatter(response.value, plan.companyId);
       collectV1OracleIdentities(response.value).forEach(id => oracleIds.add(id));
       if (step.companyPath) assert.equal(lookup(new Map([['current', response.value]]), `current.${step.companyPath}`), plan.companyId, 'PRODUCER_RESPONSE_COMPANY_MISMATCH');
       if (step.identityPath) v1Identity(lookup(new Map([['current', response.value]]), `current.${step.identityPath}`));
+      if (route === V1_COUNSEL_PROFILE_ROUTE) {
+        const id = v1Identity(response.value.id);
+        assert.equal(response.value.company_id, plan.companyId, 'COUNSEL_PROFILE_ACK_COMPANY_CHANGED');
+        assert.ok(!counselProfileIds.has(id), 'DISTINCT_COUNSEL_PROFILE_ACK_REQUIRED');
+        counselProfileIds.add(id);
+      }
+      if (route === COUNSEL_ASSIGNMENT_ROUTE) {
+        v1Identity(response.value.id);
+        assert.deepEqual([response.value.company_id, response.value.matter_id, response.value.counsel_id],
+          [plan.companyId, counselMatterId, body.counsel_id], 'COUNSEL_ASSIGNMENT_ACK_IDENTITY_CHANGED');
+      }
       observed.set(step.key, structuredClone(response.value)); uncertain = false;
+      if (plan.phase === 'base' && ['ip-create', 'work-parent-create', 'wall-matter-link', 'calendar-matter-link'].includes(step.purpose)) {
+        parentAcks.set(step.key, { actor: { companyId: plan.companyId, membershipId: plan.ownerMembershipId },
+          request: { method: step.method, route, query: resolveV1ResponseReferences(step.query, observed), body }, response });
+      }
       record({ type: 'v1_producer_response', key: step.key, status: response.status, requestId: response.requestId,
         responseSha256: v1Hash(Buffer.from(JSON.stringify(response.value))), value: structuredClone(response.value), mutationUncertain: false });
     }
+    if (plan.phase === 'base') {
+      assert.equal(typeof calendarCatalogue, 'function', 'ACTUAL_TYPED_CALENDAR_TRANSPORT_REQUIRED');
+      const pending = new Map(), acknowledged = new Set();
+      const charge = value => {
+        assert.ok(now() < deadline, 'V1_PRODUCER_TOTAL_DEADLINE');
+        assert.equal(attempted.has(value.key), false, 'PRODUCER_STEP_REPLAY_REFUSED');
+        attempted.add(value.key); pending.set(value.key, { ...value });
+        if (value.method === 'POST') { assert.ok(++writes <= V1_PRODUCER_LIMITS.writes, 'V1_PRODUCER_WRITE_BOUND'); uncertain = true; }
+        aggregate.request('base', value);
+        record({ type: 'v1_producer_request_started', ...value, privateBodyOmitted: true, mutationUncertain: uncertain });
+      };
+      const onAcknowledged = value => {
+        const sent = pending.get(value.key);
+        assert.ok(sent && !acknowledged.has(value.key), 'EXACT_CALENDAR_DISPATCH_ACK_REQUIRED');
+        assert.deepEqual([value.method, value.route, value.releaseSha], [sent.method, sent.route, plan.sourceSha]);
+        assert.ok([200, 201].includes(value.status)); assert.match(value.requestId || '', /^[A-Za-z0-9_.:-]{1,160}$/);
+        acknowledged.add(value.key); uncertain = false;
+        record({ type: 'v1_producer_response', ...value, privateResponseOmitted: true, mutationUncertain: false });
+      };
+      const families = plan.calendarCatalogue.families.map(({ spec, parents }) => ({ spec,
+        parents: Object.fromEntries(Object.entries(parents).map(([role, key]) => {
+          assert.ok(parentAcks.has(key), 'ACTUAL_HELD_CALENDAR_PARENT_ACK_REQUIRED'); return [role, parentAcks.get(key)];
+        })) }));
+      const calendar = await calendarCatalogue({ scope: { sourceSha: plan.sourceSha, companyId: plan.companyId,
+        ownerMembershipId: plan.ownerMembershipId, memberMembershipId: plan.membershipId, day: plan.calendarCatalogue.day }, families,
+        charge, onAcknowledged, remaining: () => Math.min(deadline - now(), aggregate.remaining('base')) });
+      assert.equal(pending.size, 22, 'COMPLETE_CALENDAR_REQUEST_INVENTORY_REQUIRED');
+      assert.equal(acknowledged.size, pending.size, 'COMPLETE_CALENDAR_ACK_INVENTORY_REQUIRED');
+      noSecrets(calendar); collectV1OracleIdentities(calendar).forEach(id => oracleIds.add(id));
+      observed.set('calendar-catalogue', calendar);
+    }
+    if (plan.phase === 'readthrough') assert.equal(assignedCounselProfileIds.size, counselProfileIds.size, 'COMPLETE_COUNSEL_PROFILE_ACK_INVENTORY_REQUIRED');
     const fixture = resolveV1ResponseReferences(plan.fixtureProjection, observed);
+    if (plan.phase === 'base') {
+      const raw = observed.get('calendar-catalogue'), calendar = fixture.v1.records.calendar;
+      assert.equal(calendar.day, raw.day);
+      assert.deepEqual(calendar.sources.map(row => Object.fromEntries(['family', 'docket', 'event', 'confirmation'].map(key => [key, row[key]]))), raw.sources,
+        'CALENDAR_PRESENTATION_MUST_PRESERVE_WHOLE_TYPED_READBACK');
+    }
     assert.equal(fixture.companyId, plan.companyId); assert.equal(fixture.membershipId, plan.membershipId);
     const known = new Set([plan.companyId, plan.membershipId]);
     const ids = value => { if (Array.isArray(value)) value.forEach(ids); else if (value && typeof value === 'object') Object.values(value).forEach(ids); else if (typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value)) known.add(value); };
@@ -230,7 +354,7 @@ export async function produceV1Dataset(plan, { request, catalogue, persistPrivat
       oracleIdentityEvidence: v1OracleIdentityEvidence([...oracleIds]),
       emptyNotificationPlanEvidence: plan.emptyNotificationPlanEvidence, observations: [...observed].map(([key, value]) => ({ key, sha256: v1Hash(Buffer.from(JSON.stringify(value))) })) };
     if (plan.phase === 'base') receipt.secondaryOwner = observed.get('secondary-owner');
-    if (plan.phase === 'readthrough') { receipt.viewerEvidence = plan.viewerEvidence; receipt.baseDatasetEvidence = plan.baseDatasetEvidence; receipt.baseProducerEvidence = plan.baseProducerEvidence; receipt.inboxEvidence = plan.inboxEvidence; }
+    if (plan.phase === 'readthrough') { receipt.counselPrerequisiteEvidence = plan.counselPrerequisiteEvidence; receipt.viewerEvidence = plan.viewerEvidence; receipt.baseDatasetEvidence = plan.baseDatasetEvidence; receipt.baseProducerEvidence = plan.baseProducerEvidence; receipt.inboxEvidence = plan.inboxEvidence; }
     record({ type: 'v1_producer_completed', ...receipt }); return { fixture, receipt, events };
   } catch (error) {
     record({ type: 'v1_producer_stopped', observed: false, mutationUncertain: uncertain, attempted: [...attempted],
@@ -242,7 +366,7 @@ export function pendingV1ProducerPlan() {
   return { schemaVersion: 1, inventoryId: v1Inventory.inventoryId, preparedOnly: true, readyForLive: false,
     environment: 'docker-integration', syntheticDataOnly: true, noPaidMarker: 'no-paid-providers', directDatabaseWrites: false,
     sourceSha: 'FUTURE_CANONICAL_SOURCE_PENDING', runId: 'FUTURE_OWNED_RUN_PENDING', platform: 'PENDING', companyId: 'PENDING', membershipId: 'PENDING', ownerMembershipId: 'PENDING',
-    phase: 'base', secondaryOwner: null, catalogueEvidence: null, emptyNotificationPlanEvidence: null, viewerEvidence: null, baseDatasetEvidence: null, baseProducerEvidence: null, inboxEvidence: null, steps: [], fixtureProjection: null,
+    phase: 'base', secondaryOwner: null, calendarCatalogue: null, catalogueEvidence: null, emptyNotificationPlanEvidence: null, viewerEvidence: null, baseDatasetEvidence: null, baseProducerEvidence: null, inboxEvidence: null, counselPrerequisiteEvidence: null, steps: [], fixtureProjection: null,
     pending: ['actual-current-catalogue-and-design-registration', 'normal-authenticated-owner-transport', 'actual-two-company-members', 'eight-operational-parents',
       '26-contract-creates-and-two-real-cursor-pages', 'three-normal-ip-creates-and-calendar-events', 'revoked-wall-foreign-controls',
       'reviewed-one-shot-gateway-barrier-and-response-loss-controls', 'observed-native-selectors', 'actual-source-artifact-device-backend-auth'] };
@@ -283,7 +407,8 @@ export async function produceV1Inbox(plan, { aggregate, planEvidence, admit, req
   };
   try {
     const workspace = (await call('inbox-current-parent', 'GET', `/api/matters/${plan.matterId}/workspace`)).value;
-    assert.equal(workspace.matter.id, plan.matterId); assert.equal(workspace.matter.company_id, plan.companyId); assert.equal(workspace.matter.is_disposed, false);
+    assert.equal(workspace.matter.id, plan.matterId);
+    const operationalMatter = v1OperationalMatter(workspace.matter, plan.companyId);
     v1Lifecycle(workspace.matter.lifecycle_version);
     const due = now() + 45000; assert.ok(due <= started + 70000, 'INBOX_REAL_DUE_MUST_FIT_SHARED_PHASE');
     const when = new Date(due + 3600000).toISOString(), body = { hearing_on: when.slice(0, 10), hearing_time: when.slice(11, 19), timezone: 'UTC', time_status: 'exact',
@@ -314,7 +439,7 @@ export async function produceV1Inbox(plan, { aggregate, planEvidence, admit, req
     const after = await admit(plan, { boundary: 'after', remaining: () => aggregate.remaining('inbox'), charge: value => aggregate.request('inbox', { ...value, admission: true }) });
     assert.equal(after.apiSourceSha, plan.sourceSha); assert.equal(after.webSourceSha, plan.sourceSha);
     return { schemaVersion: 1, phase: 'inbox', kind: 'actual-canonical-in-app-fixture', observed: true, sourceSha: plan.sourceSha, runId: plan.runId,
-      companyId: plan.companyId, membershipId: plan.membershipId, requests, writes: 1, notification, matter: { ...workspace.matter, identityLabel: workspace.matter.matter_code, search: workspace.matter.matter_code },
+      companyId: plan.companyId, membershipId: plan.membershipId, requests, writes: 1, notification, matter: { ...operationalMatter, identityLabel: workspace.matter.matter_code, search: workspace.matter.matter_code },
       workerRequestEvidence, workerEvidence: plan.workerEvidence, worker, observations: calls, oracleIdentityEvidence: v1OracleIdentityEvidence([...oracleIds]),
       externalCalls: 0, manualReceiptInsertion: false, automaticRetry: false, mutationUncertain: false };
   } catch {

@@ -99,6 +99,23 @@ def private_reference(reference):
     return reference
 
 
+
+def actor_runtime_reference(actor, root):
+    """Keep immutable host provenance separate from the mounted descriptor.
+
+    A mount can expose the same bytes under a different path and numeric owner.
+    Neither reference authorizes a different credential payload or a pathname
+    outside the independently admitted runtime state directory.
+    """
+    original = private_reference(actor["credentialEvidence"])
+    if "runtimeCredentialEvidence" not in actor:
+        return original
+    runtime = private_reference(actor["runtimeCredentialEvidence"])
+    assert runtime["sha256"] == original["sha256"], "V1_RUNTIME_CREDENTIAL_HASH_REQUIRED"
+    assert Path(runtime["path"]).parent == root, "V1_RUNTIME_CREDENTIAL_NAMESPACE_REQUIRED"
+    return runtime
+
+
 def create_journal(root, identity):
     assert re.fullmatch(r"[a-f0-9]{16,64}", identity)
     target = root / f"v1-control-events-{identity}.jsonl"
@@ -109,9 +126,10 @@ def create_journal(root, identity):
         os.close(descriptor)
         raise
     count, closed = 0, False
+    lease = threading.Lock()
     def metadata(value):
         return tuple(getattr(value, key) for key in ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns"))
-    def persist(record):
+    def append(record):
         nonlocal expected, count
         assert not closed and count < 2 * (LIMITS["operations"] + LIMITS["finalCleanupOperations"]) + LIMITS["nativeRecords"]
         assert metadata(expected) == metadata(os.fstat(descriptor)) == metadata(target.lstat())
@@ -127,12 +145,50 @@ def create_journal(root, identity):
         final = os.fstat(descriptor)
         assert final.st_size == expected.st_size + len(data) and metadata(final) == metadata(target.lstat())
         expected, count = final, count + 1
+    def persist(record):
+        # Native response observers and control completions run on different
+        # gateway threads. Own the metadata check, write, fsync and metadata
+        # commit together; neither another append nor close may interleave.
+        with lease:
+            append(record)
     def close():
         nonlocal closed
-        if not closed:
-            closed = True
-            os.close(descriptor)
+        with lease:
+            if not closed:
+                closed = True
+                os.close(descriptor)
     return persist, close
+
+
+def create_attempt_claim(root, run_id, prefix):
+    """One durable attempt per registered run, including stable owner labels.
+
+    Keep every older claim. Reconstructing a manager in the same run must not
+    permit replay; a different disposable run must not inherit that attempt.
+    """
+    assert isinstance(run_id, str) and 0 < len(run_id) <= 200
+    assert prefix in ("v1-control-attempt", "qp-attempt", "cx-operation")
+    def claim(identity):
+        assert isinstance(identity, str) and 0 < len(identity) <= 512
+        scope = sha(canonical({"runId": run_id, "operationId": identity}))
+        target = root / f"{prefix}-{scope}.json"
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            pending = memoryview(canonical({"runIdSha256": sha(run_id.encode()),
+                                            "operationIdSha256": sha(identity.encode()), "noReplay": True}))
+            while pending:
+                count = os.write(descriptor, pending)
+                assert count > 0
+                pending = pending[count:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    return claim
 
 
 def bounded_http(http, method, route, body=None):
@@ -152,6 +208,18 @@ def bounded_http(http, method, route, body=None):
     except (ValueError, UnicodeError):
         raise ValueError("V1_OWNER_RESPONSE_JSON_REQUIRED") from None
     return SimpleNamespace(status_code=status, content=data, json=lambda: value)
+
+
+def validate_manual_workspace_restore(recipe, index):
+    """Only SOURCE-04's normal manual-only restoration may use this global write."""
+    assert recipe["caseId"] == "SOURCE-04" and recipe["capability"] == "applyIpPolicy", "V1_MANUAL_RESTORATION_SCOPE_REQUIRED"
+    assert index > 0
+    prior, item = recipe["requests"][index - 1:index + 1]
+    assert prior["method"] == "GET" and prior["route"] == "/api/ip/workspace/configuration"
+    assert prior["expectedStatuses"] == [200]
+    assert item["method"] == "POST" and item["expectedStatuses"] == [200]
+    assert item.get("body") == {"expected_config_version": {"response": f"{index - 1}.configuration.version"},
+                                "enabled_automations": []}, "V1_MANUAL_ONLY_FRESH_VERSION_REQUIRED"
 
 
 def validate_registration(value, *, source, run, now):
@@ -179,10 +247,11 @@ def validate_registration(value, *, source, run, now):
     assert isinstance(value["ownerRecipes"], list) and len(value["ownerRecipes"]) <= 48
     actors = value["actors"]
     assert set(actors) == {"owner", "member", "second-company"}
+    private_reference(value["authorityEvidence"])
+    runtime_root = Path(value["authorityEvidence"]["path"]).parent
     for actor in actors.values():
         assert UUID.fullmatch(actor["companyId"]) and UUID.fullmatch(actor["membershipId"])
-        private_reference(actor["credentialEvidence"])
-    private_reference(value["authorityEvidence"])
+        actor_runtime_reference(actor, runtime_root)
     assert actors["owner"]["companyId"] == actors["member"]["companyId"] == value["companyId"]
     assert actors["second-company"]["companyId"] != value["companyId"]
     assert len({item["membershipId"] for item in actors.values()}) == 3
@@ -196,8 +265,12 @@ def validate_registration(value, *, source, run, now):
         assert re.fullmatch(r"(?:GET|POST|PUT|PATCH|DELETE) /api/[a-z0-9_/-]{1,300}", route)
         identifiers = re.findall(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", route)
         assert all(item in ids for item in identifiers)
-        assert identifiers or route in ("GET /api/ip/readiness", "GET /api/ip/workspace/configuration", "PUT /api/ip/workspace/configuration")
+        assert identifiers or route in ("GET /api/ip/readiness", "GET /api/ip/workspace/configuration", "PUT /api/ip/workspace/configuration", "POST /api/ip/workspace/enable")
         assert "/api/recipient-inbox" not in route, "INBOX_STATUS_WRITES_BELONG_TO_NATIVE_ACTOR_ONLY"
+    for recipe in value["ownerRecipes"]:
+        for index, item in enumerate(recipe.get("requests", [])):
+            if item.get("route") == "/api/ip/workspace/enable":
+                validate_manual_workspace_restore(recipe, index)
     return value
 
 
@@ -478,7 +551,7 @@ class RegisteredOwner:
         assert actor not in self.failed_actors, "V1_OWNER_AUTHENTICATION_NOT_REPLAYABLE"
         if actor not in self.clients:
             binding = self.registration["actors"][actor]
-            credentials = checked_json(binding["credentialEvidence"], self.root, private=True)
+            credentials = checked_json(actor_runtime_reference(binding, self.root), self.root, private=True)
             http = self.factory()
             try:
                 response = bounded_http(http, "POST", "/api/auth/login", {key: credentials[key] for key in ("email", "password", "company_slug")})
@@ -583,13 +656,19 @@ class RegisteredOwner:
         if recipe.get("cleanupRecipeId"):
             self.pending_cleanup.setdefault(case, set()).add(recipe["cleanupRecipeId"])
         responses = []
-        for item in recipe["requests"]:
+        for index, item in enumerate(recipe["requests"]):
             method, route = item["method"], item["route"]
             assert f"{method} {route}" in self.registration["ownerExactRoutes"]
             assert re.fullmatch(r"(?:GET|POST|PUT|PATCH|DELETE)", method) and route.startswith("/api/") and not any(x in route for x in "?*{}")
             # A body is a reviewed immutable recipe, optionally filled by an
             # earlier acknowledged response. No submitted path or code is run.
+            if route == "/api/ip/workspace/enable":
+                assert case == "SOURCE-04"
+                validate_manual_workspace_restore(recipe, index)
             body = resolve_recipe(item.get("body"), responses)
+            if route == "/api/ip/workspace/enable":
+                assert type(body["expected_config_version"]) is int and body["expected_config_version"] > 0
+                assert body["enabled_automations"] == []
             response = bounded_http(self.client("owner"), method, route, body)
             assert response.status_code in item["expectedStatuses"], "V1_OWNER_API_OUTCOME_UNVERIFIED_NO_REPLAY"
             responses.append(response.json() if response.content else None)
@@ -736,6 +815,7 @@ def from_environment(root, run_id, *, environment=None, factory=None, verified_i
         assert sha(verified_registration_bytes) == reference["sha256"], "V1_VERIFIED_REGISTRATION_BYTES_REQUIRED"
         value = json.loads(verified_registration_bytes.decode("utf-8", "strict"))
     validate_registration(value, source=env["CASEOPS_RELEASE_SHA"], run=run_id, now=time.time())
+    claim = create_attempt_claim(root, value["runId"], "v1-control-attempt")
     assert re.fullmatch(r"[a-f0-9]{64}", verified_implementation_sha256 or ""), "V1_VERIFIED_RUNTIME_SOURCE_REQUIRED"
     assert value["implementationSha256"] == verified_implementation_sha256, "V1_CONTROL_IMPLEMENTATION_CHANGED"
     # Verify actual API AND web identities before opening any actor/authority file.
@@ -752,9 +832,6 @@ def from_environment(root, run_id, *, environment=None, factory=None, verified_i
     owner = RegisteredOwner(value, root) if factory is None else factory(value, root)
     observer = readonly_notification_observer(value)
     persist, close_journal = create_journal(root, value["registrationId"])
-    def claim(identity):
-        with (root / f"v1-control-attempt-{sha(identity.encode())}.json").open("x", encoding="utf-8") as output:
-            output.write(json.dumps({"operationId": identity, "automaticRetry": False}))
     owner.claim = claim
     try:
         return V1Controls(value, reference["sha256"], secret, owner=owner, observer=observer, persist=persist, claim=claim, close_journal=close_journal)

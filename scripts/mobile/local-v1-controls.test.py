@@ -44,6 +44,35 @@ class Owner:
 
 
 class ControlTests(unittest.TestCase):
+    def test_durable_claims_are_run_scoped_exclusive_private_and_preserve_old_runs(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            for prefix in ('v1-control-attempt','qp-attempt','cx-operation'):
+                first=M.create_attempt_claim(root,'first-owned-run',prefix)
+                second=M.create_attempt_claim(root,'second-owned-run',prefix)
+                for identity in ('native:privacy-one-post','owner:QUEUE-01:changeAnchor:synthetic'):
+                    first(identity)
+                    before={p.name:p.read_bytes()for p in root.iterdir()}
+                    with self.assertRaises(FileExistsError):first(identity)
+                    with self.assertRaises(FileExistsError):M.create_attempt_claim(root,'first-owned-run',prefix)(identity)
+                    second(identity)
+                    self.assertTrue(all((root/name).read_bytes()==data for name,data in before.items()))
+            self.assertEqual(len(list(root.iterdir())),12)
+            for file in root.iterdir():
+                self.assertEqual(file.stat().st_mode&0o777,0o600)
+                self.assertIs(json.loads(file.read_text())['noReplay'],True)
+
+    def test_durable_claim_write_failure_stays_consumed_and_invalid_scope_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            for run,prefix in (('', 'qp-attempt'),('owned','../escape'),('owned','unknown')):
+                with self.assertRaises(AssertionError):M.create_attempt_claim(root,run,prefix)
+            self.assertEqual(list(root.iterdir()),[])
+            claim=M.create_attempt_claim(root,'owned','qp-attempt')
+            with patch.object(M.os,'fsync',side_effect=OSError('synthetic failed persistence')):
+                with self.assertRaises(OSError):claim('native:privacy-one-post')
+            with self.assertRaises(FileExistsError):claim('native:privacy-one-post')
+
     def setUp(self):
         self.owner, self.events, self.claims = Owner(), [], []
         self.manager = M.V1Controls(registration(), "b" * 64, "d" * 64, owner=self.owner,
@@ -99,6 +128,78 @@ class ControlTests(unittest.TestCase):
                 ('POST', '/api/auth/mfa/step-up', {'code': '123456', 'purpose': 'step_up', 'method': 'totp'}),
             ])
             owner.close(); self.assertEqual(closed, [True])
+
+    def test_mounted_credential_mapping_keeps_original_receipt_and_normal_authentication(self):
+        import copy
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve(); target = root / 'mounted-member.json'
+            data = b'{"email":"synthetic@example.invalid","password":"synthetic-only","company_slug":"synthetic"}'
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                os.write(descriptor, data); uid = os.fstat(descriptor).st_uid
+            finally:
+                os.close(descriptor)
+            value = registration(); value['authorityEvidence']['path'] = str(root / 'authority.json')
+            binding = value['actors']['member']
+            binding['credentialEvidence'] = {'path': '/original-host/immutable-producer.json', 'sha256': M.sha(data), 'uid': uid + 1}
+            original = copy.deepcopy(binding['credentialEvidence'])
+            binding['runtimeCredentialEvidence'] = {'path': str(target), 'sha256': M.sha(data), 'uid': uid}
+            M.validate_registration(value, source='a' * 40, run='synthetic-run', now=1000)
+            http = SimpleNamespace(headers={}, cookies=SimpleNamespace(clear=lambda: None), close=Mock())
+            response = SimpleNamespace(status_code=200, json=lambda: {'company': {'id': binding['companyId']},
+                'membership': {'id': binding['membershipId'], 'role': 'member'}, 'capabilities': ['matters:write'], 'access_token': 'synthetic-only'})
+            with patch.object(M, 'bounded_http', return_value=response) as request:
+                owner = M.RegisteredOwner(value, root, factory=lambda: http)
+                self.assertIs(owner.client('member'), http)
+                self.assertIs(owner.client('member'), http)
+                request.assert_called_once_with(http, 'POST', '/api/auth/login', json.loads(data))
+                owner.close()
+            self.assertEqual(binding['credentialEvidence'], original)
+            http.close.assert_called_once()
+
+    def test_runtime_mapping_hash_namespace_and_shape_refuse_before_private_read(self):
+        import copy
+        value = registration(); actor = value['actors']['member']
+        actor['runtimeCredentialEvidence'] = copy.deepcopy(actor['credentialEvidence'])
+        for change in ('hash', 'root', 'uid', 'extra', 'null'):
+            bad = copy.deepcopy(value); binding = bad['actors']['member']; runtime = binding['runtimeCredentialEvidence']
+            if change == 'hash': runtime['sha256'] = 'f' * 64
+            elif change == 'root': runtime['path'] = '/other-root/member.json'
+            elif change == 'uid': runtime['uid'] = True
+            elif change == 'extra': runtime['allowSymlink'] = True
+            else: binding['runtimeCredentialEvidence'] = None
+            with self.subTest(change=change), patch.object(M, 'checked_json') as read, self.assertRaises(AssertionError):
+                M.validate_registration(bad, source='a' * 40, run='synthetic-run', now=1000)
+            read.assert_not_called()
+            factory = Mock()
+            with patch.object(M, 'checked_json') as read, self.assertRaises(AssertionError):
+                M.RegisteredOwner(bad, Path('/synthetic'), factory=factory).client('member')
+            read.assert_not_called(); factory.assert_not_called()
+
+    def test_runtime_mapping_preserves_descriptor_uid_mode_symlink_and_content_guards(self):
+        import copy
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve(); target = root / 'member.json'
+            data = b'{"email":"synthetic@example.invalid"}'
+            target.write_bytes(data); target.chmod(0o600)
+            value = registration(); value['authorityEvidence']['path'] = str(root / 'authority.json')
+            binding = value['actors']['member']; binding['credentialEvidence']['sha256'] = M.sha(data)
+            binding['runtimeCredentialEvidence'] = {'path': str(target), 'sha256': M.sha(data), 'uid': target.stat().st_uid}
+            for change in ('uid', 'mode', 'symlink', 'content', 'hardlink'):
+                bad = copy.deepcopy(value)
+                if change == 'uid': bad['actors']['member']['runtimeCredentialEvidence']['uid'] += 1
+                elif change == 'mode': target.chmod(0o644)
+                elif change == 'symlink':
+                    target.rename(root / 'original.json'); target.symlink_to(root / 'original.json')
+                elif change == 'content': target.write_bytes(b'{"changed":true}')
+                else: os.link(target, root / 'linked.json')
+                factory = Mock()
+                with self.subTest(change=change), self.assertRaises((AssertionError, OSError)):
+                    M.RegisteredOwner(bad, root, factory=factory).client('member')
+                factory.assert_not_called()
+                if change == 'symlink': target.unlink(); (root / 'original.json').rename(target)
+                if change == 'hardlink': (root / 'linked.json').unlink()
+                target.write_bytes(data); target.chmod(0o600)
 
     def test_missing_untyped_or_wrong_private_uid_refuses_before_private_bytes_or_http(self):
         from unittest.mock import Mock
@@ -156,6 +257,52 @@ class ControlTests(unittest.TestCase):
             changed = registration(); changed[key] = value
             with self.assertRaises(AssertionError):
                 M.validate_registration(changed, source="a" * 40, run="synthetic-run", now=1000)
+
+    def test_manual_workspace_restoration_admits_only_the_source_fault_cleanup(self):
+        recipe = {"id": "restore-readiness", "caseId": "SOURCE-04", "capability": "applyIpPolicy",
+                  "argumentsSha256": "b" * 64, "requests": [
+                      {"method": "GET", "route": "/api/ip/workspace/configuration", "expectedStatuses": [200]},
+                      {"method": "POST", "route": "/api/ip/workspace/enable", "expectedStatuses": [200],
+                       "body": {"expected_config_version": {"response": "0.configuration.version"}, "enabled_automations": []}}],
+                  "result": {"completed": True}}
+        value = registration(); value["ownerExactRoutes"] = ["GET /api/ip/workspace/configuration", "POST /api/ip/workspace/enable"]
+        value["ownerRecipes"] = [recipe]
+        self.assertIs(M.validate_registration(value, source="a" * 40, run="synthetic-run", now=1000), value)
+        import copy
+        for change in ("automation", "case", "capability", "fixed-version", "wrong-read", "extra-body", "no-read"):
+            bad = copy.deepcopy(value); target = bad["ownerRecipes"][0]
+            if change == "automation": target["requests"][1]["body"]["enabled_automations"] = ["notification_automation"]
+            elif change == "case": target["caseId"] = "WORK-05"
+            elif change == "capability": target["capability"] = "changeChild"
+            elif change == "fixed-version": target["requests"][1]["body"]["expected_config_version"] = 1
+            elif change == "wrong-read": target["requests"][0]["route"] = "/api/ip/readiness"
+            elif change == "extra-body": target["requests"][1]["body"]["provider_keys"] = ["unreviewed"]
+            else: target["requests"].pop(0)
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                M.validate_registration(bad, source="a" * 40, run="synthetic-run", now=1000)
+
+    def test_manual_workspace_restore_uses_fresh_version_and_refuses_automations_before_post(self):
+        import copy
+        recipe = {"id": "restore-readiness", "caseId": "SOURCE-04", "capability": "applyIpPolicy", "argumentsSha256": "b" * 64,
+                  "requests": [{"method": "GET", "route": "/api/ip/workspace/configuration", "expectedStatuses": [200]},
+                               {"method": "POST", "route": "/api/ip/workspace/enable", "expectedStatuses": [200],
+                                "body": {"expected_config_version": {"response": "0.configuration.version"}, "enabled_automations": []}}],
+                  "result": {"completed": True}}
+        value = registration(); value["ownerExactRoutes"] = ["GET /api/ip/workspace/configuration", "POST /api/ip/workspace/enable"]
+        calls = []
+        def request(_client, method, route, body):
+            calls.append((method, route, body))
+            return SimpleNamespace(status_code=200, content=b"{}", json=lambda: {"configuration": {"version": 7}})
+        owner = M.RegisteredOwner(value, Path("/not-read"), factory=lambda: None); owner.client = lambda _actor: object()
+        with patch.object(M, "bounded_http", side_effect=request):
+            self.assertEqual(owner.run_recipe(recipe, "SOURCE-04"), {"completed": True})
+            self.assertEqual(calls[-1], ("POST", "/api/ip/workspace/enable", {"expected_config_version": 7, "enabled_automations": []}))
+            bad = copy.deepcopy(recipe); bad["id"] = "unsafe"; bad["argumentsSha256"] = "c" * 64
+            bad["requests"][1]["body"]["enabled_automations"] = ["notification_automation"]
+            before = len(calls)
+            with self.assertRaises(AssertionError): owner.run_recipe(bad, "SOURCE-04")
+            self.assertEqual([method for method, _route, _body in calls[before:]], ["GET"])
+            self.assertEqual(len(calls), before + 1)
 
     def test_authority_and_marker_refusal_precede_owner_and_claim(self):
         for override in ({"marker": ""}, {"authority": "x" * 64}):
@@ -437,6 +584,57 @@ class ControlTests(unittest.TestCase):
                 with self.assertRaises(OSError): M.create_journal(Path(directory), "d" * 32)
             self.assertEqual(len(descriptors), 1)
             with self.assertRaises(OSError): os.fstat(descriptors[0])
+
+    def test_concurrent_native_and_control_journal_records_share_one_commit(self):
+        self.journal_concurrency(close_second=False)
+
+    def test_journal_close_waits_for_the_owned_append_to_finish(self):
+        self.journal_concurrency(close_second=True)
+
+    def journal_concurrency(self, *, close_second):
+        # Stop the real descriptor after write but before its metadata commit.
+        # A native response and a control completion use this same journal.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            persist, close = M.create_journal(root, "e" * 32)
+            entered, release, attempted, completed = (threading.Event() for _ in range(4))
+            failures = []
+            original_sync = M.os.fsync
+            def sync(fd):
+                if threading.current_thread().name == "native-journal-writer":
+                    entered.set()
+                    if not release.wait(3): raise TimeoutError("synthetic journal release missing")
+                return original_sync(fd)
+            def first():
+                try: persist({"type": "native"})
+                except Exception as error: failures.append(error)
+            def second():
+                attempted.set()
+                try:
+                    if close_second: close()
+                    else: persist({"type": "control"})
+                except Exception as error: failures.append(error)
+                finally: completed.set()
+            a = threading.Thread(target=first, name="native-journal-writer")
+            b = threading.Thread(target=second, name="control-journal-writer")
+            with patch.object(M.os, "fsync", side_effect=sync):
+                try:
+                    a.start()
+                    self.assertTrue(entered.wait(2))
+                    b.start()
+                    self.assertTrue(attempted.wait(2))
+                    self.assertFalse(completed.wait(0.05), "parallel journal action escaped the append lease")
+                finally:
+                    release.set()
+                    a.join(3)
+                    if b.ident is not None: b.join(3)
+                    close()
+            self.assertFalse(a.is_alive())
+            self.assertFalse(b.is_alive())
+            self.assertEqual(failures, [])
+            rows = [json.loads(line) for line in (root / ("v1-control-events-" + "e" * 32 + ".jsonl")).read_text().splitlines()]
+            self.assertEqual(rows, [{"type": "native"}] if close_second else [{"type": "native"}, {"type": "control"}])
+            with self.assertRaises(AssertionError): persist({"type": "after-close"})
 
     def test_failed_manager_construction_closes_journal_and_owner_independently(self):
         value = registration(); value["implementationSha256"] = "c" * 64

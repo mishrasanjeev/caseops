@@ -1,3 +1,8 @@
+import '../../../scripts/mobile/calendar-producer-gateway-cases.mjs';
+import '../../../scripts/mobile/v1-ip-access-grant-cases.mjs';
+import '../../../scripts/mobile/v1-launch-attestor-cases.mjs';
+import './v1-calendar-acknowledgement-cases.mjs';
+import './v1-counsel-prerequisite-cases.mjs';
 import { bindObserverTestIdentity } from '../../../scripts/mobile/qa-observer-test-fixture.mjs';
 import { validateAndroidTransport } from './local-run.mjs';
 import assert from 'node:assert/strict';
@@ -9,23 +14,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
-import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor } from './v1-workflows.mjs';
-import { validateV1Fixture, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
+import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, segment, row, positionV1Visible, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave, scopedAction } from './v1-workflows.mjs';
+import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
 import { pendingV1ProducerPlan, requireV1ProducerPlan, produceV1Dataset, resolveV1ResponseReferences, produceV1Inbox, pendingV1InboxPlan } from './v1-workflows-fixture.mjs';
 import { pendingV1ViewerPlan, produceV1Viewer } from './v1-workflows-viewer.mjs';
-import { selector } from './native-ui.mjs';
+import { selector, dispatchNativeClick } from './native-ui.mjs';
 import { pendingV1Request } from '../../../scripts/mobile/prepare-v1-fixture.mjs';
 import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, androidLayoutSummary } from '../../../scripts/mobile/run-v1-workflows.mjs';
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
 import https from 'node:https';
 import http from 'node:http';
+import { createRepository } from '../src/domain/repository.ts';
+import { createPrivacyRequestsRepository } from '../src/domain/privacy-requests.ts';
 import { once } from 'node:events';
 import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-route-file.mjs';
 import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
-import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout } from '../../../scripts/mobile/native-producer-host.mjs';
-import { createV1PrivateWriter, resolveProducedReferences, createV1Worker } from '../../../scripts/mobile/produce-v1-fixture.mjs';
+import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout, producerServerDate, producerServerDateUpperBound } from '../../../scripts/mobile/native-producer-host.mjs';
+import { createV1PrivateWriter, resolveProducedReferences, createV1Worker, v1ProducerFailureCode } from '../../../scripts/mobile/produce-v1-fixture.mjs';
+
+import { V1RunEvidence, V1OwnedSessions, validateV1EvidenceStreams, verifyV1SessionAbsence, finishV1Evidence, readV1SessionStatus } from './v1-run-evidence.mjs';
+import { nativeCalendarRowFields, admitV1SegmentPresentation } from './v1-native-presentation.mjs';
 
 const ids = ['SOURCE-01', 'SOURCE-02', 'SOURCE-03', 'SOURCE-04', 'SOURCE-05', 'SOURCE-06', 'SOURCE-07', 'WORK-01', 'WORK-02', 'WORK-03', 'WORK-04', 'WORK-05', 'WORK-06', 'WORK-07', 'WORK-08', 'COUNSEL-01', 'INBOX-01'];
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -80,6 +90,16 @@ function validProducerPlan() {
     { key: 'wall-link', purpose: 'wall-matter-link', method: 'POST', route: '/api/ip/dockets/{docket}/matter-links', routeIds: { docket: 'ip-patent.docket_id' }, body: { matter_id: { $response: 'matter-0.id' }, relation_role: 'operational', expected_docket_updated_at: version, reason: 'Synthetic native wall lineage' }, expectedStatuses: [200] },
     { key: 'restricted', purpose: 'revoked-restricted', method: 'POST', route: '/api/matters/{matter}/access/restricted', routeIds: { matter: 'matter-7.id' }, body: { restricted: true }, expectedStatuses: [200] },
     { key: 'grant', purpose: 'revoked-grant', method: 'POST', route: '/api/matters/{matter}/access/grants', routeIds: { matter: 'matter-7.id' }, body: { membership_id: uuid(2) }, expectedStatuses: [200] }];
+  for (const [i, family] of ['design', 'trademark'].entries()) plan.steps.push({ key: 'link-' + family, purpose: 'calendar-matter-link', method: 'POST',
+    route: '/api/ip/dockets/{docket}/matter-links', routeIds: { docket: family === 'trademark' ? 'ip-trademark.docket.id' : 'ip-design.docket_id' },
+    body: { matter_id: { $response: 'matter-' + (i + 1) + '.id' }, relation_role: 'operational', expected_docket_updated_at: version,
+      reason: 'Synthetic native Calendar lineage' }, expectedStatuses: [201] });
+  plan.calendarCatalogue = { day: '2026-11-11', families: ['patent', 'design', 'trademark'].map((family, i) => ({
+    spec: { family, baseDate: '2026-11-10', jurisdiction: 'IN', ruleVersionId: uuid(700 + i), calendarVersionId: uuid(710),
+      ruleSourceHash: 'a'.repeat(64), calendarSourceHash: 'b'.repeat(64), title: 'Synthetic Calendar source' },
+    parents: { creator: 'ip-' + family, matter: 'matter-' + i, link: family === 'patent' ? 'wall-link' : 'link-' + family },
+  })) };
+  plan.fixtureProjection.v1.records.calendar = { $response: 'calendar-catalogue' };
   return plan;
 }
 function admissionFixture() {
@@ -142,6 +162,7 @@ function admissionFixture() {
   const oracleIdentityEvidence = v1OracleIdentityEvidence(f.v1.records, actors);
   for (const receipt of receipts) values.get(receipt.path).oracleIdentityEvidence = oracleIdentityEvidence;
   const actual = { udid: f.udid, appId: f.appId, binaryHash: binary, deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17', appDataPath: '/unit/app-data' };
+  Object.assign(values.get(q.installedEvidence.path), structuredClone(actual));
   const dependencies = { read: r => { assert.ok(values.has(r.path)); return structuredClone(values.get(r.path)); }, bytes: () => Buffer.from('synthetic public code'),
     snapshot: () => { log.push('source'); return structuredClone(sourceProof); }, installed: () => { log.push('installed'); return { ...actual }; },
     artifactHash: () => binary, reader: file => { log.push('private-reader'); const item = file.endsWith('private-a.json') ? f : b; return { bytes: Buffer.from('synthetic'), sha256: 'a'.repeat(64), uid: process.getuid(),
@@ -149,8 +170,52 @@ function admissionFixture() {
     getJson: async url => { log.push(url.includes('release-identity') ? 'web' : url.includes('/status') ? 'controls' : 'api');
       return url.includes('/status') ? { runId: 'synthetic-run', v1ControlsEnabled: true, v1ControlsImplementationSha256: gatewayImplementationEvidence.sha256, v1RegistrationSha256: registration.sha256 }
         : { release_sha: source, revision: url.includes('release-identity') ? 'synthetic-web' : 'synthetic-api' }; },
-    environment: { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' }, buildCheck: () => {}, fixtureCheck: () => {}, coreCheck: () => {}, harness: () => 'e'.repeat(64) };
+    environment: { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' }, buildCheck: () => {}, fixtureCheck: () => {}, memberCheck: () => {}, harness: () => 'e'.repeat(64) };
   return { q, f, b, values, dependencies, log };
+}
+function rawInstalledAdmission(platform) {
+  const f = admissionFixture(); f.q.platform = platform;
+  for (const item of [f.f, f.b]) item.appId = 'ai.caseops.mobile.dev';
+  for (const member of f.q.members) Object.assign(f.values.get(member.authObservation.path), { bundleId: f.f.appId, appId: f.f.appId });
+  f.values.get(f.q.deviceEvidence.path).appId = f.f.appId;
+  const actual = platform === 'android'
+    ? { platform, udid: f.f.udid, appId: f.f.appId, binaryHash: binary, bootId: 'synthetic-owned-boot',
+      appDataPath: '/data/user/0/synthetic.caseops', appDataIdentity: { kind: 'directory', uid: 10123, device: '65077', inode: '1234' }, pageSizeRequired: 16384 }
+    : { platform, udid: f.f.udid, appId: f.f.appId, binaryHash: binary, appPath: '/unit/installed.app',
+      appDataPath: '/unit/app-data', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17',
+      runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0', state: 'Booted' };
+  // Canonical producer observations contain actual native identity, without an
+  // extra embedded copy of the independently admitted build reference.
+  f.values.set(f.q.installedEvidence.path, structuredClone(actual));
+  Object.assign(f.values.get(f.q.deviceEvidence.path), { platform, ...(platform === 'android' ? { bootId: actual.bootId, pageSizeBytes: 16384, pageSizeRequired: 16384 } : {}) });
+  f.dependencies.installed = () => { f.log.push('installed'); return structuredClone(actual); };
+  return { ...f, actual };
+}
+for (const platform of ['android', 'ios']) {
+  test(`V1 canonical raw ${platform} installed observation reaches both private readers after all public gates`, async () => {
+    const f = rawInstalledAdmission(platform);
+    const admitted = await admitV1BeforeMembers(f.q, f.dependencies);
+    assert.equal(admitted.members.length, 2); assert.equal(f.log.filter(x => x === 'private-reader').length, 2);
+    assert.deepEqual(admitted.installed, f.actual);
+  });
+  test(`V1 ${platform} rejects a conflicting optional build reference before any private read`, async () => {
+    const f = rawInstalledAdmission(platform); f.values.get(f.q.installedEvidence.path).buildReceipt = { ...f.q.buildReceipt, sha256: 'f'.repeat(64) };
+    await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies)); assert.equal(f.log.includes('private-reader'), false);
+  });
+  test(`V1 ${platform} retains every live native identity field before private admission`, async () => {
+    const fields = platform === 'android' ? ['platform', 'udid', 'appId', 'binaryHash', 'bootId', 'appDataPath', 'appDataIdentity', 'pageSizeRequired']
+      : ['platform', 'udid', 'appId', 'binaryHash', 'appPath', 'appDataPath', 'deviceTypeIdentifier', 'runtime', 'state'];
+    for (const field of fields) {
+      const f = rawInstalledAdmission(platform), retained = f.values.get(f.q.installedEvidence.path);
+      retained[field] = field === 'appDataIdentity' ? { ...retained[field], inode: 'replaced' } : field === 'pageSizeRequired' ? 4096 : 'replaced';
+      await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies), undefined, field); assert.equal(f.log.includes('private-reader'), false, field);
+    }
+  });
+  test(`V1 ${platform} rejects a replacement producer-bound installed reference before private reads`, async () => {
+    const f = rawInstalledAdmission(platform), next = { ...f.q.installedEvidence, path: f.q.installedEvidence.path + '.replacement' };
+    f.values.set(next.path, structuredClone(f.actual)); f.q.installedEvidence = next;
+    await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies)); assert.equal(f.log.includes('private-reader'), false);
+  });
 }
 test('both platforms collect the independent seventeen literal cases and all51 phases', () => {
   assert.deepEqual(v1Inventory.cases.map(x => x.id), ids); assert.equal(v1Inventory.cases.length, 17);
@@ -207,10 +272,26 @@ test('allfive source refusal modes bothworkraces and emptynotification proof are
   for (const change of [f => f.v1.records.access.faults.pop(), f => f.v1.records.work.targets[4].races.pop(),
     f => f.v1.notificationPolicy.explicitEmptyChannelsBackendVerified = false, f => f.v1.notificationPolicy.channels.push('email')]) { const f = fixture(); change(f); assert.throws(() => validateV1Fixture(f, 'ios')); }
 });
-test('gateway plan contains exact returned IDs and never wildcard or manufacturedMatterIP routes', () => {
+test('gateway plan contains exact returned IDs and never wildcard or manufacturedMatterIP routes', async () => {
   const f = fixture(), routes = strictV1Routes(f.v1.records); assert.ok(routes.includes(`GET /api/ip/dockets/${uuid(50)}/summary`));
   assert.equal(routes.includes(`GET /api/matters/${uuid(50)}/workspace`), false); assert.equal(routes.some(x => /[*{}?]/.test(x)), false);
   assert.equal(routes.filter(x => /^GET \/api\/contracts\/[a-f0-9-]{36}$/.test(x)).length, 26);
+  const stopped = Error('read observed before decode'); let requestPath;
+  const request = async value => { requestPath = value; throw stopped; };
+  for (const matter of [...f.v1.records.work.targets.map(value => value.matter), f.v1.records.policy.readOnly.matter,
+    f.v1.records.policy.revokedWork.matter, f.v1.records.access.wall.linkedMatter, f.v1.records.inbox.matter, f.v1.records.counsel.matter,
+    ...f.v1.records.work.targets.flatMap(target => (target.races || []).filter(race => race.matter).map(race => race.matter))]) {
+    await assert.rejects(createRepository(request).matter(matter.id), error => error === stopped);
+    assert.ok(routes.includes('GET ' + requestPath), 'ACTUAL_MATTER_REPOSITORY_READ_MUST_BE_ADMITTED');
+    await assert.rejects(createRepository(request).drafts(matter.id), error => error === stopped);
+    assert.ok(routes.includes('GET ' + requestPath), 'ACTUAL_DRAFTS_REPOSITORY_READ_MUST_BE_ADMITTED');
+  }
+  await assert.rejects(createPrivacyRequestsRepository(request).current(), error => error === stopped);
+  assert.ok(routes.includes('GET ' + requestPath), 'ACCOUNT_SCREEN_PRIVACY_READ_MUST_BE_ADMITTED');
+  for (const route of ['GET /api/auth/native/sessions', 'GET /api/account/workspace-conduct', 'GET /api/matter-work-queue']) assert.ok(routes.includes(route));
+  assert.equal(routes.includes(`GET /api/matters/${uuid(9999)}`), false);
+  assert.equal(routes.includes('POST /api/account/deletion-requests'), false);
+
 });
 test('one actual dirtyonly mutation hash with native refresh is accepted', () => {
   const body = { expected_lifecycle_version: 1, due_on: null, expected_updated_at: version, status: 'completed' };
@@ -351,7 +432,7 @@ function viewerProducerDouble() {
     work: { matter: { title: 'Synthetic readonly Matter' }, task: { title: 'Synthetic readonly task' }, hearing: { purpose: 'Synthetic readonly hearing', reminder_channels: [], reminder_recipient_membership_ids: [], notification_critical: false },
       rowFacts: { task: ['Synthetic readonly task', 'Unassigned', 'todo · No due date · Read-only'], hearing: ['Synthetic readonly hearing', 'Forum not recorded', '27 Oct 2026 · scheduled · Read-only'] } } };
   const identity = { company: { id: uuid(9) }, membership: { id: uuid(10), role: 'viewer', is_active: true }, user: { is_active: true }, capabilities: ['matters:read'] };
-  const matter = { id: uuid(109), company_id: uuid(9), title: 'Synthetic readonly Matter', matter_code: 'SYNTHETIC-READONLY', is_disposed: false, lifecycle_version: 0 }, task = { id: uuid(110), matter_id: uuid(109), title: plan.work.task.title, owner_membership_id: null }, hearing = { id: uuid(111), matter_id: uuid(109), purpose: plan.work.hearing.purpose };
+  const matter = { id: uuid(109), company_id: uuid(9), title: 'Synthetic readonly Matter', matter_code: 'SYNTHETIC-READONLY', status: 'active', is_active: true, lifecycle_version: 0 }, task = { id: uuid(110), matter_id: uuid(109), title: plan.work.task.title, owner_membership_id: null }, hearing = { id: uuid(111), matter_id: uuid(109), purpose: plan.work.hearing.purpose };
   const values = [{ membership_id: uuid(10), role: 'viewer' }, identity, { secret: 'JBSWY3DPEHPK3PXP' }, { status: 'enrolled' }, identity, { mfa_status: 'enrolled' }, matter, task, hearing, { matter, tasks: [task], hearings: [hearing] }], calls = [], events = [], files = [];
   const dependencies = { aggregate: aggregateDouble(), planEvidence: ref('viewer-plan'), readEvidence: () => ({ kind: 'actual-normal-api-v1-base-fixture', observed: true, sourceSha: source, secondaryOwner: { companyId: uuid(9), membershipId: uuid(11), mfaEnrolled: true, credentialEvidence: privateRef('secondary-owner-private') } }), admit: async () => ({ beforeMemberRead: true, companyId: uuid(9), membershipId: uuid(11), role: 'owner', capabilities: ['company:manage_users'], credentialEvidence: privateRef('secondary-owner-private'), sourceSha: source, apiSourceSha: source, webSourceSha: source, buildReceipt: plan.buildReceipt, dockerReceipt: plan.dockerReceipt, installedEvidence: plan.installedEvidence, binaryHash: binary }),
     request: async value => { calls.push(value); return { status: 200, releaseSha: source, value: structuredClone(values[calls.length - 1]), requestId: `synthetic-${calls.length}` }; },
@@ -362,6 +443,8 @@ function viewerProducerDouble() {
 test('viewer producer executes normal APIs once including MFA and readonly workspace and keeps private data out of events', async () => {
   const value = viewerProducerDouble(), result = await produceV1Viewer(value.plan, value.dependencies);
   assert.equal(value.calls.length, 10); assert.equal(result.role, 'viewer'); assert.equal(result.mfaEnrolled, true);
+  assert.equal(result.readOnlyWork.matter.is_disposed, false);
+  assert.equal(result.readOnlyWork.matter.status, 'active'); assert.equal(result.readOnlyWork.matter.is_active, true);
   assert.equal(value.files.length, 2); assert.equal(value.files[0].contract.createExclusive, true); assert.equal(value.files[0].contract.mode, 0o600);
   assert.equal(value.files[1].contract.createExclusive, false); assert.equal(value.files[1].contract.sameOwnedDescriptor, true);
   assert.equal(value.files[0].value.totp_secret, undefined); assert.equal(value.files[1].value.totp_secret, 'JBSWY3DPEHPK3PXP'); assert.equal(result.readOnlyWork.task.id, uuid(110));
@@ -398,24 +481,73 @@ test('supplement exact list and producer create routes match actual canonical tr
     const changed = structuredClone(plan), step = changed.steps.find(value => value.purpose === purpose); step.route = step.route.slice(0, -1);
     assert.throws(() => requireV1ProducerPlan(changed));
   }
+  for (const mutate of [p => { p.calendarCatalogue = null; }, p => { p.fixtureProjection.v1.records.calendar = fixture().v1.records.calendar; },
+    p => { p.calendarCatalogue.families[1].parents.link = p.calendarCatalogue.families[0].parents.link; },
+    p => { p.calendarCatalogue.families[1].spec.ruleSourceHash = 'not-an-observation'; },
+    p => { p.calendarCatalogue.families[0].spec.baseDate = '2026-02-30'; },
+    p => { p.steps.push(...Array.from({ length: 40 }, (_, i) => ({ key: 'extra-' + i, method: 'GET', route: '/api/build', expectedStatuses: [200] }))); },
+    p => { p.steps[0].key = 'calendar-member-feed'; }]) {
+    const changed = structuredClone(plan); mutate(changed); assert.throws(() => requireV1ProducerPlan(changed));
+  }
 });
+test('Calendar row identity preserves the typed API ID and the acknowledged docket and Matter lineage', () => {
+  const docket = { id: uuid(50), matter_id: uuid(100) };
+  const confirmation = { id: uuid(65), docket_id: docket.id, matter_deadline_id: uuid(66) };
+  const events = { range_from: '2026-10-27', range_to: '2026-10-27', events: [{
+    id: `deadline:${confirmation.matter_deadline_id}`, kind: 'deadline', ip_docket_id: docket.id, matter_id: docket.matter_id,
+  }] };
+  const [event] = events.events;
+  const id = v1CalendarDeadlineIdentity(event, docket, confirmation.matter_deadline_id);
+  assert.equal(selector('ios', 'id', `event-${id}`), `~event-deadline:${confirmation.matter_deadline_id}`);
+  assert.equal(selector('android', 'id', `event-${id}`), `id=event-deadline:${confirmation.matter_deadline_id}`);
+  for (const [changed, pattern] of [
+    [{ kind: 'task' }, /ACTUAL_CALENDAR_DEADLINE_KIND_REQUIRED/],
+    [{ id: `task:${confirmation.matter_deadline_id}` }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ id: confirmation.matter_deadline_id }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ id: `deadline:${confirmation.id}` }, /ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED/],
+    [{ ip_docket_id: uuid(51) }, /CALENDAR_DOCKET_IDENTITY_REQUIRED/],
+    [{ matter_id: uuid(101) }, /CALENDAR_LINKED_MATTER_IDENTITY_REQUIRED/],
+  ]) assert.throws(() => v1CalendarDeadlineIdentity({ ...event, ...changed }, docket, confirmation.matter_deadline_id), pattern);
+  assert.throws(() => v1CalendarDeadlineIdentity(event, docket, null), /EXACT_V1_IDENTITY_REQUIRED/);
+});
+
 test('old eleven-case request identity refuses before any evidence or private loader', async () => {
   const value = admissionFixture(); value.q.inventoryId = 'native-v1-source-work-2026-10-27'; let reads = 0;
   value.dependencies.read = () => { reads++; throw Error('must not read'); };
   await assert.rejects(admitV1BeforeMembers(value.q, value.dependencies), /EXACT_V1_REQUEST_INVENTORY_REQUIRED/); assert.equal(reads, 0);
 });
 test('purged rejected editor closes directly while retained dirty conflict still requires one Leave confirmation', async () => {
-  for (const dirty of [false, true]) {
-    let editor = true, confirmation = false; const clicks = [];
-    const button = elementId => ({ elementId, isDisplayed: async () => true, isEnabled: async () => true });
-    const context = { platform: 'android', budget: createV1CaseBudget(), driver: {
-      $$: async query => query === selector('android', 'id', 'quick-close') && editor ? [button('close')]
-        : query === selector('android', 'text', 'Leave editor') && confirmation ? [button('leave')]
-        : query === selector('android', 'id', 'quick-work-editor') && editor ? [button('editor')] : [],
+  for (const platform of ['android', 'ios']) for (const dirty of [false, true]) {
+    let editor = true, confirmation = false; const clicks = [], appId = 'ai.caseops.mobile.dev.localacceptance';
+    const button = (elementId, text) => ({ elementId, isDisplayed: async () => true, isEnabled: async () => true,
+      getText: async () => text, getAttribute: async key => key === 'text' || key === 'label' ? text : 'true' });
+    const leave = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? 'android:id/button1' : 'Leave editor');
+    const stay = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? 'android:id/button2' : 'Stay');
+    const title = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? appId + ':id/alert_title' : 'Leave editor?');
+    const context = { platform, fixture: { appId }, budget: createV1CaseBudget(), driver: {
+      getCurrentPackage: async () => appId,
+      $$: async query => query === selector(platform, 'id', 'quick-close') && editor ? [button('close', 'Return to Matter work')]
+        : query === leave && confirmation ? [button('leave', platform === 'android' ? 'LEAVE EDITOR' : 'Leave editor')]
+        : query === stay && confirmation ? [button('stay', platform === 'android' ? 'STAY' : 'Stay')]
+        : query === title && confirmation ? [button('title', 'Leave editor?')]
+        : query === selector(platform, 'id', 'quick-work-editor') && editor ? [button('editor', '')] : [],
       waitUntil: async fn => assert.equal(await fn(), true), elementClick: async id => { clicks.push(id); if (id === 'close' && dirty) confirmation = true; else { editor = false; confirmation = false; } },
     } };
     await closeRejectedV1Editor(context, dirty); assert.deepEqual(clicks, dirty ? ['close', 'leave'] : ['close']); assert.equal(editor, false);
   }
+  for (const invalid of ['package', 'title', 'stay', 'leave']) {
+    let clicks = 0; const appId = 'ai.caseops.mobile.dev.localacceptance';
+    const rows = new Map([[appId + ':id/alert_title', invalid === 'title' ? 'Unrelated dialog' : 'Save outcome unknown'],
+      ['android:id/button1', invalid === 'leave' ? 'DELETE' : 'LEAVE EDITOR'], ['android:id/button2', invalid === 'stay' ? 'CANCEL' : 'STAY']]);
+    const c = { platform: 'android', fixture: { appId }, budget: createV1CaseBudget(), driver: {
+      getCurrentPackage: async () => invalid === 'package' ? 'unrelated.package' : appId,
+      $$: async query => { const id = query.replace(/^id=/, ''); return rows.has(id) ? [{ elementId: id, isDisplayed: async () => true, getText: async () => rows.get(id) }] : []; },
+      waitUntil: async fn => assert.equal(await fn(), true), elementClick: async () => { clicks++; },
+    } };
+    await assert.rejects(confirmV1WorkLeave(c, 'leave')); assert.equal(clicks, 0);
+    await assert.rejects(confirmV1WorkLeave(c, 'unreviewed')); assert.equal(clicks, 0);
+  }
+
 });
 
 function aggregateModel() {
@@ -472,7 +604,7 @@ function inboxProducerDouble() {
   const root = path.resolve(fileURLToPath(new URL('../../../', import.meta.url))), start = 1793059200000, calls = [], events = [], charges = [];
   const plan = { ...pendingV1InboxPlan(), readyForLive: true, preparedOnly: false, sourceSha: source, runId: 'v1-' + uuid(900), companyId: uuid(1), membershipId: uuid(2), matterId: uuid(100),
     workerEvidence: { ...ref('worker'), path: path.join(root, 'scripts/mobile/local-v1-inbox.py') }, managerEvidence: { ...ref('manager'), path: path.join(root, 'scripts/mobile/local-v1-controls.py') }, postgresEvidence: ref('postgres') };
-  const matter = { id: plan.matterId, company_id: plan.companyId, is_disposed: false, lifecycle_version: 2, matter_code: 'SYNTHETIC-INBOX', title: 'Synthetic Inbox Matter' };
+  const matter = { id: plan.matterId, company_id: plan.companyId, status: 'active', is_active: true, lifecycle_version: 2, matter_code: 'SYNTHETIC-INBOX', title: 'Synthetic Inbox Matter' };
   let hearing;
   const dependencies = { aggregate: { ...aggregateDouble(plan.runId), request: (...value) => charges.push(value) }, planEvidence: ref('inbox-plan'), now: () => start,
     readCode: () => Buffer.from('synthetic public source'), readEvidence: () => ({ observed: true, readOnly: true, database: 'caseops_mobile' }),
@@ -497,6 +629,15 @@ test('inbox fixture uses four normal member HTTP calls and one due worker under 
 test('inbox fixture pending, stale parent, unknown hearing and worker result refuse without replay', async () => {
   const pending = inboxProducerDouble(); await assert.rejects(produceV1Inbox(pendingV1InboxPlan(), pending.dependencies)); assert.equal(pending.calls.length, 0);
   const run = inboxProducerDouble(); run.plan.runId = 'v1-' + uuid(999); await assert.rejects(produceV1Inbox(run.plan, run.dependencies), /EXACT_FIXTURE_RUN_REQUIRED/); assert.equal(run.calls.length, 0);
+  for (const change of [m => m.status = 'disposed', m => m.status = 'closed', m => m.status = 'unknown', m => delete m.status,
+    m => m.is_active = false, m => delete m.is_active, m => m.is_disposed = true, m => m.company_id = uuid(999)]) {
+    const bad = inboxProducerDouble(); change(bad.matter);
+    await assert.rejects(produceV1Inbox(bad.plan, bad.dependencies)); assert.equal(bad.calls.length, 1);
+    assert.equal(bad.events.some(e => e.type === 'worker-request'), false);
+  }
+  const actual = { id: uuid(100), company_id: uuid(1), status: 'active', is_active: true, lifecycle_version: 2 };
+  for (const status of ['intake', 'active', 'on_hold']) assert.equal(v1OperationalMatter({ ...actual, status }, uuid(1)).is_disposed, false);
+  assert.equal(Object.hasOwn(actual, 'is_disposed'), false);
   const lifecycle = inboxProducerDouble(); lifecycle.matter.lifecycle_version = true; await assert.rejects(produceV1Inbox(lifecycle.plan, lifecycle.dependencies)); assert.equal(lifecycle.calls.length, 1);
   const lost = inboxProducerDouble(), request = lost.dependencies.request; lost.dependencies.request = async value => { if (value.method === 'POST') { lost.calls.push(value); throw Error('SYNTHETIC_PRIVATE_NOT_REFLECTED'); } return request(value); };
   await assert.rejects(produceV1Inbox(lost.plan, lost.dependencies), /^Error: V1_INBOX_FIXTURE_INCOMPLETE_NO_REPLAY$/); assert.equal(lost.calls.length, 2); assert.equal(lost.events.at(-1).mutationUncertain, true);
@@ -537,6 +678,44 @@ test('control receipt polling charges every actual RPC to its literal case ceili
     assert.ok(sent.every(value => value.capability === 'readControlReceipt')); assert.ok(clock < V1_CONTROL_PROTOCOL.completionMs);
     controls.dispose(); await assert.rejects(controls.readWorkspace({ caseId: 'WORK-01' }), /V1_CONTROLS_CLOSED/); assert.equal(sent.length, 14);
   } finally { if (previous === undefined) delete process.env.NODE_EXTRA_CA_CERTS; else process.env.NODE_EXTRA_CA_CERTS = previous; }
+});
+
+test('V1 validates both admitted member authentication environments without requiring Core dataset fields', async () => {
+  const x = admissionFixture(), checked = [], environments = [];
+  x.dependencies.memberCheck = (fixture, environment) => {
+    assert.equal(fixture.matter, undefined); assert.equal(fixture.work, undefined);
+    assert.equal(environment[fixture.auth.emailEnv], 'synthetic@example.invalid');
+    assert.equal(environment[fixture.auth.passwordEnv], 'synthetic-only-password');
+    assert.equal(environment[fixture.auth.totpSecretEnv], 'SYNTHETIC_ONLY');
+    checked.push(fixture.membershipId); environments.push(environment);
+  };
+  const result = await admitV1BeforeMembers(x.q, x.dependencies);
+  assert.deepEqual(checked, result.members.map(member => member.fixture.membershipId));
+  assert.equal(new Set(checked).size, 2);
+  for (const environment of environments) assert.deepEqual(environment, x.dependencies.environment);
+  assert.deepEqual(x.dependencies.environment, { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' });
+});
+
+test('runtime credential mapping preserves host identity and refuses malformed mapping before protected member reads', async () => {
+  const good = admissionFixture(), registered = good.values.get(good.values.get(good.q.gatewayEvidence.path).v1Registration.path);
+  const originals = structuredClone(registered.actors);
+  for (const actor of Object.values(registered.actors)) actor.runtimeCredentialEvidence = {
+    ...actor.credentialEvidence, path: path.join(path.dirname(registered.authorityEvidence.path), 'mounted-' + actor.membershipId + '.json'), uid: 0,
+  };
+  await admitV1BeforeMembers(good.q, good.dependencies);
+  for (const [name, actor] of Object.entries(registered.actors)) assert.deepEqual(actor.credentialEvidence, originals[name].credentialEvidence);
+  assert.equal(good.log.filter(value => value === 'private-reader').length, 2);
+  for (const change of ['hash', 'root', 'uid', 'extra', 'null']) {
+    const x = admissionFixture(), r = x.values.get(x.values.get(x.q.gatewayEvidence.path).v1Registration.path);
+    const actor = r.actors.member; actor.runtimeCredentialEvidence = structuredClone(actor.credentialEvidence);
+    if (change === 'hash') actor.runtimeCredentialEvidence.sha256 = 'f'.repeat(64);
+    else if (change === 'root') actor.runtimeCredentialEvidence.path = '/other-runtime/credential.json';
+    else if (change === 'uid') actor.runtimeCredentialEvidence.uid = true;
+    else if (change === 'extra') actor.runtimeCredentialEvidence.allowSymlink = true;
+    else actor.runtimeCredentialEvidence = null;
+    await assert.rejects(admitV1BeforeMembers(x.q, x.dependencies));
+    assert.equal(x.log.includes('private-reader'), false);
+  }
 });
 
 test('identity capacity accepts92 and refuses93 before a protected read while reserving the four named create cases', () => {
@@ -778,6 +957,13 @@ test('V1-PRODUCER-01 real TLS login MFA identity and normal write retain per-con
   const s=await producerServer(t,(req,res)=>{res.end(JSON.stringify(req.url==='/api/auth/login'?{...me,access_token:'synthetic-normal-login-token'}:req.url==='/api/auth/mfa/step-up'?{status:'verified'}:me));});
   const credentials=producerPrivate(s.root),charges=[];
   assert.deepEqual(await s.host.login('owner',credentials,{charge:x=>charges.push(x),remaining:()=>10000}),me);
+  assert.deepEqual(s.host.getMfaAcknowledgement('owner'), {
+    actor: { companyId: me.company.id, membershipId: me.membership.id },
+    request: { method: 'POST', route: '/api/auth/mfa/step-up', purpose: 'step_up', verificationMethod: 'totp' },
+    response: { status: 200, value: { status: 'verified' }, requestId: 'offline-2', releaseSha: source },
+  });
+  const acknowledgement = s.host.getMfaAcknowledgement('owner'); acknowledgement.response.value.status = 'changed';
+  assert.equal(s.host.getMfaAcknowledgement('owner').response.value.status, 'verified');
   await s.host.request({method:'POST',route:'/api/matters/',body:{title:'Synthetic offline Matter'}});
   assert.deepEqual(charges.map(x=>x.key),['actor-login','actor-mfa','actor-identity']);assert.equal(s.seen.length,4);
   assert.ok(s.seen.every(x=>x.headers['x-caseops-automated-test']==='no-paid-providers'&&x.headers.cookie===undefined));
@@ -992,12 +1178,87 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     assert.deepEqual(fs.readFileSync(file + '.original'), base);
   });
 
+  test('Calendar route permits bind serialized bytes without persisting the private payload', async t => {
+    const { cache, file } = fixture(t), events = [];
+    const owner = openProducerRouteFile({ cache, ...initial, persist: event => events.push(event) });
+    const authorization = 'Bearer local-calendar-fixture';
+    const provenance = { requestDigest: 'c'.repeat(64), calendarExact: true };
+    const permitRoot = path.join(cache, 'producer-permits-' + producerHash(initial.epoch));
+    const read = 'GET /api/ip/dockets/' + id + '/deadline-workspace';
+    const writes = ['POST /api/ip/dockets/' + id + '/deadlines', 'POST /api/ip/deadlines/' + id + '/confirm',
+      ...['preview', 'apply'].map(action => 'POST /api/ip/dockets/' + id + '/access/' + action)];
+    const bodyBytes = Buffer.from('{"preview_token":"synthetic-raw-token", "reason":"fixture"}');
+    const receipts = [];
+    for (const route of [read, ...writes]) {
+      await owner.dispatch(route, provenance, authorization, Date.now() + 5000, async proof => {
+        const bytes = fs.readFileSync(path.join(permitRoot, producerHash(proof) + '.json'));
+        const permit = JSON.parse(bytes);
+        assert.equal(permit.route, route);
+        assert.equal(permit.creatorAckSha256, provenance.requestDigest);
+        assert.equal(permit.bearerSha256, producerHash(authorization));
+        assert.equal(permit.bodySha256, route === read ? undefined : producerHash(bodyBytes));
+        assert.ok(!bytes.includes('synthetic-raw-token') && !bytes.includes(authorization));
+        const permitReceipt = producerHash(bytes); receipts.push(permitReceipt);
+        return { permitReceipt };
+      }, { queryPresent: false, bodyBytes: route === read ? undefined : bodyBytes });
+    }
+    assert.deepEqual(owner.consumed(), receipts);
+    assert.ok(!JSON.stringify(events).includes('synthetic-raw-token'));
+    owner.verifyRestored();
+    assert.deepEqual(fs.readFileSync(file), base);
+  });
+
+  test('Calendar route permits refuse ordinary provenance, queries and unexpected body framing', async t => {
+    const docket = '/api/ip/dockets/' + id;
+    const read = 'GET ' + docket + '/deadline-workspace', write = 'POST ' + docket + '/access/apply';
+    const provenance = { requestDigest: 'c'.repeat(64), calendarExact: true }, bodyBytes = Buffer.from('{}');
+    for (const [route, evidence, binding, refusal] of [
+      [write, { requestDigest: provenance.requestDigest }, { bodyBytes, queryPresent: false }, /EXACT_ADMISSION/],
+      [write, provenance, { bodyBytes, queryPresent: true }, /EXACT_ADMISSION/],
+      [read, provenance, { bodyBytes, queryPresent: false }, /BODY_REQUIRED/],
+      [write, provenance, { queryPresent: false }, /BODY_REQUIRED/],
+    ]) {
+      const { cache } = fixture(t);
+      const owner = openProducerRouteFile({ cache, ...initial });
+      let sends = 0;
+      await assert.rejects(owner.dispatch(route, evidence, 'Bearer local-calendar-fixture', Date.now() + 5000,
+        () => { sends++; }, binding), refusal);
+      assert.deepEqual(fs.readdirSync(path.join(cache, 'producer-permits-' + producerHash(initial.epoch))), []);
+      assert.equal(sends, 0);
+    }
+  });
+
   test('the real TLS gateway refuses a future route, then the actual host sends it only after its creator ACK', async t => {
     const { cache, file } = fixture(t), seen = [], events = [];
+    const calendarPath = '/api/ip/dockets/' + id + '/deadlines';
+    const accessPath = '/api/ip/dockets/' + id + '/access/preview';
+    const accessApplyPath = '/api/ip/dockets/' + id + '/access/apply';
+    const accessReceived = [];
+    const calendarReceived = [];
     const upstream = http.createServer((req, res) => {
       const request = { method: req.method, route: req.url, marker: req.headers['x-caseops-automated-test'] };
       assert.equal(req.headers['x-caseops-qa-producer-permit'], undefined);
       seen.push(request);
+      if (req.url === calendarPath) {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+          calendarReceived.push(Buffer.concat(chunks));
+          res.writeHead(201, { 'Content-Type': 'application/json', 'X-Request-ID': 'synthetic-calendar-ack' });
+          res.end(JSON.stringify({ id: other, privateProjectionMarker: 'not returned to caller' }));
+        });
+        return;
+      }
+      if (req.url === accessPath || req.url === accessApplyPath) {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => {
+          accessReceived.push(Buffer.concat(chunks));
+          res.writeHead(200, { 'Content-Type': 'application/json', 'X-Request-ID': req.url === accessPath ? 'synthetic-private-access-ack' : 'synthetic-private-apply-ack' });
+          res.end(JSON.stringify(req.url === accessPath ? { preview_token: 'synthetic-private-preview-value' } : { applied: true }));
+        });
+        return;
+      }
       const body = req.url === '/api/auth/login' ? { access_token: 'synthetic-local-token', company: { id: company }, membership: { id: member } }
         : req.url === '/api/matters/' ? { id, company_id: company } : { matter_id: id };
       req.resume();
@@ -1073,5 +1334,457 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
       ['producer_exact_route_permit', 'producer_exact_route_consumed']);
     routeFile.verifyRestored();
     assert.deepEqual(fs.readFileSync(file), base);
+
+    const calendarClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => calendarClient.clear());
+    await calendarClient.request({ actor: 'owner', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic@example.invalid' } });
+    const body = { title: 'Synthetic governed deadline', is_critical: false }, exact = Buffer.from(JSON.stringify(body));
+    const planned = { actor: 'owner', method: 'POST', route: calendarPath, producerStage: 'base', body };
+    let claimed = false, accepted = 0;
+    const chain = { claim(got) {
+      assert.equal(got.company, company); assert.equal(got.membership, member);
+      assert.equal(got.requestTarget, calendarPath); assert.deepEqual(got.bodyBytes, exact);
+      if (claimed) return null;
+      claimed = true;
+      return { provenance: { requestDigest: producerHash('synthetic-predecessor-ack'), bodySha256: producerHash(exact) },
+        acceptResponse(response) {
+          accepted++; assert.equal(response.status, 201); assert.equal(response.releaseSha, sourceSha);
+          assert.equal(response.value.id, other); assert.match(response.permitReceipt, /^[a-f0-9]{64}$/);
+          return { id: response.value.id };
+        } };
+    } };
+    try {
+      assert.deepEqual(await calendarClient.requestCalendar(planned, chain),
+        { status: 201, requestId: 'synthetic-calendar-ack', projection: { id: other } });
+    } catch (error) {
+      t.diagnostic(JSON.stringify({ scope: 'synthetic-loopback-calendar-failure',
+        upstreamRequests: seen.map(row => ({ method: row.method, route: row.route === calendarPath ? 'calendar'
+          : row.route === '/api/auth/login' ? 'login' : row.route === '/api/matters/' ? 'matter' : row.route === route ? 'task' : 'unknown',
+        noPaidMarker: row.marker === 'no-paid-providers' })),
+        calendarBodiesReceived: calendarReceived.length,
+        acknowledgedStatuses: events.filter(row => row.type === 'producer_http_ack').map(row => row.status),
+        permitsIssued: events.filter(row => row.type === 'producer_exact_route_permit').length,
+        permitsConsumed: events.filter(row => row.type === 'producer_exact_route_consumed').length }));
+      throw error;
+    }
+    await assert.rejects(calendarClient.requestCalendar(planned, chain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.equal(accepted, 1);
+    assert.deepEqual(calendarReceived, [exact]);
+    assert.deepEqual(seen.filter(row => row.route === calendarPath), [{ method: 'POST', route: calendarPath, marker: 'no-paid-providers' }]);
+    assert.ok(!JSON.stringify(events).includes('privateProjectionMarker'));
+    routeFile.verifyRestored();
+
+    const accessClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => accessClient.clear());
+    await accessClient.request({ actor: 'owner', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic@example.invalid' } });
+    const accessBytes = Buffer.from('{"action":"grant", "subject_id":"synthetic-private-subject"}');
+    const accessInput = { actor: 'owner', method: 'POST', route: accessPath, producerStage: 'base', bodyBytes: accessBytes };
+    assert.throws(() => accessClient.request(accessInput), /IP_ACCESS_TYPED_TRANSPORT_REQUIRED/);
+    let accessClaims = 0, accessAcks = 0;
+    const accessChain = { claim(attempt) {
+      assert.equal(++accessClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, accessPath); assert.deepEqual(attempt.bodyBytes, accessBytes);
+      return { provenance: { requestDigest: producerHash('actual-offline-panel-ack'), bodySha256: producerHash(accessBytes) },
+        acceptResponse(response) { accessAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); assert.ok(Number.isFinite(producerServerDateUpperBound(response.serverDate))); return response.value; } };
+    } };
+    const privateResult = await accessClient.requestIpAccess(accessInput, accessChain);
+    assert.deepEqual(privateResult.projection, { preview_token: 'synthetic-private-preview-value' });
+    assert.equal(accessAcks, 1); assert.deepEqual(accessReceived, [accessBytes]);
+    const applyBytes = Buffer.from('{"action":"grant","preview_token":"synthetic-private-preview-value"}');
+    let applyClaims = 0, applyAcks = 0;
+    const applyChain = { claim(attempt) {
+      assert.equal(++applyClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, accessApplyPath); assert.deepEqual(attempt.bodyBytes, applyBytes);
+      return { provenance: { requestDigest: producerHash(privateResult.requestId), bodySha256: producerHash(applyBytes) },
+        acceptResponse(response) { applyAcks++; assert.match(response.permitReceipt, /^[a-f0-9]{64}$/);
+          assert.ok(Number.isFinite(producerServerDateUpperBound(response.serverDate))); return response.value; } };
+    } };
+    const applyResult = await accessClient.requestIpAccess({ ...accessInput, route: accessApplyPath, bodyBytes: applyBytes }, applyChain);
+    assert.deepEqual(applyResult.projection, { applied: true }); assert.equal(applyAcks, 1);
+    assert.deepEqual(accessReceived, [accessBytes, applyBytes]);
+
+    assert.ok(!JSON.stringify(events).includes('synthetic-private-preview-value') && !JSON.stringify(events).includes('synthetic-private-subject'));
+    await assert.rejects(accessClient.requestCalendar({ ...accessInput, bodyBytes: undefined }, accessChain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.equal(accessReceived.length, 2); routeFile.verifyRestored();
+
+    const memberClient = createProducerHttp({ ...options, routeAdmission: { file: routeFile, provenance: producerRouteProvenance('v1', sourceSha) } });
+    t.after(() => memberClient.clear());
+    await memberClient.request({ actor: 'member', method: 'POST', route: '/api/auth/login', body: { email: 'synthetic-member@example.invalid' } });
+    const summaryPath = '/api/ip/dockets/' + id + '/summary';
+    const summaryInput = { actor: 'member', method: 'GET', route: summaryPath, producerStage: 'base' };
+    let summaryClaims = 0;
+    const summaryChain = { claim(attempt) {
+      assert.equal(++summaryClaims, 1); assert.equal(attempt.company, company); assert.equal(attempt.membership, member);
+      assert.equal(attempt.requestTarget, summaryPath); assert.equal(attempt.bodyBytes, undefined);
+      return { provenance: { requestDigest: producerHash('actual-offline-confirmation-ack') }, acceptResponse(response) {
+        assert.equal(response.status, 200); assert.equal(response.releaseSha, sourceSha);
+        assert.match(response.permitReceipt, /^[a-f0-9]{64}$/); return response.value;
+      } };
+    } };
+    const summaryResult = await memberClient.requestMemberDocket(summaryInput, summaryChain);
+    assert.deepEqual(summaryResult.projection, { matter_id: id });
+    await assert.rejects(memberClient.requestMemberDocket(summaryInput, summaryChain), /HTTP_INCOMPLETE_NO_REPLAY/);
+    assert.deepEqual(seen.filter(row => row.route === summaryPath), [{ method: 'GET', route: summaryPath, marker: 'no-paid-providers' }]);
+    routeFile.verifyRestored();
   });
 }
+
+test('Android retained segment selection follows its observed checkable parent and rejects false or unrelated state', async () => {
+  const recipe = { group: 'Event type', label: 'Deadlines', query: 'android=new UiSelector().text("Deadlines").className("android.widget.TextView")',
+    labelAttribute: 'text', selectedOwner: 'checkable-label-parent', selectedType: 'android.view.View', selectedAttribute: 'checked', selectedValue: 'true' };
+  const label = { elementId: 'actual-label', isDisplayed: async () => true, getAttribute: async key => key === 'text' ? 'Deadlines' : 'false' };
+  const state = { checked: 'true', checkable: 'true', class: 'android.view.View' };
+  let children = [label], parents;
+  const parent = { elementId: 'actual-parent', isDisplayed: async () => true, getAttribute: async key => state[key], $$: async () => children };
+  parents = [parent];
+  const c = { platform: 'android', fixture: { udid:'synthetic-device',buildReceipt:ref('build'),v1: { nativeSelectors: { observed:true,udid:'synthetic-device',buildReceipt:ref('build'),segments: { 'Event type': { Deadlines: recipe } } } } },
+    driver: { $$: async query => query === recipe.query ? [label] : query === `//*[@text='Deadlines']/parent::*[@checkable='true']` ? parents : [] } };
+  await selectedSegment(c, 'Event type', 'Deadlines');
+  for (const [key, bad] of [['checked', 'false'], ['checkable', 'false'], ['class', 'android.widget.TextView']]) {
+    const prior = state[key]; state[key] = bad; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); state[key] = prior;
+  }
+  children = [{ ...label, elementId: 'unrelated-label' }]; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); children = [label];
+  parents = [parent, parent]; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); parents = [];
+  await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); parents = [parent];
+  recipe.selectedOwner = 'unreviewed'; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines'));
+  delete recipe.selectedOwner; recipe.selectedAttribute = 'selected';
+  label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'true'; await selectedSegment(c, 'Event type', 'Deadlines');
+  label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'false'; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines'));
+});
+
+
+test('native notification actions bind exact record IDs, labels and frames and dispatch only once', async () => {
+  for (const platform of ['android', 'ios']) {
+    const scopeId = 'notification-' + uuid(1), calls = [], controls = [];
+    let action = 'Open source record', suffix = 'open-source', visible = true, enabled = true, label = action;
+    let type = platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View', clickable = 'true', accessible = 'true';
+    let cardCount = 1, controlCount = 1, actualId, rejectClick = false;
+    let rect = { x: 20, y: 50, width: 80, height: 40 };
+    const leaf = { elementId: 'label', isDisplayed: async () => true, getAttribute: async () => label };
+    const card = { elementId: 'card', isDisplayed: async () => true };
+    const button = { elementId: 'button', isDisplayed: async () => visible, isEnabled: async () => enabled,
+      getAttribute: async key => ({ name: actualId, 'resource-id': actualId, type, class: type, label, clickable, accessible })[key],
+      $$: async query => query === `android=new UiSelector().text(${JSON.stringify(action)}).className("android.widget.TextView")` ? [leaf] : [] };
+    const fixture = { udid: 'synthetic-device', buildReceipt: ref('build'), v1: { nativeSelectors: { observed: true, udid: 'synthetic-device',
+      buildReceipt: ref('build'), scopedActionPatterns: { recipientInbox: { observed: true, scopePrefix: 'notification-',
+        controlIdentity: 'notification-action-id', expectedType: type } } } } };
+    const c = { platform, fixture, budget: { control: () => controls.push('one') }, driver: {
+      $$: async query => query === selector(platform, 'id', scopeId) ? Array(cardCount).fill(card)
+        : query === selector(platform, 'id', `${scopeId}-${suffix}`) ? Array(controlCount).fill(button) : [],
+      getElementRect: async id => id === 'card' ? { x: 10, y: 20, width: 100, height: 200 } : rect,
+      getWindowRect: async () => ({ x: 0, y: 0, width: 200, height: 300 }),
+      elementClick: async id => { calls.push(id); if (rejectClick) throw new Error('LOST_NATIVE_ACK'); } } };
+    for (const [next, key] of [['Open source record', 'open-source'], ['Mark as read', 'mark-read'], ['Dismiss notification', 'dismiss'], ['Restore notification', 'restore']]) {
+      action = label = next; suffix = key; actualId = `${scopeId}-${suffix}`; await scopedAction(c, scopeId, action);
+    }
+    assert.deepEqual(calls, Array(4).fill('button')); assert.equal(controls.length, 4);
+    const rejected = async () => { const count = calls.length; await assert.rejects(scopedAction(c, scopeId, action)); assert.equal(calls.length, count); };
+    cardCount = 0; await rejected(); cardCount = 2; await rejected(); cardCount = 1;
+    controlCount = 0; await rejected(); controlCount = 2; await rejected(); controlCount = 1;
+    visible = false; await rejected(); visible = true; enabled = false; await rejected(); enabled = true;
+    actualId = 'notification-' + uuid(2) + '-restore'; await rejected(); actualId = `${scopeId}-${suffix}`;
+    type = 'unreviewed'; await rejected(); type = platform === 'ios' ? 'XCUIElementTypeButton' : 'android.view.View';
+    label = 'Wrong action'; await rejected(); label = action;
+    if (platform === 'android') { clickable = 'false'; await rejected(); clickable = 'true'; }
+    else { accessible = 'false'; await rejected(); accessible = 'true'; }
+    rect = { x: 110, y: 50, width: 80, height: 40 }; await rejected(); rect = { x: 20, y: 50, width: 80, height: 40 };
+    fixture.v1.nativeSelectors.udid = 'other-device'; await rejected(); fixture.v1.nativeSelectors.udid = fixture.udid;
+    fixture.v1.nativeSelectors.buildReceipt = ref('other-build'); await rejected(); fixture.v1.nativeSelectors.buildReceipt = fixture.buildReceipt;
+    const count = calls.length; rejectClick = true;
+    await assert.rejects(scopedAction(c, scopeId, action), /LOST_NATIVE_ACK/); assert.equal(calls.length, count + 1);
+  }
+});
+
+
+test('V1 producer server Date parser binds one or two actual canonical seconds without selecting a later value', () => {
+  const date = 'Sun, 08 Nov 2026 12:00:00 GMT', previous = 'Sun, 08 Nov 2026 11:59:59 GMT';
+  assert.equal(producerServerDate(['dAtE', date]), date);
+  assert.equal(producerServerDate(['Date', date, 'date', previous]), date);
+  assert.equal(producerServerDate(['Date', previous, 'Date', date]), previous);
+  assert.equal(producerServerDateUpperBound(date), Date.parse(date) + 1000);
+  for (const raw of [[], ['Date'], ['Date', undefined], ['Date', date, 'Date', date, 'Date', date],
+    ['Date', date, 'date', 'Sun, 08 Nov 2026 11:59:58 GMT'], ['Date', 'Mon, 08 Nov 2026 12:00:00 GMT'],
+    ['Date', date + ' trailing'], ['Date', '2026-11-08T12:00:00Z'], ['Date', date, ...Array.from({ length: 128 }, () => ['X', 'synthetic']).flat()]])
+    assert.throws(() => producerServerDate(raw), /SERVER_DATE/);
+});
+test('V1 producer captures received server Date only on an exact access panel through real marked TLS', async t => {
+  const first = 'Sun, 08 Nov 2026 12:00:00 GMT', second = 'Sun, 08 Nov 2026 11:59:59 GMT';
+  const s = await producerServer(t, (_req, res) => { res.sendDate = false; res.setHeader('Date', [first, second]); res.end('{"observed":true}'); });
+  const response = await s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access' });
+  assert.equal(response.status, 200); assert.equal(response.serverDate, first); assert.deepEqual(response.value, { observed: true });
+  for (const route of ['/api/build', '/api/ip/dockets/' + uuid(10) + '/access?diagnostic=synthetic', '/api/ip/dockets/' + uuid(10) + '/access-elsewhere/access']) {
+    const other = await s.host.request({ method: 'GET', route }); assert.equal(Object.hasOwn(other, 'serverDate'), false);
+  }
+  assert.equal(s.seen.length, 4); assert.ok(s.seen.every(x => x.headers['x-caseops-automated-test'] === 'no-paid-providers'));
+});
+test('V1 producer rejects missing malformed extra or incoherent received Date without transport replay', async t => {
+  const date = 'Sun, 08 Nov 2026 12:00:00 GMT';
+  for (const header of [undefined, 'bad-date', 'Mon, 08 Nov 2026 12:00:00 GMT', [date, date, date], [date, 'Sun, 08 Nov 2026 12:00:02 GMT']]) {
+    const s = await producerServer(t, (_req, res) => { res.sendDate = false; if (header !== undefined) res.setHeader('Date', header); res.end('{}'); });
+    await assert.rejects(s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access', timeoutMs: 1000 }), /INCOMPLETE_NO_REPLAY/);
+    await assert.rejects(s.host.request({ method: 'GET', route: '/api/ip/dockets/' + uuid(10) + '/access' }), /OUTCOME_UNCERTAIN/);
+    assert.equal(s.seen.length, 1); assert.equal(s.seen[0].headers['x-caseops-automated-test'], 'no-paid-providers');
+  }
+});
+
+test('V1 producer stopped receipts expose only finite public codes and never exception values or causes', () => {
+  const secret = 'synthetic-private-password-and-preview-token';
+  let getterReads = 0; const accessor = new Error(); Object.defineProperty(accessor, 'message', { get() { getterReads++; return secret; } });
+  assert.equal(v1ProducerFailureCode(accessor), 'V1_FIXTURE_PRODUCTION_INCOMPLETE'); assert.equal(getterReads, 0);
+  for (const message of ['PRODUCER_SERVER_DATE_REQUIRED', 'V1_IP_ACL_GRANT_NOT_ACTIVE']) {
+    const error = new Error(message, { cause: new Error(secret) }); assert.equal(v1ProducerFailureCode(error), message);
+  }
+  for (const error of [new Error(secret), new Error('V1_IP_ACL_GRANT_NOT_ACTIVE\n' + secret), new Error('V1_PRIVATE_' + secret),
+    { message: 'V1_IP_ACL_GRANT_NOT_ACTIVE', cause: secret }, 'V1_IP_ACL_GRANT_NOT_ACTIVE', null]) {
+    const code = v1ProducerFailureCode(error); assert.equal(code, 'V1_FIXTURE_PRODUCTION_INCOMPLETE'); assert.equal(code.includes(secret), false);
+  }
+});
+
+// These are source/harness regressions; actual Appium acceptance is separate.
+
+function evidenceDirectory(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-v1-evidence-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory;
+}
+// Entry/counter/cleanup units retain every real append and verify every sync
+// request. Durability itself is covered by the real-IO happy/fault tests below;
+// avoid issuing 6,000 physical flushes beside unrelated bounded scanners.
+function countedSyncEvidence(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-v1-counted-sync-'));
+  const requests = []; let journal, flushed = false;
+  try { journal = new V1RunEvidence(directory, { ...fs, fsyncSync(fd) { requests.push(fd); } }); }
+  catch (error) { fs.rmSync(directory, { recursive: true, force: true }); throw error; }
+  // Close owned descriptors before removing files, including on assertion failure.
+  t.after(() => { try { journal.close(); } finally { fs.rmSync(directory, { recursive: true, force: true }); } });
+  return { journal, finish(index) {
+    const stream = journal.streams[index];
+    assert.equal(journal.io.appendFileSync, fs.appendFileSync, 'ENTRY_UNITS_REQUIRE_REAL_APPENDS');
+    assert.equal(requests.length, 2000, 'EVERY_ACCEPTED_ENTRY_REQUIRES_ITS_SYNC_REQUEST');
+    assert.ok(requests.every(fd => fd === stream.fd), 'SYNC_REQUEST_MUST_TARGET_EXACT_WRITTEN_STREAM');
+    assert.equal(stream.events.length, 2000);
+    assert.equal(flushed, false, 'ONE_FINAL_REAL_FLUSH_REQUIRED'); flushed = true;
+    fs.fsyncSync(stream.fd);
+    const manifest = journal.close();
+    assert.equal(manifest.streams[index].fileBytesVerified, true);
+    assert.equal(manifest.streams[index].count, 2000);
+    assert.equal(stream.finalBytes.toString('utf8').trimEnd().split('\n').length, 2000);
+    assert.equal(v1Hash(stream.finalBytes), manifest.streams[index].sha256);
+    return manifest;
+  } };
+}
+test('V1 evidence requires both complete streams with shared ordering and byte-exact hashes', t => {
+  const directory = evidenceDirectory(t), journal = new V1RunEvidence(directory);
+  journal.write({type:'run_started'});journal.write({type:'browser_step',control:'synthetic'});journal.write({type:'phase_started'});
+  const manifest=journal.close(), main=fs.readFileSync(path.join(directory,'events.jsonl')), browser=fs.readFileSync(path.join(directory,'browser-events.jsonl'));
+  assert.deepEqual(validateV1EvidenceStreams(manifest,main,browser).map(x=>x.evidenceSequence),[1,2,3]);
+  assert.throws(()=>validateV1EvidenceStreams(manifest,main,Buffer.alloc(0)));
+  assert.throws(()=>validateV1EvidenceStreams(manifest,Buffer.from(main.toString().replace('run_started','run_altered')),browser));
+  assert.deepEqual(journal.close(),manifest); assert.throws(()=>journal.write({type:'late'}));
+});
+for (const type of ['native_ui_action','browser_step']) test(`V1 ${type} stream saturates at its unchanged 2000-entry cap and stops both streams`, t => {
+  const counted=countedSyncEvidence(t),journal=counted.journal;
+  for(let i=0;i<2000;i++)journal.write({type});
+  assert.throws(()=>journal.write({type}),/V1_EVIDENCE_EVENT_BOUND/);
+  assert.throws(()=>journal.write({type:type==='browser_step'?'native_ui_action':'browser_step'}),/V1_EVIDENCE_EVENT_BOUND/);
+  const manifest=counted.finish(type==='browser_step'?1:0);assert.equal(manifest.status,'incomplete');assert.equal(manifest.totalEvents,2000);
+});
+test('V1 serialization and byte-bound failures poison the writer without exposing diagnostics', t => {
+  for(const event of [{type:'synthetic',value:'x'.repeat(1048576)},(()=>{const x={type:'synthetic'};x.x=x;return x})(),{get type(){throw new Error('DO_NOT_RETAIN')}}]){
+    const sub=path.join(evidenceDirectory(t),'run');fs.mkdirSync(sub);const journal=new V1RunEvidence(sub);
+    assert.throws(()=>journal.write(event),/V1_EVIDENCE_(WRITE_FAILED|BYTE_BOUND)/);
+    assert.throws(()=>journal.write({type:'safe'}));const manifest=journal.close();assert.equal(manifest.status,'incomplete');
+    assert.equal(JSON.stringify(manifest).includes('DO_NOT_RETAIN'),false);
+  }
+});
+for(const fault of ['partial-write','fsync'])test(`V1 ${fault} retains uncertain bytes without claiming a whole-file digest`,t=>{
+  const directory=evidenceDirectory(t);const io={...fs,appendFileSync(fd,bytes){if(fault==='partial-write'){fs.appendFileSync(fd,bytes.subarray(0,7));throw new Error('PRIVATE_IO_DIAGNOSTIC')}return fs.appendFileSync(fd,bytes)},fsyncSync(fd){if(fault==='fsync')throw new Error('PRIVATE_IO_DIAGNOSTIC');fs.fsyncSync(fd)}};
+  const journal=new V1RunEvidence(directory,io);assert.throws(()=>journal.write({type:'synthetic'}),/V1_EVIDENCE_WRITE_FAILED/);
+  const manifest=journal.close();assert.equal(manifest.status,'incomplete');assert.equal(manifest.streams[0].sha256,null);assert.equal(manifest.streams[0].bytes,null);assert.equal(manifest.streams[0].fileBytesVerified,false);
+  assert.ok(fs.statSync(path.join(directory,'events.jsonl')).size>0);assert.equal(JSON.stringify(manifest).includes('PRIVATE_IO_DIAGNOSTIC'),false);
+});
+test('V1 final evidence verification detects replacement or altered retained bytes', t=>{
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory);journal.write({type:'synthetic'});
+  fs.writeFileSync(path.join(directory,'events.jsonl'),'replacement');const manifest=journal.close();
+  assert.equal(manifest.status,'incomplete');assert.equal(manifest.streams[0].sha256,null);
+});
+test('V1 owned session cleanup survives saturated evidence and never repeats a lost acknowledgement',async t=>{
+  const counted=countedSyncEvidence(t),journal=counted.journal,owner=new V1OwnedSessions(10);let calls=0;
+  const driver={sessionId:uuid(1),async deleteSession(){calls++}};owner.add(driver);
+  for(let i=0;i<2000;i++)journal.write({type:'synthetic'});
+  await assert.rejects(owner.remove(driver,()=>journal.write({type:'appium_session'})),/V1_EVIDENCE_EVENT_BOUND/);
+  assert.deepEqual(await owner.close(),[{id:uuid(1),attempted:true,acknowledged:true}]);assert.equal(calls,1);
+  const lost={sessionId:uuid(2),async deleteSession(){calls++;throw new Error('LOST_ACK')}};owner.add(lost);
+  await assert.rejects(owner.remove(lost),/LOST_ACK/);await owner.close();assert.equal(calls,2);
+  const hanging={sessionId:uuid(3),deleteSession(){calls++;return new Promise(()=>{})}};owner.add(hanging);
+  const result=await owner.close();assert.equal(result.at(-1).acknowledged,false);assert.equal(calls,3);
+  await owner.close();assert.equal(calls,3);assert.equal(counted.finish(0).status,'incomplete');
+});
+test('V1 session registry bounds actual registrations and rejects concurrent unknown owners',async()=>{
+  const owner=new V1OwnedSessions(10);for(let i=0;i<17;i++){const d={sessionId:uuid(i+1),async deleteSession(){}};owner.add(d);assert.throws(()=>owner.add({sessionId:uuid(100)}),/V1_OWNED_SESSION_BOUND/);await owner.remove(d)}
+  assert.throws(()=>owner.add({sessionId:uuid(100)}),/V1_OWNED_SESSION_BOUND/);
+});
+test('V1 Calendar fixture uses the canonical decoded display type and exact normalized source fields',()=>{
+  const raw={id:'deadline:'+uuid(1),kind:'deadline',display_type:'filing_deadline',title:'Synthetic filing',occurs_on:'2026-11-14',matter_id:uuid(2),matter_code:'SYN-2',matter_title:'Synthetic matter',ip_docket_id:uuid(3),time_status:'time_not_published',detail:null};
+  assert.deepEqual(nativeCalendarRowFields(raw,'2026-11-14','Synthetic day'),['Synthetic filing','SYN-2 · Synthetic matter','Synthetic day · filing deadline · Time not published · IP docket']);
+  assert.throws(()=>nativeCalendarRowFields({...raw,occurs_on:'2026-11-15'},'2026-11-14','Synthetic day'));
+});
+test('V1 viewer segment presentation is separately source/build/device bound without primary data grafting',()=>{
+  const selectors={observed:true,udid:'synthetic-device',buildReceipt:ref('build'),segments:{'Matter view':{Work:{label:'Work'}}}};
+  const fixture={udid:'synthetic-device',buildReceipt:ref('build'),binarySourceSha:source,companyId:uuid(9)};
+  const c={fixture,platform:'android',segmentPresentation:{sourceSha:source,platform:'android',selectors}};
+  assert.equal(admitV1SegmentPresentation(c),selectors);assert.equal(fixture.v1,undefined);
+  assert.equal(admitV1SegmentPresentation({...c,segmentPresentation:{...c.segmentPresentation,selectors:{...selectors,segments:{'Source type':{Contracts:{label:'Contracts'}}}}}}).segments['Source type'].Contracts.label,'Contracts');
+  for(const changed of [{udid:'wrong'},{buildReceipt:ref('wrong')},{binarySourceSha:'f'.repeat(40)}])assert.throws(()=>admitV1SegmentPresentation({...c,fixture:{...fixture,...changed}}));
+  assert.throws(()=>admitV1SegmentPresentation({...c,segmentPresentation:undefined}));assert.equal(fixture.v1,undefined);
+});
+function positioningDouble(){
+  let clock=0,moves=0;const original=Date.now;Date.now=()=>clock;
+  const c={platform:'android',budget:{control(){}},driver:{getWindowRect:async()=>({x:0,y:0,width:500,height:1000}),performActions:async()=>{moves++},releaseActions:async()=>{},waitUntil:async callback=>{for(let n=0;n<105;n++){if(await callback())return;clock+=200}throw new Error('EXACT_V1_VISIBLE_FACT_REQUIRED')}}};
+  return{c,get moves(){return moves},restore(){Date.now=original}};
+}
+test('V1 positioning latches original lookup and lost gesture errors despite WDIO rejected-callback retries',async()=>{
+  for(const fault of ['lookup','gesture']){const value=positioningDouble();try{
+    const original=new Error('ORIGINAL_NATIVE_FAILURE');let reads=0,dispatched=0;
+    value.c.driver.waitUntil=async callback=>{for(let n=0;n<20;n++){try{if(await callback())return}catch{};await Promise.resolve();}throw new Error('WRAPPED_TIMEOUT')};
+    if(fault==='gesture'){let clock=0;Date.now=()=>clock+=400;value.c.driver.performActions=async()=>{dispatched++;throw original}};
+    await assert.rejects(positionV1Visible(value.c,async()=>{reads++;if(fault==='lookup')throw original;return{ready:false}}),error=>error===original);
+    assert.ok(reads<=5);assert.equal(value.moves,0);assert.equal(dispatched,fault==='gesture'?1:0);
+  }finally{value.restore()}}
+});
+test('V1 rows require all exact child fields and reposition a row covered by Android tabs',async()=>{
+  for(const clipped of [true,false]){const value=positioningDouble();try{
+    const fields=['Exact title','Exact parent','Exact metadata'],element={elementId:'row',isDisplayed:async()=>true,getAttribute:async()=> 'event-synthetic',
+      $$:async query=>clipped&&value.moves===0?[]:[{isDisplayed:async()=>true,getText:async()=>fields.find(f=>query===selector('android','text',f))}]};
+    const tab={elementId:'tab',isDisplayed:async()=>true};
+    value.c.driver.$$=async query=>query===selector('android','id','event-synthetic')?[element]:query===selector('android','id','tab-today')?[tab]:[];
+    value.c.driver.getElementRect=async id=>id==='tab'?{x:0,y:900,width:125,height:100}:({x:0,y:value.moves?300:clipped?700:900,width:500,height:100});
+    assert.equal(await row(value.c,'event-synthetic',fields),element);assert.equal(value.moves,1);
+  }finally{value.restore()}}
+});
+
+test('V1 finalizer cannot accept cleanup that crosses its original absolute deadline or a rejected result',t=>{
+  for(const fault of ['late','validation','corrupt']){
+    const directory=evidenceDirectory(t);let clock=0;const journal=new V1RunEvidence(directory,fs,{now:()=>clock,milliseconds:100});
+    journal.write({type:'synthetic',nested:{value:'original'}});
+    if(fault==='corrupt')fs.writeFileSync(path.join(directory,'events.jsonl'),'corrupted');
+    if(fault==='late')clock=100;
+    const result=finishV1Evidence(journal,()=>{if(fault==='validation')throw new Error('PRIVATE_RESULT_DETAIL');return{status:'passed'}});
+    assert.equal(result.completed,false);assert.equal(result.result,undefined);assert.equal(JSON.stringify(result).includes('PRIVATE_RESULT_DETAIL'),false);
+  }
+});
+test('V1 complete stream finalization consumes held exact bytes and isolates mutable event inputs',t=>{
+  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory),nested={value:'original'};
+  journal.write({type:'synthetic',nested});nested.value='changed';journal.events[0].nested.value='also changed';
+  const result=finishV1Evidence(journal,events=>{assert.equal(events[0].nested.value,'original');return{status:'passed'}});
+  assert.equal(result.completed,true);assert.equal(result.result.status,'passed');
+});
+test('V1 session absence checks every known ID plus actual complete inventory without retries',async()=>{
+  const sessions=[{id:uuid(1)},{id:uuid(2)}],calls=[];
+  const request=async(route,timeout)=>{calls.push({route,timeout});return route==='/appium/sessions'?{status:200,value:[]}:{status:404,value:{error:'invalid session id'}}};
+  const result=await verifyV1SessionAbsence(sessions,request);assert.equal(result.verified,true);
+  assert.deepEqual(calls.map(x=>x.route),[`/session/${uuid(1)}/timeouts`,`/session/${uuid(2)}/timeouts`,'/appium/sessions']);assert.ok(calls.every(x=>x.timeout<=5000&&x.timeout>0));
+  for(const response of [{status:200,value:{}},{status:404,value:{error:'unknown error'}}]){let reads=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{reads++;return response}));assert.equal(reads,1);}
+  await assert.rejects(verifyV1SessionAbsence(sessions,async(route)=>route==='/appium/sessions'?{status:200,value:[{id:uuid(3)}]}:{status:404,value:{error:'invalid session id'}}));
+  let clock=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{clock=60000;return{status:404,value:{error:'invalid session id'}}},()=>clock),/V1_SESSION_ABSENCE_DEADLINE/);
+});
+test('V1 global expiry during gesture geometry prevents late physical dispatch',async()=>{
+  const value=positioningDouble();try{let active=true,geometry=0;value.c.assertActive=()=>assert.equal(active,true,'GLOBAL_EXPIRED');
+    value.c.driver.getWindowRect=async()=>{geometry++;active=false;return{x:0,y:0,width:500,height:1000}};
+    await assert.rejects(positionV1Visible(value.c,async()=>({ready:false})),/GLOBAL_EXPIRED/);assert.equal(geometry,1);assert.equal(value.moves,0);
+  }finally{value.restore()}
+});
+test('V1 Work and Source segments use separate viewer presentation and dispatch each exact control once',async()=>{
+  const fixture={udid:'synthetic-device',buildReceipt:ref('build'),binarySourceSha:source,companyId:uuid(9)},before=structuredClone(fixture),calls=[];
+  const recipes={};for(const [group,label]of[['Matter view','Work'],['Source type','Contracts']])recipes[group]={[label]:{group,label,labelAttribute:'text',query:`android=new UiSelector().text("${label}")`}};
+  let label;const element={elementId:'segment',isDisplayed:async()=>true,getAttribute:async()=>label};
+  const c={fixture,platform:'android',segmentPresentation:{sourceSha:source,platform:'android',selectors:{observed:true,udid:fixture.udid,buildReceipt:fixture.buildReceipt,segments:recipes}},budget:{control(){}},driver:{waitUntil:async fn=>assert.equal(await fn(),true),$$:async query=>query===recipes[label==='Work'?'Matter view':'Source type'][label].query?[element]:[],elementClick:async id=>calls.push(id)}};
+  for(const [group,value]of[['Matter view','Work'],['Source type','Contracts']]){label=value;await segment(c,group,label);}
+  assert.deepEqual(calls,['segment','segment']);assert.deepEqual(fixture,before);assert.equal(fixture.v1,undefined);
+});
+test('Android read-only row binds its exact global scroll ancestor and rejects alternate ownership',async()=>{
+  const facts=['Readonly exact task','Unassigned','todo · Read-only'],id='task-synthetic',row={elementId:'row',isDisplayed:async()=>true,getAttribute:async key=>key==='resource-id'?id:'false',$$:async query=>{assert.equal(query.startsWith('xpath=ancestor::'),false);return facts.filter(x=>selector('android','text',x)===query).map((x,i)=>({elementId:'leaf'+i,isDisplayed:async()=>true,getText:async()=>x}))}},scroll={elementId:'scroll',isDisplayed:async()=>true};
+  let ancestorCount=1;const queries=[];const c={platform:'android',budget:createV1CaseBudget(),driver:{$$:async query=>{queries.push(query);return facts.some(x=>selector('android','text',x)===query)?facts.filter(x=>selector('android','text',x)===query).map((x,i)=>({elementId:'leaf'+i,isDisplayed:async()=>true,getText:async()=>x})):query===selector('android','id',id)?[row]:query===`//*[@resource-id='${id}']/ancestor::*[@scrollable="true"]`?Array(ancestorCount).fill(scroll):[]},getWindowRect:async()=>({x:0,y:0,width:400,height:800}),getElementRect:async key=>key==='scroll'?{x:0,y:100,width:400,height:600}:key==='row'?{x:10,y:200,width:380,height:100}:{x:20,y:210,width:300,height:20}}};
+  assert.equal(await readOnlyV1Row(c,id,facts),row);assert.ok(queries.includes(`//*[@resource-id='${id}']/ancestor::*[@scrollable="true"]`));
+  ancestorCount=0;await assert.rejects(readOnlyV1Row(c,id,facts),/EXACT_READONLY_ROW_SCROLL_ANCESTOR_REQUIRED/);ancestorCount=2;await assert.rejects(readOnlyV1Row(c,id,facts),/EXACT_READONLY_ROW_SCROLL_ANCESTOR_REQUIRED/);
+});
+
+test('Android flattened readonly facts reject missing, duplicate, hidden, altered and out-of-row matches',async()=>{
+  for(const fault of ['missing','duplicate','hidden','wrong-text','outside','clickable','wrong-id','too-many']){
+    const id='task-synthetic',facts=['Exact title','Exact owner','Exact state'];
+    const leaf={elementId:'leaf',isDisplayed:async()=>fault!=='hidden',getText:async()=>fault==='wrong-text'?'Wrong':facts[0]};
+    const row={elementId:'row',isDisplayed:async()=>true,getAttribute:async key=>key==='resource-id'?(fault==='wrong-id'?'task-other':id):fault==='clickable'?'true':'false'},scroll={elementId:'scroll',isDisplayed:async()=>true};
+    const c={platform:'android',budget:createV1CaseBudget(),driver:{$$:async query=>query===selector('android','id',id)?[row]:query.includes('/ancestor::')?[scroll]:facts.some(x=>selector('android','text',x)===query)&&fault!=='missing'?Array(fault==='too-many'?101:fault==='duplicate'?2:1).fill(leaf):[],getWindowRect:async()=>({x:0,y:0,width:400,height:800}),getElementRect:async key=>key==='scroll'?{x:0,y:100,width:400,height:600}:key==='row'?{x:10,y:200,width:380,height:100}:{x:20,y:fault==='outside'?400:210,width:300,height:20}}};
+    await assert.rejects(readOnlyV1Row(c,id,facts),new RegExp(fault==='too-many'?'READONLY_ROW_FACT_LOOKUP_BOUND':fault==='clickable'?'READONLY_ROW_MUST_NOT_OFFER_EDIT_ACTION':fault==='wrong-id'?'EXACT_READONLY_ROW_IDENTITY_REQUIRED':fault==='wrong-text'?'Expected values to be strictly equal':'EXACT_READONLY_ROW_FACT_REQUIRED'));
+  }
+});
+
+test('V1 session HTTP observation preserves marker/TLS policy, refuses redirects and bounds received bytes',async()=>{
+  const options=[];
+  const response=await readV1SessionStatus('http://127.0.0.1:4725/appium/sessions',1000,async(url,init)=>{options.push(init);assert.equal(url.hostname,'127.0.0.1');return new Response('{"value":[]}',{status:200})});
+  assert.deepEqual(response,{status:200,value:[]});assert.equal(options[0].redirect,'error');assert.deepEqual(options[0].headers,{'X-CaseOps-Automated-Test':'no-paid-providers'});assert.ok(options[0].signal instanceof AbortSignal);
+  for(const item of [new Response('',{status:302}),new Response('bad-json',{status:200}),new Response(new Uint8Array([255]),{status:200})])await assert.rejects(readV1SessionStatus('https://localhost:4725/appium/sessions',1000,async()=>item));
+  let cancelled=false,reads=0;
+  const body=new ReadableStream({pull(controller){reads++;controller.enqueue(new Uint8Array(9000));},cancel(){cancelled=true}},{highWaterMark:0});
+  await assert.rejects(readV1SessionStatus('http://127.0.0.1:4725/appium/sessions',1000,async()=>new Response(body,{status:200})),/V1_SESSION_STATUS_RESPONSE_BOUND/);
+  assert.equal(cancelled,true);assert.equal(reads,2);
+  for(const url of ['https://example.invalid/appium/sessions','http://user@localhost:4725/appium/sessions','http://localhost:4725/appium/sessions?q=x']){let calls=0;await assert.rejects(readV1SessionStatus(url,1000,async()=>{calls++;return new Response('{}')}));assert.equal(calls,0);}
+});
+test('V1 absence observation admits the complete seventeen-session inventory under one deadline',async()=>{
+  const sessions=Array.from({length:17},(_,i)=>({id:uuid(i+1)}));let count=0;
+  const result=await verifyV1SessionAbsence(sessions,async(route)=>{count++;return route==='/appium/sessions'?{status:200,value:[]}:{status:404,value:{error:'invalid session id'}}});assert.equal(result.known.length,17);assert.equal(count,18);
+});
+
+test('Android readonly association refuses changed row/scroll epochs and tab occlusion', async () => {
+  for (const fault of ['row-layout', 'scroll-layout', 'row-identity', 'scroll-identity', 'tabs']) {
+    const facts = ['Exact title', 'Exact owner', 'Exact state'], id = 'task-synthetic';
+    let rowReads = 0, scrollReads = 0, rowQueries = 0, scrollQueries = 0;
+    const row = { elementId: 'row', isDisplayed: async () => true, getAttribute: async key => key === 'resource-id' ? id : 'false' };
+    const scroll = { elementId: 'scroll', isDisplayed: async () => true }, tab = { elementId: 'tab', isDisplayed: async () => true };
+    const c = { platform: 'android', budget: createV1CaseBudget(), driver: {
+      $$: async query => {
+        if (query === selector('android', 'id', id)) return [{ ...row, elementId: fault === 'row-identity' && ++rowQueries > 1 ? 'replacement' : 'row' }];
+        if (query.includes('/ancestor::')) return [{ ...scroll, elementId: fault === 'scroll-identity' && ++scrollQueries > 1 ? 'replacement' : 'scroll' }];
+        if (query === selector('android', 'id', 'tab-today')) return fault === 'tabs' ? [tab] : [];
+        return facts.filter(value => query === selector('android', 'text', value)).map((value, i) => ({ elementId: `leaf-${i}`, isDisplayed: async () => true, getText: async () => value }));
+      }, getWindowRect: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+      getElementRect: async key => key === 'row' ? { x: 10, y: fault === 'row-layout' && ++rowReads > 1 ? 220 : 200, width: 380, height: 100 }
+        : key === 'scroll' ? { x: 0, y: 100, width: 400, height: fault === 'scroll-layout' && ++scrollReads > 1 ? 590 : 600 }
+        : key === 'tab' ? { x: 0, y: 200, width: 100, height: 100 } : { x: 20, y: 210, width: 300, height: 20 },
+      performActions: async () => { throw new Error('COVERED_ROW_REQUIRES_POSITIONING'); }, releaseActions: async () => {},
+    } };
+    await assert.rejects(readOnlyV1Row(c, id, facts), fault === 'tabs' ? /COVERED_ROW_REQUIRES_POSITIONING/ : fault.endsWith('layout') ? /READONLY_ROW_LAYOUT_CHANGED/ : /Expected values to be strictly equal/);
+  }
+});
+
+test('V1 evidence poisons serialization failure without reading an arbitrary thrown message getter', t => {
+  const directory = evidenceDirectory(t), journal = new V1RunEvidence(directory); let reads = 0;
+  const thrown = { get message() { reads++; throw new Error('UNSAFE_DIAGNOSTIC_ACCESS'); } };
+  assert.throws(() => journal.write({ get type() { throw thrown; } }), /V1_EVIDENCE_WRITE_FAILED/);
+  assert.equal(reads, 0); assert.throws(() => journal.write({ type: 'safe' }), /V1_EVIDENCE_WRITE_FAILED/);
+  assert.equal(journal.close().status, 'incomplete'); assert.equal(reads, 0);
+});
+
+test('V1 witness row preserves one ID-bound find event and budget charge across polling and positioning', async () => {
+  const value = positioningDouble();
+  try {
+    const fields = ['Exact title', 'Exact parent', 'Exact metadata'], events = [], clicks = [];
+    const element = { elementId: 'row', isDisplayed: async () => true, getAttribute: async () => 'event-synthetic',
+      $$: async query => value.moves === 0 ? [] : fields.filter(text => query === selector('android', 'text', text)).map(text => ({ isDisplayed: async () => true, getText: async () => text })) };
+    const budget = createV1CaseBudget(); value.c.budget = budget;
+    value.c.record = event => { budget.control(); events.push(event); };
+    value.c.driver.$$ = async query => query === selector('android', 'id', 'event-synthetic') ? [element] : [];
+    value.c.driver.getElementRect = async () => ({ x: 0, y: value.moves ? 300 : 700, width: 500, height: 100 });
+    value.c.driver.elementClick = async id => clicks.push(id);
+    const resolved = await row(value.c, 'event-synthetic', fields);
+    assert.equal(resolved, element); assert.equal(value.moves, 1); assert.deepEqual(clicks, []);
+    assert.deepEqual(events, [{ type: 'native_ui_action', action: 'find', controlId: 'event-synthetic' }, { type: 'native_ui_action', action: 'swipe' }]);
+    assert.equal(budget.counts.controls, 3); // one find, explicit gesture admission, recorded swipe
+    await dispatchNativeClick(value.c, resolved, 'id', 'event-synthetic');
+    assert.deepEqual(clicks, ['row']); assert.equal(budget.counts.controls, 4);
+    assert.deepEqual(events.at(-1), { type: 'native_ui_action', action: 'click', controlId: 'event-synthetic' });
+    let lookups = 0; const exhausted = createV1CaseBudget();
+    for (let i = 0; i < V1_BUDGETS.maxControlsPerCase; i++) exhausted.control();
+    await assert.rejects(row({ ...value.c, record: () => exhausted.control(), driver: { $$: async () => { lookups++; return []; } } }, 'event-synthetic', fields), /V1_NATIVE_ACTION_BOUND/);
+    assert.equal(lookups, 0);
+  } finally { value.restore(); }
+});

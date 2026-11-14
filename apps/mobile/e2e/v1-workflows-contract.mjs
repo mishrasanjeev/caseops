@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { constants, openSync, closeSync, fstatSync, lstatSync, readSync } from 'node:fs';
 import { v1Inventory, V1_BUDGETS } from './v1-workflows-inventory.mjs';
+import { nativeCalendarRowFields } from './v1-native-presentation.mjs';
 
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const SHA = /^[a-f0-9]{64}$/;
@@ -138,6 +139,17 @@ export function createV1FixtureAggregate({ runId, sourceSha, claim, persist, now
     publicState,
   };
 }
+/** Raw MatterRecord has status/is_active; is_disposed is an internal fixture projection. */
+export function v1OperationalMatter(record, companyId) {
+  assert.ok(record && typeof record === 'object' && !Array.isArray(record), 'V1_ACTUAL_MATTER_RECORD_REQUIRED');
+  v1Identity(record.id); v1Identity(record.company_id); assert.equal(record.company_id, companyId, 'V1_MATTER_COMPANY_MISMATCH');
+  v1Lifecycle(record.lifecycle_version);
+  assert.ok(['intake', 'active', 'on_hold'].includes(record.status), 'V1_OPERATIONAL_MATTER_STATUS_REQUIRED');
+  assert.equal(record.is_active, true, 'V1_ACTIVE_MATTER_REQUIRED');
+  if (Object.hasOwn(record, 'is_disposed')) assert.equal(record.is_disposed, false, 'V1_CONTRADICTORY_MATTER_PROJECTION');
+  return { ...record, is_disposed: false };
+}
+
 export function v1Reference(value, code = 'HASH_BOUND_V1_REFERENCE_REQUIRED') {
   assert.ok(value && path.isAbsolute(value.path || '') && path.resolve(value.path) === value.path && SHA.test(value.sha256 || ''), code);
   return value;
@@ -147,6 +159,16 @@ export function v1PrivateReference(value) {
   assert.deepEqual(Object.keys(value).sort(), ['path', 'sha256', 'uid'], 'EXACT_PRIVATE_DESCRIPTOR_REFERENCE_REQUIRED');
   assert.ok(Number.isSafeInteger(value.uid) && value.uid >= 0, 'ACTUAL_PRIVATE_DESCRIPTOR_UID_REQUIRED');
   return value;
+}
+export function validateV1ActorPrivateMapping(actor, authorityEvidence) {
+  const original = v1PrivateReference(actor.credentialEvidence);
+  if (Object.hasOwn(actor, 'runtimeCredentialEvidence')) {
+    const runtime = v1PrivateReference(actor.runtimeCredentialEvidence);
+    v1PrivateReference(authorityEvidence);
+    assert.equal(runtime.sha256, original.sha256, 'V1_RUNTIME_CREDENTIAL_HASH_REQUIRED');
+    assert.equal(path.dirname(runtime.path), path.dirname(authorityEvidence.path), 'V1_RUNTIME_CREDENTIAL_NAMESPACE_REQUIRED');
+  }
+  return original;
 }
 export function validateV1FixtureAggregate(value, sourceSha, load = readV1Reference) {
   assert.equal(value.kind, 'actual-complete-v1-fixture-aggregate'); assert.equal(value.observed, true); assert.equal(value.sourceSha, sourceSha);
@@ -345,6 +367,14 @@ export function validateV1Fixture(fixture, platform) {
   assert.equal(inbox.externalCalls, 0); assert.equal(inbox.manualReceiptInsertion, false);
   return fixture;
 }
+/** Calendar's row identity is typed; the UUID is the acknowledged Matter deadline. */
+export function v1CalendarDeadlineIdentity(event, docket, deadlineId) {
+  assert.equal(event?.kind, 'deadline', 'ACTUAL_CALENDAR_DEADLINE_KIND_REQUIRED');
+  assert.equal(event.id, `deadline:${v1Identity(deadlineId)}`, 'ACKNOWLEDGED_CALENDAR_DEADLINE_ID_REQUIRED');
+  assert.equal(event.ip_docket_id, v1Identity(docket?.id), 'CALENDAR_DOCKET_IDENTITY_REQUIRED');
+  assert.equal(event.matter_id, v1Identity(docket?.matter_id), 'CALENDAR_LINKED_MATTER_IDENTITY_REQUIRED');
+  return event.id;
+}
 export function validateV1ExecutionFixture(fixture, platform) {
   validateV1Fixture(fixture, platform);
   const { records, nativeSelectors } = fixture.v1;
@@ -356,8 +386,10 @@ export function validateV1ExecutionFixture(fixture, platform) {
   for (const key of ['day', 'dayLabel', 'nextWeekLabel']) text(records.calendar[key]);
   assert.match(records.calendar.day, /^\d{4}-\d{2}-\d{2}$/);
   for (const source of records.calendar.sources) {
-    v1Identity(source.event.id); text(source.docket.status); v1Version(source.docket.updated_at, 'task');
+    v1CalendarDeadlineIdentity(source.event, source.docket, source.expected.deadlineId);
+    text(source.docket.status); v1Version(source.docket.updated_at, 'task');
     assert.ok(Array.isArray(source.rowFields) && source.rowFields.length === 3); source.rowFields.forEach(text);
+    assert.deepEqual(source.rowFields, nativeCalendarRowFields(source.event, records.calendar.day, records.calendar.dayLabel), 'CANONICAL_CALENDAR_ROW_FACTS_REQUIRED');
   }
   const contracts = records.contracts.pages.flatMap(page => page.contracts);
   assert.deepEqual(records.contracts.rows.map(row => row.id).sort(), contracts.map(row => row.id).sort());
@@ -387,7 +419,7 @@ export function validateV1ExecutionFixture(fixture, platform) {
   assert.equal(records.policy.revokedWork.task.immutable_lifecycle_history, false); v1Version(records.policy.revokedWork.task.updated_at, 'task');
   assert.ok(records.policy.revokedWork.rowFacts); assert.ok(records.policy.readOnly.rowFacts);
   const wall = records.access.wall;
-  v1Identity(wall.event.id); assert.equal(wall.event.ip_docket_id, wall.docket.id);
+  v1CalendarDeadlineIdentity(wall.event, wall.docket, wall.expected.deadlineId);
   assert.equal(wall.rowFields.length, 3); wall.rowFields.forEach(text);
   for (const target of [...records.work.targets.flatMap(value => [value, ...(value.races || []).filter(race => race.matter)]), records.policy.readOnly, records.policy.revokedWork]) {
     text(target.matter.search); text(target.matter.identityLabel); text(target.matter.title);
@@ -457,20 +489,28 @@ export function validateV1InboxMutationEvidence(observed, completeJourney, { id,
   return row;
 }
 export function strictV1Routes(records) {
-  const routes = new Set(['GET /api/build', 'GET /api/health', 'GET /api/ip/readiness', 'GET /api/contracts/', 'GET /api/ip/portfolio', 'GET /api/calendar/events', 'GET /api/matters/']);
+  const routes = new Set(['GET /api/build', 'GET /api/health', 'GET /api/ip/readiness', 'GET /api/contracts/', 'GET /api/ip/portfolio', 'GET /api/calendar/events', 'GET /api/matters/',
+    'GET /api/auth/native/sessions', 'GET /api/account/deletion-requests', 'GET /api/account/workspace-conduct', 'GET /api/matter-work-queue']);
   for (const source of records.calendar.sources) routes.add(`GET /api/ip/dockets/${v1Identity(source.docket.id)}/summary`);
   routes.add(`GET /api/ip/dockets/${v1Identity(records.access.wall.docket.id)}/summary`);
   for (const row of records.contracts.pages.flatMap(x => x.contracts)) routes.add(`GET /api/contracts/${v1Identity(row.id)}`);
   const targets = [...records.work.targets.flatMap(target => [target, ...(target.races || []).filter(race => race.matter)]),
     records.policy.readOnly, records.policy.revokedWork];
-  routes.add(`GET /api/matters/${v1Identity(records.access.wall.linkedMatter.id)}/workspace`);
+  // Opening a Matter hydrates its raw record, workspace and draft list.
+  // Supporting reads never confer a mutation route on Counsel or viewer parents.
+  for (const matter of [records.access.wall.linkedMatter, records.inbox.matter, records.counsel.matter, ...targets.map(target => target.matter)]) {
+    const prefix = `/api/matters/${v1Identity(matter.id)}`;
+    for (const suffix of ['', '/workspace', '/drafts']) routes.add(`GET ${prefix}${suffix}`);
+  }
   routes.add(`GET /api/contracts/${v1Identity(records.obligations.contractId)}/obligations`);
   routes.add(`GET /api/outside-counsel/matters/${v1Identity(records.counsel.matter.id)}/context`);
   routes.add('GET /api/recipient-inbox');
   routes.add(`PATCH /api/recipient-inbox/${v1Identity(records.inbox.notification.id)}`);
-  routes.add(`GET /api/matters/${v1Identity(records.inbox.matter.id)}/workspace`);
+  const inboxMatter = v1Identity(records.inbox.matter.id);
+  routes.add(`GET /api/matters/${inboxMatter}`); routes.add(`GET /api/matters/${inboxMatter}/workspace`);
   for (const { matter, task, hearing } of targets) {
     const prefix = `/api/matters/${v1Identity(matter.id)}`;
+    routes.add(`GET ${prefix}`);
     routes.add(`GET ${prefix}/workspace`);
     if (matter.id !== records.policy.readOnly.matter.id) {
       for (const kind of ['tasks', 'hearings']) routes.add(`POST ${prefix}/${kind}`);

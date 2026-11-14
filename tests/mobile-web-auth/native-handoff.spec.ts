@@ -43,6 +43,7 @@ test('MOB-WEB-02 names the exact account and workspace before explicit consent',
   await expect(page.getByText('Example Legal / fixture-legal', { exact: true })).toBeVisible();
   const connect = page.getByRole('button', { name: 'Connect app', exact: true });
   await expect(connect).toBeEnabled();
+  await expect(connect).toBeFocused();
   expect(authorizations).toBe(0);
   const size = await connect.boundingBox();
   expect(size!.height).toBeGreaterThanOrEqual(44);

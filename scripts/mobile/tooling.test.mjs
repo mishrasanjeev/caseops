@@ -11,13 +11,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { binaryHash, byTestId, Journal, localJson, localUrl, MARKER, MARKER_HEADER, reconcileInventory, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
 import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
-import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
+import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, validateNativeFixtureAuthentication, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
 import { collect, harnessFingerprint, inventory as datedInventory, receiptInventory } from '../../apps/mobile/e2e/suite.mjs';
@@ -1112,6 +1113,34 @@ function coreFixture(t) {
   return fixture;
 }
 const unitCredentials = { CASEOPS_MOBILE_UNIT_EMAIL: 'unit@example.invalid', CASEOPS_MOBILE_UNIT_PASSWORD: 'unit-only' };
+test('native authentication admits its isolated member without requiring unrelated Core records while Core remains complete', t => {
+  const fixture = coreFixture(t);
+  for (const key of ['matter', 'today', 'work', 'calendar']) delete fixture[key];
+  fixture.auth = { ...fixture.auth, mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' };
+  const env = { ...unitCredentials, CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
+  assert.equal(validateNativeFixtureAuthentication(fixture, env), fixture);
+  assert.throws(() => validateCoreFixture(fixture, env), /SEEDED_MATTER_ID_REQUIRED/);
+});
+test('shared native member validation preserves credential MFA browser marker source and Docker isolation refusals', t => {
+  const fixture = coreFixture(t);
+  for (const key of ['matter', 'today', 'work', 'calendar']) delete fixture[key];
+  fixture.auth = { ...fixture.auth, mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' };
+  const env = { ...unitCredentials, CASEOPS_MOBILE_UNIT_TOTP: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
+  for (const mutate of [
+    x => { x.environment = 'production'; }, x => { x.syntheticDataOnly = false; },
+    x => { x.coreInventory = 'unreviewed'; }, x => { x.backendSha = 'unknown'; },
+    x => { x.webSha = 'unknown'; }, x => { x.backendRevision = 'different'; },
+    x => { x.browserApiMarkerVerified = false; }, x => { x.auth.webOrigin = 'http://127.0.0.1:3443'; },
+    x => { x.auth.emailEnv = 'PATH'; }, x => { x.auth.passwordEnv = 'PATH'; },
+    x => { x.auth.totpSecretEnv = 'PATH'; }, x => { x.auth.mfaStage = 'unknown'; },
+    x => { x.auth.mode = 'native-firefox'; }, x => { x.isolationEvidence.sha256 = '0'.repeat(64); },
+    x => { const data = JSON.parse(readFileSync(x.isolationEvidence.path)); data.productionAccessed = true; x.isolationEvidence = ownedFile(t, data); },
+    x => { const data = JSON.parse(readFileSync(x.isolationEvidence.path)); data.containers[0].project = 'other-project'; x.isolationEvidence = ownedFile(t, data); },
+  ]) { const x = structuredClone(fixture); mutate(x); assert.throws(() => validateNativeFixtureAuthentication(x, env)); }
+  for (const name of ['CASEOPS_MOBILE_UNIT_EMAIL', 'CASEOPS_MOBILE_UNIT_PASSWORD', 'CASEOPS_MOBILE_UNIT_TOTP']) {
+    const missing = { ...env }; delete missing[name]; assert.throws(() => validateNativeFixtureAuthentication(fixture, missing));
+  }
+});
 test('dated fixture requires genuine Docker/TLS/release/marker/seed evidence and all supported searches', (t) => {
   const fixture = coreFixture(t);
   assert.equal(validateCoreFixture(fixture, unitCredentials), fixture);
@@ -1466,6 +1495,8 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
   let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
+  let consentViewport = 'bottom', keyboardShown = false, keyboardDismissedAt = -Infinity, keyboardChecksAfterDismissal = 0;
+  const consentScrolls = [], keyboardDismissals = [];
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
   let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
   const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
@@ -1480,12 +1511,15 @@ function firefoxDouble(t, foreign = false, options = {}) {
     getCurrentPackage: async () => stage === 'complete' ? fixture.appId : 'org.mozilla.firefox',
     pressKeyCode: async (code) => {
       assert.equal(code, 4); assert.equal(editing, true, 'BACK_MUST_NOT_NAVIGATE_WHEN_EDITOR_CLOSED');
-      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) editing = false;
+      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
     },
+    isKeyboardShown: async () => options.recurringConsentKeyboard && keyboardDismissals.length > 0
+      ? ++keyboardChecksAfterDismissal > 1 : keyboardShown,
+    hideKeyboard: async () => { keyboardDismissals.push('dismiss'); keyboardDismissedAt = clock; keyboardChecksAfterDismissal = 0; if (options.keyboardDismissFailure) throw options.keyboardDismissFailure; if (!options.keyboardStuck) keyboardShown = false; },
     waitUntil: async (callback, settings = {}) => {
       // Pending Firefox preparation is observed one click per poll, so it
       // takes the simulated clock below rather than a single poll.
-      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && fullBrowser) {
+      if (options.chromeDelayMs === undefined && options.connectDelayMs === undefined && options.verifiedNoticeDelayMs === undefined && options.appOpenDelayMs === undefined && options.promptDelaysMs === undefined && options.entryDelayMs === undefined && !options.lowerFieldsNeedScroll && !options.consentViewportScroll && options.keyboardTreeDelayMs === undefined && fullBrowser) {
         return assert.ok(await callback(), 'UNIT_WAIT_UNSATISFIED');
       }
       const start = clock, timeout = settings.timeout ?? 10000, interval = settings.interval ?? 150;
@@ -1509,8 +1543,14 @@ function firefoxDouble(t, foreign = false, options = {}) {
       if (!options.replaceIgnored) typed[key] = args.text;
     },
     getWindowRect: async () => ({ width: 400, height: 800 }),
-    performActions: async () => {
+    performActions: async (actions) => {
       swipes.push('scroll');
+      if (options.consentViewportScroll && stage === 'connect') {
+        const gesture = actions[0].actions;
+        const direction = gesture[0].y < gesture[2].y ? 'up' : 'down';
+        consentScrolls.push({ direction, verified, identityRead: records.filter(row => row.type === 'browser_step' && row.action === 'read').at(-1)?.key });
+        consentViewport = direction === 'up' ? 'top' : 'bottom';
+      }
       if (options.connectDelayMs !== undefined && stage === 'connect' && clock - connectedAt < options.connectDelayMs) {
         stage = 'login';
         refreshes.push('GET /sign-in');
@@ -1541,6 +1581,9 @@ function firefoxDouble(t, foreign = false, options = {}) {
           && (key === 'companySlug' || !options.lowerFieldsNeedScroll || swipes.length > 0)
         : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
           && clock - connectedAt >= (options.connectDelayMs ?? 0)
+          && (!options.consentViewportScroll || (key === 'connect' ? consentViewport === 'bottom' && !(options.missingSettledConnect && consentScrolls.length > 0) : consentViewport === 'top'))
+          && (key !== 'connect' || !options.restoreKeyboardAfterWorkspace
+            || !keyboardShown && (keyboardDismissals.length === 0 || clock - keyboardDismissedAt >= (options.keyboardTreeDelayMs ?? 0)))
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
           && (key !== 'mfaSubmit' || !options.submitHiddenUntilCode || consentCodeEntered)
         : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
@@ -1555,6 +1598,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
       fields.set(elementId, key);
       return [{ elementId, isDisplayed: async () => true, isEnabled: async () => key !== 'appOpen' || !options.appOpenDisabled,
         getText: async () => {
+          if (key === 'workspace' && options.restoreKeyboardAfterWorkspace) keyboardShown = true;
           if (Object.hasOwn(typed, key)) return typed[key];
           if (key === 'urlValue') {
             const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
@@ -1571,7 +1615,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
           if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
-          if (key === 'urlClose') editing = false;
+          if (key === 'urlClose') { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') { stage = 'connect'; connectedAt = clock; }
           if (key === 'connect') {
@@ -1587,7 +1631,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
         } }];
     },
   };
-  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes,
+  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes, consentScrolls, keyboardDismissals,
     elapsed: () => clock };
 }
 
@@ -2312,6 +2356,42 @@ test('Android explicitly updates then reads ID-autocompletion setting and expose
   assert.deepEqual(calls, ['update', 'read', 'lookup']);
   assert.deepEqual(records, [{ type: 'native_driver_settings', disableIdLocatorAutocompletion: true,
     waitForIdleTimeout: 500, waitForSelectorTimeout: 0 }]);
+});
+
+test('Android supplement runners journal the real driver settings readback under the current case ID', async (t) => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'co-native-settings-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const platform = 'android';
+  const settings = { disableIdLocatorAutocompletion: true, waitForIdleTimeout: 500, waitForSelectorTimeout: 0 };
+  const runners = [
+    ['run-queue-privacy.mjs', 'QUEUE-01'],
+    ['run-v1-workflows.mjs', 'SOURCE-01'],
+    ['run-client-extensions.mjs', 'CX28-CAM-01'],
+  ];
+  for (const [runner, scenarioId] of runners) {
+    const id = `${platform}:${scenarioId}`;
+    const source = readFileSync(new URL(`./${runner}`, import.meta.url), 'utf8');
+    // Execute only the runner's settings invocation with a fake driver and the real journal.
+    const invocations = source.match(/(?<=await )configureNativeDriver\([^\n]*?\);/g);
+    assert.equal(invocations?.length, 1, runner);
+    const file = path.join(directory, `${runner}.jsonl`);
+    const journal = new Journal(file);
+    const calls = [];
+    const driver = {
+      updateSettings: async (value) => { assert.deepEqual(value, settings); calls.push('update'); },
+      getSettings: async () => { calls.push('read'); return { ...settings, privateSetting: 'unit-private' }; },
+    };
+    try {
+      await runInNewContext(invocations[0], { configureNativeDriver, driver, journal, id,
+        q: { platform }, config: { platform }, scenario: { id: scenarioId }, write: (event) => journal.write(event) });
+    } finally {
+      journal.close();
+    }
+    assert.deepEqual(calls, ['update', 'read'], runner);
+    const { at, ...receipt } = JSON.parse(readFileSync(file, 'utf8'));
+    assert.equal(new Date(at).toISOString(), at, runner);
+    assert.deepEqual(receipt, { type: 'native_driver_settings', ...settings, id }, runner);
+  }
 });
 
 test('false, missing or nonboolean ID-setting readback fails closed before UI and journals only the bounded boolean', async () => {
@@ -3384,7 +3464,58 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
-  assert.equal(action.runs.steps[0].id, 'prepare');
+  assert.equal(action.runs.steps.length, 2);
+  const [windowsRuntime, prepare] = action.runs.steps;
+  assert.equal(windowsRuntime.if, "${{ runner.os == 'Windows' }}");
+  assert.equal(windowsRuntime.shell, 'bash');
+  assert.equal(prepare.id, 'prepare');
+  const runtimeProgram = windowsRuntime.run.match(/^node <<'CASEOPS_WINDOWS_RUNTIME'\n([\s\S]+)\nCASEOPS_WINDOWS_RUNTIME\n?$/)?.[1];
+  assert.ok(runtimeProgram, 'Exact bounded Windows SDK readiness program required');
+  const ready = { status: 0, signal: null, stdout: 'CASEOPS_WINDOWS_POWERSHELL_5_1_READY', stderr: '' };
+  const runtimeCases = [
+    ['ready', ready, true],
+    ['timeout', { ...ready, error: { code: 'ETIMEDOUT' }, status: null }, false],
+    ['signal', { ...ready, signal: 'SIGTERM' }, false],
+    ['failure', { ...ready, status: 1 }, false],
+    ['extra-output', { ...ready, stdout: ready.stdout + '\nUNREVIEWED' }, false],
+    ['unexpected-stderr', { ...ready, stderr: 'UNREVIEWED' }, false],
+  ];
+  for (const [id, result, accepted] of runtimeCases) {
+    let calls = 0;
+    const messages = [];
+    const scopedProcess = { platform: 'win32', env: { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'true', CI: 'true', GITHUB_OUTPUT: 'PRIVATE_COMMAND_PATH', UNRELATED_SECRET: 'MUST_NOT_PROPAGATE' } };
+    const context = { process: scopedProcess, console: { log: value => messages.push(value) }, require: name => {
+      if (name === 'node:assert/strict') return assert;
+      if (name === 'node:path') return path;
+      assert.equal(name, 'node:child_process');
+      return { spawnSync: (executable, args, options) => {
+        calls++;
+        assert.equal(executable, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+        assert.deepEqual(Array.from(args.slice(0, 4)), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command']);
+        assert.equal(args.length, 5);
+        assert.match(args[4], /PSVersion\.Major -ne 5/);
+        assert.match(args[4], /Language\.Parser\]::ParseInput\('\$caseops = 6 \* 7'/);
+        assert.doesNotMatch(args[4], /CASEOPS_TRUST_ACL_PATH|CASEOPS_COMMAND_|GITHUB_OUTPUT|GetAccessControl|SetAccessControl|SetOwner|ReadAll|WriteAll|Invoke-WebRequest|Invoke-RestMethod|Start-Sleep|Add-Type/);
+        assert.deepEqual({ ...options.env }, { SystemRoot: 'C:\\Windows', WINDIR: 'C:\\Windows' });
+        assert.equal(options.timeout, 10000); assert.equal(options.maxBuffer, 4096); assert.equal(options.windowsHide, true); assert.equal(options.encoding, 'utf8');
+        assert.equal(options.shell, undefined);
+        return result;
+      } };
+    } };
+    if (accepted) {
+      runInNewContext(runtimeProgram, context);
+      assert.deepEqual(messages.map(value => JSON.parse(value)), [{ sdk: 'WindowsPowerShell', version: '5.1', ready: true }]);
+    } else {
+      assert.throws(() => runInNewContext(runtimeProgram, context), /CI_WINDOWS_RUNTIME_NOT_READY/, id);
+      assert.deepEqual(messages, [], id);
+    }
+    assert.equal(calls, 1, id);
+  }
+  for (const [platform, environment] of [['linux', { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'true', CI: 'true' }], ['win32', { SystemRoot: 'relative', GITHUB_ACTIONS: 'true', CI: 'true' }], ['win32', { SystemRoot: 'C:\\Windows', GITHUB_ACTIONS: 'false', CI: 'true' }]]) {
+    let calls = 0;
+    assert.throws(() => runInNewContext(runtimeProgram, { process: { platform, env: environment }, require: name => name === 'node:assert/strict' ? assert : name === 'node:path' ? path : { spawnSync: () => { calls++; } }, console: { log: () => assert.fail('Refused setup cannot announce readiness') } }), /CI_WINDOWS_RUNTIME_/);
+    assert.equal(calls, 0);
+  }
 });
 
 
@@ -4646,7 +4777,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = 'c6c1c264a03c8f849b18f917d0f79e1f15eecc6876db89bd29680e2da59169e1'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4789,7 +4920,7 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '1ec73b3c42d8b79d93775d56ffad383645c55ce8']]);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '3f08aeb00815650e61beaa32faf097af0b05602e']]);
     for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
@@ -5668,8 +5799,8 @@ function observerSinkFixture(callback) {
 }
 
 test('source observer import is inert and the worker allowlist is literal and unique', () => {
-  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 36); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 36);
-  for (const added of ['scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
+  assert.equal(SOURCE_GATE_WORKER_PATHS.length, 37); assert.equal(new Set(SOURCE_GATE_WORKER_PATHS).size, 37);
+  for (const added of ['scripts/mobile/ios-files-facts.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'])
     assert.equal(SOURCE_GATE_WORKER_PATHS.filter(name => name === added).length, 1);
   assert.ok(SOURCE_GATE_WORKER_PATHS.every(name => !name.includes('..') && name.endsWith('.test.mjs')));
 });
@@ -5813,7 +5944,7 @@ for (const [label, extra, compactCount] of [
     // Exercise Node's real controller-to-worker argv serialization. A synthetic
     // NODE_TEST_CONTEXT with direct entry execution does not reproduce it.
     const result = await run({ args: [...extra, '--test', '--test-reporter=tap', path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')] });
-    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    assert.equal(result.code, 0, JSON.stringify({ signal: result.signal, overflow: result.overflow, stdout: result.stdout.toString(), stderr: result.stderr.toString() })); assert.equal(result.signal, null); assert.equal(result.overflow, false);
     const output = result.stdout.toString();
     for (const [name, value] of [['tests', 12], ['pass', 12], ['fail', 0], ['cancelled', 0], ['skipped', 0], ['todo', 0]])
       assert.match(output, new RegExp(`^# ${name} ${value}$`, 'm'));
@@ -6244,6 +6375,19 @@ test('iOS local archive admission accepts the current full lock and refuses stal
   assert.equal(accepted.expectedSha256, '49334bfec7c0c87913499c1694e5e00d78fe87e8f18d0497fcfffe24cc5fe4e8');
   assert.equal(createHash('sha256').update(accepted.bytes).digest('hex'), accepted.expectedSha256); accepted.bytes.fill(0);
   const lock = path.join(root, 'apps/mobile/package-lock.json'), bytes = fs.readFileSync(lock), open = fs.openSync; let archiveOpens = 0;
+  const old = JSON.parse(bytes);
+  Object.assign(old.packages['node_modules/node-forge'], { version: '1.4.1',
+    resolved: 'https://registry.npmjs.org/node-forge/-/node-forge-1.4.1.tgz',
+    integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
+  const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
+  assert.equal(oldBytes.length, bytes.length);
+  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), 'd15da4b402622883d58f0c61cd5b8fd7bc95cb36bb8ead1b3cc46b1b596c5def');
+  try {
+    fs.writeFileSync(lock, oldBytes);
+    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
+  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+  assert.equal(archiveOpens, 0);
   try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
     assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);
@@ -6316,4 +6460,162 @@ test('Android Maven fallback retains namespace identity and feeds both actual Gr
     fs.rmdirSync(home); fs.symlinkSync(path.join(root, 'previous-home'), home, 'dir');
     assert.throws(() => bindAndroidEmptyMavenRepository({ HOME: home }, captured, digest), /ANDROID_HOST_OWNED_DIRECTORY/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('Firefox restores settled Connect after identity scrolling before and after consent MFA', async t => {
+  browserEnvironment(t);
+  for (const restoreConsentKeyboard of [false, true]) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, restoreConsentKeyboard });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    await browserLogin(fake.context);
+    assert.deepEqual(fake.consentScrolls.map(({direction,verified}) => [direction,verified]), [['up',false],['down',false],['up',true],['down',true]]);
+    assert.deepEqual(fake.consentScrolls.filter(x => x.direction === 'down').map(x=>x.identityRead), ['workspace','workspace']);
+    assert.equal(fake.clicks.filter(x=>x==='connect').length, 2);
+    assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length, 1);
+    assert.equal(fake.clicks.filter(x=>x==='appOpen').length, 1);
+    assert.equal(fake.keyboardDismissals.length, restoreConsentKeyboard ? 2 : 0);
+  }
+});
+
+test('Firefox missing settled Connect stops within the original ten-second lookup budget without an auth mutation', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, missingSettledConnect: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await assert.rejects(browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length, 0);
+  assert.equal(fake.writes.filter(([key])=>key==='mfaCode').length, 0);
+  assert.ok(fake.consentScrolls.filter(x=>x.direction==='down').length <= 3);
+  assert.ok(fake.waits.at(-1).timeout <= 10000);
+  assert.equal(fake.elapsed() - fake.waits.at(-1).start, 10000);
+});
+
+test('Firefox consent keyboard dismissal fails closed without replaying an unknown acknowledgement', async t => {
+  browserEnvironment(t);
+  const failure = new Error('UNIT_KEYBOARD_ACK_UNKNOWN');
+  const fake = firefoxDouble(t, false, { consent: true, restoreConsentKeyboard: true, keyboardDismissFailure: failure });
+  await assert.rejects(browserLogin(fake.context), error=>error === failure);
+  assert.equal(fake.keyboardDismissals.length, 1);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length, 0);
+});
+
+test('Firefox settled consent recovery never scrolls down or reconnects after a changed MFA identity or PKCE', async t => {
+  browserEnvironment(t);
+  for (const options of [{ wrongAfterMfa: true }, { changedAfterMfa: true }]) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, ...options });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    await assert.rejects(browserLogin(fake.context), /WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE|BROWSER_HANDOFF_CHANGED/);
+    assert.equal(fake.clicks.filter(x => x === 'connect').length, 1);
+    assert.equal(fake.consentScrolls.filter(x => x.direction === 'down' && x.verified).length, 0);
+    assert.equal(fake.clicks.includes('appOpen'), false);
+  }
+});
+
+test('Firefox retained consent keyboard rejects a failed dismissal before identity scrolling or Connect', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, restoreConsentKeyboard: true, keyboardStuck: true });
+  await assert.rejects(browserLogin(fake.context), /FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED/);
+  assert.equal(fake.keyboardDismissals.length, 1);
+  assert.equal(fake.swipes.length, 0);
+  assert.equal(fake.clicks.includes('connect'), false);
+});
+
+test('Firefox settled lookup cannot dispatch a gesture after its async geometry outlives the outer wait', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true });
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  const {driver} = fake.context, originalRect = driver.getWindowRect.bind(driver), originalWait = driver.waitUntil.bind(driver);
+  let resolveGeometry, enteredGeometry, lateCallback;
+  const geometryStarted = new Promise(resolve => { enteredGeometry = resolve; });
+  const geometry = new Promise(resolve => { resolveGeometry = resolve; });
+  const settled = () => fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key === 'workspace';
+  driver.getWindowRect = async () => {
+    if (settled()) { enteredGeometry(); return geometry; }
+    return originalRect();
+  };
+  driver.waitUntil = async (callback, options) => {
+    if (!settled() || options.timeoutMsg !== 'NATIVE_CONTROL_NOT_VISIBLE') return originalWait(callback, options);
+    lateCallback = callback();
+    await geometryStarted;
+    throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+  };
+  await assert.rejects(browserLogin(fake.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  const before = fake.records.length;
+  resolveGeometry({width:400,height:800});
+  await lateCallback;
+  assert.equal(fake.records.length, before, 'EXPIRED_CALLBACK_MUST_NOT_START_ANOTHER_COMMAND');
+  assert.deepEqual(fake.consentScrolls.map(x=>x.direction), ['up']);
+  assert.equal(fake.clicks.includes('connect'), false);
+});
+
+test('Firefox settled visibility and swipe failures preserve the original error without another command', async t => {
+  browserEnvironment(t);
+  for (const boundary of ['visibility', 'gesture']) {
+    const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true });
+    t.mock.method(Date, 'now', () => fake.elapsed());
+    const {driver} = fake.context, query = driver.$$.bind(driver), perform = driver.performActions.bind(driver);
+    const failure = new Error('UNIT_SETTLED_'+boundary.toUpperCase()+'_ACK_UNKNOWN');
+    let attempts = 0, recordsAtFailure;
+    const settled = () => fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key === 'workspace';
+    driver.$$ = async value => {
+      if (boundary === 'visibility' && settled()) { attempts++; recordsAtFailure = fake.records.length; throw failure; }
+      return query(value);
+    };
+    driver.performActions = async value => {
+      if (boundary === 'gesture' && settled()) { attempts++; recordsAtFailure = fake.records.length; throw failure; }
+      return perform(value);
+    };
+    await assert.rejects(browserLogin(fake.context), error=>error===failure);
+    assert.equal(attempts, 1);
+    assert.equal(fake.records.length, recordsAtFailure);
+    assert.equal(fake.clicks.includes('connect'), false);
+  }
+});
+
+
+test('Firefox late consent IME and delayed accessibility settle inside both original Connect lookup bounds', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t, false, {consent:true, consentViewportScroll:true, restoreKeyboardAfterWorkspace:true, keyboardTreeDelayMs:450});
+  t.mock.method(Date, 'now', () => fake.elapsed());
+  await browserLogin(fake.context);
+  assert.equal(fake.keyboardDismissals.length,2);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length,2);
+  assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length,1);
+  assert.equal(fake.clicks.filter(x=>x==='appOpen').length,1);
+  const steps=fake.records.filter(x=>x.type==='browser_step');
+  for(const index of steps.map((x,i)=>x.key==='consent-keyboard'?i:-1).filter(x=>x>=0)) {
+    assert.equal(steps.slice(0,index).filter(x=>x.action==='read').at(-1).key,'workspace');
+  }
+});
+
+test('Firefox recurring consent IME cannot trigger a second dismissal or Connect click', async t => {
+  browserEnvironment(t);
+  const fake = firefoxDouble(t,false,{consent:true,consentViewportScroll:true,restoreKeyboardAfterWorkspace:true,recurringConsentKeyboard:true});
+  t.mock.method(Date,'now',()=>fake.elapsed());
+  await assert.rejects(browserLogin(fake.context),/FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED/);
+  assert.equal(fake.keyboardDismissals.length,1);
+  assert.equal(fake.clicks.includes('connect'),false);
+});
+
+test('Firefox settled gesture releases acknowledged input after outer expiry without a later lookup or click', async t => {
+  browserEnvironment(t);
+  const fake=firefoxDouble(t,false,{consent:true,consentViewportScroll:true});
+  t.mock.method(Date,'now',()=>fake.elapsed());
+  const {driver}=fake.context,perform=driver.performActions.bind(driver),wait=driver.waitUntil.bind(driver);
+  let resolveGesture,enteredGesture,lateCallback,releases=0;
+  const gestureStarted=new Promise(resolve=>{enteredGesture=resolve;});
+  const gesture=new Promise(resolve=>{resolveGesture=resolve;});
+  const settled=()=>fake.records.filter(x=>x.type==='browser_step'&&x.action==='read').at(-1)?.key==='workspace';
+  driver.performActions=async value=>{await perform(value);if(settled()){enteredGesture();await gesture;}};
+  driver.releaseActions=async()=>{releases++;};
+  driver.waitUntil=async(callback,options)=>{
+    if(!settled()||options.timeoutMsg!=='NATIVE_CONTROL_NOT_VISIBLE')return wait(callback,options);
+    lateCallback=callback();await gestureStarted;throw new Error('NATIVE_CONTROL_NOT_VISIBLE');
+  };
+  await assert.rejects(browserLogin(fake.context),/NATIVE_CONTROL_NOT_VISIBLE/);
+  const before=fake.records.length,beforeReleases=releases;
+  resolveGesture();await lateCallback;
+  assert.equal(releases,beforeReleases+1);
+  assert.equal(fake.records.length,before);
+  assert.equal(fake.clicks.includes('connect'),false);
 });

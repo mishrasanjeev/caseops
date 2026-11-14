@@ -21,7 +21,7 @@ def registration():
         'sourceSha':'a'*40,'runId':'qp-'+uid(1),'expiresAt':time.time()+400,'baseImplementationSha256':p.BASE_SHA256,'implementationSha256':'b'*64,
         'capabilities':list(p.CAPABILITIES),'caseControlLimits':p.CASES,'registrationId':'a'*32,'companyId':uid(1),'syntheticIds':[uid(i)for i in range(1,40)],
         'actors':{'owner':actor(2,1),'member':actor(3,1),'second-company':actor(4,5)},'anchor':{'id':tid,'matterId':mid},
-        'exactRoutes':['GET '+p.QUEUE,'GET '+p.PRIVACY,'POST '+p.PRIVACY,'GET /api/matters/'+mid+'/workspace'],'ownerExactRoutes':routes,'ownerRecipes':recipes,
+        'exactRoutes':['GET '+p.QUEUE,'GET '+p.PRIVACY,'POST '+p.PRIVACY,'GET /api/matters/'+mid+'/workspace','GET /api/matters/'+mid+'/drafts'],'ownerExactRoutes':routes,'ownerRecipes':recipes,
         'backendRevision':'api-rev','webRevision':'web-rev','authorityEvidence':{'path':'/synthetic/authority.json','sha256':'a'*64,'uid':os.getuid()}}
 class Owner:
     def __init__(self):self.closed=False;self.calls=[];self.restored=True
@@ -48,6 +48,15 @@ class Protocol(unittest.TestCase):
     def test_registration_positive_preserves_old_limits(self):
         p.validate_registration(self.v,source='a'*40,run=self.v['runId'],now=time.time());self.assertEqual(p.LIMITS['operations'],49);self.assertEqual(sum(p.CASES.values())+1,49)
         old=load('old_unchanged','local-v1-controls.py');self.assertEqual(old.LIMITS['operations'],264);self.assertEqual(sum(old.CASE_LIMITS.values())+1,255)
+    def test_matter_work_drafts_is_one_exact_owned_read_with_no_foreign_or_write_admission(self):
+        p.validate_registration(self.v,source='a'*40,run=self.v['runId'],now=time.time())
+        route='/api/matters/'+self.v['anchor']['matterId']+'/drafts'
+        self.c.route('GET',route)
+        for method,path in [('POST',route),('GET','/api/matters/'+uid(99)+'/drafts'),('GET','/api/matters/*/drafts')]:
+            with self.assertRaisesRegex(AssertionError,'QP_EXACT_ROUTE_REQUIRED'):self.c.route(method,path)
+        for changed in [self.v['exactRoutes'][:-1],self.v['exactRoutes']+['POST '+route],self.v['exactRoutes']+['GET /api/matters/'+uid(99)+'/drafts']]:
+            value={**self.v,'exactRoutes':changed}
+            with self.assertRaises(AssertionError):p.validate_registration(value,source='a'*40,run=self.v['runId'],now=time.time())
     def test_202_ack_loss_retains_exact_original_and_one_receipt_read(self):
         arm=self.arm();intercept=self.native();self.assertTrue(self.ack(intercept));r=self.call('readControlReceipt',args={'id':arm})
         self.assertTrue(r['upstreamAcknowledged']);self.assertEqual(r['upstreamStatus'],202);self.assertEqual(r['requestsForwarded'],1);self.assertEqual(r['responseObservation'],self.value)
@@ -104,6 +113,95 @@ class Protocol(unittest.TestCase):
             self.assertEqual([r['type']for r in rows],['qp_control_started','qp_control_completed'])
             self.assertTrue(result['journalClosed']);self.assertTrue(self.c.closed)
             with self.assertRaises(AssertionError):persist({'type':'after_close_forbidden'})
+    def test_closed_gateway_keeps_marked_reads_without_reopening_control_journal(self):
+        from http.client import HTTPConnection
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+
+        forwarded = []
+        routes = [p.QUEUE + "?ownership=mine&dates=all&limit=25", p.PRIVACY]
+        responses = {routes[0]:b'{"items":[],"next_cursor":null}',routes[1]:b'{"request":null}'}
+
+        class Upstream(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                forwarded.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(responses[self.path])
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            (root / "gateway-routes.json").write_text(json.dumps({"routes": ["GET " + p.QUEUE, "GET " + p.PRIVACY]}))
+            base = load("qp_closed_read_journal", "local-v1-controls.py")
+            persist, close_journal = base.create_journal(root, "c" * 32)
+            self.c.persist = persist
+            self.c.close_journal = close_journal
+            journal_path = root / ("v1-control-events-" + "c" * 32 + ".jsonl")
+            with patch.dict(os.environ, {"CASEOPS_MOBILE_V1_CONTROLS": "0"}):
+                gateway = g.Gateway(root)
+            gateway.v1 = self.c
+            upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+            server = g.ThreadingHTTPServer(("127.0.0.1", 0), gateway.handler())
+            threads = [Thread(target=item.serve_forever) for item in (upstream, server)]
+            for thread in threads:
+                thread.start()
+
+            def request(method, route):
+                conn = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
+                try:
+                    conn.request(method, route, headers={
+                        "Authorization": "Bearer cnat_SYNTHETIC",
+                        "X-CaseOps-Automated-Test": "no-paid-providers",
+                    })
+                    response = conn.getresponse()
+                    return response.status, response.read()
+                finally:
+                    conn.close()
+
+            try:
+                with patch.object(g, "upstream_destination", return_value=("127.0.0.1", upstream.server_port)):
+                    for route in routes:
+                        self.assertEqual(request("GET", route), (200, responses[route]))
+                    self.assertEqual(len(self.c.records), 2)
+                    self.assertTrue(self.call("closeRunControls")["journalClosed"])
+                    closed_bytes = journal_path.read_bytes()
+                    for route in routes:
+                        self.assertEqual(request("GET", route), (200, responses[route]))
+                    status, response = request("GET", "/__caseops_e2e/status")
+                    self.assertEqual(status, 200)
+                    state = json.loads(response)
+                    self.assertFalse(state["overflow"])
+                    self.assertFalse(state["v1ControlsEnabled"])
+                    self.assertTrue(state["v1ControlRunClosed"])
+                    self.assertEqual([(r["route"], r["status"], r["nativeMarker"]) for r in state["requests"]],
+                                     [(p.QUEUE, 200, True), (p.PRIVACY, 200, True)] * 2)
+                    self.assertEqual(journal_path.read_bytes(), closed_bytes)
+                    self.assertEqual(len(self.c.records), 2)
+                    self.assertEqual(request("POST", p.PRIVACY)[0], 403)
+                self.assertEqual(forwarded, routes * 2)
+            finally:
+                for item in (server, upstream):
+                    item.shutdown()
+                    item.server_close()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+                gateway.journal.close()
+                close_journal()
+
+    def test_pending_privacy_ack_after_closure_stays_unverified(self):
+        self.arm()
+        intercept = self.native()
+        self.assertTrue(self.call("closeRunControls")["journalClosed"])
+        with self.assertRaisesRegex(AssertionError, "QP_CLOSED_NATIVE_WRITE_EVIDENCE_UNAVAILABLE"):
+            self.ack(intercept)
+        self.assertFalse(self.c.should_withhold(intercept, 202))
+        self.assertEqual(self.c.records, [])
+
     def test_original_native_202_is_durable_before_ack_loss_is_authorized(self):
         base=load('ack_journal_base','local-v1-controls.py')
         with tempfile.TemporaryDirectory() as raw:
@@ -164,13 +262,74 @@ class Protocol(unittest.TestCase):
         self.assertIn(identity,self.claims)
         with self.assertRaises(AssertionError):self.call('changeAnchor',case='QUEUE-01',args={'action':'change'},identity=identity)
     def test_query_observation_retains_only_cursor_digest(self):
-        self.c.after_native('GET',p.QUEUE,native=True,request_id='r',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25&cursor=OPAQUE_PRIVATE_CURSOR',status=200,data=b'{}',intercept=None)
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='r',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25&cursor=OPAQUE_PRIVATE_CURSOR',status=200,data=b'{"items":[],"next_cursor":null}',intercept=None)
         self.assertNotIn('OPAQUE_PRIVATE_CURSOR',json.dumps(self.c.records));self.assertEqual(self.c.records[0]['queryObservation']['cursorSha256'],p.sha(b'OPAQUE_PRIVATE_CURSOR'))
+    def test_queue_response_records_delivered_cursor_and_anchor_digests_only(self):
+        value={'items':[{'id':uid(11)}],'next_cursor':'INDEPENDENT_ENCRYPTED_NATIVE_CURSOR'}
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='native-page',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=json.dumps(value).encode(),intercept=None)
+        self.assertEqual(self.c.records[0]['responseObservation'],{'nextCursorSha256':p.sha(value['next_cursor'].encode()),'anchorIdSha256':p.sha(uid(11).encode())})
+        self.assertNotIn(value['next_cursor'],json.dumps(self.events))
+        self.assertNotIn(uid(11),json.dumps(self.events))
+    def test_queue_response_empty_page_has_explicit_null_cursor_and_anchor(self):
+        self.c.after_native('GET',p.QUEUE,native=True,request_id='native-empty',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=b'{"items":[],"next_cursor":null}',intercept=None)
+        self.assertEqual(self.c.records[0]['responseObservation'],{'nextCursorSha256':None,'anchorIdSha256':None})
+    def test_queue_response_invalid_or_foreign_anchor_never_becomes_evidence(self):
+        for value in ({'items':[]},{'items':[],'next_cursor':''},{'items':[],'next_cursor':'x'*4001},
+                      {'items':[{'id':uid(99)}],'next_cursor':None},{'items':[{}],'next_cursor':None},
+                      {'items':[{'id':uid(11)}]*26,'next_cursor':None}):
+            before=len(self.c.records)
+            with self.assertRaises(AssertionError):self.c.after_native('GET',p.QUEUE,native=True,request_id='invalid-page',sequence=1,body=b'',query='ownership=mine&dates=all&limit=25',status=200,data=json.dumps(value).encode(),intercept=None)
+            self.assertEqual(len(self.c.records),before)
     def test_owner_account_mutation_and_wrong_recipe_status_refused(self):
         for edit in (lambda v:v['ownerExactRoutes'].append('POST '+p.PRIVACY),lambda v:v['ownerRecipes'][0]['requests'][2].update(expectedStatuses=[500])):
             v=registration();edit(v)
             with self.assertRaises(AssertionError):p.validate_registration(v,source='a'*40,run=v['runId'],now=time.time())
 class Loader(unittest.TestCase):
+    def test_actual_loader_scopes_native_and_owner_claims_to_the_registered_run(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw).resolve()
+            # A retained older run consumed this claim. Never remove or replace
+            # it to admit a fresh synthetic account in a different run.
+            legacy=root/('qp-attempt-'+p.sha(b'native:privacy-one-post')+'.json')
+            legacy.write_bytes(b'{"retained":"earlier-run"}')
+            before=legacy.read_bytes();receipts=[]
+            class Http:
+                def __init__(self,*_args,**_kwargs):pass
+                def __enter__(self):return self
+                def __exit__(self,*_args):pass
+            for n in (1,2):
+                v=registration();v['runId']='qp-'+format(n,'024x');v['registrationId']=format(n,'032x')
+                secret=root/('authority-'+str(n)+'.json');secret.write_text(json.dumps({'control_secret':'b'*64}));secret.chmod(0o600)
+                v['authorityEvidence']={'path':str(secret),'sha256':p.sha(secret.read_bytes()),'uid':os.getuid()}
+                v['implementationSha256']='c'*64;encoded=json.dumps(v).encode()
+                env={'CASEOPS_ENV':'local','CASEOPS_RELEASE_SHA':'a'*40,'CASEOPS_MOBILE_V1_CONTROLS':'1','CASEOPS_MOBILE_V1_PROFILE':p.PROFILE,
+                     'CASEOPS_MOBILE_V1_REGISTRATION_SHA256':p.sha(encoded)}
+                expected={k:v['actors']['member'][k]for k in ('userId','membershipId','companyId')}
+                def http(_client,_method,url):
+                    value=({'user':{'id':expected['userId']},'membership':{'id':expected['membershipId']},'company':{'id':expected['companyId']}}
+                           if url=='/api/auth/me' else {'release_sha':'a'*40,'revision':'api-rev'if url.endswith('/api/build')else'web-rev'})
+                    return SimpleNamespace(status_code=200,json=lambda:value)
+                base=load('qp_claim_base_'+str(n),'local-v1-controls.py')
+                with patch.dict(sys.modules,{'httpx':SimpleNamespace(Client=Http)}),patch.object(base,'bounded_http',side_effect=http):
+                    c=p.from_environment(root,v['runId'],environment=env,verified_implementation_sha256='c'*64,verified_registration_bytes=encoded,base_module=base)
+                    try:
+                        # RegisteredOwner uses stable recipe labels too. They
+                        # must be exclusive within this run, independent across runs.
+                        c.owner.claim('owner:QUEUE-01:changeAnchor:synthetic')
+                        with self.assertRaises(FileExistsError):c.owner.claim('owner:QUEUE-01:changeAnchor:synthetic')
+                        c.arms['synthetic']={'id':'synthetic','caseId':'PRIVACY-01','consumed':False,'closed':False}
+                        body=json.dumps({'operation_id':uid(90),'confirmation':'request_account_deletion'}).encode()
+                        c.validate_native_request('POST',p.PRIVACY,native=True,body=body,query='',authorization='Bearer cnat_SYNTHETIC')
+                        self.assertTrue(c.privacy_admitted)
+                        with self.assertRaisesRegex(AssertionError,'REPLAY'):c.validate_native_request('POST',p.PRIVACY,native=True,body=body,query='',authorization='Bearer cnat_SYNTHETIC')
+                        # A new in-memory manager cannot bypass a durable claim
+                        # belonging to the same registered run.
+                        with self.assertRaises(FileExistsError):c.claim('native:privacy-one-post')
+                        receipts.append(c.registration['runId'])
+                    finally:c.close()
+            self.assertEqual(receipts,['qp-'+format(n,'024x')for n in (1,2)])
+            self.assertEqual(legacy.read_bytes(),before)
+
     def test_actual_constructor_failure_closes_owned_journal_even_if_owner_close_fails(self):
         for fail_owner in (False, True):
             with self.subTest(ownerFailure=fail_owner), tempfile.TemporaryDirectory() as raw:

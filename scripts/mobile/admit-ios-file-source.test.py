@@ -35,7 +35,7 @@ class Admissions(unittest.TestCase):
         self.core = {"platform": "ios", "environment": "docker-integration", "syntheticDataOnly": True,
                      "productionAccessed": False, "noPaidProviderKeysInAPIOrWeb": True, "project": "caseops-mobile-unit",
                      "apiOrigin": "https://127.0.0.1:8443", "backendSha": "a" * 40, "backendRevision": "unit-api",
-                     "gatewayRunId": "unit-gateway", "gatewayImplementationSha256": "b" * 64, "containers": [self.api],
+                     "gatewayRunId": "caseops-mobile-unit-core-01234567", "gatewayImplementationSha256": "b" * 64, "containers": [self.api],
                      "credentialsFile": str(self.cache / "credentials.json"), "publicCA": str(self.cache / "tls/ca.crt"),
                      "fixtureSourceHashes": {"scripts/mobile/local-fixture.py": hashlib.sha256((admission.HERE / "local-fixture.py").read_bytes()).hexdigest()}}
         self.write(self.cache / "config.json", {"CASEOPS_MOBILE_PLATFORM": "ios", "CASEOPS_MOBILE_PROJECT": "caseops-mobile-unit", "CASEOPS_MOBILE_API_PORT": "8443"})
@@ -155,11 +155,71 @@ class Admissions(unittest.TestCase):
             with self.assertRaises(ValueError):
                 admission.add_exact_route({"routes": routes}, route)
 
-    def integration(self, bad_workspace=False, bad_bytes=False):
+    def scoped_routes(self, stage="full-core"):
+        count = {"consent": 2, "full-core": 9}[stage]
+        targets = ["/api/matters/?limit=25"] + [f"/api/matters/?limit=25&q=synthetic-{i}" for i in range(count - 1)]
+        return {"routes": ["GET /api/build"], "coreMatterReadAdmission": {
+            "runId": "caseops-mobile-unit-core-01234567", "stage": stage,
+            "targetSha256": [hashlib.sha256(value.encode()).hexdigest() for value in targets]}}
+
+    def test_scoped_route_admission_preserves_exact_guard_without_mutating_input(self):
+        route = f"GET /api/matters/{self.seed['matter']['id']}/attachments/{self.source['id']}/download"
+        for stage in ("consent", "full-core"):
+            prior = self.scoped_routes(stage)
+            original = copy.deepcopy(prior)
+            result = admission.add_exact_route(prior, route, prior["coreMatterReadAdmission"]["runId"])
+            self.assertEqual(prior, original)
+            self.assertEqual(result, {**original, "routes": sorted(original["routes"] + [route])})
+
+    def test_download_admission_preserves_real_gateway_query_and_bearer_denials(self):
+        spec = importlib.util.spec_from_file_location("source_admission_gateway", Path(__file__).with_name("local-gateway.py"))
+        gateway_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gateway_module)
+        gateway = gateway_module.Gateway.__new__(gateway_module.Gateway)
+        gateway.state = {"runId": "caseops-mobile-unit-core-01234567"}
+        gateway.v1 = None
+        route = f"GET /api/matters/{self.seed['matter']['id']}/attachments/{self.source['id']}/download"
+        with patch.dict(os.environ, {"CASEOPS_ENV": "local"}):
+            for stage in ("consent", "full-core"):
+                prior = self.scoped_routes(stage)
+                updated = admission.add_exact_route(prior, route, gateway.state["runId"])
+                for config in (prior, updated):
+                    for target in ("/api/matters/?limit=25", "/api/matters/?limit=25&q=synthetic-0"):
+                        self.assertTrue(gateway.core_matter_read(config, target, True))
+                        self.assertFalse(gateway.core_matter_read(config, target, False))
+                    for target in ("/api/matters/", "/api/matters/?limit=100", "/api/matters/?limit=25&q=foreign", "/api/matters/?limit=25&q=synthetic-0&extra=1"):
+                        self.assertFalse(gateway.core_matter_read(config, target, True))
+                self.assertEqual(gateway.allowed(updated) - gateway.allowed(prior), {route})
+
+    def test_scoped_route_admission_refuses_missing_foreign_or_malformed_scope(self):
+        route = f"GET /api/matters/{self.seed['matter']['id']}/attachments/{self.source['id']}/download"
+        prior = self.scoped_routes()
+        run_id = prior["coreMatterReadAdmission"]["runId"]
+        for observed in (None, "caseops-mobile-foreign-core-01234567"):
+            with self.assertRaises(ValueError):
+                admission.add_exact_route(prior, route, observed)
+        guards = [None, {}, {**prior["coreMatterReadAdmission"], "unexpected": True},
+                  {**prior["coreMatterReadAdmission"], "stage": "unknown"},
+                  {**prior["coreMatterReadAdmission"], "runId": "not-a-core-epoch"},
+                  {**prior["coreMatterReadAdmission"], "targetSha256": []},
+                  {**prior["coreMatterReadAdmission"], "targetSha256": ["a" * 64] * 9},
+                  {**prior["coreMatterReadAdmission"], "targetSha256": ["a" * 64] + prior["coreMatterReadAdmission"]["targetSha256"][1:]},
+                  {**prior["coreMatterReadAdmission"], "targetSha256": [None] + prior["coreMatterReadAdmission"]["targetSha256"][1:]}]
+        for guard in guards:
+            with self.subTest(guard=guard), self.assertRaises(ValueError):
+                admission.add_exact_route({**prior, "coreMatterReadAdmission": guard}, route, run_id)
+        for invalid in ({**prior, "unknown": {}}, {**prior, "routes": ["GET /api/matters/"]}):
+            with self.assertRaises(ValueError):
+                admission.add_exact_route(invalid, route, run_id)
+
+    def integration(self, bad_workspace=False, bad_bytes=False, scoped=False):
         request, _ = admission.host_request(self.args())
         credentials = self.cache / "credentials.json"
         generator.new_file(credentials, b'{"email":"synthetic@example.com","password":"unit-only","company_slug":"test-legal"}')
-        self.write(self.cache / "gateway-routes.json", {"routes": ["GET /api/build"]})
+        prior = self.scoped_routes() if scoped else {"routes": ["GET /api/build"]}
+        if scoped:
+            prior["coreMatterReadAdmission"]["runId"] = self.core["gatewayRunId"]
+        self.write(self.cache / "gateway-routes.json", prior)
         actions = []
         workspace = copy.deepcopy(self.workspace)
         if bad_workspace:
@@ -212,6 +272,18 @@ class Admissions(unittest.TestCase):
         after = json.loads((self.cache / evidence["routesAfter"]["file"]).read_text())
         self.assertEqual(set(after["routes"]) - set(before["routes"]), {result["route"]})
         self.assertNotIn("/preview", result["route"])
+
+    def test_complete_scoped_flow_retains_whole_guard_and_exact_download_only(self):
+        result, actions, calls = self.integration(scoped=True)
+        evidence = json.loads((self.cache / result["receiptFile"]).read_text())
+        before = json.loads((self.cache / evidence["routesBefore"]["file"]).read_text())
+        after = json.loads((self.cache / evidence["routesAfter"]["file"]).read_text())
+        self.assertEqual(before, self.scoped_routes())
+        self.assertEqual(after, {**before, "routes": sorted(before["routes"] + [result["route"]])})
+        self.assertEqual(json.loads((self.cache / "gateway-routes.json").read_text()), after)
+        self.assertEqual([row[1] for row in calls], [None, None, "bytes=0-15"])
+        self.assertFalse(evidence["attachmentsCreated"])
+        self.assertFalse(evidence["directDatabaseWrites"])
 
     def test_wrong_actual_workspace_never_mutates_routes_and_preserves_failed_claim(self):
         with self.assertRaises(ValueError):

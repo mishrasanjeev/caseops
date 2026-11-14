@@ -984,6 +984,8 @@ class PortabilityTests(unittest.TestCase):
                 self.assertIn("GET /api/auth/native/sessions", after["routes"])
                 self.assertIn("GET /api/account/deletion-requests", after["routes"])
                 self.assertIn("GET /api/matter-work-queue", after["routes"])
+                self.assertIn("GET /api/account/workspace-conduct", after["routes"])
+                self.assertNotIn("POST /api/account/workspace-conduct/accept", after["routes"])
                 self.assertNotIn("POST /api/account/deletion-requests", after["routes"])
                 self.assertFalse(any(route.startswith("DELETE") for route in after["routes"]))
                 self.assertEqual((root / "seed.json").read_text(), base)
@@ -1362,10 +1364,37 @@ class GatewayTests(unittest.TestCase):
             "GET /api/auth/native/sessions",
         ]}))
         self.gateway = gateway_module.Gateway(self.root)
-        self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler())
+        self.handler_completion = threading.Condition()
+        self.completed_handlers = set()
+        self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.connection_type = http.client.HTTPConnection
+
+    def tracked_handler(self):
+        original = self.gateway.handler()
+        completion, completed = self.handler_completion, self.completed_handlers
+
+        class ObservedHandler(original):
+            def finish(self):
+                try:
+                    super().finish()
+                finally:
+                    with completion:
+                        completed.add((self.server.server_port, self.client_address))
+                        completion.notify_all()
+
+        return ObservedHandler
+
+    def wait_for_handler(self, server_port, peer, deadline):
+        remaining = deadline - gateway_module.time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+        with self.handler_completion:
+            complete = self.handler_completion.wait_for(
+                lambda: (server_port, peer) in self.completed_handlers, timeout=remaining)
+        if not complete or gateway_module.time.monotonic() > deadline:
+            raise TimeoutError("OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
 
     def tearDown(self):
         self.server.shutdown()
@@ -1374,13 +1403,119 @@ class GatewayTests(unittest.TestCase):
         self.gateway.journal.close()
         self.temp.cleanup()
 
-    def request(self, method, path, headers=None, body=None):
-        with closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
+    def request(self, method, path, headers=None, body=None, timeout=3):
+        deadline = gateway_module.time.monotonic() + timeout
+        with closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=timeout)) as client:
             client.request(method, path, body=body, headers=headers or {})
+            peer = client.sock.getsockname()
+            client.sock.settimeout(max(.001, deadline - gateway_module.time.monotonic()))
             response = client.getresponse()
-            return response.status, response.read()
+            result = response.status, response.read()
+        self.wait_for_handler(self.server.server_port, peer, deadline)
+        return result
 
-    def test_initial_fixture_route_inventory_adds_only_exact_compatibility_get(self):
+    def test_owned_workspace_setup_put_forwards_exact_body_and_authority_once_over_tls(self):
+        certificates = self.root / "workspace-put-tls"
+        certificates.mkdir()
+        with patch.object(fixture_module, "ROOT", certificates), redirect_stdout(io.StringIO()):
+            fixture_module.prepare(argparse.Namespace())
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": [
+            "GET /api/build", "PUT /api/ip/workspace/configuration",
+        ]}))
+        body = b'{"expected_version":null,"synthetic_fixture":true}'
+        observed = []
+
+        class Upstream(gateway_module.BaseHTTPRequestHandler):
+            def log_message(self, *_args): pass
+
+            def do_PUT(self):
+                observed.append((self.command, self.path, self.headers.get(gateway_module.MARKER_HEADER),
+                                 self.headers.get("Authorization"),
+                                 self.rfile.read(int(self.headers["Content-Length"]))))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler()) as tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
+            tls.socket = context.wrap_socket(tls.socket, server_side=True)
+            client_context = ssl.create_default_context(cafile=str(certificates / "tls/ca.crt"))
+            client_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (upstream, tls)]
+            for thread in threads:
+                thread.start()
+            connection = self.connection_type("127.0.0.1", upstream.server_port, timeout=3)
+            try:
+                with patch.object(gateway_module.http.client, "HTTPConnection", return_value=connection) as transport, \
+                        closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
+                                                          context=client_context)) as client:
+                    deadline = gateway_module.time.monotonic() + 3
+                    client.request("PUT", "/api/ip/workspace/configuration", body=body, headers={
+                        gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                        "Authorization": "Bearer SYNTHETIC_WORKSPACE_OWNER", "Content-Type": "application/json",
+                    })
+                    peer = client.sock.getsockname()
+                    response = client.getresponse()
+                    actual_body = response.read()
+                    self.wait_for_handler(tls.server_port, peer, deadline)
+                    self.assertEqual((response.status, actual_body), (200, b"{}"))
+                    transport.assert_called_once()
+                self.assertEqual(observed, [("PUT", "/api/ip/workspace/configuration", gateway_module.MARKER,
+                                             "Bearer SYNTHETIC_WORKSPACE_OWNER", body)])
+                self.assertEqual(len(self.gateway.state["requests"]), 1)
+                self.assertEqual(self.gateway.state["requests"][0]["method"], "PUT")
+            finally:
+                connection.close()
+                for server in (upstream, tls):
+                    server.shutdown()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+
+    def test_workspace_setup_put_keeps_marker_exact_route_origin_and_body_bounds(self):
+        marker = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        cases = [
+            ("absent-route", "/api/ip/workspace/configuration", marker, 403, []),
+            ("missing-marker", "/api/ip/workspace/configuration", {}, 403,
+             ["PUT /api/ip/workspace/configuration"]),
+            ("different-explicit-route", "/api/case-tracking/search", marker, 403,
+             ["PUT /api/case-tracking/search"]),
+            ("query", "/api/ip/workspace/configuration?extra=synthetic", marker, 403,
+             ["PUT /api/ip/workspace/configuration"]),
+            ("oversized", "/api/ip/workspace/configuration", {**marker, "Content-Length": "1048577"},
+             413, ["PUT /api/ip/workspace/configuration"]),
+        ]
+        for label, route, headers, status, routes in cases:
+            with self.subTest(label=label):
+                (self.root / "gateway-routes.json").write_text(json.dumps({"routes": routes}))
+                with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+                    actual, _ = self.request("PUT", route, headers, b"{}")
+                    self.assertEqual(actual, status)
+                    transport.assert_not_called()
+        handler = self.gateway.handler(web=True)
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": ["PUT /api/ip/workspace/configuration"]}))
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), handler) as web:
+            thread = threading.Thread(target=web.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with patch.object(gateway_module.http.client, "HTTPConnection") as transport, \
+                        closing(self.connection_type("127.0.0.1", web.server_port, timeout=3)) as client:
+                    client.request("PUT", "/api/ip/workspace/configuration", body=b"{}", headers=marker)
+                    response = client.getresponse()
+                    self.assertEqual(response.status, 403)
+                    response.read()
+                    transport.assert_not_called()
+            finally:
+                web.shutdown()
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+
+    def test_initial_fixture_route_inventory_adds_exact_compatibility_and_conduct_gets(self):
         retained = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
                     "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",
                     "GET /api/me/today", "GET /api/matters/", "GET /api/calendar/events",
@@ -1388,9 +1523,129 @@ class GatewayTests(unittest.TestCase):
                     "GET /api/matters/unit-matter/workspace", "POST /api/matters/unit-matter/notes",
                     "GET /api/matters/unit-matter/drafts", "GET /api/matters/unit-matter/drafts/unit-draft"}
         actual = fixture_module.initial_gateway_routes("unit-matter", "unit-draft")
-        self.assertEqual(actual, retained | {"GET /api/auth/native/compatibility"})
+        self.assertEqual(actual, retained | {"GET /api/auth/native/compatibility", "GET /api/account/workspace-conduct"})
         (self.root / "gateway-routes.json").write_text(json.dumps({"routes": sorted(actual)}))
         self.assertEqual(self.gateway.allowed(), actual)
+
+    def test_core_matter_read_stages_forward_only_exact_encoded_native_gets_over_tls(self):
+        certificates = self.root / "certificates"
+        certificates.mkdir()
+        with patch.object(fixture_module, "ROOT", certificates), redirect_stdout(io.StringIO()):
+            fixture_module.prepare(argparse.Namespace())
+        config_path = self.root / "gateway-routes.json"
+        run_id = "caseops-mobile-unit-core-a1b2c3d4"
+        default = "/api/matters/?limit=25"
+        search = default + "&q=Core+setup%2F%2B%25%7E%2A"
+        full_searches = [search, *(default + f"&q=Core+identifier+{n}" for n in range(7))]
+        marker = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        native = {**marker, "Authorization": "Bearer cnat_SYNTHETIC"}
+        observed = []
+
+        class Upstream(gateway_module.BaseHTTPRequestHandler):
+            def log_message(self, *_args): pass
+
+            def do_GET(self):
+                observed.append((self.command, self.path, self.headers.get(gateway_module.MARKER_HEADER)))
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+        def configure(stage, targets, epoch=run_id, routes=None):
+            config_path.write_text(json.dumps({
+                "routes": ["GET /api/build"] if routes is None else routes,
+                "coreMatterReadAdmission": {"runId": epoch, "stage": stage,
+                    "targetSha256": [hashlib.sha256(target.encode("ascii")).hexdigest() for target in targets]},
+            }))
+
+        self.gateway.state["runId"] = run_id
+        configure("consent", [default, search])
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler()) as tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
+            tls.socket = context.wrap_socket(tls.socket, server_side=True)
+            client_context = ssl.create_default_context(cafile=str(certificates / "tls/ca.crt"))
+            client_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in (upstream, tls)]
+            for thread in threads:
+                thread.start()
+
+            def request(method, target, headers=native):
+                deadline = gateway_module.time.monotonic() + 3
+                with closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
+                                                         context=client_context)) as client:
+                    client.request(method, target, headers=headers)
+                    peer = client.sock.getsockname()
+                    response = client.getresponse()
+                    result = response.status, json.loads(response.read())
+                self.wait_for_handler(tls.server_port, peer, deadline)
+                return result
+
+            def rejected(method, target, headers=native, code="ROUTE_NOT_ADMITTED"):
+                self.assertEqual(request(method, target, headers), (403, {"code": code}))
+
+            try:
+                with patch.dict(os.environ, {"CASEOPS_ENV": "local"}), \
+                        patch.object(gateway_module, "upstream_destination", return_value=("127.0.0.1", upstream.server_port)):
+                    self.assertEqual(request("GET", default), (200, {}))
+                    self.assertEqual(request("GET", search), (200, {}))
+                    for target in ("/api/matters/", default + "&q=", default + "&q=wrong",
+                                   default + "&cursor=future", search + "&q=repeat",
+                                   search.replace("+", "%20"), search.replace("%2F", "%2f"),
+                                   "/api/matters/?q=Core+setup%2F%2B%25%7E%2A&limit=25", full_searches[1]):
+                        rejected("GET", target)
+                    rejected("GET", search, marker)
+                    rejected("GET", search, {**native, "Cookie": "synthetic=scope"})
+                    rejected("GET", search, {"Authorization": native["Authorization"]}, "AUTOMATED_MARKER_REQUIRED")
+                    rejected("POST", search)
+                    with socket.create_connection(("127.0.0.1", tls.server_port), timeout=3) as raw, \
+                            client_context.wrap_socket(raw, server_hostname="127.0.0.1") as client, \
+                            client.makefile("rb") as response:
+                        client.sendall(b"GET /api/matters/?limit=25&q=raw-\xe9 HTTP/1.1\r\n"
+                                       b"Host: localhost\r\nX-CaseOps-Automated-Test: no-paid-providers\r\n"
+                                       b"Authorization: Bearer cnat_SYNTHETIC\r\n\r\n")
+                        self.assertIn(b" 400 ", response.readline(200))
+                        error = response.read(2048)
+                        self.assertIn(b"ORIGIN_FORM_REQUIRED", error)
+                        self.assertNotIn(b"raw-", error)
+                    with patch.object(gateway_module, "upstream_target", return_value=default + "&q=non-ascii-\xe9"):
+                        rejected("GET", search)
+                    permit = {**native, gateway_module.PRODUCER_PERMIT: "a" * 64}
+                    with patch.object(self.gateway, "consume_producer_permit", return_value="b" * 64) as producer:
+                        rejected("GET", default + "&q=wrong", permit, "PRODUCER_PERMIT_NOT_ADMITTED")
+                        rejected("GET", search, permit, "PRODUCER_PERMIT_NOT_ADMITTED")
+                        producer.assert_not_called()
+                    configure("consent", [default, search], epoch=run_id[:-1] + "0")
+                    rejected("GET", default)
+                    configure("consent", [default, search], routes=["GET /api/matters/"])
+                    rejected("GET", default)
+                    configure("consent", [default, *full_searches])
+                    rejected("GET", default)
+                    configure("full-core", [default, *full_searches])
+                    with patch.dict(os.environ, {"CASEOPS_ENV": "test"}):
+                        rejected("GET", default)
+                    with patch.object(self.gateway, "v1", SimpleNamespace(closed=False)):
+                        rejected("GET", default)
+                    for target in [default, *full_searches]:
+                        self.assertEqual(request("GET", target), (200, {}))
+                    rejected("GET", default + "&q=not-from-fixture")
+            finally:
+                tls.shutdown()
+                upstream.shutdown()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+
+        targets = [default, search, default, *full_searches]
+        self.assertEqual(observed, [("GET", target, gateway_module.MARKER) for target in targets])
+        self.assertEqual(self.gateway.state["accepted"], len(targets))
+        self.assertEqual([row["route"] for row in self.gateway.state["requests"]], ["/api/matters/"] * len(targets))
+        journal = next(self.root.glob("gateway-events-*.jsonl")).read_text()
+        self.assertNotIn("?", journal)
+        self.assertNotIn("cnat_", journal)
+        self.assertNotIn("raw-", journal)
 
     def test_absolute_authorities_fragments_and_encoded_request_line_injection_never_open_upstream(self):
         headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
@@ -1466,8 +1721,11 @@ class GatewayTests(unittest.TestCase):
                 def close(self): pass
             with self.subTest(expected=expected), patch.object(gateway_module.http.client, "HTTPConnection", Upstream), \
                     closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
+                deadline = gateway_module.time.monotonic() + 3
                 client.request("GET", "/api/build", headers={gateway_module.MARKER_HEADER: gateway_module.MARKER})
+                peer = client.sock.getsockname()
                 response = client.getresponse(); headers = response.getheaders(); body = response.read()
+                self.wait_for_handler(self.server.server_port, peer, deadline)
                 self.assertEqual(response.status, expected)
                 if expected == 200:
                     self.assertEqual([value for key, value in headers if key.lower() == "set-cookie"], [value for _, value in pairs])
@@ -1696,12 +1954,136 @@ class GatewayTests(unittest.TestCase):
             gateway_module.runtime_source_bytes(source, digest)
         self.assertEqual(len(closed), 1)
 
+    def test_runtime_sibling_creation_does_not_change_the_held_source_identity(self):
+        parent = self.root.resolve() / "source-namespace"
+        parent.mkdir(mode=0o700)
+        source = parent / "runtime.py"
+        body = b"# owned synthetic source\n"
+        source.write_bytes(body)
+        before = source.stat()
+        read, changed = os.read, []
+        def create_sibling(descriptor, extent):
+            value = read(descriptor, extent)
+            if not changed:
+                changed.append(True)
+                (parent / "unrelated-directory").mkdir(mode=0o700)
+                (parent / "unrelated-file").write_bytes(b"public sibling")
+            return value
+        with patch.object(gateway_module.os, "read", create_sibling):
+            self.assertEqual(gateway_module.runtime_source_bytes(source, hashlib.sha256(body).hexdigest()), body)
+        self.assertTrue(changed)
+        self.assertEqual(tuple(getattr(before, key) for key in gateway_module._SOURCE_METADATA),
+                         tuple(getattr(source.stat(), key) for key in gateway_module._SOURCE_METADATA))
+
+    @unittest.skipIf(os.name == "nt", "POSIX directory modes; actual Windows ACL acceptance is separate")
+    def test_posix_runtime_parent_permission_change_still_refuses_and_closes(self):
+        parent = self.root.resolve() / "permission-namespace"
+        parent.mkdir(mode=0o700)
+        source = parent / "runtime.py"
+        source.write_bytes(b"# public source\n")
+        read, close, changed, closed = os.read, os.close, [], []
+        def change_mode(descriptor, extent):
+            value = read(descriptor, extent)
+            if not changed:
+                changed.append(True)
+                parent.chmod(0o750)
+            return value
+        def record_close(descriptor):
+            closed.append(descriptor)
+            close(descriptor)
+        try:
+            with patch.object(gateway_module.os, "read", change_mode), patch.object(gateway_module.os, "close", record_close), self.assertRaisesRegex(AssertionError, "NAMESPACE"):
+                gateway_module.runtime_source_bytes(source)
+        finally:
+            parent.chmod(0o700)
+        self.assertEqual(len(closed), 1)
+
     def test_native_missing_marker_denied_before_transport(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
             status, _ = self.request("GET", "/api/matters/")
             self.assertEqual(status, 403)
             transport.assert_not_called()
         self.assertEqual(self.gateway.state["markerRejected"], 1)
+
+    def test_qa_route_rejection_retains_allowlisted_status_timing_without_private_bytes(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER, "Authorization": "Bearer cnat_SYNTHETIC"}
+        with patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+            status, _ = self.request("POST", "/api/auth/native/refresh?discarded=synthetic-query", headers, b'{"refresh_token":"SYNTHETIC_PRIVATE"}')
+            self.assertEqual(status, 403)
+            upstream.assert_not_called()
+        rows = self.gateway.state["rejectedRequests"]
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(set(row), {"type", "runId", "rejectionSequence", "routeTemplate", "routeSha256", "status", "authorityClass", "observedAtUnixMs", "decisionMs"})
+        self.assertEqual(row["type"], "qa_route_rejection")
+        self.assertEqual(row["routeTemplate"], "POST /api/auth/native/refresh")
+        self.assertEqual(row["routeSha256"], hashlib.sha256(b"POST /api/auth/native/refresh").hexdigest())
+        self.assertEqual((row["status"], row["authorityClass"], row["rejectionSequence"]), (403, "native", 1))
+        self.assertIs(type(row["observedAtUnixMs"]), int)
+        self.assertGreater(row["observedAtUnixMs"], 0)
+        self.assertGreaterEqual(row["decisionMs"], 0)
+        self.assertLessEqual(row["decisionMs"], 20000)
+        journal = Path(self.gateway.journal.name).read_text()
+        self.assertEqual(json.loads(journal), row)
+        for forbidden in ("SYNTHETIC", "discarded", "refresh_token", "?", "Bearer"):
+            self.assertNotIn(forbidden, journal)
+        self.assertEqual(self.gateway.state["routeRejected"], 1)
+        self.assertEqual(self.gateway.state["requests"], [])
+
+    def test_qa_work_draft_rejection_keeps_only_owned_route_template_status_and_timing(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER, "Authorization": "Bearer cnat_SYNTHETIC"}
+        identity = "00000000-0000-4000-8000-000000000123"
+        path = "/api/matters/" + identity + "/drafts"
+        with patch.object(gateway_module.http.client, "HTTPConnection") as upstream:
+            status, _ = self.request("GET", path + "?discarded=SYNTHETIC_PRIVATE", headers)
+            self.assertEqual(status, 403)
+            upstream.assert_not_called()
+        row = self.gateway.state["rejectedRequests"][0]
+        self.assertEqual(row["routeTemplate"], "GET /api/matters/{matterId}/drafts")
+        self.assertEqual(row["routeSha256"], hashlib.sha256(("GET " + path).encode()).hexdigest())
+        self.assertEqual((row["status"], row["authorityClass"]), (403, "native"))
+        self.assertGreaterEqual(row["decisionMs"], 0)
+        self.assertLessEqual(row["decisionMs"], 20000)
+        journal = Path(self.gateway.journal.name).read_text()
+        for forbidden in (identity, "discarded", "SYNTHETIC", "Bearer", "?"):
+            self.assertNotIn(forbidden, journal)
+        self.assertEqual(self.gateway.state["routeRejected"], 1)
+        self.assertEqual(self.gateway.state["requests"], [])
+
+    def test_qa_rejection_unknown_paths_remain_redacted_and_disabled_profiles_keep_no_diagnostic(self):
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        for registration in ({"profile": "queue-privacy-v1", "syntheticDataOnly": False},
+                             {"profile": "source-work-v3", "syntheticDataOnly": True}):
+            self.gateway.v1 = SimpleNamespace(closed=True, registration=registration)
+            status, _ = self.request("GET", "/api/unreviewed/private-value", headers)
+            self.assertEqual(status, 403)
+            self.assertNotIn("rejectedRequests", self.gateway.state)
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        status, _ = self.request("GET", "/api/unreviewed/private-value?query=discarded", headers)
+        self.assertEqual(status, 403)
+        row = self.gateway.state["rejectedRequests"][0]
+        self.assertEqual(row["routeTemplate"], "unclassified")
+        self.assertIsNone(row["routeSha256"])
+        self.assertEqual(row["authorityClass"], "other")
+        self.assertNotIn("private-value", json.dumps(row))
+        self.assertNotIn("query", json.dumps(row))
+
+    def test_qa_rejection_bound_retains_every_earlier_observation_and_fails_closed(self):
+        self.gateway.v1 = SimpleNamespace(closed=True, registration={"profile": "queue-privacy-v1", "syntheticDataOnly": True})
+        headers = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        for _ in range(16):
+            status, _ = self.request("POST", "/api/auth/native/refresh", headers)
+            self.assertEqual(status, 403)
+        retained = list(self.gateway.state["rejectedRequests"])
+        status, _ = self.request("POST", "/api/auth/native/refresh", headers)
+        self.assertEqual(status, 403)
+        self.assertEqual(self.gateway.state["rejectedRequests"], retained)
+        self.assertEqual(len(retained), 16)
+        self.assertEqual(self.gateway.state["routeRejected"], 17)
+        self.assertTrue(self.gateway.state["overflow"])
+        self.assertEqual(len(Path(self.gateway.journal.name).read_text().splitlines()), 16)
 
     def test_unreviewed_paid_route_denied_before_transport(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
@@ -1835,6 +2217,153 @@ class GatewayTests(unittest.TestCase):
         lines = Path(self.gateway.journal.name).read_text().splitlines()
         self.assertEqual([json.loads(line)["sourceRequestId"] for line in lines],
                          [f"{index:016x}" for index in range(64)])
+
+    def test_request_helper_waits_for_exact_owned_handler_after_readable_body(self):
+        close_entered, release_close, body_read, boundary = (threading.Event() for _ in range(4))
+        outcome, errors = {}, []
+        base_connection = self.connection_type
+
+        class ObservedClient(base_connection):
+            def getresponse(self):
+                response = super().getresponse()
+                original_read = response.read
+                def read(*args, **kwargs):
+                    data = original_read(*args, **kwargs)
+                    body_read.set()
+                    return data
+                response.read = read
+                return response
+
+        def close_upstream():
+            close_entered.set()
+            released = release_close.wait(3)
+            if not released:
+                raise TimeoutError("SYNTHETIC_UPSTREAM_CLOSE_NOT_RELEASED")
+
+        def dispatch():
+            try:
+                outcome['response'] = self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"})
+                with self.gateway.lock:
+                    outcome['requestsAtReturn'] = list(self.gateway.state['requests'])
+            except Exception as error:
+                errors.append(error)
+            finally:
+                boundary.set()
+
+        original_wait = self.handler_completion.wait_for
+        def observe_wait(*args, **kwargs):
+            boundary.set()
+            return original_wait(*args, **kwargs)
+
+        self.connection_type = ObservedClient
+        with patch.object(gateway_module.http.client, "HTTPConnection") as transport, \
+                patch.object(self.handler_completion, 'wait_for', side_effect=observe_wait):
+            response = transport.return_value.getresponse.return_value
+            response.status = 200; response.getheaders.return_value = []; response.read.return_value = b"{}"
+            transport.return_value.close.side_effect = close_upstream
+            worker = threading.Thread(target=dispatch)
+            worker.start()
+            try:
+                received = body_read.wait(1)
+                held = close_entered.wait(1)
+                observed_boundary = boundary.wait(1)
+                with self.gateway.lock:
+                    before_release = list(self.gateway.state['requests'])
+            finally:
+                release_close.set()
+                worker.join(3)
+            self.assertFalse(worker.is_alive())
+            self.assertTrue(received and held and observed_boundary)
+            self.assertEqual(before_release, [])
+            self.assertEqual(errors, [])
+            self.assertEqual(outcome['response'], (200, b"{}"))
+            self.assertEqual(len(outcome['requestsAtReturn']), 1)
+            row = outcome['requestsAtReturn'][0]
+            self.assertEqual((row['method'], row['route'], row['trafficClass']),
+                             ('OPTIONS', '/api/auth/login', 'browser-preflight'))
+            self.assertNotIn('nativeMarker', row)
+            self.assertEqual(transport.return_value.request.call_count, 1)
+
+    def test_request_helper_completion_deadline_does_not_replay_http(self):
+        release_close = threading.Event()
+        error = None
+        def handler_completed():
+            return len(self.completed_handlers) == 1
+
+        def close_upstream():
+            released = release_close.wait(3)
+            if not released:
+                raise TimeoutError("SYNTHETIC_UPSTREAM_CLOSE_NOT_RELEASED")
+        with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200; response.getheaders.return_value = []; response.read.return_value = b"{}"
+            transport.return_value.close.side_effect = close_upstream
+            started = gateway_module.time.monotonic()
+            try:
+                try:
+                    self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"}, timeout=.2)
+                except Exception as caught:
+                    error = caught
+                elapsed = gateway_module.time.monotonic() - started
+            finally:
+                release_close.set()
+                with self.handler_completion:
+                    complete = self.handler_completion.wait_for(handler_completed, timeout=3)
+            self.assertTrue(complete)
+            self.assertIsInstance(error, TimeoutError)
+            self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+            self.assertLess(elapsed, 1)
+            self.assertEqual(transport.return_value.request.call_count, 1)
+            self.assertEqual(len(self.gateway.state['requests']), 1)
+            self.assertEqual(self.gateway.state['requests'][0]['trafficClass'], 'browser-preflight')
+            self.assertNotIn('nativeMarker', self.gateway.state['requests'][0])
+
+    def test_completion_deadline_interrupt_finishes_owned_handler_before_transport_unpatch(self):
+        interruption = KeyboardInterrupt("SYNTHETIC_OWNED_HANDLER_INTERRUPT")
+        original_constructor = gateway_module.http.client.HTTPConnection
+        original_handler_wait = self.wait_for_handler
+        original_condition_wait = self.handler_completion.wait_for
+        owned, observations = {}, []
+
+        def interrupt_after_actual_timeout(server_port, peer, deadline):
+            try:
+                original_handler_wait(server_port, peer, deadline)
+            except TimeoutError as error:
+                self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+                # request() reached this boundary only after its real socket
+                # response was read; the acknowledged handler still owns close.
+                with self.handler_completion:
+                    self.assertNotIn((server_port, peer), self.completed_handlers)
+                owned['peer'] = (server_port, peer)
+                owned['transport'] = gateway_module.http.client.HTTPConnection
+                raise interruption
+            self.fail("The actual owned handler did not reach its completion deadline")
+
+        def observe_completion(predicate, timeout):
+            complete = original_condition_wait(predicate, timeout=timeout)
+            if 'peer' in owned:
+                observations.append((
+                    complete,
+                    owned['peer'] in self.completed_handlers,
+                    gateway_module.http.client.HTTPConnection is owned['transport'],
+                ))
+            return complete
+
+        with patch.object(self, "wait_for_handler", side_effect=interrupt_after_actual_timeout), \
+                patch.object(self.handler_completion, "wait_for", side_effect=observe_completion):
+            with self.assertRaises(KeyboardInterrupt) as raised:
+                self.test_request_helper_completion_deadline_does_not_replay_http()
+
+        self.assertIs(raised.exception, interruption)
+        self.assertEqual(observations, [(True, True, True)])
+        self.assertIs(gateway_module.http.client.HTTPConnection, original_constructor)
+        self.assertEqual(owned['transport'].return_value.request.call_count, 1)
+        self.assertEqual(len(self.completed_handlers), 1)
+        self.assertEqual(len(self.gateway.state['requests']), 1)
+        row = self.gateway.state['requests'][0]
+        self.assertEqual((row['method'], row['route'], row['trafficClass']),
+                         ('OPTIONS', '/api/auth/login', 'browser-preflight'))
+        self.assertNotIn('nativeMarker', row)
 
     def test_public_identity_and_preflight_do_not_forge_a_native_marker(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
@@ -1986,7 +2515,7 @@ class UsbReverseOriginTests(unittest.TestCase):
         files_module = load('usb_files_loader', 'prepare-android-files-fixture.py')
         for producer_module in (bootstrap_module, extend_module, fixture_module, files_module):
             with self.subTest(producer=Path(producer_module.__file__).name), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory); producer = root / Path(producer_module.__file__).name; helper = root / 'local-transport.py'
+                root = Path(directory).resolve(); producer = root / Path(producer_module.__file__).name; helper = root / 'local-transport.py'
                 original = (Path(producer_module.__file__).parent / 'local-transport.py').read_bytes()
                 producer.write_bytes(Path(producer_module.__file__).read_bytes()); helper.write_bytes(original)
                 spec = importlib.util.spec_from_file_location('usb_source_control', producer)
@@ -2152,6 +2681,115 @@ class ComposeStartupOrderTests(unittest.TestCase):
         conditions = dict(re.findall(r"^      ([a-z-]+):\n        condition: ([a-z_]+)$", depends.group(1), re.MULTILINE))
         self.assertEqual(conditions, {"migrate": "service_completed_successfully", "valkey": "service_healthy", "scanner": "service_healthy"})
 
+
+
+class V1GovernedProfileTests(unittest.TestCase):
+    NOW = 1794495600
+
+    def config(self, platform="android"):
+        run = "v1-" + "a" * 24
+        return {"CASEOPS_MOBILE_PLATFORM": platform, "CASEOPS_MOBILE_API_PORT": "8443",
+                "CASEOPS_MOBILE_WEB_PORT": "3443", "CASEOPS_MOBILE_PROJECT": "caseops-mobile-v1-" + "a" * 12,
+                "CASEOPS_MOBILE_API_SHA": "b" * 40, "CASEOPS_MOBILE_WEB_SHA": "b" * 40,
+                "CASEOPS_MOBILE_GATEWAY_RUN_ID": run,
+                "CASEOPS_MOBILE_V1_GOVERNED_RUN_ID": run,
+                "CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG": "test-mobile-v1-" + "a" * 12,
+                "CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT": bootstrap_module.datetime.fromtimestamp(
+                    self.NOW + 3600, bootstrap_module.UTC).isoformat()}
+
+    def test_optional_profile_is_explicit_and_does_not_inherit_ambient_rollouts(self):
+        with patch.dict(os.environ, self.config(), clear=True):
+            self.assertIsNone(bootstrap_module.v1_governed_profile({}, now=self.NOW))
+        for key in ("RUN_ID", "COMPANY_SLUG", "EXPIRES_AT"):
+            config = self.config()
+            del config["CASEOPS_MOBILE_V1_GOVERNED_" + key]
+            with self.assertRaises(AssertionError):
+                bootstrap_module.v1_governed_profile(config, now=self.NOW)
+
+    def test_profile_is_exactly_two_local_rollouts_with_a_bounded_expiry_and_slug(self):
+        for platform in ("android", "ios"):
+            config = self.config(platform)
+            profile = bootstrap_module.v1_governed_profile(config, now=self.NOW)
+            self.assertEqual(profile["kind"], "isolated-native-v1-governed-profile")
+            self.assertEqual(profile["sourceSha"], "b" * 40)
+            self.assertEqual(profile["runId"], config["CASEOPS_MOBILE_GATEWAY_RUN_ID"])
+            self.assertEqual(profile["apiEnvironment"], {
+                "CASEOPS_IP_WORKSPACE_ENABLED": "true",
+                "CASEOPS_IP_RULE_GOVERNANCE_ENABLED": "true",
+                "CASEOPS_IP_WORKSPACE_ROLLOUT_EXPIRES_AT": config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"],
+                "CASEOPS_IP_RULE_GOVERNANCE_ROLLOUT_EXPIRES_AT": config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"],
+                "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "test-legal,test-mobile-other," + config["CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG"]})
+
+    def test_invalid_epoch_source_slug_expiry_and_remote_origin_refuse_before_compose(self):
+        edits = [("CASEOPS_MOBILE_V1_GOVERNED_RUN_ID", "v1-" + "c" * 24),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG", "test-legal"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_COMPANY_SLUG", "test-mobile-v1-" + "a" * 12 + ",foreign"),
+                 ("CASEOPS_MOBILE_API_SHA", "unavailable"),
+                 ("CASEOPS_MOBILE_WEB_SHA", "c" * 40),
+                 ("CASEOPS_MOBILE_API_ORIGIN", "https://caseops.ai"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT", "2026-11-12T15:00:00"),
+                 ("CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT", "not-a-time")]
+        for key, value in edits:
+            with self.subTest(key=key, value=value):
+                config = self.config(); config[key] = value
+                with self.assertRaises((AssertionError, ValueError)):
+                    bootstrap_module.v1_governed_profile(config, now=self.NOW)
+        config = self.config()
+        self.assertIsNotNone(bootstrap_module.v1_governed_profile(config, now=self.NOW + 3599))
+        for observation in (self.NOW + 3600, self.NOW + 3601, self.NOW - 10801):
+            with self.assertRaises(AssertionError):
+                bootstrap_module.v1_governed_profile(config, now=observation)
+
+    def test_generated_compose_profile_changes_only_api_rollouts_and_existing_platform_fields(self):
+        for platform in ("android", "ios"):
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory, patch.object(
+                    bootstrap_module, "machine", return_value="x86_64"), patch.object(
+                    bootstrap_module.time, "time", return_value=self.NOW):
+                root = Path(directory); (root / "compose-secrets.json").write_text("{}")
+                config = self.config(platform)
+                canonical = (bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes()
+                command, environment = bootstrap_module.compose(root, config)
+                override = next(root.glob(platform + "-compose-*.json"))
+                actual = json.loads(override.read_text())
+                api = bootstrap_module.v1_governed_profile(config, now=self.NOW)["apiEnvironment"]
+                expected = {"services": {"api": {"environment": dict(api)}}}
+                if platform == "ios":
+                    expected["services"]["api"]["environment"]["CASEOPS_PUBLIC_APP_URL"] = "https://127.0.0.1:3443"
+                    expected["services"]["migrate"] = {"environment": {"CASEOPS_PUBLIC_APP_URL": "https://127.0.0.1:3443"}}
+                self.assertEqual(actual, expected)
+                self.assertEqual(command.count("-f"), 2)
+                self.assertEqual((bootstrap_module.REPO / "compose.mobile-local.yml").read_bytes(), canonical)
+                self.assertNotIn("CASEOPS_IP_WORKSPACE_ENABLED", environment)
+                before = override.read_bytes()
+                bootstrap_module.compose(root, config)
+                self.assertEqual(override.read_bytes(), before)
+                override.write_text('{"services":{}}')
+                with self.assertRaisesRegex(AssertionError, "override changed"):
+                    bootstrap_module.compose(root, config)
+
+    def test_expired_profile_still_allows_only_canonical_stop_without_an_expiry_extension(self):
+        config = self.config()
+        original = config["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"]
+        with tempfile.TemporaryDirectory() as directory, patch.object(bootstrap_module.time, "time", return_value=self.NOW + 3601):
+            root = Path(directory); (root / "compose-secrets.json").write_text("{}")
+            (root / "config.json").write_text(json.dumps(config))
+            with self.assertRaisesRegex(AssertionError, "nonexpired"):
+                bootstrap_module.compose(root, config)
+            calls = []
+            def command(argv, **options):
+                calls.append(list(argv))
+                if argv[-2:] == ["ps", "-aq"]:
+                    return ""
+                self.assertEqual(argv[-3:], ["stop", "--timeout", "20"])
+                return ""
+            with patch.object(bootstrap_module, "run", side_effect=command):
+                bootstrap_module.main(argparse.Namespace(action="stop", cache=root, platform="android"))
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(json.loads((root / "config.json").read_text())["CASEOPS_MOBILE_V1_GOVERNED_EXPIRES_AT"], original)
+            for action in ("resume", "rebuild-api"):
+                with patch.object(bootstrap_module, "run") as denied, self.assertRaisesRegex(AssertionError, "nonexpired"):
+                    bootstrap_module.main(argparse.Namespace(action=action, cache=root, platform="android"))
+                denied.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

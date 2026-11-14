@@ -162,39 +162,39 @@ def _historical_identity_columns(engine):
 
 
 @pytest.fixture
-def protocol_database(pg_engine, monkeypatch):
-    name = "document_protocol_" + uuid4().hex
-    url = pg_engine.url.set(database=name)
-    with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
-        admin.execute(text(f'CREATE DATABASE "{name}"'))
-    engine = create_engine(url)
-    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url.render_as_string(hide_password=False))
-    get_settings.cache_clear()
-    mapper = registry()
-    try:
-        command.upgrade(cfg, "20260928_0001")
-        table = Table("document_processing_jobs", MetaData(), autoload_with=engine)
-        assert "no_paid_providers" not in table.c
-
-        class LegacyJob:
-            pass
-
-        mapper.map_imperatively(LegacyJob, table, properties={
-            "requested_by_membership": relationship(CompanyMembership,
-                primaryjoin=table.c.requested_by_membership_id == CompanyMembership.id,
-                foreign_keys=[table.c.requested_by_membership_id]),
-        })
-        command.upgrade(cfg, "20261010_0002")
-        with _historical_identity_columns(engine):
-            yield SimpleNamespace(engine=engine, cfg=cfg, legacy_job=LegacyJob)
-    finally:
-        mapper.dispose()
-        engine.dispose()
+def protocol_database(pg_engine, monkeypatch, document_protocol_template):
+    with temporary_http_database(pg_engine.url, template=document_protocol_template) as engine:
+        url = engine.url
+        cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+        cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
+        cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
+        monkeypatch.setenv("CASEOPS_DATABASE_URL", url.render_as_string(hide_password=False))
         get_settings.cache_clear()
-        with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
-            admin.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+        mapper = registry()
+        try:
+            with engine.connect() as connection:
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == "20260928_0001"
+                )
+            table = Table("document_processing_jobs", MetaData(), autoload_with=engine)
+            assert "no_paid_providers" not in table.c
+
+            class LegacyJob:
+                pass
+
+            mapper.map_imperatively(LegacyJob, table, properties={
+                "requested_by_membership": relationship(CompanyMembership,
+                    primaryjoin=table.c.requested_by_membership_id == CompanyMembership.id,
+                    foreign_keys=[table.c.requested_by_membership_id]),
+            })
+            command.upgrade(cfg, "20261010_0002")
+            with _historical_identity_columns(engine):
+                yield SimpleNamespace(engine=engine, cfg=cfg, legacy_job=LegacyJob)
+        finally:
+            mapper.dispose()
+            engine.dispose()
+            get_settings.cache_clear()
 
 
 def _legacy_module(database, clock):

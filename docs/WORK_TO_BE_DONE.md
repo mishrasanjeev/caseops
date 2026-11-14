@@ -1,3 +1,287 @@
+## 2026-11-14 — disposable native V1 setup gateway remains unverified
+
+J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;
+production verdict **Inconclusive**, complete native release **NO-GO**. Retain the
+unacknowledged synthetic bootstrap attempt; separate invalid probes measure403
+for its omitted setup route and501 for workspace PUT, while an independent
+read-only query finds zero target-tenant rows. Add only the exact API-origin
+workspace PUT handler, keeping explicit route admission, marker, normal authority,
+body and query/origin guards. Real TLS red/green proof retains seven original
+failures; all119 fixture cases and11 route consumers pass with pinned runtimes.
+The first ambient-Node child failures remain retained. Owner bootstrap, the
+canonical one-row nonbillable entitlement, normal governance and both actual
+83-case suites remain due; no role SQL, direct API bypass, expiry extension or
+native-pass transfer. Preserve both source4265240f builds and the77-container park.
+See [dated scope and evidence](mobile/NATIVE_V1_SETUP_2026-11-14.md).
+
+## 2026-11-14 — complete installed API audit and optional telemetry repair
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production verdict
+**Inconclusive**, native release **NO-GO**. After the separately retained DNS
+failure and repair, the expanded152-package audit found the optional telemetry
+API1.45.1 advisory GHSA-mf5v-w3w3-f6cg. Update the coherent official1.45.2/0.66b2
+cohort and retain the actual nine-case parser red/green proof. Add the omitted
+util-http Apache notice with tagged-source/artifact provenance and exact image,
+upload-context and deployment-fence checks. Security CI now installs the optional
+extra before its unchanged strict audit. Complete related coverage passes112
+cases/22subtests without failures/skips; all152 installed Mac distributions pass
+dependency validation and strict OSV audit, independently reconciled by unique
+canonical name and exact version. No waiver, native pass transfer or production
+closure. Preserve every prior failed report. New-source CI/image and both native
+suites remain due. See [telemetry evidence](security/otel-security-20261114.md).
+
+## 2026-11-14 — newly published dnspython WKS audit blocker
+
+QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production bug verdict
+**Inconclusive**, complete native release **NO-GO**. Exact4ca30702 Security found
+CVE-2026-128089 in the locked2.9.0 dependency after a compatible138-package
+installation. The official2.9.2 patch is hash/license/provenance verified; the
+API floor, targeted lock, image notice and integrity consumers are updated.
+Ten bounded parser regressions retain six red assertions on2.9.0 and pass on
+2.9.2. Complete scoped parser/notice/shared packaging coverage passes40cases
+plus17subtests with no failures/skips; the complete normal-fixture API selection
+also passes53cases/17subtests in the actual152-package Mac API installation,
+whose dependency validation passes. Preserve unrelated lock records, earlier
+notices, the original CI failure and all prior native evidence. Fresh complete
+API installed audit/image/CI and both exact-source native suites remain due;
+no advisory waiver or transferred native pass. See
+[dated scope and evidence](security/dnspython-security-20261114.md).
+
+## 2026-11-13 — foreground native session-expiry recovery remains unverified
+
+J20/M22, US-MOB-01/02/08 and NATIVE-13: **Partially implemented**; bug verdict
+**Inconclusive**; complete native release **NO-GO**. The actual c77076 iOS Core
+run passed12 calls, left11 unexecuted after foreground session expiry, reconciled
+all69 phases and23 closed/absent sessions, and passed postflight. Read-only native
+session timestamps prove expired MFA; the gateway403 body/individual timing was
+not captured and remains explicitly unmeasured. The root App now receives a
+completed-cleanup notification for foreground JSON/byte rejection as well as
+restore; only a separate public policy read may recover sign-in. No refresh,
+business mutation, MFA expiry or compatibility rule is relaxed. Focused70-case
+coverage passes; rebuilt complete Android/iOS acceptance remains required. See
+`docs/mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md` for exact evidence, failed
+fixture/isolation attempts, unchanged bounds and current publishing dependencies.
+
+## 2026-11-13 — iOS offscreen Files measurement replacement pending
+
+### 2026-11-13 actual iOS Queue/Privacy failures retained
+
+J20/M22, US-MOB-01..08, QUEUE-01/PRIVACY-01: the actual source391 QP attempt
+executed both calls and failed their native visibility waits; all sessions,
+controls and postflight cleaned up, with0 deletion submissions. Native hierarchy
+proved the tall queue wrapper invisible while its typed child controls were
+visible. The candidate now checks scoped visible controls, complete ordered row
+identities and measured pagination/privacy inputs. A separate read-only native
+candidate reached the older second-page task, exact parent and privacy cancel;
+130 adjacent regressions pass. Canonical QP credit remains0/2 until fresh full
+source/binary/backend/actor/registration acceptance. Implementation Partially
+implemented, bug verdict Inconclusive, full native release NO-GO. See
+`docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md` for exact evidence and
+preserved failed attempts; no source-based assumption is reported as measured.
+
+
+### 2026-11-13 native Files replacement remains incomplete
+
+J20/M22, US-MOB-01..08, FILES-01..17: source391 passed actual iOS Core23,
+but its fresh Files attempt passed5 calls, failed FILES-06 and left11 unexecuted.
+All14 created sessions closed; all21 provider originals were preserved with zero
+owned private copies. The aggregate lifecycle postflight correctly remained
+failed. An atomic WDA fact reader now preserves the existing identity, role,
+visibility, geometry and timing bounds; the clocked regression and separate
+read-only native candidate pass. Implementation Partially implemented, bug
+verdict Inconclusive, full native release NO-GO pending rebuilt full acceptance.
+See docs/mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md for exact artifacts,
+original failure retention and the distinction between measured diagnostics and
+an unmeasured original transport cause. Android and iOS83-case suites remain due.
+
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Inconclusive; NO-GO**.
+Actual9d79 iOS Core23 passed; full Files17 retained16 passed calls and one
+failed FILES-11 call, with complete postflight and session cleanup. Passive
+native diagnostics separately measured redundant offscreen polling and a late
+read overlapping the next action. The helper now completes one measured
+observation before scrolling, preserves all visibility/identity/geometry guards
+and original deadlines, and passes unit and actual read-only Simulator candidate
+checks. Candidate credit is zero; a new source-bound cold full17 replacement is
+required. Current unique9d79 passes are39/83 iOS and36/83 Android, independently.
+Google Play version3 remains submitted/In review; Apple documentation review is
+pending. See [dated evidence](mobile/NATIVE_IOS_FILES_MEASUREMENT_2026-11-13.md).
+
+## 2026-11-13 — Android Files filename positioning remains under verification
+
+J20/M22 / US-MOB-01..08: **Partially implemented / Partially fixed; NO-GO**.
+At source9d79, Android Core23 passed all69 phases, but Files17 retained13
+successful calls, three failed calls and one blocked case. The failures occur
+before finding the same older baseline filename. Native observation found16
+files, then independently revealed that exact row with bounded UiScrollable
+positioning; no pagination or network defect is claimed. The Android details
+helper now positions the filename before reading it, retaining exact identity,
+hash, source-expansion and lost-acknowledgement checks. A before-fix regression
+failed; the complete related60-case unit selection passed. A disclosed dirty
+host-candidate replay verified the exact row and hash on the unchanged APK and
+closed its session, with zero canonical case credit. Fresh complete native and
+store verification remains due. The earlier route-preparation failure, all
+failed case reports and the incomplete pagination hypothesis are retained.
+See [dated evidence and store dependencies](mobile/NATIVE_FILES_FILENAME_POSITION_2026-11-13.md).
+
+## 2026-11-12 — hosted timeout repair and static-analysis follow-up
+
+J20/M22 release remains **Inconclusive; NO-GO**. Hosted shard3/32 now passes
+in5 minutes48 seconds under the same12-minute limit. Three CodeQL test findings
+are addressed by moving the deliberate clone interruption into a helper;
+all identity, absence, recovery and original-source assertions remain. The
+complete10-case module passed on actual PostgreSQL in72.046 seconds/all30 phases,
+with source parity and complete database cleanup verified. Fresh CodeQL analysis
+and alert verdict, full CI and remaining native/store acceptance stay open.
+See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
+## 2026-11-12 — dated PostgreSQL setup verification
+
+J20/M22 release verification remains **Inconclusive; NO-GO**. CI shard3/32
+exceeded its unchanged12-minute budget;41/127 completed cases do not prove green.
+The two repeated historical setup paths now clone separately built, immutable
+dated templates into a fresh database per test. Historical boundaries, native
+DDL and race assertions remain unchanged. All145 cases across the three changed
+modules passed on actual PostgreSQL (435 passing phases,261.903 seconds), with
+fixture/source database absence and original server/database inventory verified.
+The first failed catalogue-ID oracle and original canceled CI artifact remain.
+The separate20-command logout source gate passed. Full new CI, native suites,
+distribution packages and both store submissions remain open; no native case
+credit comes from these database tests. See [dated proof](mobile/CI_DATED_PROTOCOL_SETUP_2026-11-12.md).
+
+## 2026-11-12 — native completion cleanup remains open
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented; Inconclusive;
+release NO-GO**. Actual c8dd Android Queue passed all phases; Privacy setup/call
+passed but final teardown exceeded the unchanged480-second suite budget.
+The narrow Android sweep correction passed70 protocol cases and an actual-app
+logout in6.124 seconds, with one204, private controls cleared and session deleted.
+This focused proof earns no full-suite credit. Original failed reports and
+unknown original cleanup acknowledgements remain preserved and independently
+reconciled. Main CI was canceled at PostgreSQL shard3/32's12-minute limit:
+41/127 complete cases is incomplete, despite green source/security/CodeQL gates.
+Neither store is submitted. See [dated proof](mobile/NATIVE_QP_CLEANUP_2026-11-12.md).
+
+## 2026-11-12 — native Matter marker and complete rejection diagnostics
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; unmeasured original causes Inconclusive**. Both actual407c QA
+builds and its complete source gate passed. Queue advanced through detail,
+filters, pagination and stale restoration, then waited for a nonexistent Matter
+marker. A corrected double reproduces it and an actual native diagnostic proves
+the real marker and exact Matter code. The full run still credits zero cases;
+Privacy stopped at the failed gateway counter. The candidate preserves normal
+auth refresh, adds bounded secret-free rejection evidence and batches the same
+native row facts without weaker guards or longer budgets. See [evidence and
+remaining gates](mobile/NATIVE_QUEUE_MARKER_2026-11-12.md).
+
+## 2026-11-12 — native Queue terminal publication and auth lease preparation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both actual718e QA builds passed.
+Android PRIVACY-01 passed completely and is independently reconciled as one
+case; QUEUE-01 failed awaiting detail, with paired cleanup and passed postflight.
+Later read-only geometry did not reproduce clipping. Three regressions reproduce
+an independent controller publication race; the candidate releases the completed
+read lease before publishing without invalidating its first callbacks or a
+successor lease. Hash-bound pre-registration auth retains original observations
+and verifies the exact runtime transition without extending budgets. All57
+Queue/Privacy Node cases pass; full source/native replacement remains required.
+See [evidence and remaining gates](mobile/NATIVE_QUEUE_PUBLICATION_2026-11-12.md).
+
+## 2026-11-12 — disposable native attempt claim isolation
+
+J20/M22 and US-MOB-01 through US-MOB-08 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual9d Android/iOS Simulator builds
+passed. Both Android Queue/Privacy calls failed; all setup/teardown pairs ran,
+and postflight rejected an incomplete gateway ledger. A retained older QA claim
+reproduces the Privacy admission collision. Candidate run-scoped durable claims
+preserve same-run replay refusal across all three profiles without deleting old
+evidence. A focused unchanged-build Queue diagnostic passed but does not explain
+or erase the full-run failure; opt-in rank/digest diagnostics preserve every
+native assertion and deadline. See [exact evidence and open gates](mobile/NATIVE_RUN_CLAIMS_2026-11-12.md).
+
+## 2026-11-12 — native Queue cursor evidence and restoration
+
+J20/M22, US-MOB-07/08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Actual b09f2523 Android and iOS
+Simulator builds passed. Android's new initial sign-in setup passed, but the
+complete Queue/Privacy run failed later: zero complete cases, Privacy suppressed
+after failed cleanup. The retained journal proves one native stale409 and no
+privacy POST, with closed authority. A serving-API probe reproduces why comparing
+independently encrypted cursor bytes is invalid. The candidate binds the actual
+native response/request digests and explicitly restores one acknowledged test
+change on failure without replaying an unknown mutation. Candidate modules pass
+49 Node and28 Python cases; full source/native replacement gates remain open.
+See [dated evidence and limits](mobile/NATIVE_QUEUE_CURSOR_2026-11-12.md).
+
+## 2026-11-12 — initial native consent visibility
+
+J20/M22, US-MOB-01/02 and MOB-01/02 remain **Partially implemented; release
+NO-GO**. Actual 288b2504 Android and iOS Simulator builds succeeded. The complete
+replacement Queue/Privacy attempt stopped in first sign-in setup: both calls
+were unexecuted, with zero native case credit. Reports remain under
+`native-release-20261111-ZzEIol4V/qp-288b-android-01/` outside Git. Normal login
+returned200; no privacy request or anchor PATCH was sent, and the run authority
+closed. These facts do not pass either native case or verify the journal race.
+
+A separate passive post-failure observation found the consent page with the
+keyboard still open and no visible Connect control. One normal Android Back
+revealed the enabled initial Connect button, without an authorization submit;
+retain `post-failed-initial-connect-keyboard-01/{before,after,result}.json` in
+that cache. This is the reproduced post-failure state, not an original failure
+screenshot or a measured network diagnosis.
+
+The candidate focuses the initial button only when current verified consent
+renders it enabled, as well as when it remounts after MFA. The existing current
+query/epoch, MFA, expiry, explicit-consent and no-replay fences remain unchanged.
+The complete component module first retained34passes/1focus failure, then
+passed35/35, including delayed initial identity and late-MFA focus preservation.
+A prior CLI startup failure selected an absent Vitest project and executed no
+cases; it remains separate. Native and deployed-production acceptance are still
+open, so the bug verdict remains **Inconclusive** and no store submission is
+claimed.
+
+## 2026-11-12 — native Queue/Privacy follow-up
+
+J20/M22, US-MOB-01/02/07/08 and QUEUE-01/PRIVACY-01 remain
+**Partially implemented; release NO-GO**. Exact a82ded25 Android acceptance
+completed Core23 and Files17 (40/83 cases, 120 unique passing phases). Hosted
+CI completed successfully, including the canonical browser union (753 passes,
+21 existing reviewed skips); browser passes are separate from native acceptance.
+The complete two-case Queue/Privacy run failed both calls and privacy teardown.
+Its original reports and gateway journal are retained under
+`native-release-20261111-ZzEIol4V/qp-a82d-android-01/` outside Git.
+
+Privacy actor switching and teardown looked for the account header without
+scrolling after the receipt assertions had moved it offscreen. The candidate
+restores that exact header with bounded upward scrolling before checking the
+same principal and dispatching one acknowledged sign-out. No identity or logout
+assertion is removed. A separate real-descriptor regression reproduces concurrent
+append/close races in the shared native/control journal; one lease now covers
+metadata validation, append, fsync, metadata reconciliation and close. The
+original Queue refusal has no retained exception detail, so that race remains a
+source-based hypothesis for the original dated failure, not measured causality.
+Original deadlines, operation limits, unknown-outcome fences and inventories
+remain unchanged. The focused scrolled-account logout also passed on the actual a82ded25 APK
+(`candidate-privacy-logout-native-01/result.json` in that retained cache), with
+normal logout204, no private credential read and a closed Appium session. This
+one focused check does not pass the two-case inventory. Fresh complete native
+replay, iOS and distribution remain open;
+no release AAB, review submission or publication is established by these fixes.
+
+## 2026-11-12 — native core acceptance follow-up
+
+J20/M22 remains **Partially implemented; release NO-GO**. Actual b260802d
+Android APK and iOS Simulator app builds succeeded. Android's complete dated
+core attempt passed 20/23 calls; fresh sign-in after device-session revocation
+failed before Connect, leaving three calls unverified. A verified-code focus
+candidate passes its complete 33-case component module; Firefox/device replay
+and all remaining native inventories are pending. The original failure and
+post-failure diagnostics remain distinct in the bug ledger. Live Play Console
+still shows changes not submitted for review. No signed release or store
+publication is established by these builds.
+
 ## 2026-11-11 - Workbook 5
 
 November14 00:56UTC: e2e0 CI43527128891 failed the October21 FastEmbed test's
@@ -3613,3 +3897,175 @@ Shared homepage/FAQ, GC and guide pack/recommendation claims are now also
 qualified locally. Source replacement passes 25 cases; existing browser cases
 open nondefault drafting/FAQ states. Complete final-head gates are still open,
 including PostgreSQL CI image acquisition; no cache or partial pass is a waiver.
+
+
+### Native Queue input follow-up — 2026-11-12
+
+J20/M22, US-MOB-01 through US-MOB-08: **Partially implemented**; release
+**NO-GO**. Actual f4942cfd Android and iOS Simulator builds passed. The actual
+f494 Android Queue/Privacy run completed both setups and teardowns with paired
+sessions and passing postflight: Privacy passed completely, Queue failed at
+its first task-detail transition. One current Privacy case is independently
+reconciled; the whole suite remains failed. The ordinary native click had no
+corresponding detail-read request. A separate, source-bound native diagnostic
+found the exact task button fully visible and enabled; one documented Android
+clickGesture opened its exact detail and produced one successful queue read.
+This is measured input-path evidence, not proof of an original network cause.
+The narrower idle-scope candidate alone still failed and is retained. A fresh
+complete page/detail replay of the primary gesture passed, with normal logout,
+session deletion and settings restoration. It has zero full-suite credit. No full-suite,
+distribution-signing or store-submission completion is claimed. See
+`docs/mobile/NATIVE_QUEUE_TOUCH_2026-11-12.md`.
+
+
+## 2026-11-12 — exact native Matter reads and settled Queue input
+
+J20/M22, US-MOB-01..08 and QUEUE-01/PRIVACY-01 remain **Partially implemented;
+release NO-GO; bug verdict Inconclusive**. Both dbd2 actual QA builds and the
+complete source gate passed. Its full Android QP attempt credits zero cases:
+Queue failed a retained unclassified403 after Matter navigation; Privacy stopped
+on the poisoned ledger. Source proves a missing exact owned drafts read, now
+admitted in both registration validators with strict foreign/write refusals.
+Candidate native replays preserve task/First-page input failures; one replay
+proved exact task facts, and a separate gesture reached all25 first-page rows
+before its collector failed. Settled-frame single primary input now covers the
+four fixed Queue navigation controls and task rows, without retries or longer
+bounds.70 JavaScript,30 controls and109 gateway cases pass. Replacement native
+acceptance and both store submissions remain open. See
+[dated evidence](mobile/NATIVE_QUEUE_WORK_READS_2026-11-12.md).
+
+The subsequent expanded native05 replay passed both complete pages, all nine
+filters, exact task facts/Matter identity and one owned drafts GET200, with
+settings restoration, normal exact-member logout and session deletion. The
+independent reconciliation retains the original rejection counter. This focused
+dirty-harness proof earns zero full-case credit; complete replacement acceptance
+and the release NO-GO remain unchanged.
+
+
+### 2026-11-12 native Core rules setup
+
+J20/M22 / US-MOB-01..08 remain Partially implemented, Inconclusive and release
+NO-GO. The full c8dd iOS Core23 run had 8 passing cases, 14 failed phases and
+8 unexecuted calls; all 23 sessions were closed. NATIVE-09 reached Add note, then
+the missing policy GET blocked its editor. Exact read admission and synthetic
+native consent setup now have focused actual Simulator proof; a complete
+replacement run is still pending. See
+[the dated evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md).
+The 300b CodeQL analyses and independent alert verdict pass without waiver;
+main CI, remaining native inventories, signing and store submission are not
+inferred from that result.
+
+
+### 2026-11-12 Android-first packaging scope
+
+J20/M22 remains Partially implemented / Inconclusive / NO-GO. Schema-v2 reviewed
+store gates now bind the exact shipping platform, preserving all 14 common gates
+and its own native acceptance; the other platform is independent. Complete
+32-case executor contracts pass, with no actual distribution acceptance or
+submission inferred. The LINK-05 qualification/build cycle remains open. See
+[the platform gate record](mobile/STORE_PLATFORM_GATES_2026-11-12.md).
+
+
+### 2026-11-12 replacement iOS Core and CI diagnostic evidence
+
+J20/M22 / US-MOB-01..08 release remains Inconclusive / NO-GO. The separate full
+iOS Core23 replacement now passes all 69 phases, postflight, native exit 0 and
+all 23 unique session cleanups; the old failed run remains retained. See
+[Core evidence](mobile/NATIVE_CORE_CONDUCT_SETUP_2026-11-12.md). The remaining
+60 iOS cases are not inferred. Android's remaining native work and both store
+submissions remain outstanding.
+
+300b CI shard 9 crashed on SIGSEGV during a partial 60-second thread dump; its
+127 selected cases include only 67 completed passes. The exact crash cause is
+Inconclusive without a core backtrace. An equally timed Python-owned observer,
+with fatal crash handling and all budgets/assertions intact, passed a physical
+60-second qualification plus all 147 affected native Python/PG cases (441 phases,
+native exit 0). See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
+New hosted CI is still required; no mobile/store case credit is granted by that
+infrastructure replay.
+
+
+### 2026-11-13 — native V1 fixture foundations (partial)
+
+See [V1 fixture foundations](mobile/V1_FIXTURE_FOUNDATIONS_2026-11-13.md).
+Explicit local rollout and nonbillable entitlement contracts are implemented;
+actual PostgreSQL and remaining V1/CX native acceptance are unverified. NO-GO;
+no store submission or native case credit.
+
+### 2026-11-13 — diagnostic review follow-up
+
+Hosted ea68f74b PostgreSQL shard 9 passed. CodeQL findings 845/846 required a
+separate frame-release and thread-control-flow repair; complete 140 host
+diagnostic/launcher cases passed. Fresh hosted alert verdicts are still pending.
+See [diagnostic evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md). Native
+platform completion and store submission remain unverified; release NO-GO.
+
+
+### 2026-11-13 — V1 Calendar producer host integration (native acceptance pending)
+
+J20/M22 US-MOB-01..08: normal MFA/private ACL bridge, typed three-family
+Calendar catalogue and complete base-producer integration retain the original
+request/write/deadline limits. Full V1 module:178/178 offline/real-loopback-TLS
+checks; no native case credit. See
+`docs/mobile/V1_CALENDAR_PRODUCER_INTEGRATION_2026-11-13.md`. Fresh governed
+PostgreSQL fixture production, native V1/CX/QP inventories, reviewer readiness and
+production store submission remain open. Release verdict:NO-GO.
+
+### 2026-11-13 — API coverage shard 13 cleanup-double regression
+
+The hosted shard failed two offline journal tests because their database
+double omitted the canonical post-DROP absence read. The complete original
+25-case module reproduced both failures; the complete replacement passes
+27 cases, including retained-database and lost-observation refusal controls.
+Canonical fixture behavior is unchanged. Verdict: Partially fixed; fresh
+full hosted CI remains required. See [journal evidence](mobile/CI_DATABASE_JOURNAL_2026-11-13.md).
+
+## 2026-11-13 — native stored-session recovery and private Play qualification
+
+J20/M22, US-MOB-01/02/08 remain **Partially implemented; Inconclusive; NO-GO**.
+An actual iOS Files setup stopped after compatibility 200 / native refresh 403 /
+logout 204 and left an idle compatibility panel. One bounded public recheck after
+acknowledged authentication rejection now allows fresh secure sign-in; it never
+replays the rotating token and preserves cleanup, unknown-outcome and policy
+denials. The complete mobile suite passed 690 cases and type-checking passed;
+rebuilt native acceptance remains pending. Google Play version2 is available only
+to the owner on the internal test track, unreviewed and not publicly launched.
+See [dated evidence and limits](mobile/NATIVE_SESSION_RECOVERY_2026-11-13.md).
+
+## 2026-11-13 — Android public compatibility auth proof
+
+J20/M22, US-MOB-01/02 and NATIVE-01 remain **Partially implemented; Inconclusive;
+NO-GO**. The rebuilt Android app completed normal MFA/PKCE and native identity
+checks, but its auth proof wrongly counted the credential-free compatibility GET
+as prior authenticated success. The consumer now applies the existing exact-GET
+public-policy exception;40 consumer/MFA/traffic checks passed, retaining every
+negative guard. Fresh native acceptance remains pending. Binaries/backend stay
+6fbcad12; this host-consumer revision is recorded separately, with no source
+guard relaxed or older failed report upgraded. See [dated evidence](mobile/NATIVE_AUTH_PUBLIC_POLICY_PROOF_2026-11-13.md).
+
+
+## 2026-11-13 — native MFA status viewport
+
+J20/M22 / US-MOB-01..08 / Android NATIVE-13: **Partially implemented**,
+bug **Partially fixed**, release **NO-GO**. The actual rebuilt Android Core run
+retains 12 passed calls and 11 unexecuted calls after the MFA success status
+was offscreen. Native fixed-control/frame observations revealed the exact
+message after one upward scroll; the gateway acknowledged MFA and identity
+reads with 200. The browser status now accompanies its connection action and
+is its accessible description. The complete 35-case component suite and web
+TypeScript passed; replacement native/production acceptance remains pending.
+No native assertions, timeouts, MFA/PKCE or authorization rules were relaxed.
+See [exact evidence and limits](mobile/NATIVE_MFA_STATUS_VIEWPORT_2026-11-13.md).
+
+
+## 2026-11-14 — Android native receipt-search latency
+
+J20/M22 / US-MOB-01/02/08 / QUEUE-01 and PRIVACY-01 remain **Partially
+implemented; Inconclusive; NO-GO**. Both source5 Android QP call bodies passed,
+but the original time window interrupted final cleanup; no full QP credit.
+A real native comparison found three unnecessary upward searches while reading
+ordered receipt fields (11.457seconds versus3.695seconds with downward search).
+The narrow harness correction preserves every receipt value, negative guard,
+request count, gesture limit and deadline. Two red regressions became green
+in the complete77-case module; fresh full native and source gates remain open.
+See [retained evidence and limits](mobile/ANDROID_RECEIPT_SEARCH_LATENCY_2026-11-14.md).
