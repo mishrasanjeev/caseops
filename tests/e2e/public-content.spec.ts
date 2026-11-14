@@ -1,4 +1,4 @@
-import AxeBuilder from "@axe-core/playwright";
+import { loadAxeBuilder } from "./support/external-journey-loaders";
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
@@ -722,7 +722,7 @@ test.describe("Public landing page and user guide", () => {
           `${pathname} overflows at ${viewport.width}px: ${JSON.stringify(widths)}`,
         ).toBeLessThanOrEqual(Math.max(widths.bodyClient, widths.documentClient) + 1);
 
-        const results = await new AxeBuilder({ page })
+        const results = await new (loadAxeBuilder())({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
           .analyze();
         const blockers = results.violations
