@@ -2304,8 +2304,8 @@ class GatewayTests(unittest.TestCase):
                 elapsed = gateway_module.time.monotonic() - started
             finally:
                 release_close.set()
-                with self.handler_completion:
-                    complete = self.handler_completion.wait_for(lambda: len(self.completed_handlers) == 1, timeout=3)
+            with self.handler_completion:
+                complete = self.handler_completion.wait_for(lambda: len(self.completed_handlers) == 1, timeout=3)
             self.assertTrue(complete)
             self.assertIsInstance(error, TimeoutError)
             self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
