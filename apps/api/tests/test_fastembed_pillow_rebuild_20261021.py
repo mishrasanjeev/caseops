@@ -209,8 +209,7 @@ def test_security_audits_complete_installed_metadata_without_resolving_upstream_
     steps = workflow["jobs"]["pip-audit"]["steps"]
     sync = next(step for step in steps if step.get("name") == "Sync API deps")
     audit = next(step for step in steps if step.get("name") == "Run pip-audit")["run"]
-    # Audit the optional telemetry distributions as well as the base install.
-    assert sync["run"] == "uv sync --frozen --no-install-project --extra observability"
+    assert sync["run"] == "uv sync --frozen --all-extras --no-install-project"
     assert "uv pip check\n" in audit
     assert '--strict' in audit and '--vulnerability-service osv' in audit
     assert '--path "$site_packages"' in audit

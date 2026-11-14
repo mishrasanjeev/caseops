@@ -153,3 +153,10 @@ Native acceptance is still0/83 Android and0/83 iOS for this candidate. Earlier
 native passes are not transferred. Fresh complete source gates, current-commit
 builds and actual complete native groups remain required before release sign-off.
 Apple organization enrollment remains a separate pending external review.
+
+
+## 2026-11-14 — Mainline conflict reconciliation
+
+PR612 head e46122b3 had no new pull-request workflow runs because GitHub reported mergeable=false / dirty against main34ce599d. Resolve the ten actual conflict files in a separate checkout; preserve the frozen native source and its failed setup evidence. Keep main's all-extras strict audit, both independent WKS inventories (10 unittest cases and nine parameterized pytest cases), both telemetry and DNS notices, and the upstream original/cherry-picked fix references. Runtime API code, uv.lock and native build inputs remain byte-identical to e46122b3.
+
+Verification: all seven affected complete Python modules passed144 cases, zero failures/skips, plus17 unittest subtests, in `main-reconciliation-targeted-01/result.xml` under the owned native evidence root. Exact per-module reconciliation and bundled notice hashes are in that directory's `reconciliation.json`; focused Ruff passed. This is local Mac dependency-contract verification, not Linux/Windows acceptance or a completed native suite. The replacement merge commit needs fresh hosted CI and source-bound native acceptance; current release verdict remains NO-GO.

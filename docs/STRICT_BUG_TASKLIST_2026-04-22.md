@@ -272,6 +272,70 @@ no release AAB, review submission or publication is established by these fixes.
 
 # Strict Bug Task List - 2026-04-22
 
+## November14: Workflow Consumer Missed; Current CI Failed
+
+CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure
+is the October21 FastEmbed wheel test's exact Security sync-command expectation,
+still core-only after the intentional all-extras audit change. Preserve every
+strict installed-metadata/no-ignore assertion and add --all-extras to the exact
+expected command. This is our missed adjacent consumer, not a provider outage.
+Hosted4108PG/55OTEL pass separately; App artifacts absent, whole CI failed.
+Full10 deliberately interrupted at195 complete-phase passes of4108, no native
+session completion or browser acceptance; retain all raw evidence. Replacement
+whole hosted CI must pass before the next canonical local Docker run. No deploy.
+Expanded ten-module Linux focused run completed363cases/all1089phases:361P,
+two environment failures (minimal API image lacks git; isolated child cannot
+import the appended pytest). Both exact cases then pass on native Windows,
+all six phases. Retain both environments and the earlier missing-temp-parent
+setup failure separately; do not call this one all-pass363-case execution.
+
+## November14: Complete Security-Family Repair, Replacement Still Required
+
+PR620/f0db full preflight20 passes2954frontend/304files and14/14built-browser
+journeys, but current hosted APIshard4 has1826actual=1460P/365S/1F. Its sole
+failure is the adjacent October26 exact-cohort test still expecting1.45.1/
+0.66b1 after the patched runtime moved to1.45.2/0.66b2. Update only that strict
+expected cohort, retaining all manifest/lock/wheel/installed-version assertions.
+All five security-family modules now reconcile110unique Linux cases/330passed
+phases,0S/0F, on built f0db core libraries plus existing optional/dev libraries,
+network disabled and source unchanged. This is focused proof, not a new image
+or full release. Full09 deliberately interrupted after collection, before
+native execution groups; all evidence retained, no acceptance claim. Newhead
+CI/preflight/full10/exact production replay and final Excel remain required.
+
+## November14: Workbook5 Docker Passed; New Dependency Security Stop
+
+Full08/40b completed4108native passes/all12324phases and784browser cases:
+770P/14explicitS/0F/0retry, all14new/retained target cases passed. Independent
+collection, progress, XML, artifact and source checks pass. PR614 mergedf6656bc1
+at the exact same tree. Old full07 failures remain retained as failures.
+
+Main Security43504920237 now fails dnspython2.9.0/CVE-2026-128089. Its global
+feed publication wasNovember13 20:19UTC during browser acceptance, but upstream
+disclosure wasNovember4 and the patched package was uploadedNovember3. The
+earlier passing audit did not prove maintainer advisories were absent.
+Safe WKS boundary regressions establish three missing rejections (text service,
+direct bitmap and wire bitmap) on2.9.0, with six positive/negative controls
+passing. Repair only the official2.9.2 dependency and corresponding provenance,
+notices and floors. Replacement gates/deployed bytes are still unverified.
+No new bug fixed verdict or provider/legal/native-app certification is claimed.
+
+Focused Linux replacement42cases=40P/2optional-observabilityS/0F,126phases,
+with the exact official2.9.2 wheel and unchanged source; not a built image or
+whole release. Windows new9WKS cases pass. Prior broader Windows35P/5F/2S
+provenance-helper/platform/cache-link failures remain retained, not suppressed.
+Strict core-installed metadata audit and dependency check pass. Full release gates
+remain pending; neither old full08 nor these components certify production.
+
+All-extras audit163 exposes optional opentelemetry-api1.45.1/CVE-2026-126360,
+fixed1.45.2. Keep observability disabled, update its compatible cohort, extend
+strict CI audit to all supported extras and regress the real traceparent parser
+plus valid-context preservation. Original positive core audit and expanded
+negative audit stay distinct. Safe 513-character baseline55=45P/10F on1.45.1;
+patched real-parser/workflow/floor suite69P on1.45.2, complete native journals.
+Fresh strict all-extras163-package audit reports0known vulnerabilities. These
+are focused results, not replacement full Docker or production certification.
+
 ## November 12 Native MFA continuation focus
 
 **Inconclusive; native replacement and production verification pending.**

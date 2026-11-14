@@ -284,6 +284,74 @@ publication is established by these builds.
 
 ## 2026-11-11 - Workbook 5
 
+November14 00:56UTC: e2e0 CI43527128891 failed the October21 FastEmbed test's
+exact core-only Security sync command. The workflow intentionally requires
+--all-extras; correct only that stale command expectation and retain all strict
+installed-metadata/no-ignore checks. This is another missed adjacent workflow
+consumer, our propagation error. Hosted17512API=13385P/4126S/1F,4108PGP/55OTELP;
+App artifacts absent, not a green release. Full10 deliberately interrupted after
+195 complete-phase passes, before native completion/browser execution; power
+restored and evidence retained. No production deployment. Complete hosted CI
+must pass before replacement local Docker, then exact-main/live acceptance.
+Expanded ten-module Linux363cases/1089phases:361P/two environment failures
+(missing git; child pytest import), both exact checks then native Windows2P/
+6phases. Preserve initial missing-temp-parent setup errors and all raw outputs;
+this is not a single all-pass363-case execution or whole-release acceptance.
+
+November14 latest continuation: after restoring every Playwright Git blob to
+the accepted baseline, f0db/preflight20 passes2954frontend and14built-browser
+cases. Hosted APIshard4 retains one missed adjacent exact-cohort assertion in
+test_dependency_security_20261026.py, still pinned to old tracing releases.
+Correct that strict dictionary only; grep all code/config pin consumers, and
+retain exact manifest/lock/hash/installed checks. Focused five-module Linux
+replacement110P/330phases/0S/0F, all intended files/ordered IDs and source hashes
+reconciled, no network. Full09 was deliberately interrupted after completed
+collection and before any native execution group; capture/source seals and
+normal power restoration retained. Seven exact-owned containers/two networks
+removed; images/two test volumes/evidence preserved. No full09 acceptance or
+production deployment. Newhead CI/preflight21/full10/live replay remain owed.
+The prior dated observations below are history, not current certification.
+
+November14 current update: full Docker08 at40b/c67 is complete and independently
+reconciled:4108native passes,784browsers=770P/14explicitS/0F/0retry, all14target
+cases passed at desktop/phone widths. PR614 merged asf6656bc1 with the same
+tree. This does not overwrite the failed full07 observations below.
+Release remains NO-GO: fresh main Security43504920237 detects the new high
+dnspython advisoryCVE-2026-128089, globally publishedNovember13 20:19UTC;
+upstream disclosureNovember4 and patched package uploadNovember3 predate that
+feed. Earlier audit success did not replace official maintainer review. Official2.9.2
+targeted repair/provenance and safe WKS regressions are in acceptance; prior
+2.9.0 local proof is not reused as repaired-runtime proof. Main green, complete
+repaired-image Docker and exact production replay remain required. No app/
+MacBook change, audit waiver, paid call or production/fixed verdict.
+
+The subsequent163-package all-extras audit finds a second advisory in optional
+OpenTelemetry API1.45.1 (CVE-2026-126360). Compatible1.45.2/0.66b2 cohort and
+all-extras strict CI auditing are repaired in source; observability remains disabled.
+Safe baseline55=45P/10F, patched focused69P and strict installed all-extras
+audit163/0known vulnerabilities. Replacement hosted/full/live gates remain owed.
+Preflight18 also fails the unchanged15-second App collection budget, with24
+inventory cases passed and5unexecuted after its hook failure. Cold import-path
+repair is required; a warm retry is not performance closure. Full09 has not
+started and no earlier run is relabelled as this replacement's acceptance.
+An experimental collector deferred axe/jsQR/JSZip and canonical response schemas.
+Fresh profile04-06 timed out (launches briefly
+overlapped; not exclusive measurements); serial07 diagnostic completed784IDs in
+19.99s under a45s profiling ceiling, NOT original-budget acceptance. The further
+schema deferral did not meet the15s budget either. Preflight19 completed both
+typechecks/81transportunits/29ordinary-cache inventorycases/2961frontendcases/
+freshbuild, but browser14=10P/4F/0S/0retry. Every failing assistant/communications
+case hit `SyntaxError: Cannot use import statement outside a module` at the
+new schema import. Full structured failures are retained. Remove the ENTIRE
+unproved collector optimization, restore exact known-good Playwright files,
+add three static-validator loader regressions and replay all14 journeys. Issue615
+remains open and separate; do not expand this security release to repair it.
+Independent review found two introduced gaps before release: unconditional
+optional imports broke core-only collection and lock regeneration dropped ten
+unrelated PyPy uharfbuzz wheels. Restore that package's exact prior block,
+declare core-only optional absence, and add a mandatory all-extras CI parser
+gate plus explicit optional/required collection regressions. No audit waiver.
+
 November13 current checkpoint: full07/48ab ended4108actual=4106P/2captureF,
 zero skips/retries/all12324phases retained;784browser cases gated/unexecuted.
 No production certification. Controlled frozen filesystem probes reproduce

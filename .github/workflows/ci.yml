@@ -76,6 +76,24 @@ jobs:
       - name: Enforce offline AI safety release gate (IPLF-065)
         run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
 
+      - name: Require optional traceparent security acceptance
+        working-directory: apps/api
+        env:
+          CASEOPS_REQUIRE_OBSERVABILITY_TESTS: "1"
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          CASEOPS_TEST_RESULT_JOURNAL: observability-security-results.jsonl
+        run: uv run python -m pytest --noconftest -o addopts= -p no:cacheprovider -p tests.retained_results tests/test_opentelemetry_traceparent_security_20261114.py -q --junitxml=observability-security-results.xml
+
+      - name: Retain optional traceparent security results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-security-results
+          path: |
+            apps/api/observability-security-results.jsonl
+            apps/api/observability-security-results.xml
+          if-no-files-found: error
+
       - name: Ruff
         working-directory: apps/api
         run: uv run ruff check src tests

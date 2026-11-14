@@ -149,7 +149,14 @@ def test_lock_matches_the_exact_official_patched_artifacts_without_optional_extr
 def test_installed_distribution_is_the_reviewed_unmodified_parser_and_metadata():
     site = Path(dns.name.__file__).parent.parent
     retained = {}
-    for relative, expected in _provenance()["installedMembers"].items():
+    members = _provenance()["installedMembers"]
+    assert set(members) == {
+        "METADATA",
+        "dns/name.py",
+        "dns/rdtypes/IN/WKS.py",
+        "dnspython-2.9.2.dist-info/licenses/LICENSE",
+    }
+    for relative, expected in members.items():
         path = site / ("dnspython-2.9.2.dist-info/METADATA" if relative == "METADATA" else relative)
         retained[relative] = _read_bound(
             path,
@@ -160,6 +167,7 @@ def test_installed_distribution_is_the_reviewed_unmodified_parser_and_metadata()
     assert metadata.get_all("Name") == ["dnspython"]
     assert metadata.get_all("Version") == ["2.9.2"]
     assert metadata.get_all("License-Expression") == ["ISC"]
+    assert metadata.get_all("License-File") == ["LICENSE"]
     assert metadata.get_all("Requires-Python") == [">=3.11"]
 
 
@@ -222,6 +230,11 @@ def test_actual_email_validator_default_dependency_works_without_dns_network(mon
 def test_exact_tagged_isc_notice_is_in_api_copy_contexts_and_deploy_dirty_fence():
     provenance = _provenance()
     assert provenance["release"]["commit"] == "854bedd6d641cb42785d26ca674ed2c0f20131e0"
+    assert provenance["release"]["securityFixCommit"] == "a62e1be066da0ed71b5b59f37435bb17cfa0070f"
+    assert provenance["advisory"]["id"] == "GHSA-vvf4-9x63-8xvv"
+    assert provenance["advisory"]["cve"] == "CVE-2026-128089"
+    assert provenance["advisory"]["globalPublishedAt"] == "2026-11-13T20:19:13Z"
+    assert provenance["advisory"]["upstreamPatchedVersion"] == "2.9.2"
     assert provenance["upstreamLicense"]["wheelLicensePresent"] is True
     assert provenance["upstreamLicense"]["sdistLicensePresent"] is True
     for name, expected in provenance["bundledFiles"].items():

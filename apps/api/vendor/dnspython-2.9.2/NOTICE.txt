@@ -1,19 +1,19 @@
-dnspython 2.9.2 — API Python dependency
+dnspython 2.9.2 - API Python dependency
 
 Copyright (C) Dnspython Contributors
 Copyright (C) 2001-2017 Nominum, Inc.
 Copyright (C) Google Inc.
 
-License: ISC. LICENSE is copied byte-for-byte from the official v2.9.2
-source commit 854bedd6d641cb42785d26ca674ed2c0f20131e0 and matches the
-license included in both official PyPI archives. This API image notice
-preserves that unmodified copyright and permission text. The library is
-installed from the official hash-pinned artifact without modification.
+License: ISC. The accompanying LICENSE is copied byte-for-byte from the
+official v2.9.2 source tag, commit 854bedd6d641cb42785d26ca674ed2c0f20131e0.
+The official PyPI 2.9.2 wheel and source archive also contain this exact
+license. This copy retains the unmodified upstream copyright and permission
+notices beside the API image's dependency provenance. No dnspython library
+code is modified.
 
 Source: https://github.com/rthalley/dnspython/tree/v2.9.2
 Release: https://pypi.org/project/dnspython/2.9.2/
-Advisory: https://github.com/rthalley/dnspython/security/advisories/GHSA-vvf4-9x63-8xvv
 Exact artifact, source and license references are in provenance.json.
 
-This API-only dependency is separate from the web/mobile JavaScript graph,
-public JavaScript notice inventory and retained historical exception registry.
+This API-only dependency is separate from the web/mobile JavaScript package
+graph, public JavaScript notice inventory and historical exception registry.
