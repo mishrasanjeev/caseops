@@ -12,6 +12,9 @@
   Devanagari's upright-only policy separate from genuine Latin italics.
   Reconcile runtime, provenance, packaging and public-notice asset counts;
   metadata inspection alone is not native rendering or production acceptance.
+  A new public notice also changes the native upload required-set cardinality;
+  replay actual gcloud discovery and its positive/negative canaries, not only
+  the page and packaging tests.
 
 - Windows file identity checks must compare the same creation-time field on
   named paths and open descriptors. Python's legacy ctime can mean creation

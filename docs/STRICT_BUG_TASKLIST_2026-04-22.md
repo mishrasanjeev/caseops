@@ -1,5 +1,18 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Follow-Up Upload Inventory Count Reconciled
+
+Draft PR621/3e9c15efb first failed its Native Cloud Build web-upload gate. Local
+unchanged reproduction confirms all9cases stopped in setUp at72required paths
+versus stale71, before traversal. The new Noto Sans public notice was already
+admitted by both upload contexts; this was a missed exact-count consumer, not
+a missing asset or reason to broaden either allowlist. Correct only71to72.
+All9native gcloud discovery tests then pass locally, including every positive
+input and secret/sibling/parent-pruning negative canary. Evidence:
+outputs/bugs5-20261111/upload-context-followup-01/before.log and after.log.
+Keep the hosted failed run43578082898 and require fresh green CI; no claim
+that these9checks are whole release or new production acceptance.
+
 ## November14: B5-001 U+2011 Candidate, Focused Native147 Passed
 
 **Inconclusive for the original production fix; unshipped candidate.** J07/M06,

@@ -1,5 +1,14 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Upload Required-Set Consumer Was Missed
+
+PR621/3e9c15efb's native upload gate failed the stale71-path cardinality after
+the Noto Sans public notice made72required paths. Both contexts already admit
+the asset. The strict cardinality is updated to72without changing allowlists;
+all9local native discovery/canary cases pass. Hosted replacement and all full
+candidate/production gates remain open. Preserve the original9setup failures
+and failed hosted job rather than attributing either to missing licensed bytes.
+
 ## November14: B5-001 Additive PDF Font Candidate, Native147 Passed
 
 **Inconclusive / NO-GO for this candidate.** Existing J07/M06,

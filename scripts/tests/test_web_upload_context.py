@@ -112,7 +112,7 @@ class NativeUploadTests(unittest.TestCase):
         self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *PDF_PUBLIC_NOTICES, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 71)
+        self.assertEqual(len(self.required), 72)
 
     def files(self, paths):
         for relative in paths:
