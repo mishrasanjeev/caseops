@@ -2299,7 +2299,7 @@ class GatewayTests(unittest.TestCase):
             try:
                 try:
                     self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"}, timeout=.2)
-                except BaseException as caught:
+                except Exception as caught:
                     error = caught
                 elapsed = gateway_module.time.monotonic() - started
             finally:
