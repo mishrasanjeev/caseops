@@ -467,6 +467,13 @@ class Gateway:
                     with gateway.lock:
                         gateway.state["markerRejected"] += 1
                     return self.reply(403, {"code": "AUTOMATED_MARKER_REQUIRED"})
+                # Only the separately admitted normal workspace setup uses PUT.
+                # Keep it off the web proxy, reject query aliases and retain the
+                # exact-route, normal authorization and bounded-body checks below.
+                if self.command == "PUT" and (web or target != "/api/ip/workspace/configuration"):
+                    with gateway.lock:
+                        gateway.state["routeRejected"] += 1
+                    return self.reply(403, {"code": "ROUTE_NOT_ADMITTED"})
                 config = gateway.route_configuration()
                 guarded_matter_read = route == CORE_MATTER_ROUTE and "coreMatterReadAdmission" in config
                 if guarded_matter_read:
@@ -648,6 +655,7 @@ class Gateway:
 
             do_GET = handle_request
             do_POST = handle_request
+            do_PUT = handle_request
             do_PATCH = handle_request
             do_DELETE = handle_request
             do_OPTIONS = handle_request

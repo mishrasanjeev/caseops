@@ -1382,6 +1382,103 @@ class GatewayTests(unittest.TestCase):
             response = client.getresponse()
             return response.status, response.read()
 
+    def test_owned_workspace_setup_put_forwards_exact_body_and_authority_once_over_tls(self):
+        certificates = self.root / "workspace-put-tls"
+        certificates.mkdir()
+        with patch.object(fixture_module, "ROOT", certificates), redirect_stdout(io.StringIO()):
+            fixture_module.prepare(argparse.Namespace())
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": [
+            "GET /api/build", "PUT /api/ip/workspace/configuration",
+        ]}))
+        body = b'{"expected_version":null,"synthetic_fixture":true}'
+        observed = []
+
+        class Upstream(gateway_module.BaseHTTPRequestHandler):
+            def log_message(self, *_args): pass
+
+            def do_PUT(self):
+                observed.append((self.command, self.path, self.headers.get(gateway_module.MARKER_HEADER),
+                                 self.headers.get("Authorization"),
+                                 self.rfile.read(int(self.headers["Content-Length"]))))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), Upstream) as upstream, \
+                gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler()) as tls:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.load_cert_chain(certificates / "tls/server.crt", certificates / "tls/server.key")
+            tls.socket = context.wrap_socket(tls.socket, server_side=True)
+            client_context = ssl.create_default_context(cafile=str(certificates / "tls/ca.crt"))
+            client_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (upstream, tls)]
+            for thread in threads:
+                thread.start()
+            connection = self.connection_type("127.0.0.1", upstream.server_port, timeout=3)
+            try:
+                with patch.object(gateway_module.http.client, "HTTPConnection", return_value=connection) as transport, \
+                        closing(http.client.HTTPSConnection("127.0.0.1", tls.server_port, timeout=3,
+                                                          context=client_context)) as client:
+                    client.request("PUT", "/api/ip/workspace/configuration", body=body, headers={
+                        gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                        "Authorization": "Bearer SYNTHETIC_WORKSPACE_OWNER", "Content-Type": "application/json",
+                    })
+                    response = client.getresponse()
+                    self.assertEqual((response.status, response.read()), (200, b"{}"))
+                    transport.assert_called_once()
+                self.assertEqual(observed, [("PUT", "/api/ip/workspace/configuration", gateway_module.MARKER,
+                                             "Bearer SYNTHETIC_WORKSPACE_OWNER", body)])
+                self.assertEqual(len(self.gateway.state["requests"]), 1)
+                self.assertEqual(self.gateway.state["requests"][0]["method"], "PUT")
+            finally:
+                connection.close()
+                for server in (upstream, tls):
+                    server.shutdown()
+                for thread in threads:
+                    thread.join(2)
+                    self.assertFalse(thread.is_alive())
+
+    def test_workspace_setup_put_keeps_marker_exact_route_origin_and_body_bounds(self):
+        marker = {gateway_module.MARKER_HEADER: gateway_module.MARKER}
+        cases = [
+            ("absent-route", "/api/ip/workspace/configuration", marker, 403, []),
+            ("missing-marker", "/api/ip/workspace/configuration", {}, 403,
+             ["PUT /api/ip/workspace/configuration"]),
+            ("different-explicit-route", "/api/case-tracking/search", marker, 403,
+             ["PUT /api/case-tracking/search"]),
+            ("query", "/api/ip/workspace/configuration?extra=synthetic", marker, 403,
+             ["PUT /api/ip/workspace/configuration"]),
+            ("oversized", "/api/ip/workspace/configuration", {**marker, "Content-Length": "1048577"},
+             413, ["PUT /api/ip/workspace/configuration"]),
+        ]
+        for label, route, headers, status, routes in cases:
+            with self.subTest(label=label):
+                (self.root / "gateway-routes.json").write_text(json.dumps({"routes": routes}))
+                with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+                    actual, _ = self.request("PUT", route, headers, b"{}")
+                    self.assertEqual(actual, status)
+                    transport.assert_not_called()
+        handler = self.gateway.handler(web=True)
+        (self.root / "gateway-routes.json").write_text(json.dumps({"routes": ["PUT /api/ip/workspace/configuration"]}))
+        with gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), handler) as web:
+            thread = threading.Thread(target=web.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with patch.object(gateway_module.http.client, "HTTPConnection") as transport, \
+                        closing(self.connection_type("127.0.0.1", web.server_port, timeout=3)) as client:
+                    client.request("PUT", "/api/ip/workspace/configuration", body=b"{}", headers=marker)
+                    response = client.getresponse()
+                    self.assertEqual(response.status, 403)
+                    response.read()
+                    transport.assert_not_called()
+            finally:
+                web.shutdown()
+                thread.join(2)
+                self.assertFalse(thread.is_alive())
+
     def test_initial_fixture_route_inventory_adds_exact_compatibility_and_conduct_gets(self):
         retained = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
                     "POST /api/auth/native/token", "POST /api/auth/native/refresh", "POST /api/auth/native/logout",

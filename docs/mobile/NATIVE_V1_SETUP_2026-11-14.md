@@ -1,0 +1,85 @@
+# Disposable V1 workspace setup — November 14, 2026
+
+J20/M22, US-MOB-01/02/08, SOURCE-01/03/04/06 and the83-case Android/iOS
+inventory. Candidate **Partially implemented**; bug verdict **Inconclusive**;
+complete native acceptance **NO-GO** until the normal setup and native suites run.
+This change concerns the isolated QA gateway, not production API authorization.
+
+## Observed boundaries
+
+At source4265240f, both fresh native builds passed. Android's actual replacement
+installation preserved app data and matched the APK hash; the owned emulator
+proved API36, ARM64 and16KB pages. A public QA CA was installed through Settings
+only on that dedicated emulator, preserving the prior certificate bytes. Its
+one setup session is independently absent. These setup actions earn no native
+case credit. The real phone received no commands or QA certificate.
+
+The fresh synthetic-owner attempt stopped at its bootstrap POST with an
+unacknowledged transport result. Do not infer the original HTTP status from that
+exception or replay its original credential payload. A separately dated invalid
+empty-payload probe measured403 on the public gateway's bootstrap route; the
+observed allowlist omitted that route. An independent read-only query found zero
+Company rows for the exact synthetic slug. Preserve the failed attempt and its
+private files. A different invalid empty-payload probe measured501 for the normal
+workspace-configuration PUT. The serving gateway has no PUT handler.
+
+The owner preflight independently matched API-side and PostgreSQL-side database,
+system identifier and exact server-start microseconds, an internal network, no
+published PostgreSQL port, owned fresh volume and API mounts/image. No owner was
+created and no entitlement was granted. A prior embedded-Python quoting failure
+occurred before its DB connection; retain it separately. The preflight now parses
+that exact Python program offline before any live dispatch.
+
+## Narrow repair and adjacent checks
+
+Add PUT handling only for the literal API-origin
+`/api/ip/workspace/configuration`, without query aliases. The exact route still
+must be explicitly admitted. The web proxy, other PUT paths, missing marker,
+unadmitted route and oversized body remain rejected before upstream transport.
+Forward the original normal Bearer authority and request bytes once; keep normal
+API authentication/MFA, tenant permissions and body bounds. No provider route,
+browser cookie authority, producer permit or production policy is expanded.
+Update the independently reviewed gateway implementation pin to the actual bytes.
+
+Two unchanged regressions retain seven red assertions against the original
+gateway and pass after this repair. The positive executes real loopback TLS and
+one upstream HTTP exchange, verifying marker, exact route, Bearer and byte-exact
+body. Negative guards cover absent route, marker, another explicitly listed PUT,
+query, web origin and first oversized body. The complete local fixture module
+passes119 cases, with no skips;11 gateway route/immutable-snapshot/producer
+consumers also pass. A first complete module run inherited a broken ambient
+Node16 executable and failed three readiness-child assertions. Preserve that
+report; the unchanged119-case replacement activates pinned Node24.15.0 and passes.
+
+## Remaining actual execution
+
+The initial Core allowlist remains narrow. Before any fresh V1 owner credential
+is used, the owned V1 operator must publish its canonical declared fixed setup
+routes, including bootstrap and MFA enrollment. During its separate37-call
+normal governance phase, admit only the exact workspace PUT and exact subsequent
+calendar/rule activation routes after their normal acknowledged creation. Remove
+the temporary setup PUT before native route-authority capture; native route-file
+and descriptor grammars remain unchanged. Retain immutable configuration and
+allowlist snapshots, rather than binding later validation to a mutable path.
+
+Use the existing canonical single nonbillable entitlement worker with fresh
+Company/current owner locks, exact two entitlement keys, independent PostgreSQL
+identity, unchanged32-statement/30-second bound, one durable claim and exact
+postcommit readback. Never promote roles through SQL, use direct API-port HTTP,
+replay an uncertain mutation or extend the original profile expiry.
+
+The source4265240f per-scope rebuild also left a refused mixed API/web candidate.
+Retain its failure. The owned replacement staged both source identities before
+canonical Compose/build-web/finish, preserved the original CA/profile expiry and
+all77 retained containers, and independently reconciled the70 unrelated ones.
+The later park preserves all data and advances only unreached cleanup; a completed
+emulator kill is not replayed after its controller stopped.
+
+Evidence resides under the owned native evidence root in
+`qa-gateway-put-security-20261114-01/`,
+`v1-4265240f-bootstrap-route-diagnostic-01/`, the two failed owner directories,
+`android-v1-4265240f-coherent-rebind-02/` and the dated park directories. Fresh
+committed-source gates, rebuilt native artifacts, normal bootstrap/governance and
+all83 actual cases on each platform remain due. Earlier native passes and either
+source4265240f build do not certify this newer candidate. Physical hardware and store
+signing remain separate acceptance boundaries.

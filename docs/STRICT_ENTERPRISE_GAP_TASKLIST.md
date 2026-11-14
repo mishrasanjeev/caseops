@@ -1,3 +1,19 @@
+## 2026-11-14 — disposable native V1 setup gateway remains unverified
+
+J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;
+production verdict **Inconclusive**, complete native release **NO-GO**. Retain the
+unacknowledged synthetic bootstrap attempt; separate invalid probes measure403
+for its omitted setup route and501 for workspace PUT, while an independent
+read-only query finds zero target-tenant rows. Add only the exact API-origin
+workspace PUT handler, keeping explicit route admission, marker, normal authority,
+body and query/origin guards. Real TLS red/green proof retains seven original
+failures; all119 fixture cases and11 route consumers pass with pinned runtimes.
+The first ambient-Node child failures remain retained. Owner bootstrap, the
+canonical one-row nonbillable entitlement, normal governance and both actual
+83-case suites remain due; no role SQL, direct API bypass, expiry extension or
+native-pass transfer. Preserve both source4265240f builds and the77-container park.
+See [dated scope and evidence](mobile/NATIVE_V1_SETUP_2026-11-14.md).
+
 ## 2026-11-14 — complete installed API audit and optional telemetry repair
 
 QG-SEC-004 / NFT-005, J14/M14; candidate **Implemented**, production verdict
