@@ -44,8 +44,24 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 724, "app-mobile": 60}
+APP_PROJECT_COUNTS = {"app-chromium": 727, "app-mobile": 63}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+NOV14_REFERENCE_FILE = "ram-2026-11-14-prod.spec.ts"
+NOV14_DRAFT_FILE = "draft-quality20261114.spec.ts"
+NOV14_APP_CASES = (
+    ("app-chromium", NOV14_REFERENCE_FILE,
+     "IP India content and form references /app/ip/registry desktop"),
+    ("app-chromium", NOV14_REFERENCE_FILE,
+     "IP India content and form references /app/ip/patents desktop"),
+    ("app-chromium", NOV14_DRAFT_FILE,
+     "Draft quality 2026-11-14 desktop: generated findings survive correction and reload"),
+    ("app-mobile", NOV14_REFERENCE_FILE,
+     "[mobile] IP India content and form references /app/ip/registry phone"),
+    ("app-mobile", NOV14_REFERENCE_FILE,
+     "[mobile] IP India content and form references /app/ip/patents phone"),
+    ("app-mobile", NOV14_DRAFT_FILE,
+     "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"),
+)
 BATCH5_CONTRACT_VERSION = 1
 BATCH5_FILES = tuple(
     f"ram-2026-11-11-{name}.spec.ts" for name in ("statutes", "drafting", "contracts", "bugs")
@@ -146,7 +162,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6,
+    "tester": 101, "tester-catalog": 18, "tester-index": 6,
     "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
@@ -331,10 +347,38 @@ def _app_project_partition(binding):
     return invocation
 
 
+def _nov14_rows(rows, *, production=False, execution=False):
+    files = {NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE}
+    selected = [row for row in rows if row["file"] in files]
+    expected = Counter(
+        ("tester-prod-chromium" if production else project, file, (file, title))
+        for project, file, title in NOV14_APP_CASES
+        if not production or file == NOV14_REFERENCE_FILE
+    )
+    if (Counter((row["project_name"], row["file"], tuple(row["title_path"]))
+                for row in selected) != expected
+            or len({row["id"] for row in selected}) != len(selected)
+            or any(row["project_id"] != row["project_name"]
+                   or type(row["retries"]) is not int or row["retries"] != 0
+                   or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+                   or row["expected_status"] != "passed" for row in selected)):
+        raise EvidenceError("nov14_required_case_identity_mismatch")
+    if execution and any(
+        row["status"] != "expected" or len(row["results"]) != 1
+        or row["results"][0]["status"] != "passed"
+        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        for row in selected
+    ):
+        raise EvidenceError("nov14_required_case_not_passed")
+    return selected
+
+
 def _app_inventory(canonical):
     rows = canonical["tests"]
     batch5 = [row for row in rows if row["file"] in BATCH5_FILES]
-    legacy = [row for row in rows if row["file"] not in BATCH5_FILES]
+    _nov14_rows(rows)
+    legacy = [row for row in rows
+              if row["file"] not in (*BATCH5_FILES, NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE)]
     if batch5 or BATCH5_CASE_COUNTS:
         _batch5_rows(batch5, {"app-chromium": 0, "app-mobile": 1}, include_moved=False)
     if (Counter(row["project_name"] for row in rows) != APP_PROJECT_COUNTS
@@ -478,6 +522,7 @@ def _batch5_proofs(document):
 def _batch5_source_hashes(root):
     files = ("playwright.app.config.ts", "playwright.prod-ram.config.ts",
              "scripts/prod_playwright_evidence.py", REPORTER,
+             f"tests/e2e/{NOV14_REFERENCE_FILE}",
              *(f"tests/e2e/{file}" for file in (*BATCH5_FILES, *(file for file, _ in BATCH5_MOVED_CASES))))
     if any(not (root / file).is_file() or (root / file).is_symlink() for file in files):
         raise EvidenceError("missing_or_linked_batch5_source")
@@ -508,6 +553,9 @@ def _check_app_selection(binding, selected, canonical, *, execution=False):
             raise EvidenceError("app_project_discovery_executed_tests")
         return
     allowed_skips = {row for row in APP_EXPECTED_SKIPS if row[0] == project}
+    # A selected App project owns one half of the six-case reviewed cohort.
+    _nov14_rows([row for row in canonical["tests"] if row["project_name"] != project]
+                + selected["tests"], execution=False)
     actual_skips = set()
     for row in selected["tests"]:
         attempts = row["results"]
@@ -539,6 +587,9 @@ def _tester_partition(binding):
 def _tester_inventory(canonical):
     projects = set(TESTER_PARTITIONS.values())
     rows = [row for row in canonical["tests"] if row["project_name"] in projects]
+    if any(row["file"] == NOV14_DRAFT_FILE for row in canonical["tests"]):
+        raise EvidenceError("local_draft_quality_in_production_inventory")
+    _nov14_rows(rows, production=True)
     if not rows or len({row["id"] for row in rows}) != len(rows):
         raise EvidenceError("empty_or_duplicate_tester_canonical_inventory")
     expected_counts = Counter()
@@ -594,7 +645,7 @@ def _tester_file_filters(binding):
     return [catalog if invocation == "tester-catalog" else rf"^(?!.*{catalog}).*$"]
 
 
-def _check_tester_selection(binding, discovery, canonical):
+def _check_tester_selection(binding, discovery, canonical, *, execution=False):
     invocation = _tester_partition(binding)
     if invocation is None:
         raise EvidenceError("unreviewed_tester_partition_binding")
@@ -603,6 +654,8 @@ def _check_tester_selection(binding, discovery, canonical):
     ]
     if [_tester_case_identity(row) for row in discovery["tests"]] != expected:
         raise EvidenceError("tester_partition_selection_mismatch")
+    if binding["invocation"] == "tester":
+        _nov14_rows(discovery["tests"], production=True, execution=execution)
 
 
 def _tester_case_identity(row):
@@ -1380,6 +1433,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         result["binding"] = public_binding
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
+        if partition is not None:
+            _check_tester_selection(binding, result, canonical, execution=True)
         if app_partition is not None:
             _check_app_selection(binding, result, canonical, execution=True)
         if batch5_partition is not None:
@@ -1781,6 +1836,7 @@ def validate(root: Path, required, expected: str) -> None:
                 raise EvidenceError("canonical_tester_binding_mismatch")
             if partition is not None:
                 _check_tester_selection(binding, discovery, canonical)
+                _check_tester_selection(binding, result, canonical, execution=True)
             elif batch5_partition is not None:
                 _validate_app_native(root, directory, binding, discovery, result, canonical)
                 _check_batch5_selection(binding, discovery, canonical)
@@ -1886,10 +1942,14 @@ def validate_batch5_release_union(root: Path, required, expected: str):
         selected.extend(_tester_case_identity(row) for row in result["tests"])
     if len(selected) != len(set(selected)) or Counter(selected) != Counter(canonical_identity):
         raise EvidenceError("batch5_release_union_mismatch")
-    original = sum(TESTER_PARTITION_COUNTS.values()) + 2 * len(BATCH5_MOVED_CASES)
+    new_references = len(_nov14_rows(retained, production=True))
+    original = (
+        sum(TESTER_PARTITION_COUNTS.values()) - new_references + 2 * len(BATCH5_MOVED_CASES)
+    )
     if original != 176:
         raise EvidenceError("batch5_original_inventory_mismatch")
     return {"tester_release_union": TESTER_PARTITION_CONTRACT, "original_case_count": original,
+            "new_reference_case_count": new_references,
             "new_batch5_case_count": sum(sum(pair) for pair in BATCH5_CASE_COUNTS.values()),
             "test_count": len(selected), "release_sha": expected}
 

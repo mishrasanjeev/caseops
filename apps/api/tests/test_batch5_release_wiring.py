@@ -61,6 +61,7 @@ def batch5_capture(capture, monkeypatch):
         source = state.root / "tests/e2e" / file
         source.parent.mkdir(parents=True, exist_ok=True)
         source.touch()
+    (state.root / "tests/e2e/ram-2026-11-14-prod.spec.ts").touch()
     template = copy.deepcopy(state.discovery)
     template["config"]["configFile"] = str(config)
     template["stats"]["startTime"] = "2026-10-09T00:00:00.000Z"
@@ -161,7 +162,7 @@ def test_batch5_inventory_cannot_infer_unreviewed_counts_or_change_historical_pi
             "ram-2026-11-07-teams.spec.ts",
         }
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97,
+        "tester": 101,
         "tester-catalog": 18,
         "tester-index": 6,
         "test-legal-write-oct13-a": 40,
@@ -170,7 +171,7 @@ def test_batch5_inventory_cannot_infer_unreviewed_counts_or_change_historical_pi
     assert evidence.APP_BASE_PROJECT_COUNTS == {"app-chromium": 719, "app-mobile": 55}
     assert len(evidence.APP_EXPECTED_SKIPS) == 21
     assert evidence.BATCH5_CASE_COUNTS == _reviewed_batch5_counts()
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 724, "app-mobile": 60}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 727, "app-mobile": 63}
     assert sum(evidence.BATCH5_CASE_COUNTS[BATCH5_BUGS_FILE]) == 4
     assert sum(sum(pair) for pair in evidence.BATCH5_CASE_COUNTS.values()) == 8 + 2
     assert evidence.BATCH5_CASE_PROOF_SCOPES == {
@@ -313,6 +314,22 @@ def test_batch5_source_change_after_transport_cannot_produce_completion(batch5_c
     assert state.batch5_run("batch5-desktop") == 1
     receipt = evidence._json(state.root / evidence.EVIDENCE / "batch5-desktop/exit.json")
     assert receipt["incomplete_reason"] == "batch5_source_changed_during_execution"
+
+
+def test_batch5_canonical_source_binding_includes_reference_spec_but_not_local_generation(
+    batch5_capture,
+):
+    state = batch5_capture
+    before = evidence._batch5_source_hashes(state.root)
+    reference = "tests/e2e/ram-2026-11-14-prod.spec.ts"
+    assert reference in before
+    assert "tests/e2e/draft-quality20261114.spec.ts" not in before
+    (state.root / reference).write_text("// changed official-reference test\n", encoding="utf-8")
+    after = evidence._batch5_source_hashes(state.root)
+    assert after[reference] != before[reference]
+    assert {file: digest for file, digest in after.items() if file != reference} == {
+        file: digest for file, digest in before.items() if file != reference
+    }
     assert not (state.root / evidence.EVIDENCE / "batch5-desktop/completion.json").exists()
 
 
@@ -370,7 +387,8 @@ def test_batch5_release_union_preserves_all176_original_cases_plus_additions(
         receipt = evidence.validate_batch5_release_union(state.root, roles, BASE)
         assert receipt["original_case_count"] == 176
         assert receipt["new_batch5_case_count"] == 8 + 2
-        assert receipt["test_count"] == 176 + 8 + 2
+        assert receipt["new_reference_case_count"] == 4
+        assert receipt["test_count"] == 176 + 8 + 2 + 4
 
 
 def test_batch5_workflow_is_serial_correctly_authenticated_and_required_for_certification():

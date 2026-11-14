@@ -1759,6 +1759,95 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
     assert seen == [(capture.root, "offline", capture.args)]
 
 
+NOV14_REVIEWED_CASES = (
+    ("app-chromium", "ram-2026-11-14-prod.spec.ts",
+     "IP India content and form references /app/ip/registry desktop"),
+    ("app-chromium", "ram-2026-11-14-prod.spec.ts",
+     "IP India content and form references /app/ip/patents desktop"),
+    ("app-chromium", "draft-quality20261114.spec.ts",
+     "Draft quality 2026-11-14 desktop: generated findings survive correction and reload"),
+    ("app-mobile", "ram-2026-11-14-prod.spec.ts",
+     "[mobile] IP India content and form references /app/ip/registry phone"),
+    ("app-mobile", "ram-2026-11-14-prod.spec.ts",
+     "[mobile] IP India content and form references /app/ip/patents phone"),
+    ("app-mobile", "draft-quality20261114.spec.ts",
+     "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"),
+)
+
+
+def _nov14_fixture_rows(production=False):
+    rows = []
+    for ordinal, (project, file, title) in enumerate(NOV14_REVIEWED_CASES):
+        if production and file == "draft-quality20261114.spec.ts":
+            continue
+        owner = "tester-prod-chromium" if production else project
+        rows.append({"id": f"nov14-{ordinal}:{owner}:0", "native_spec_id": f"nov14-{ordinal}",
+                     "file": file, "title_path": [file, title], "project_id": owner,
+                     "project_name": owner, "expected_status": "passed", "status": "expected",
+                     "retries": 0, "repeat_each_index": 0,
+                     "results": [{"status": "passed", "retry": 0}]})
+    return rows
+
+
+@pytest.mark.parametrize("production", [False, True])
+def test_nov14_requires_independent_six_app_or_four_reference_only_prod_identities(production):
+    assert tuple(evidence.NOV14_APP_CASES) == NOV14_REVIEWED_CASES
+    rows = _nov14_fixture_rows(production)
+    assert len(evidence._nov14_rows(rows, production=production, execution=True)) == (
+        4 if production else 6
+    )
+
+
+@pytest.mark.parametrize("ordinal", range(6))
+@pytest.mark.parametrize("damage", [
+    "title", "file", "missing", "duplicate", "project", "retry", "repeat", "expected_skip",
+    "skipped", "failed", "no_result", "second_attempt",
+])
+def test_nov14_each_reviewed_identity_rejects_replacement_or_nonpassing_execution(ordinal, damage):
+    rows = _nov14_fixture_rows()
+    row = rows[ordinal]
+    if damage == "title":
+        row["title_path"][-1] += " changed"
+    elif damage == "file":
+        row["file"] = "other.spec.ts"
+    elif damage == "missing":
+        rows.pop(ordinal)
+    elif damage == "duplicate":
+        rows.append(copy.deepcopy(row))
+    elif damage == "project":
+        row["project_name"] = row["project_id"] = "other-project"
+    elif damage == "retry":
+        row["retries"] = 1
+    elif damage == "repeat":
+        row["repeat_each_index"] = 1
+    elif damage == "expected_skip":
+        row["expected_status"] = "skipped"
+    elif damage in {"skipped", "failed"}:
+        row["results"][0]["status"] = damage
+    elif damage == "no_result":
+        row["results"] = []
+    else:
+        row["results"].append({"status": "passed", "retry": 1})
+    with pytest.raises(evidence.EvidenceError, match="nov14_required_case"):
+        evidence._nov14_rows(rows, execution=True)
+
+
+def test_nov14_local_generation_can_never_enter_production_even_with_same_counts():
+    canonical = {"tests": _tester_canonical_rows()}
+    canonical["tests"][0]["file"] = "draft-quality20261114.spec.ts"
+    with pytest.raises(evidence.EvidenceError, match="local_draft_quality_in_production_inventory"):
+        evidence._tester_inventory(canonical)
+
+
+def test_nov14_reference_runtime_cannot_be_a_successful_skipped_tester_case():
+    rows = _nov14_fixture_rows(production=True)
+    for row in rows:
+        skipped = copy.deepcopy(rows)
+        skipped[rows.index(row)]["results"][0]["status"] = "skipped"
+        with pytest.raises(evidence.EvidenceError, match="nov14_required_case_not_passed"):
+            evidence._nov14_rows(skipped, production=True, execution=True)
+
+
 def _tester_canonical_rows():
     rows = []
     partitions = {
@@ -1785,12 +1874,20 @@ def _tester_canonical_rows():
                     "expected_status": "passed",
                     "results": [{"status": "passed", "retry": 0}],
                 })
+    for ordinal, (_width, file, title) in enumerate(NOV14_REVIEWED_CASES):
+        if file != "ram-2026-11-14-prod.spec.ts":
+            continue
+        row = copy.deepcopy(rows[0])
+        row.update(id=f"nov14-{ordinal}:tester-prod-chromium:0",
+                   native_spec_id=f"nov14-{ordinal}", file=file,
+                   title_path=[file, title], line=ordinal + 1)
+        rows.append(row)
     return rows
 
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.OCT13_FILES == {
@@ -1803,12 +1900,12 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
         "ram-2026-10-22-prod.spec.ts": 1,
     }
-    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 172
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 176
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
@@ -2561,7 +2658,7 @@ def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
         assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
     assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
     assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
-    assert len(evidence._tester_inventory(canonical)) == 172
+    assert len(evidence._tester_inventory(canonical)) == 176
 
 
 @pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
@@ -2759,7 +2856,7 @@ BATCH5_BUGS_CASES = (
 
 
 def _app_reviewed_counts():
-    return {project: count + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
+    return {project: count + 3 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -2904,6 +3001,7 @@ def app_capture(capture):
                   f"{'[mobile] ' if width else ''}B5 {file} case {number}")
                  for file, pair in evidence.BATCH5_CASE_COUNTS.items()
                  for number in range(pair[width])]
+        added += [(file, title) for owner, file, title in NOV14_REVIEWED_CASES if owner == project]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]
