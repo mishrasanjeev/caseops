@@ -229,7 +229,12 @@ export async function admitV1BeforeMembers(config, dependencies = {}) {
   const actual = io.installed(fixture, config.platform, config.expectedBinaryHash, io.environment); assert.equal(actual.udid, device.udid);
   assert.equal(actual.binaryHash, config.expectedBinaryHash); assert.equal(actual.appId, fixture.appId);
   assert.equal(device.observed, true); assert.equal(device.platform, config.platform); assert.equal(device.appId, fixture.appId); assert.deepEqual(device.buildReceipt, config.buildReceipt);
-  assert.equal(expectedInstalled.udid, fixture.udid); assert.equal(expectedInstalled.appId, fixture.appId); assert.deepEqual(expectedInstalled.buildReceipt, config.buildReceipt);
+  assert.equal(expectedInstalled.udid, fixture.udid); assert.equal(expectedInstalled.appId, fixture.appId);
+  // Canonical producer observations bind the live native identity directly;
+  // their build receipt is independently admitted above and need not be copied
+  // inside the observation. Any optional copy must still match exactly.
+  if (Object.hasOwn(expectedInstalled, 'buildReceipt')) assert.deepEqual(expectedInstalled.buildReceipt, config.buildReceipt);
+  for (const [key, value] of Object.entries(actual)) assert.deepEqual(expectedInstalled[key], value, 'V1_INSTALLED_OBSERVATION_CHANGED');
   assert.equal(expectedInstalled.binaryHash ?? expectedInstalled.installedApkSha256, config.expectedBinaryHash);
   if (expectedInstalled.appDataPath) assert.equal(actual.appDataPath, expectedInstalled.appDataPath);
   if (config.platform === 'android') validateAndroidLayoutEvidence(fixture, actual, device, expectedInstalled);

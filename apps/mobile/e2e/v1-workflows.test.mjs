@@ -159,6 +159,7 @@ function admissionFixture() {
   const oracleIdentityEvidence = v1OracleIdentityEvidence(f.v1.records, actors);
   for (const receipt of receipts) values.get(receipt.path).oracleIdentityEvidence = oracleIdentityEvidence;
   const actual = { udid: f.udid, appId: f.appId, binaryHash: binary, deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17', appDataPath: '/unit/app-data' };
+  Object.assign(values.get(q.installedEvidence.path), structuredClone(actual));
   const dependencies = { read: r => { assert.ok(values.has(r.path)); return structuredClone(values.get(r.path)); }, bytes: () => Buffer.from('synthetic public code'),
     snapshot: () => { log.push('source'); return structuredClone(sourceProof); }, installed: () => { log.push('installed'); return { ...actual }; },
     artifactHash: () => binary, reader: file => { log.push('private-reader'); const item = file.endsWith('private-a.json') ? f : b; return { bytes: Buffer.from('synthetic'), sha256: 'a'.repeat(64), uid: process.getuid(),
@@ -168,6 +169,50 @@ function admissionFixture() {
         : { release_sha: source, revision: url.includes('release-identity') ? 'synthetic-web' : 'synthetic-api' }; },
     environment: { NODE_EXTRA_CA_CERTS: '/unit/ca.crt' }, buildCheck: () => {}, fixtureCheck: () => {}, memberCheck: () => {}, harness: () => 'e'.repeat(64) };
   return { q, f, b, values, dependencies, log };
+}
+function rawInstalledAdmission(platform) {
+  const f = admissionFixture(); f.q.platform = platform;
+  for (const item of [f.f, f.b]) item.appId = 'ai.caseops.mobile.dev';
+  for (const member of f.q.members) Object.assign(f.values.get(member.authObservation.path), { bundleId: f.f.appId, appId: f.f.appId });
+  f.values.get(f.q.deviceEvidence.path).appId = f.f.appId;
+  const actual = platform === 'android'
+    ? { platform, udid: f.f.udid, appId: f.f.appId, binaryHash: binary, bootId: 'synthetic-owned-boot',
+      appDataPath: '/data/user/0/synthetic.caseops', appDataIdentity: { kind: 'directory', uid: 10123, device: '65077', inode: '1234' }, pageSizeRequired: 16384 }
+    : { platform, udid: f.f.udid, appId: f.f.appId, binaryHash: binary, appPath: '/unit/installed.app',
+      appDataPath: '/unit/app-data', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17',
+      runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0', state: 'Booted' };
+  // Canonical producer observations contain actual native identity, without an
+  // extra embedded copy of the independently admitted build reference.
+  f.values.set(f.q.installedEvidence.path, structuredClone(actual));
+  Object.assign(f.values.get(f.q.deviceEvidence.path), { platform, ...(platform === 'android' ? { bootId: actual.bootId, pageSizeBytes: 16384, pageSizeRequired: 16384 } : {}) });
+  f.dependencies.installed = () => { f.log.push('installed'); return structuredClone(actual); };
+  return { ...f, actual };
+}
+for (const platform of ['android', 'ios']) {
+  test(`V1 canonical raw ${platform} installed observation reaches both private readers after all public gates`, async () => {
+    const f = rawInstalledAdmission(platform);
+    const admitted = await admitV1BeforeMembers(f.q, f.dependencies);
+    assert.equal(admitted.members.length, 2); assert.equal(f.log.filter(x => x === 'private-reader').length, 2);
+    assert.deepEqual(admitted.installed, f.actual);
+  });
+  test(`V1 ${platform} rejects a conflicting optional build reference before any private read`, async () => {
+    const f = rawInstalledAdmission(platform); f.values.get(f.q.installedEvidence.path).buildReceipt = { ...f.q.buildReceipt, sha256: 'f'.repeat(64) };
+    await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies)); assert.equal(f.log.includes('private-reader'), false);
+  });
+  test(`V1 ${platform} retains every live native identity field before private admission`, async () => {
+    const fields = platform === 'android' ? ['platform', 'udid', 'appId', 'binaryHash', 'bootId', 'appDataPath', 'appDataIdentity', 'pageSizeRequired']
+      : ['platform', 'udid', 'appId', 'binaryHash', 'appPath', 'appDataPath', 'deviceTypeIdentifier', 'runtime', 'state'];
+    for (const field of fields) {
+      const f = rawInstalledAdmission(platform), retained = f.values.get(f.q.installedEvidence.path);
+      retained[field] = field === 'appDataIdentity' ? { ...retained[field], inode: 'replaced' } : field === 'pageSizeRequired' ? 4096 : 'replaced';
+      await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies), undefined, field); assert.equal(f.log.includes('private-reader'), false, field);
+    }
+  });
+  test(`V1 ${platform} rejects a replacement producer-bound installed reference before private reads`, async () => {
+    const f = rawInstalledAdmission(platform), next = { ...f.q.installedEvidence, path: f.q.installedEvidence.path + '.replacement' };
+    f.values.set(next.path, structuredClone(f.actual)); f.q.installedEvidence = next;
+    await assert.rejects(admitV1BeforeMembers(f.q, f.dependencies)); assert.equal(f.log.includes('private-reader'), false);
+  });
 }
 test('both platforms collect the independent seventeen literal cases and all51 phases', () => {
   assert.deepEqual(v1Inventory.cases.map(x => x.id), ids); assert.equal(v1Inventory.cases.length, 17);

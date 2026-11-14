@@ -1,3 +1,16 @@
+## November14 — canonical native installed receipt compatibility
+
+Candidate Implemented; native verification Inconclusive; NO-GO. Actual source6b
+public native admission rejects the raw installed observation already accepted
+by the canonical producer, because the runner requires a redundant nested build
+reference. Preserve immutable receipts. Admit absent optional metadata, reject
+conflicting copies, and compare every real native identity field while keeping
+all independent build/source/hash/device/serving/viewer checks before credentials.
+Complete original-runner regression188pass/2fail; corrected190/190, zero skips.
+New source gates/builds/native suites remain required. Android source6b primary
+and viewer native auth/selectors pass; formal83/platform counts remain0. See
+[dated proof and retained failures](mobile/NATIVE_V1_SETUP_2026-11-14.md).
+
 ## November14 — retain intrinsic Node24 child failure output
 
 Partially implemented / Inconclusive; NO-GO. Hosted672b2ed3 Mobile source child

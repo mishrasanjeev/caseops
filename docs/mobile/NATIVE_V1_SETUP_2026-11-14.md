@@ -391,3 +391,55 @@ failed before any private credential read with Firefox Secure Connection Failed.
 Preserve `v1-6b44841b-android-primary-auth-01/`; complete known-session absence
 and an empty actual Appium inventory were proved. Current formal native counts
 remain0/83 per platform; compiled builds and setup do not earn case credit.
+
+
+## 2026-11-14 — canonical installed-observation receipt compatibility
+
+J20/M22, US-MOB-01/02/08; candidate **Implemented**, native bug verdict
+**Inconclusive**, full release **NO-GO**. The complete source6b44841b disposable
+producer accepted its real raw `observeInstalled()` evidence before private
+admission. Its immutable viewer receipt binds that exact reference. Actual
+unmodified `admitV1BeforeMembers()` then refused at line232 because it required
+an additional nested `buildReceipt` absent from canonical observations on both
+platforms. The unchanged actual call used no dependency injection and stopped
+before private-member admission/control activation. Retain
+`v1-6b44841b-final-inputs-03/actual-native-admission-refusal.json` under the owned
+`native-release-20261111-ZzEIol4V` evidence root.
+
+Accept the canonical raw schema while requiring any supplied nested build
+reference to match exactly. Independently retain the build artifact/source/hash,
+serving identities, device, complete producer/viewer reference equality and
+private-admission ordering. Also compare **every** freshly observed native field
+against retained evidence, including Android boot/data-directory identity and
+iOS app/container/runtime/state; this strengthens the old selected-field check.
+
+The complete revised190-case V1 module against the original runner has188pass
+and2fail, one canonical raw-observation positive per platform, both at the
+missing nested reference assertion (`native-installed-receipt-contract-red-
+02.tap`). The corrected runner passes190/190 with zero failure, cancellation,
+skip or todo (`...green-04.tap`). Adjacent negatives reject conflicting optional
+receipts, every platform-specific native identity drift and replacement of the
+producer-bound observation before any private reader. Preserve earlier red01
+and green01/02/03 reports: their Android fixture app/boot/device metadata defects
+were setup failures, not positive acceptance. Full source gates and native
+replacement on the corrected source remain required.
+
+Both actual source6b builds passed. Its Android primary02 and viewer02 normal
+Firefox/MFA/PKCE/native identity/logout observations passed with complete session
+absence, grant-to-native5916ms and4897ms respectively; primary also observed all
+required V1 selectors. They earn zero formal83-case credit. Firefox initially
+reported an unknown issuer; retiring only the six exact verified older emulator
+QA CAs, preserving their public bytes, left the current CA unchanged and restored
+normal verified HTTPS. No exception was accepted, no personal-phone command ran,
+and earlier failure evidence remains separate.
+
+Two external preparation defects were retained separately: a literal current
+grant ID absent from the original producer oracle and a null obligation company
+placeholder. The corrected **separate** projection selects the exact registered
+member's unique grant from the immediately preceding owned-docket GET and derives
+company identity from both actual acknowledged obligation pages. The canonical
+resolver passes actual/reordered data and rejects missing, duplicate, wrong-
+subject and101-row responses. It preserves all151 original oracle identities,
+registers exactly55 control identities plus four native-creation reservations,
+and performs no extra HTTP or mutation. Both old projections and original raw
+producer receipts remain unchanged. No V1 registration has been activated.
