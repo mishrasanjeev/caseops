@@ -1657,7 +1657,7 @@ test('V1 session absence checks every known ID plus actual complete inventory wi
   const request=async(route,timeout)=>{calls.push({route,timeout});return route==='/appium/sessions'?{status:200,value:[]}:{status:404,value:{error:'invalid session id'}}};
   const result=await verifyV1SessionAbsence(sessions,request);assert.equal(result.verified,true);
   assert.deepEqual(calls.map(x=>x.route),[`/session/${uuid(1)}/timeouts`,`/session/${uuid(2)}/timeouts`,'/appium/sessions']);assert.ok(calls.every(x=>x.timeout<=5000&&x.timeout>0));
-  for(const response of [{status:200,value:{}},{status:404,value:{error:'unknown error'}}]){let reads=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{reads++;return response}));assert.equal(reads,1)}
+  for(const response of [{status:200,value:{}},{status:404,value:{error:'unknown error'}}]){let reads=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{reads++;return response}));assert.equal(reads,1);}
   await assert.rejects(verifyV1SessionAbsence(sessions,async(route)=>route==='/appium/sessions'?{status:200,value:[{id:uuid(3)}]}:{status:404,value:{error:'invalid session id'}}));
   let clock=0;await assert.rejects(verifyV1SessionAbsence(sessions,async()=>{clock=60000;return{status:404,value:{error:'invalid session id'}}},()=>clock),/V1_SESSION_ABSENCE_DEADLINE/);
 });
