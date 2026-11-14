@@ -2245,7 +2245,7 @@ class GatewayTests(unittest.TestCase):
                 outcome['response'] = self.request("OPTIONS", "/api/auth/login", {"Origin": "https://10.0.2.2:3443"})
                 with self.gateway.lock:
                     outcome['requestsAtReturn'] = list(self.gateway.state['requests'])
-            except BaseException as error:
+            except Exception as error:
                 errors.append(error)
             finally:
                 boundary.set()
