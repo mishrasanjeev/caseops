@@ -44,7 +44,7 @@ TeamManager = Annotated[
     response_model=TeamListResponse,
     summary="List teams for the current company",
 )
-async def get_teams(
+def get_teams(
     context: CurrentContext, session: DbSession
 ) -> TeamListResponse:
     return list_teams(session, context=context)
@@ -56,7 +56,7 @@ async def get_teams(
     status_code=status.HTTP_201_CREATED,
     summary="Create a team",
 )
-async def post_team(
+def post_team(
     payload: TeamCreateRequest,
     context: TeamManager,
     session: DbSession,
@@ -71,7 +71,7 @@ async def post_team(
     response_model=TeamRecord,
     summary="Update a team",
 )
-async def patch_team(
+def patch_team(
     team_id: str,
     payload: TeamUpdateRequest,
     context: TeamManager,
@@ -89,7 +89,7 @@ async def patch_team(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a team",
 )
-async def delete_team_endpoint(
+def delete_team_endpoint(
     team_id: str,
     context: TeamManager,
     session: DbSession,
@@ -103,7 +103,7 @@ async def delete_team_endpoint(
     response_model=TeamRecord,
     summary="Add a member to a team",
 )
-async def post_team_member(
+def post_team_member(
     team_id: str,
     payload: TeamMembershipCreateRequest,
     context: TeamManager,
@@ -126,7 +126,7 @@ async def post_team_member(
     summary="Remove a member from a team",
     responses={409: {"description": "The team membership or access changed."}},
 )
-async def delete_team_member(
+def delete_team_member(
     team_id: str,
     membership_id: str,
     context: TeamManager,
@@ -156,7 +156,7 @@ async def delete_team_member(
         409: {"description": "The team membership changed or is no longer active."},
     },
 )
-async def patch_team_member_lead(
+def patch_team_member_lead(
     team_id: str,
     team_membership_id: str,
     payload: TeamMembershipLeadUpdateRequest,
@@ -179,7 +179,7 @@ async def patch_team_member_lead(
     response_model=TeamScopingResponse,
     summary="Turn team-scoped matter visibility on or off",
 )
-async def put_team_scoping(
+def put_team_scoping(
     payload: TeamScopingUpdateRequest,
     context: TeamManager,
     session: DbSession,

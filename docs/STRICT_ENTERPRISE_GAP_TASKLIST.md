@@ -1,5 +1,35 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Bounded Unused-Team Component Verified, Whole Scale Gap Open
+
+J14/M13/US-040, NFT-001 and SEC-002/003/004 remain partially implemented,
+not production-certified. Focused51pure/SQLite and44PostgreSQL cases pass,
+including the10,000-unrelated-docket work bound and dependency-writer races.
+All45database intent/ack pairs and complete phase/native XML inventories are
+retained. The Windows journal metadata repair preserves fail-closed controls;
+its original44setup errors and all launcher failures remain separate evidence.
+Populated-team N+1/raw-history/bulk-ACL work, global-enablement scale, cold
+collection615 and full candidate/production acceptance remain open. Neither
+these components nor deployed34ce's partial production passes certify the
+release. No native device/store or paid-provider acceptance is implied.
+
+## November14: Teams Unused-Scope Optimization Does Not Close Bulk Work Gap
+
+J14/M13/US-040, NFT-001 and SEC-002/003/004 remain **Inconclusive / UNTESTED**.
+The isolated b5-team candidate adds indexed tenant-qualified dependency EXISTS
+checks and synchronous Teams endpoint bodies. Only teams with no Matter,
+grant or wall references can avoid the IP fence scan. Historical/future ACL
+rows conservatively preserve the original full pipeline, checked at discovery
+and both locked revalidation stages. Global scoping enablement is unchanged.
+
+The24 unit/in-process HTTP, one real-app SQLite/TestClient HTTP and44 PG cases
+are authored expectations, not
+collected/executed evidence. Full nonempty-team role/ACL batching, raw history/
+pair/query bounds, global-enablement scaling and exact-release responsiveness
+are still open. Negative-index plan and Team-FK interleaving tests are authored
+but unrun. No timeout/retry, lifecycle, ACL, dependency, deployment or native
+surface was weakened; no main/HEAD/production mutation or certification occurred.
+
 ## November14: Audit-Command Contract Propagation Still Incomplete
 
 QG-SEC-004/NFT-005 remains NO-GO. Current e2e0 CI43527128891 failed one dated

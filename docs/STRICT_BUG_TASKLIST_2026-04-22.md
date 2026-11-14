@@ -1,5 +1,54 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Teams Focused Proof Passed, Production Closure Still Open
+
+The isolated candidate now has51pure/SQLite cases passed with153retained
+setup/call/teardown phases and44PostgreSQL cases passed with132phases, no skips
+or failures. The complete collected IDs match execution and native XML.
+The PostgreSQL run retains45paired database create-intent/ack records; each
+HTTP template starts from template0, never the application database. Six
+10,000-docket unused-team mutations stay within40SQL statements, with no role
+table reads or docket hydration. Historical/future grants and walls, all three
+snapshot checkpoints, concurrent dependency writers and unfiltered global
+scoping controls pass. Nonempty-team scale remains open.
+
+Attempt06 stopped all44cases in setup at the Windows ownership-journal guard.
+Its failure is preserved. Legacy named-path ctime and descriptor change time
+disagreed after append; the repair compares Windows birth time while retaining
+inode/size/mtime/ownership/namespace checks and POSIX ctime. Repeated durable
+appends and existing hardlink/oversize/short-write/zero-write/parent-swap/lost-ACK
+controls pass. Earlier owned launcher preparation failures01-05 remain retained,
+not product reproductions. Evidence is in teams-native-execute-02 and
+teams-postgres-focused-07 under the primary Workbook5 evidence root.
+
+Verdict remains **Inconclusive** for the unshipped repair. Exact34ce production
+removal504 remains a failed result. Fresh image/full Docker/browser/CI/protected
+release and exact-production replay are still required; no timeout, retry,
+provider, ACL or lifecycle fence was weakened. MacBook work is untouched.
+
+## November14: Teams Zero-Dependency Candidate, UNTESTED
+
+J14/M13/US-040, FT-059/061, NFT-001, SEC-002/003/004. Exact34ce API00525-x6m
+had a 120-second removal504 and later recovered without restart; the supplied
+10,195 visible TM count is not an operational-role count. In b5-team only,
+add three tenant-qualified EXISTS probes over Matter.team_id, grant.team_id
+and wall.excluded_team_id. Every historical/future row counts. Only zero
+dependencies bypass the tenant IP scan; all three snapshot checkpoints
+recheck, any dependency retains the original full role/parent/ACL fence,
+and global scoping remains unfiltered. Eight sync-DB Teams routes now use def.
+
+Verdict: **Inconclusive / UNTESTED**. Source-declared candidates are24 unit/
+in-process HTTP, one real-app SQLite/TestClient HTTP and44 PostgreSQL cases,
+including the retained15. The added SQLite case uses the same lifespan portal,
+real auth/team/removal and a1-second build GET before its bounded gate releases.
+No collection,
+tests, DB, Docker, build, install, network, commit, push or deploy ran. New
+negative-EXISTS plan assertions retain actual EXPLAIN/buffer evidence only when
+executed; no zero-I/O or production latency result exists. Nonempty-team N+1,
+raw role/coverage-history bounds and bulk durable ACL work remain explicitly
+open, as do global-scoping scale and exact-release browser acceptance. The
+frozen parent's fullDocker11 and operational evidence are not modified.
+
 ## November14: Workflow Consumer Missed; Current CI Failed
 
 CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure

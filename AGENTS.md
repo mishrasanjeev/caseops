@@ -1,5 +1,24 @@
 # CaseOps agent instructions
 
+- Windows file identity checks must compare the same creation-time field on
+  named paths and open descriptors. Python's legacy ctime can mean creation
+  time for lstat but change time for fstat after append. Use Windows birth time
+  alongside inode, size, mtime, ownership and namespace checks; preserve POSIX
+  ctime checks and prove repeated durable appends plus tamper rejection.
+
+- Delegated workers may write only inside their assigned isolated worktree or
+  an explicitly validated absolute evidence root. Never derive an evidence
+  path from the worker's current directory or write untracked sidecars into a
+  frozen release source tree. Preserve any deviation and its hashes; restoring
+  clean status later is not proof that the tree stayed clean throughout a run.
+
+- A zero-dependency Teams fast path must probe tenant-qualified Matter team,
+  team-grant and team-wall references, including every historical and future
+  ACL row. Recheck at all three snapshot checkpoints under the original
+  authority/Team locks; preserve the full existing fence for any dependency
+  and the unfiltered global scoping fence. Passing unused-team tests cannot
+  certify nonempty-team role/ACL work bounds or production responsiveness.
+
 - Security advisory results are time-bound even for an unchanged source tree.
   Recheck dependency security immediately before a protected release merge and
   deployment after long-running acceptance. Retain the original passing audit
