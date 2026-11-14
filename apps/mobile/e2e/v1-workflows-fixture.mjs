@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { totp } from './mfa.mjs';
-import { v1Hash, v1Identity, v1Reference, v1PrivateReference, v1Lifecycle, collectV1OracleIdentities, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, readV1Reference, readV1Bytes } from './v1-workflows-contract.mjs';
+import { v1Hash, v1Identity, v1Reference, v1PrivateReference, v1Lifecycle, collectV1OracleIdentities, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, v1OperationalMatter, readV1Reference, readV1Bytes } from './v1-workflows-contract.mjs';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory } from './v1-workflows-inventory.mjs';
 import { readV1CounselPrerequisite, V1_COUNSEL_PROFILE_ROUTE } from './v1-counsel-prerequisite.mjs';
@@ -276,6 +276,7 @@ export async function produceV1Dataset(plan, { request, catalogue, calendarCatal
       assert.equal(response.releaseSha, plan.sourceSha, 'V1_PRODUCER_SERVING_SOURCE_CHANGED');
       assert.ok(response.value && typeof response.value === 'object' && !Array.isArray(response.value), 'ACTUAL_PRODUCER_RESPONSE_REQUIRED');
       noSecrets(response.value);
+      if (step.purpose === 'work-parent-create' || step.key === 'matter-revoked-current') v1OperationalMatter(response.value, plan.companyId);
       collectV1OracleIdentities(response.value).forEach(id => oracleIds.add(id));
       if (step.companyPath) assert.equal(lookup(new Map([['current', response.value]]), `current.${step.companyPath}`), plan.companyId, 'PRODUCER_RESPONSE_COMPANY_MISMATCH');
       if (step.identityPath) v1Identity(lookup(new Map([['current', response.value]]), `current.${step.identityPath}`));
@@ -406,7 +407,8 @@ export async function produceV1Inbox(plan, { aggregate, planEvidence, admit, req
   };
   try {
     const workspace = (await call('inbox-current-parent', 'GET', `/api/matters/${plan.matterId}/workspace`)).value;
-    assert.equal(workspace.matter.id, plan.matterId); assert.equal(workspace.matter.company_id, plan.companyId); assert.equal(workspace.matter.is_disposed, false);
+    assert.equal(workspace.matter.id, plan.matterId);
+    const operationalMatter = v1OperationalMatter(workspace.matter, plan.companyId);
     v1Lifecycle(workspace.matter.lifecycle_version);
     const due = now() + 45000; assert.ok(due <= started + 70000, 'INBOX_REAL_DUE_MUST_FIT_SHARED_PHASE');
     const when = new Date(due + 3600000).toISOString(), body = { hearing_on: when.slice(0, 10), hearing_time: when.slice(11, 19), timezone: 'UTC', time_status: 'exact',
@@ -437,7 +439,7 @@ export async function produceV1Inbox(plan, { aggregate, planEvidence, admit, req
     const after = await admit(plan, { boundary: 'after', remaining: () => aggregate.remaining('inbox'), charge: value => aggregate.request('inbox', { ...value, admission: true }) });
     assert.equal(after.apiSourceSha, plan.sourceSha); assert.equal(after.webSourceSha, plan.sourceSha);
     return { schemaVersion: 1, phase: 'inbox', kind: 'actual-canonical-in-app-fixture', observed: true, sourceSha: plan.sourceSha, runId: plan.runId,
-      companyId: plan.companyId, membershipId: plan.membershipId, requests, writes: 1, notification, matter: { ...workspace.matter, identityLabel: workspace.matter.matter_code, search: workspace.matter.matter_code },
+      companyId: plan.companyId, membershipId: plan.membershipId, requests, writes: 1, notification, matter: { ...operationalMatter, identityLabel: workspace.matter.matter_code, search: workspace.matter.matter_code },
       workerRequestEvidence, workerEvidence: plan.workerEvidence, worker, observations: calls, oracleIdentityEvidence: v1OracleIdentityEvidence([...oracleIds]),
       externalCalls: 0, manualReceiptInsertion: false, automaticRetry: false, mutationUncertain: false };
   } catch {

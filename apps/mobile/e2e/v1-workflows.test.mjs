@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
 import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor } from './v1-workflows.mjs';
-import { validateV1Fixture, v1CalendarDeadlineIdentity, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
+import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
 import { pendingV1ProducerPlan, requireV1ProducerPlan, produceV1Dataset, resolveV1ResponseReferences, produceV1Inbox, pendingV1InboxPlan } from './v1-workflows-fixture.mjs';
@@ -366,7 +366,7 @@ function viewerProducerDouble() {
     work: { matter: { title: 'Synthetic readonly Matter' }, task: { title: 'Synthetic readonly task' }, hearing: { purpose: 'Synthetic readonly hearing', reminder_channels: [], reminder_recipient_membership_ids: [], notification_critical: false },
       rowFacts: { task: ['Synthetic readonly task', 'Unassigned', 'todo · No due date · Read-only'], hearing: ['Synthetic readonly hearing', 'Forum not recorded', '27 Oct 2026 · scheduled · Read-only'] } } };
   const identity = { company: { id: uuid(9) }, membership: { id: uuid(10), role: 'viewer', is_active: true }, user: { is_active: true }, capabilities: ['matters:read'] };
-  const matter = { id: uuid(109), company_id: uuid(9), title: 'Synthetic readonly Matter', matter_code: 'SYNTHETIC-READONLY', is_disposed: false, lifecycle_version: 0 }, task = { id: uuid(110), matter_id: uuid(109), title: plan.work.task.title, owner_membership_id: null }, hearing = { id: uuid(111), matter_id: uuid(109), purpose: plan.work.hearing.purpose };
+  const matter = { id: uuid(109), company_id: uuid(9), title: 'Synthetic readonly Matter', matter_code: 'SYNTHETIC-READONLY', status: 'active', is_active: true, lifecycle_version: 0 }, task = { id: uuid(110), matter_id: uuid(109), title: plan.work.task.title, owner_membership_id: null }, hearing = { id: uuid(111), matter_id: uuid(109), purpose: plan.work.hearing.purpose };
   const values = [{ membership_id: uuid(10), role: 'viewer' }, identity, { secret: 'JBSWY3DPEHPK3PXP' }, { status: 'enrolled' }, identity, { mfa_status: 'enrolled' }, matter, task, hearing, { matter, tasks: [task], hearings: [hearing] }], calls = [], events = [], files = [];
   const dependencies = { aggregate: aggregateDouble(), planEvidence: ref('viewer-plan'), readEvidence: () => ({ kind: 'actual-normal-api-v1-base-fixture', observed: true, sourceSha: source, secondaryOwner: { companyId: uuid(9), membershipId: uuid(11), mfaEnrolled: true, credentialEvidence: privateRef('secondary-owner-private') } }), admit: async () => ({ beforeMemberRead: true, companyId: uuid(9), membershipId: uuid(11), role: 'owner', capabilities: ['company:manage_users'], credentialEvidence: privateRef('secondary-owner-private'), sourceSha: source, apiSourceSha: source, webSourceSha: source, buildReceipt: plan.buildReceipt, dockerReceipt: plan.dockerReceipt, installedEvidence: plan.installedEvidence, binaryHash: binary }),
     request: async value => { calls.push(value); return { status: 200, releaseSha: source, value: structuredClone(values[calls.length - 1]), requestId: `synthetic-${calls.length}` }; },
@@ -377,6 +377,8 @@ function viewerProducerDouble() {
 test('viewer producer executes normal APIs once including MFA and readonly workspace and keeps private data out of events', async () => {
   const value = viewerProducerDouble(), result = await produceV1Viewer(value.plan, value.dependencies);
   assert.equal(value.calls.length, 10); assert.equal(result.role, 'viewer'); assert.equal(result.mfaEnrolled, true);
+  assert.equal(result.readOnlyWork.matter.is_disposed, false);
+  assert.equal(result.readOnlyWork.matter.status, 'active'); assert.equal(result.readOnlyWork.matter.is_active, true);
   assert.equal(value.files.length, 2); assert.equal(value.files[0].contract.createExclusive, true); assert.equal(value.files[0].contract.mode, 0o600);
   assert.equal(value.files[1].contract.createExclusive, false); assert.equal(value.files[1].contract.sameOwnedDescriptor, true);
   assert.equal(value.files[0].value.totp_secret, undefined); assert.equal(value.files[1].value.totp_secret, 'JBSWY3DPEHPK3PXP'); assert.equal(result.readOnlyWork.task.id, uuid(110));
@@ -516,7 +518,7 @@ function inboxProducerDouble() {
   const root = path.resolve(fileURLToPath(new URL('../../../', import.meta.url))), start = 1793059200000, calls = [], events = [], charges = [];
   const plan = { ...pendingV1InboxPlan(), readyForLive: true, preparedOnly: false, sourceSha: source, runId: 'v1-' + uuid(900), companyId: uuid(1), membershipId: uuid(2), matterId: uuid(100),
     workerEvidence: { ...ref('worker'), path: path.join(root, 'scripts/mobile/local-v1-inbox.py') }, managerEvidence: { ...ref('manager'), path: path.join(root, 'scripts/mobile/local-v1-controls.py') }, postgresEvidence: ref('postgres') };
-  const matter = { id: plan.matterId, company_id: plan.companyId, is_disposed: false, lifecycle_version: 2, matter_code: 'SYNTHETIC-INBOX', title: 'Synthetic Inbox Matter' };
+  const matter = { id: plan.matterId, company_id: plan.companyId, status: 'active', is_active: true, lifecycle_version: 2, matter_code: 'SYNTHETIC-INBOX', title: 'Synthetic Inbox Matter' };
   let hearing;
   const dependencies = { aggregate: { ...aggregateDouble(plan.runId), request: (...value) => charges.push(value) }, planEvidence: ref('inbox-plan'), now: () => start,
     readCode: () => Buffer.from('synthetic public source'), readEvidence: () => ({ observed: true, readOnly: true, database: 'caseops_mobile' }),
@@ -541,6 +543,15 @@ test('inbox fixture uses four normal member HTTP calls and one due worker under 
 test('inbox fixture pending, stale parent, unknown hearing and worker result refuse without replay', async () => {
   const pending = inboxProducerDouble(); await assert.rejects(produceV1Inbox(pendingV1InboxPlan(), pending.dependencies)); assert.equal(pending.calls.length, 0);
   const run = inboxProducerDouble(); run.plan.runId = 'v1-' + uuid(999); await assert.rejects(produceV1Inbox(run.plan, run.dependencies), /EXACT_FIXTURE_RUN_REQUIRED/); assert.equal(run.calls.length, 0);
+  for (const change of [m => m.status = 'disposed', m => m.status = 'closed', m => m.status = 'unknown', m => delete m.status,
+    m => m.is_active = false, m => delete m.is_active, m => m.is_disposed = true, m => m.company_id = uuid(999)]) {
+    const bad = inboxProducerDouble(); change(bad.matter);
+    await assert.rejects(produceV1Inbox(bad.plan, bad.dependencies)); assert.equal(bad.calls.length, 1);
+    assert.equal(bad.events.some(e => e.type === 'worker-request'), false);
+  }
+  const actual = { id: uuid(100), company_id: uuid(1), status: 'active', is_active: true, lifecycle_version: 2 };
+  for (const status of ['intake', 'active', 'on_hold']) assert.equal(v1OperationalMatter({ ...actual, status }, uuid(1)).is_disposed, false);
+  assert.equal(Object.hasOwn(actual, 'is_disposed'), false);
   const lifecycle = inboxProducerDouble(); lifecycle.matter.lifecycle_version = true; await assert.rejects(produceV1Inbox(lifecycle.plan, lifecycle.dependencies)); assert.equal(lifecycle.calls.length, 1);
   const lost = inboxProducerDouble(), request = lost.dependencies.request; lost.dependencies.request = async value => { if (value.method === 'POST') { lost.calls.push(value); throw Error('SYNTHETIC_PRIVATE_NOT_REFLECTED'); } return request(value); };
   await assert.rejects(produceV1Inbox(lost.plan, lost.dependencies), /^Error: V1_INBOX_FIXTURE_INCOMPLETE_NO_REPLAY$/); assert.equal(lost.calls.length, 2); assert.equal(lost.events.at(-1).mutationUncertain, true);

@@ -56,7 +56,7 @@ function fixture() {
     const parents = {
       creator: ack('POST', routes[family], 201, creatorValue),
       matter: ack('POST', '/api/matters/', 200, { id: matterId, company_id: scope.companyId, title: matterTitle, matter_code: matterCode,
-        is_active: true, status: 'intake' }),
+        is_active: true, status: 'intake', lifecycle_version: 0 }),
       link: ack('POST', prefix + '/matter-links', 201, { id: linkId, company_id: scope.companyId, docket_id: docketId, matter_id: matterId,
         relation_role: 'operational', retired_at: null, source: 'manual', created_by_membership_id: scope.ownerMembershipId },
       { body: { matter_id: matterId, relation_role: 'operational', expected_docket_updated_at: time } }),
@@ -198,7 +198,7 @@ async function verifyDatasetCatalogueComposition() {
     if (input.route === '/api/matters/') {
       const i = Number(input.body.title.split(' ').at(-1));
       return i < 3 ? structuredClone(entries[i].parents.matter.response)
-        : response({ id: id(2000 + i), company_id: scope.companyId, title: input.body.title, is_active: true, status: 'intake' });
+        : response({ id: id(2000 + i), company_id: scope.companyId, title: input.body.title, is_active: true, status: 'intake', lifecycle_version: 0 });
     }
     return response({ id: id(3000 + serial), company_id: scope.companyId });
   };

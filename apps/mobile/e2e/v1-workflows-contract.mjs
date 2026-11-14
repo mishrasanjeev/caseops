@@ -138,6 +138,17 @@ export function createV1FixtureAggregate({ runId, sourceSha, claim, persist, now
     publicState,
   };
 }
+/** Raw MatterRecord has status/is_active; is_disposed is an internal fixture projection. */
+export function v1OperationalMatter(record, companyId) {
+  assert.ok(record && typeof record === 'object' && !Array.isArray(record), 'V1_ACTUAL_MATTER_RECORD_REQUIRED');
+  v1Identity(record.id); v1Identity(record.company_id); assert.equal(record.company_id, companyId, 'V1_MATTER_COMPANY_MISMATCH');
+  v1Lifecycle(record.lifecycle_version);
+  assert.ok(['intake', 'active', 'on_hold'].includes(record.status), 'V1_OPERATIONAL_MATTER_STATUS_REQUIRED');
+  assert.equal(record.is_active, true, 'V1_ACTIVE_MATTER_REQUIRED');
+  if (Object.hasOwn(record, 'is_disposed')) assert.equal(record.is_disposed, false, 'V1_CONTRADICTORY_MATTER_PROJECTION');
+  return { ...record, is_disposed: false };
+}
+
 export function v1Reference(value, code = 'HASH_BOUND_V1_REFERENCE_REQUIRED') {
   assert.ok(value && path.isAbsolute(value.path || '') && path.resolve(value.path) === value.path && SHA.test(value.sha256 || ''), code);
   return value;
