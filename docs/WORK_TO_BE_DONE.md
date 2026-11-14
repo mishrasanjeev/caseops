@@ -1,5 +1,13 @@
 ## 2026-11-11 - Workbook 5
 
+November14 human continuation: PR621 remains open and unshipped. The patch
+adds structural drafting-quality and dated official IP India reference
+acceptance under the current PRD, without claiming legal accuracy, complete
+registry search or filing completion. A worker-safe collection optimization
+preserves actual native identities but its final15second cold App run still
+fails;615 is not closed. Complete current CI, fresh full Docker and exact-SHA
+production replay remain required. Native/MacBook work is excluded.
+
 November14 00:56UTC: e2e0 CI43527128891 failed the October21 FastEmbed test's
 exact core-only Security sync command. The workflow intentionally requires
 --all-extras; correct only that stale command expectation and retain all strict

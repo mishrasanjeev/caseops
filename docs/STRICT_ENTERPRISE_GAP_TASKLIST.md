@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Structural Draft Quality Is Not Legal Accuracy Certification
+
+Partially implemented / NO-GO for the new candidate until release acceptance.
+J07/M06 structural validators and bounded multiline authority context are being
+connected to the existing generation/edit paths. Preserve all source, citation,
+review, lifecycle and no-paid gates. Deterministic fixtures cannot establish
+substantive legal accuracy, citation relevance or suitability for filing.
+Existing IP ownership adds dated official reference content and Form 2 field
+guidance without enabling automated register access. Full India source coverage,
+live registry adapter terms/capabilities and separately reviewed legal/form
+benchmarks remain open. All new tests must enter the real App/production native
+inventory; a new spec or a source link alone is not coverage or certification.
+
 ## November14: PR621 Propagation Still Requires Whole Gates
 
 QG verification remains NO-GO, not production-certified. New Teams regressions

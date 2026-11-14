@@ -1,5 +1,29 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Draft Quality And Official IP Source Acceptance
+
+The owner's resumed immediate-patch request is under active PR621 ownership.
+Candidate drafting defects are concrete: first-line-only authority summaries
+drop later reasoning (whitespace-only summaries can raise IndexError), existing
+document-type validators were not passed the actual template on generation or
+manual edit, and a full model summary can conceal deterministic findings at the
+1200-character limit. Preserve the original budgets, actual validators, stable
+finding codes and citation/review/ACL/source/lifecycle fences. Local deterministic
+tests are component proof, not a real-model legal-quality benchmark.
+
+Official IP India references are a bounded, dated addition under existing IP
+ownership: actual Form 2 fields and Rule 13 guidance, exact official URLs and
+reviewed PDF hash. Seven references do not constitute a live register adapter,
+complete source corpus or completed filing. Production register CAPTCHA/OTP and
+provider/licensing gates remain untouched. Both additions require discovered
+desktop/phone journeys and exact-serving acceptance before a fixed claim.
+
+Cold collection615 remains open: a worker-safe canonical schema loader removed
+unnecessary eager work and preserved784App/172selected-production identities,
+but its final fresh-cache15second App run still timed out. The earlier passing
+quiet measurements do not erase that failure. Broader measured work reduction,
+actual worker proof and unchanged15/8second constructors remain required.
+
 ## November14: PR621 Lint And Governance Consumer Repairs
 
 The owner's immediate-patch request resumes621 and adds AI drafting-quality

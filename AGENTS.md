@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- Draft-quality acceptance must exercise generation and manual revision using
+  the actual template type, preserve multiline authority reasoning within the
+  bounded prompt, and keep deterministic blockers visible when summaries clip.
+  Schema-valid model output and passing deterministic fixtures do not establish
+  real-model legal accuracy or filing suitability.
+- Official IP references must distinguish reviewed source content and format
+  guidance from live register records. Retain exact source/version/hash and
+  provisional/complete boundaries; never present an index link as an ingested
+  form or bypass an official portal's CAPTCHA/OTP to claim search coverage.
+
 - Before publishing a regression-heavy repair or starting a long acceptance
   run, execute the repository's normal whole-API lint gate as well as focused
   tests. Re-export imported pytest fixtures through an explicit module binding
