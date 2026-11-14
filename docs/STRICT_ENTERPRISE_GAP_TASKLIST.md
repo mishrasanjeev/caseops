@@ -1,5 +1,27 @@
 # Strict Enterprise Gap Tasklist
 
+## November14: Windows Collection Is Not A Passing Local Component
+
+Issue615 remains Not fixed. On integrated790-case source, fresh-cache baseline
+App collection takes21.216s under a45s diagnostic ceiling; baseline selected
+production176takes9.642s. The worker-safe loader candidate still fails the
+original15second App constructor, while its8second production constructor
+passes7.519s. A profiled App diagnostic takes16.427s, not admission. Additional
+CPU profiling attributes7.864s to Babel,2.601s to file reading and1.068s to GC;
+the separate loader thread is mostly idle. Do not confuse that idle thread with
+the main thread's work. An experimental19MB read deferral plus bounded Node heap
+flags also misses15seconds; no heap flag or read deferral is retained in source.
+
+This Windows test-startup defect remains visible and must not be labelled fixed
+or a passing full Windows preflight. The urgent production repair instead
+requires exact-candidate complete hosted CI (including its unchanged full
+frontend coverage and native15/8second inventory checks), fresh local built
+20-case workflow acceptance, and the unchanged canonical full Docker verifier
+with all native PG/browser identities. This is not permission to omit or weaken
+repository tests, source binding, provider/security fences or deploy guards.
+Retain failed Windows evidence separately and require exact-serving production
+replay; no certification is inferred from this admission plan.
+
 ## November14: Structural Draft Quality Is Not Legal Accuracy Certification
 
 Partially implemented / NO-GO for the new candidate until release acceptance.

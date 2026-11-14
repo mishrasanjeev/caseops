@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+## November14: Integrated Collection615 Failure Retained
+
+Worker-safe canonical/external loaders have real native validation, ZIP, QR and
+axe-worker proof, but integrated App790cold collection still times out at the
+unchanged15s budget. Selected production176passes its8s budget at7.519s. Source
+ab9c remains unshipped. The later45s-profiled App completion is diagnostic only;
+an experimental source-read/heap adjustment also fails and is not retained.
+No static inventory, filtered tests, warmed-cache pass or raised deadline is
+used as closure. Keep615open. Urgent production acceptance uses the complete
+exact-source CI/frontend gates, fresh built20workflows and unchanged full
+canonical Docker/production inventories, not a false Windows-preflight pass.
+
 ## November14: Independent Review Found Two Additional Drafting Defects
 
 Static review of49c identified false type findings for valid section-first/
