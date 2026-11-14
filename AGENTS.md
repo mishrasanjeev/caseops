@@ -8,8 +8,11 @@
 
 - A new test helper imported transitively by a colocated web unit can become a
   builder input even when production code never imports it. Reconcile the exact
-  Docker COPY closure, both finite ignore allowlists, native upload discovery,
-  source triggers and build fingerprints; do not broaden a directory allowlist
+  Docker COPY closure, both finite ignore allowlists, deployment dirty-input
+  guards, native upload discovery, source triggers and build fingerprints.
+  Exercise real Git dirty-input rejection as well as static closure/omission
+  checks; a passing upload-only suite does not cover the deploy guard. Do not
+  broaden a directory allowlist
   or copy test helpers into the production runner to hide the missing input.
 
 - Connecting an existing validator can expose its old false positives. Regress

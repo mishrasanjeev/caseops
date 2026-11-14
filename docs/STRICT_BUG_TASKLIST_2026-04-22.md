@@ -6324,3 +6324,19 @@ All replacement hosted gates, unchanged full Docker inventory, protected
 merge, guarded exact-main deployment and complete exact-production replay
 remain required. Production still independently observed at34ce; no PR621
 fix is claimed deployed from these local checks.
+
+Candidate667f50cc6 repeats the fresh built20 workflows successfully with
+0failures/skips/retries. Exact Security43590740545 and shared source43590740598
+passed; Web43590740471 also passed, including full coverage, unchanged native
+inventory budgets, fresh Next build and web Docker builder. Other API/PG and
+later browser gates remain incomplete. These passes are source-bound, not
+production or replacement-head certification.
+
+The preceding291c API shard4 completed before workflow cancellation and retained
+seven deploy-guard failures (1580P/776S), all explicitly naming the same missing
+canonical validator helper. This was a real omission in the builder dependency
+propagation, not a product API reproduction or an authorized deployment.
+The repair adds that one literal helper to the actual dirty-input path array
+and its shared omission/native-Git regression matrix. No whole test-tree
+allowlist or dirty-source waiver is introduced. Failed evidence remains in
+outputs/bugs5-20261111/ci621-291c-failures-01/api-shard4.log.
