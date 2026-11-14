@@ -1672,7 +1672,7 @@ test('V1 Work and Source segments use separate viewer presentation and dispatch 
   const recipes={};for(const [group,label]of[['Matter view','Work'],['Source type','Contracts']])recipes[group]={[label]:{group,label,labelAttribute:'text',query:`android=new UiSelector().text("${label}")`}};
   let label;const element={elementId:'segment',isDisplayed:async()=>true,getAttribute:async()=>label};
   const c={fixture,platform:'android',segmentPresentation:{sourceSha:source,platform:'android',selectors:{observed:true,udid:fixture.udid,buildReceipt:fixture.buildReceipt,segments:recipes}},budget:{control(){}},driver:{waitUntil:async fn=>assert.equal(await fn(),true),$$:async query=>query===recipes[label==='Work'?'Matter view':'Source type'][label].query?[element]:[],elementClick:async id=>calls.push(id)}};
-  for(const [group,value]of[['Matter view','Work'],['Source type','Contracts']]){label=value;await segment(c,group,label)}
+  for(const [group,value]of[['Matter view','Work'],['Source type','Contracts']]){label=value;await segment(c,group,label);}
   assert.deepEqual(calls,['segment','segment']);assert.deepEqual(fixture,before);assert.equal(fixture.v1,undefined);
 });
 test('Android read-only row binds its exact global scroll ancestor and rejects alternate ownership',async()=>{
