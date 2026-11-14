@@ -1701,7 +1701,7 @@ test('V1 session HTTP observation preserves marker/TLS policy, refuses redirects
   const body=new ReadableStream({pull(controller){reads++;controller.enqueue(new Uint8Array(9000));},cancel(){cancelled=true}},{highWaterMark:0});
   await assert.rejects(readV1SessionStatus('http://127.0.0.1:4725/appium/sessions',1000,async()=>new Response(body,{status:200})),/V1_SESSION_STATUS_RESPONSE_BOUND/);
   assert.equal(cancelled,true);assert.equal(reads,2);
-  for(const url of ['https://example.invalid/appium/sessions','http://user@localhost:4725/appium/sessions','http://localhost:4725/appium/sessions?q=x']){let calls=0;await assert.rejects(readV1SessionStatus(url,1000,async()=>{calls++;return new Response('{}')}));assert.equal(calls,0)}
+  for(const url of ['https://example.invalid/appium/sessions','http://user@localhost:4725/appium/sessions','http://localhost:4725/appium/sessions?q=x']){let calls=0;await assert.rejects(readV1SessionStatus(url,1000,async()=>{calls++;return new Response('{}')}));assert.equal(calls,0);}
 });
 test('V1 absence observation admits the complete seventeen-session inventory under one deadline',async()=>{
   const sessions=Array.from({length:17},(_,i)=>({id:uuid(i+1)}));let count=0;
