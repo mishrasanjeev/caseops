@@ -6706,3 +6706,31 @@ counted offline saturation fixtures; native synchronization and every original
 security/time/entry bound remain unchanged. [Exact proof and remaining gates](mobile/NATIVE_RELEASE_INTEGRATION_2026-11-14.md)
 keep quiet diagnostic success distinct from a causal diagnosis or native pass.
 Fresh full gates/builds/83-case suites remain required.
+
+## 2026-11-14 — CodeQL alert verdict and test-fixture boundaries
+
+**Partially fixed / NO-GO.** The source82f94368 CI workflow completed all53
+jobs (52 successes and the expected staging skip), but the broader72-check
+rollup contained a separate failing CodeQL alert verdict132480720992: a high
+filesystem-race finding in `queue-privacy.test.mjs` and an uninitialized-local
+finding in the optional telemetry packaging test. Analysis-workflow success
+does not establish the security alert verdict. Exact annotations are retained at
+`/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/codeql-82f94368-repair-01/codeql-check-and-annotations.json`.
+
+The private-peer assertion now checks mode, bounded bytes and stable regular,
+non-symlink pathname identity through one owned descriptor, closing it on every
+failure. Preserve the original umask, exclusive-create and symlink refusals;
+regular-file and symlink replacement regressions also prove descriptor closure.
+The Python test initializes its optional distribution explicitly and refuses
+fallthrough before provenance/member reads, retaining the ordinary missing-extra
+skip and every installed version/member-hash assertion.
+
+The original pathname pattern accepted a substituted file (focused2P/1F); the
+complete repaired module passes78/78 with all77 earlier titles retained. The
+Python fallthrough reproduces the original uninitialized local (6P/1F), then
+passes7/7 with the actual installed0.66b2 cohort and zero skips. Independent
+Node review and separate Python review found no blocking or major finding.
+Evidence is under the same repair directory. Fresh CodeQL analysis **and its
+separate alert verdict**, subsequent CI and native acceptance remain required.
+No rule/path exclusion, alert dismissal, deadline increase or native case credit
+is introduced. The running native source82f94368 checkout remains untouched.

@@ -5448,3 +5448,22 @@ See [integration evidence and external/hardware prerequisites](mobile/NATIVE_REL
 Final frozen gates, both actual builds and all83native cases per platform remain
 required. Play review and Apple organization review are external pending states,
 not passed release or hardware gates.
+
+## 2026-11-14 — Analysis completion is not a security-alert pass
+
+**Partially implemented / Partially fixed / NO-GO.** Inventory the complete PR
+check rollup as well as workflow runs. At82f94368 the53-job CI and five analysis
+workflows succeeded, while the independent CodeQL alert check reported one high
+filesystem-race alert and one uninitialized-local error. Preserve that failed
+verdict and exact annotations; neither a successful analysis job nor a green
+test module closes an alert.
+
+The two test-fixture repairs retain strict pathname/descriptor ownership,
+bounded reads, exclusive-create negatives and optional-distribution identity,
+license and member-hash checks. Actual module results are78 Node passes and7
+Python passes with zero failures/skips, including real pathname replacements
+and missing-cohort/fallthrough regressions. Evidence and independent reviews:
+`/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/codeql-82f94368-repair-01/`.
+Fresh analysis plus the alert verdict and the remaining native gates are still
+pending; no exclusion, dismissal, source-identity relaxation or native-result
+transfer is permitted.

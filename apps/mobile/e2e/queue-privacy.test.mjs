@@ -400,7 +400,64 @@ test('public QP registration projects observed actor IDs and exact mount ownersh
 test('pending producer has zero claim private write transport or admission calls',async()=>{let calls=0;const f=()=>{calls++;};await assert.rejects(produceQueuePrivacy(pendingProducer(),{request:f,admit:f,persist:f,claim:f,persistPrivate:f}));assert.equal(calls,0);});
 test('unknown API acknowledgement consumes one claim and never replays or continues',async()=>{const x=producerDouble();try{let calls=0;x.io.request=async()=>{calls++;throw Error('SYNTHETIC_UNKNOWN');};await assert.rejects(x.run(),/SYNTHETIC_UNKNOWN/);assert.equal(calls,1);assert.equal(x.claims.length,1);assert.equal(x.events.filter(e=>e.type==='qp_fixture_completed').length,0);await assert.rejects(x.run());assert.equal(calls,1);}finally{x.close();}});
 test('malformed or wrong-tenant page cannot become a complete fixture',async()=>{const x=producerDouble();try{const old=x.io.request;x.io.request=async(...args)=>{const r=await old(...args);if(args[2].startsWith('/api/matter-work-queue'))r.value.scope='all_company_tasks';return r;};await assert.rejects(x.run());assert.equal(x.events.some(e=>e.type==='qp_fixture_completed'),false);}finally{x.close();}});
-test('private peer creation is0600underumask0 and refuses symlink and existing files',()=>{const dir=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'qp-private-'));const original=process.umask(0);try{const file=path.join(dir,'private.json'),value={password:'SYNTHETIC_ONLY'};const r=writePrivatePeer(file,value);assert.equal(fs.statSync(file).mode&0o777,0o600);assert.equal(r.createdBeforeFirstPost,true);assert.throws(()=>writePrivatePeer(file,value));const link=path.join(dir,'link');fs.symlinkSync(file,link);assert.throws(()=>writePrivatePeer(link,value));assert.deepEqual(JSON.parse(fs.readFileSync(file)),value);}finally{process.umask(original);fs.rmSync(dir,{recursive:true});}});
+function assertCreatedPrivatePeer(file, value, beforeRead = () => {}) {
+ const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+ try {
+  const created = fs.fstatSync(descriptor);
+  const fields = ['ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeMs', 'ctimeMs'];
+  const frame = metadata => fields.map(key => metadata[key]);
+  const checkPath = () => {
+   const pathname = fs.lstatSync(file);
+   assert.ok(pathname.isFile() && !pathname.isSymbolicLink(), 'PRIVATE_PEER_PATH_CHANGED');
+   assert.deepEqual(frame(pathname), frame(created), 'PRIVATE_PEER_PATH_CHANGED');
+   if (process.platform !== 'win32') assert.equal(pathname.dev, created.dev, 'PRIVATE_PEER_PATH_CHANGED');
+  };
+  assert.ok(created.isFile() && created.nlink === 1);
+  assert.equal(created.mode & 0o777, 0o600);
+  if (process.getuid) assert.equal(created.uid, process.getuid());
+  assert.ok(created.size > 0 && created.size <= 16384);
+  checkPath();
+  beforeRead(descriptor);
+  const bytes = Buffer.alloc(created.size + 1);
+  let total = 0;
+  while (total < bytes.length) {
+   const read = fs.readSync(descriptor, bytes, total, bytes.length - total, null);
+   if (read === 0) break;
+   total += read;
+  }
+  const after = fs.fstatSync(descriptor);
+  assert.deepEqual(frame(after), frame(created), 'PRIVATE_PEER_DESCRIPTOR_CHANGED');
+  assert.equal(after.dev, created.dev, 'PRIVATE_PEER_DESCRIPTOR_CHANGED');
+  checkPath();
+  assert.equal(total, created.size, 'PRIVATE_PEER_SIZE_CHANGED');
+  assert.deepEqual(JSON.parse(bytes.subarray(0, total).toString('utf8')), value);
+ } finally {
+  fs.closeSync(descriptor);
+ }
+}
+test('private peer creation is0600underumask0 and refuses symlink and existing files',()=>{const dir=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'qp-private-'));const original=process.umask(0);try{const file=path.join(dir,'private.json'),value={password:'SYNTHETIC_ONLY'};const r=writePrivatePeer(file,value);assert.equal(r.createdBeforeFirstPost,true);assert.throws(()=>writePrivatePeer(file,value));const link=path.join(dir,'link');fs.symlinkSync(file,link);assert.throws(()=>writePrivatePeer(link,value));assertCreatedPrivatePeer(file,value);}finally{process.umask(original);fs.rmSync(dir,{recursive:true});}});
+test('private peer verification rejects pathname replacement during descriptor reads', () => {
+ for (const replacement of ['regular', 'symlink']) {
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'qp-private-race-'));
+  try {
+   const file = path.join(dir, 'private.json'), value = { password: 'SYNTHETIC_ONLY' };
+   writePrivatePeer(file, value);
+   let replacements = 0, descriptor;
+   assert.throws(() => assertCreatedPrivatePeer(file, value, owned => {
+    descriptor = owned;
+    replacements++;
+    const initial = path.join(dir, 'initial.json');
+    fs.renameSync(file, initial);
+    if (replacement === 'symlink') fs.symlinkSync(initial, file);
+    else fs.writeFileSync(file, JSON.stringify(value), { mode: 0o666, flag: 'wx' });
+   }), /PRIVATE_PEER_/);
+   assert.equal(replacements, 1);
+   assert.throws(() => fs.fstatSync(descriptor), { code: 'EBADF' });
+  } finally {
+   fs.rmSync(dir, { recursive: true });
+  }
+ }
+});
 test('independent order retains microseconds and exact IDs instead of millisecond or insertion order',()=>{const row=(n,stamp)=>({id:id(n),role:'mine',owner_membership_id:id(1),due_on:'2027-01-01',created_at:stamp});const a=row(9,'2026-10-27T00:00:00.100001Z'),b=row(1,'2026-10-27T00:00:00.1+00:00');assert.deepEqual(expectedQueue([a,b],'mine','all',id(1),id(2)).map(x=>x.id),[b.id,a.id]);});
 test('real profile owner recipes contain only exact anchor normal APIs and current version selectors',async()=>{const x=producerDouble();try{const d=await x.run(),r=ownerRecipes(d);assert.equal(r.length,2);assert.deepEqual(r.map(x=>x.id),['change','restore']);for(const recipe of r){assert.deepEqual(recipe.requests.map(x=>x.method),['GET','GET','PATCH']);assert.deepEqual(Object.keys(recipe.requests[2].body).sort(),['due_on','expected_lifecycle_version','expected_updated_at']);assert.ok(recipe.requests.every(x=>!x.route.includes('/account/')));}}finally{x.close();}});
 test('public source installed API ANDweb precede EACH actual protected-reader callback and buffers clear',async()=>{const x=await admissionDouble();try{const r=await x.run();assert.equal(r.members.length,2);assert.equal(x.calls.filter(x=>x.startsWith('PRIVATE:')).length,2);for(let i=0;i<x.calls.length;i++)if(x.calls[i].startsWith('PRIVATE:')){assert.match(x.calls[i-3],/api\/build$/);assert.match(x.calls[i-2],/api\/release-identity$/);assert.match(x.calls[i-1],/__caseops_e2e\/status$/);}assert.ok(x.credentials.every(c=>c.bytes.every(b=>b===0)));}finally{x.close();}});

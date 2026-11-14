@@ -82,10 +82,12 @@ def test_public_notice_bytes_have_exact_cross_checkout_attributes():
 
 
 def test_installed_optional_distribution_matches_reviewed_wheel_members():
+    distribution = None
     try:
         distribution = importlib.metadata.distribution("opentelemetry-util-http")
     except importlib.metadata.PackageNotFoundError:
         pytest.skip("Installed optional cohort requires the observability extra")
+    assert distribution is not None, "Missing optional distribution must terminate as a skip"
     assert distribution.version == "0.66b2"
     for name, expected in provenance()["installedMembers"].items():
         relative = (
@@ -114,3 +116,38 @@ def test_strict_installed_ci_audit_also_admits_optional_cohort():
     assert "--vulnerability-service osv" in command
     assert '--path "$site_packages"' in command
     assert "--ignore-vuln" not in command
+
+
+def test_missing_optional_distribution_skips_before_reading_members(monkeypatch):
+    calls = []
+
+    def missing(name):
+        calls.append(name)
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def forbidden_provenance():
+        pytest.fail("Missing optional cohort must not read member provenance")
+
+    monkeypatch.setattr(importlib.metadata, "distribution", missing)
+    monkeypatch.setitem(globals(), "provenance", forbidden_provenance)
+    with pytest.raises(pytest.skip.Exception, match="requires the observability extra"):
+        test_installed_optional_distribution_matches_reviewed_wheel_members()
+    assert calls == ["opentelemetry-util-http"]
+
+
+def test_missing_optional_distribution_fails_closed_if_skip_returns(monkeypatch):
+    calls = []
+
+    def missing(name):
+        calls.append(name)
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def forbidden_provenance():
+        pytest.fail("Missing optional cohort must not read member provenance")
+
+    monkeypatch.setattr(importlib.metadata, "distribution", missing)
+    monkeypatch.setattr(pytest, "skip", lambda reason: None)
+    monkeypatch.setitem(globals(), "provenance", forbidden_provenance)
+    with pytest.raises(AssertionError, match="Missing optional distribution"):
+        test_installed_optional_distribution_matches_reviewed_wheel_members()
+    assert calls == ["opentelemetry-util-http"]
