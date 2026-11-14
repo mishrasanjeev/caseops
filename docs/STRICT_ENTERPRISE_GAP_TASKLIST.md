@@ -5315,3 +5315,18 @@ See [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#20
 Full current-candidate native acceptance remains0/83 per platform; no earlier
 native pass is transferred, and earlier unclassified network refusals stay
 incomplete. Fresh full source gates and native builds/execution remain due.
+
+
+## 2026-11-14 — Native host/container credential provenance
+
+J20/M22 / US-MOB-01/02/08 remains Partially implemented / Partially fixed /
+NO-GO. The immutable native viewer credential reference cannot simultaneously
+name a host file and the gateway's direct-child mounted runtime file. A separate
+optional runtime reference preserves original producer/native equality, requires
+identical SHA and the admitted namespace, then retains all actual descriptor
+ownership and content guards. Python48/48 and JavaScript181/181 regressions
+pass after preserving both original red reports; mounted-runtime and full
+native acceptance remain open. Exact drafts supporting reads are added through
+actual repository-constructor tests; no additional native writes are granted.
+The original unlogged route refusal remains Inconclusive. See
+[dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--host-and-mounted-credential-identity).

@@ -12,7 +12,7 @@ import threading
 import time
 
 PROFILE = "queue-privacy-v1"
-BASE_SHA256 = "72c99df84d1a13c1cb8ade3902a6c5079a81c17404f71dfbb946b9ebd5832ec7"
+BASE_SHA256 = "3f77c501a8f2e42aa1b6ad0a0a72d14e22ca4f5d065dee0da6e92bb60c861b36"
 CASES = {"QUEUE-01": 24, "PRIVACY-01": 24}
 CAPABILITIES = ("readQueue", "readOwnPrivacy", "changeAnchor", "armPrivacyAckLoss",
                 "readControlReceipt", "readNativeRequest", "closeCaseControls", "closeRunControls")

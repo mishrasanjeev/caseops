@@ -193,3 +193,58 @@ Status: Partially implemented; bug verdict: Partially fixed; release verdict: NO
 A separate checkout reproduces the complete five-case module: four pass/one fails. Change only its exact command expectation, retaining every installed identity/notice/strict-OSV/uv-pip-check/no-ignore assertion. Complete replacement across all eight related dependency/packaging modules passes149cases, zero skips/errors/failures, plus17 unittest subtests. Independent JUnit reconciliation and original/replacement reports are retained under `ci-ca71f1da-otel-command-{red,green}-01/`. Hosted replacement remains required.
 
 This follow-up changes only that API test and documentation. The ca71f1da native build/backend/harness checkout stays frozen for its actual device work; both its Android APK and strict-signed iOS Simulator app built successfully. Exact runtime-input equality must be recorded separately rather than renaming those receipts or claiming these are store archives. The full83-case native inventories remain incomplete.
+
+
+## 2026-11-14 — Host and mounted credential identity
+
+J20/M22 / US-MOB-01/02/08; implementation status: Partially implemented;
+bug verdict: Partially fixed; release verdict: NO-GO until native acceptance.
+
+The frozen ca71f1da Android preparation completed normal API/MFA provisioning,
+the complete producer, and the native primary-account sign-in/UI/logout
+observation. These are preparation observations, not any of the83 acceptance
+cases. The next registration boundary exposed incompatible namespaces: the
+immutable viewer producer and native host reader require the original host
+credential reference, while the gateway reader requires a direct child of its
+mounted runtime state directory. Rewriting the producer receipt or relaxing the
+private reader would erase the required provenance or ownership checks.
+
+An optional `runtimeCredentialEvidence` now names the mounted copy separately.
+Its exact private-reference shape and SHA must agree with the original payload;
+its parent must equal the authority's admitted runtime state directory. The
+actual gateway reader repeats the mapping check against its own root before
+opening anything, then retains the existing descriptor, UID, single-link,
+regular-file, private-mode, bounded-byte and SHA checks. The native host still
+reads the original `credentialEvidence`; immutable viewer equality is unchanged.
+The original and mounted UID values may differ and each belongs to its actual
+filesystem descriptor. Authentication still uses the normal login and MFA APIs
+and verifies tenant, membership, role and capabilities. Controls remain disabled
+by default; registration and mapping do not grant native mutations.
+
+Reproduced Python regression:48 tests, two failures and one error in the original
+candidate (`native-credential-mapping-python-red-01.log`). Replacement complete
+module:48 passed (`native-credential-mapping-python-green-01.log`). It exercises
+actual owned files, separate original/runtime references and normal login,
+plus malformed mapping/hash/root and UID/mode/symlink/content/hardlink refusal.
+The complete JavaScript module reproduced179 passed/two failures, then181
+passed with zero skipped/cancelled/todo (`native-credential-mapping-javascript-
+{red,green}-01.tap`). Public admission refuses malformed mappings before private
+member reads and preserves exact host references on the valid path.
+
+The same repository-constructor regression adds the exact supporting
+`GET /api/matters/{id}/drafts` reads and read-only Counsel Matter hydration,
+including known race, linked, Inbox and viewer parents. No wildcard, invented
+parent or additional mutation route is admitted. An explicit new gateway
+process preparation observed four successful drafts reads and no additional
+route rejections during actual native sign-in/UI/logout, retained in
+`v1-ca71f1da-primary-auth-03-draft-read-reconciliation.json`. The original failed
+attempt did not retain rejected route values: its network root cause remains
+Inconclusive, and its failed report/counters/journals are preserved separately.
+
+Every shared-base pin and the transitive gateway-exporter pin is reconciled to
+the reviewed implementation bytes. Full frozen source verification, fresh
+source-bound native builds, mounted-runtime validation and83 cases on each
+platform remain required. Current-candidate formal acceptance is0/83 Android
+and0/83 iOS. No historical source's case count or receipt is relabelled.
+All evidence paths above are under
+`/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.

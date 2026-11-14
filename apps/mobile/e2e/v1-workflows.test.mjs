@@ -231,9 +231,12 @@ test('gateway plan contains exact returned IDs and never wildcard or manufacture
   const stopped = Error('read observed before decode'); let requestPath;
   const request = async value => { requestPath = value; throw stopped; };
   for (const matter of [...f.v1.records.work.targets.map(value => value.matter), f.v1.records.policy.readOnly.matter,
-    f.v1.records.policy.revokedWork.matter, f.v1.records.access.wall.linkedMatter, f.v1.records.inbox.matter]) {
+    f.v1.records.policy.revokedWork.matter, f.v1.records.access.wall.linkedMatter, f.v1.records.inbox.matter, f.v1.records.counsel.matter,
+    ...f.v1.records.work.targets.flatMap(target => (target.races || []).filter(race => race.matter).map(race => race.matter))]) {
     await assert.rejects(createRepository(request).matter(matter.id), error => error === stopped);
     assert.ok(routes.includes('GET ' + requestPath), 'ACTUAL_MATTER_REPOSITORY_READ_MUST_BE_ADMITTED');
+    await assert.rejects(createRepository(request).drafts(matter.id), error => error === stopped);
+    assert.ok(routes.includes('GET ' + requestPath), 'ACTUAL_DRAFTS_REPOSITORY_READ_MUST_BE_ADMITTED');
   }
   await assert.rejects(createPrivacyRequestsRepository(request).current(), error => error === stopped);
   assert.ok(routes.includes('GET ' + requestPath), 'ACCOUNT_SCREEN_PRIVACY_READ_MUST_BE_ADMITTED');
@@ -627,6 +630,28 @@ test('control receipt polling charges every actual RPC to its literal case ceili
     assert.ok(sent.every(value => value.capability === 'readControlReceipt')); assert.ok(clock < V1_CONTROL_PROTOCOL.completionMs);
     controls.dispose(); await assert.rejects(controls.readWorkspace({ caseId: 'WORK-01' }), /V1_CONTROLS_CLOSED/); assert.equal(sent.length, 14);
   } finally { if (previous === undefined) delete process.env.NODE_EXTRA_CA_CERTS; else process.env.NODE_EXTRA_CA_CERTS = previous; }
+});
+
+test('runtime credential mapping preserves host identity and refuses malformed mapping before protected member reads', async () => {
+  const good = admissionFixture(), registered = good.values.get(good.values.get(good.q.gatewayEvidence.path).v1Registration.path);
+  const originals = structuredClone(registered.actors);
+  for (const actor of Object.values(registered.actors)) actor.runtimeCredentialEvidence = {
+    ...actor.credentialEvidence, path: path.join(path.dirname(registered.authorityEvidence.path), 'mounted-' + actor.membershipId + '.json'), uid: 0,
+  };
+  await admitV1BeforeMembers(good.q, good.dependencies);
+  for (const [name, actor] of Object.entries(registered.actors)) assert.deepEqual(actor.credentialEvidence, originals[name].credentialEvidence);
+  assert.equal(good.log.filter(value => value === 'private-reader').length, 2);
+  for (const change of ['hash', 'root', 'uid', 'extra', 'null']) {
+    const x = admissionFixture(), r = x.values.get(x.values.get(x.q.gatewayEvidence.path).v1Registration.path);
+    const actor = r.actors.member; actor.runtimeCredentialEvidence = structuredClone(actor.credentialEvidence);
+    if (change === 'hash') actor.runtimeCredentialEvidence.sha256 = 'f'.repeat(64);
+    else if (change === 'root') actor.runtimeCredentialEvidence.path = '/other-runtime/credential.json';
+    else if (change === 'uid') actor.runtimeCredentialEvidence.uid = true;
+    else if (change === 'extra') actor.runtimeCredentialEvidence.allowSymlink = true;
+    else actor.runtimeCredentialEvidence = null;
+    await assert.rejects(admitV1BeforeMembers(x.q, x.dependencies));
+    assert.equal(x.log.includes('private-reader'), false);
+  }
 });
 
 test('identity capacity accepts92 and refuses93 before a protected read while reserving the four named create cases', () => {

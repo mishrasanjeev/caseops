@@ -129,6 +129,78 @@ class ControlTests(unittest.TestCase):
             ])
             owner.close(); self.assertEqual(closed, [True])
 
+    def test_mounted_credential_mapping_keeps_original_receipt_and_normal_authentication(self):
+        import copy
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve(); target = root / 'mounted-member.json'
+            data = b'{"email":"synthetic@example.invalid","password":"synthetic-only","company_slug":"synthetic"}'
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                os.write(descriptor, data); uid = os.fstat(descriptor).st_uid
+            finally:
+                os.close(descriptor)
+            value = registration(); value['authorityEvidence']['path'] = str(root / 'authority.json')
+            binding = value['actors']['member']
+            binding['credentialEvidence'] = {'path': '/original-host/immutable-producer.json', 'sha256': M.sha(data), 'uid': uid + 1}
+            original = copy.deepcopy(binding['credentialEvidence'])
+            binding['runtimeCredentialEvidence'] = {'path': str(target), 'sha256': M.sha(data), 'uid': uid}
+            M.validate_registration(value, source='a' * 40, run='synthetic-run', now=1000)
+            http = SimpleNamespace(headers={}, cookies=SimpleNamespace(clear=lambda: None), close=Mock())
+            response = SimpleNamespace(status_code=200, json=lambda: {'company': {'id': binding['companyId']},
+                'membership': {'id': binding['membershipId'], 'role': 'member'}, 'capabilities': ['matters:write'], 'access_token': 'synthetic-only'})
+            with patch.object(M, 'bounded_http', return_value=response) as request:
+                owner = M.RegisteredOwner(value, root, factory=lambda: http)
+                self.assertIs(owner.client('member'), http)
+                self.assertIs(owner.client('member'), http)
+                request.assert_called_once_with(http, 'POST', '/api/auth/login', json.loads(data))
+                owner.close()
+            self.assertEqual(binding['credentialEvidence'], original)
+            http.close.assert_called_once()
+
+    def test_runtime_mapping_hash_namespace_and_shape_refuse_before_private_read(self):
+        import copy
+        value = registration(); actor = value['actors']['member']
+        actor['runtimeCredentialEvidence'] = copy.deepcopy(actor['credentialEvidence'])
+        for change in ('hash', 'root', 'uid', 'extra', 'null'):
+            bad = copy.deepcopy(value); binding = bad['actors']['member']; runtime = binding['runtimeCredentialEvidence']
+            if change == 'hash': runtime['sha256'] = 'f' * 64
+            elif change == 'root': runtime['path'] = '/other-root/member.json'
+            elif change == 'uid': runtime['uid'] = True
+            elif change == 'extra': runtime['allowSymlink'] = True
+            else: binding['runtimeCredentialEvidence'] = None
+            with self.subTest(change=change), patch.object(M, 'checked_json') as read, self.assertRaises(AssertionError):
+                M.validate_registration(bad, source='a' * 40, run='synthetic-run', now=1000)
+            read.assert_not_called()
+            factory = Mock()
+            with patch.object(M, 'checked_json') as read, self.assertRaises(AssertionError):
+                M.RegisteredOwner(bad, Path('/synthetic'), factory=factory).client('member')
+            read.assert_not_called(); factory.assert_not_called()
+
+    def test_runtime_mapping_preserves_descriptor_uid_mode_symlink_and_content_guards(self):
+        import copy
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve(); target = root / 'member.json'
+            data = b'{"email":"synthetic@example.invalid"}'
+            target.write_bytes(data); target.chmod(0o600)
+            value = registration(); value['authorityEvidence']['path'] = str(root / 'authority.json')
+            binding = value['actors']['member']; binding['credentialEvidence']['sha256'] = M.sha(data)
+            binding['runtimeCredentialEvidence'] = {'path': str(target), 'sha256': M.sha(data), 'uid': target.stat().st_uid}
+            for change in ('uid', 'mode', 'symlink', 'content', 'hardlink'):
+                bad = copy.deepcopy(value)
+                if change == 'uid': bad['actors']['member']['runtimeCredentialEvidence']['uid'] += 1
+                elif change == 'mode': target.chmod(0o644)
+                elif change == 'symlink':
+                    target.rename(root / 'original.json'); target.symlink_to(root / 'original.json')
+                elif change == 'content': target.write_bytes(b'{"changed":true}')
+                else: os.link(target, root / 'linked.json')
+                factory = Mock()
+                with self.subTest(change=change), self.assertRaises((AssertionError, OSError)):
+                    M.RegisteredOwner(bad, root, factory=factory).client('member')
+                factory.assert_not_called()
+                if change == 'symlink': target.unlink(); (root / 'original.json').rename(target)
+                if change == 'hardlink': (root / 'linked.json').unlink()
+                target.write_bytes(data); target.chmod(0o600)
+
     def test_missing_untyped_or_wrong_private_uid_refuses_before_private_bytes_or_http(self):
         from unittest.mock import Mock
         with tempfile.TemporaryDirectory() as directory:

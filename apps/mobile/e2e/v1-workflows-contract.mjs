@@ -159,6 +159,16 @@ export function v1PrivateReference(value) {
   assert.ok(Number.isSafeInteger(value.uid) && value.uid >= 0, 'ACTUAL_PRIVATE_DESCRIPTOR_UID_REQUIRED');
   return value;
 }
+export function validateV1ActorPrivateMapping(actor, authorityEvidence) {
+  const original = v1PrivateReference(actor.credentialEvidence);
+  if (Object.hasOwn(actor, 'runtimeCredentialEvidence')) {
+    const runtime = v1PrivateReference(actor.runtimeCredentialEvidence);
+    v1PrivateReference(authorityEvidence);
+    assert.equal(runtime.sha256, original.sha256, 'V1_RUNTIME_CREDENTIAL_HASH_REQUIRED');
+    assert.equal(path.dirname(runtime.path), path.dirname(authorityEvidence.path), 'V1_RUNTIME_CREDENTIAL_NAMESPACE_REQUIRED');
+  }
+  return original;
+}
 export function validateV1FixtureAggregate(value, sourceSha, load = readV1Reference) {
   assert.equal(value.kind, 'actual-complete-v1-fixture-aggregate'); assert.equal(value.observed, true); assert.equal(value.sourceSha, sourceSha);
   assert.deepEqual(value.envelope, V1_FIXTURE_ENVELOPE); assert.equal(value.automaticRetry, false);
@@ -484,8 +494,12 @@ export function strictV1Routes(records) {
   for (const row of records.contracts.pages.flatMap(x => x.contracts)) routes.add(`GET /api/contracts/${v1Identity(row.id)}`);
   const targets = [...records.work.targets.flatMap(target => [target, ...(target.races || []).filter(race => race.matter)]),
     records.policy.readOnly, records.policy.revokedWork];
-  const linkedMatter = v1Identity(records.access.wall.linkedMatter.id);
-  routes.add(`GET /api/matters/${linkedMatter}`); routes.add(`GET /api/matters/${linkedMatter}/workspace`);
+  // Opening a Matter hydrates its raw record, workspace and draft list.
+  // Supporting reads never confer a mutation route on Counsel or viewer parents.
+  for (const matter of [records.access.wall.linkedMatter, records.inbox.matter, records.counsel.matter, ...targets.map(target => target.matter)]) {
+    const prefix = `/api/matters/${v1Identity(matter.id)}`;
+    for (const suffix of ['', '/workspace', '/drafts']) routes.add(`GET ${prefix}${suffix}`);
+  }
   routes.add(`GET /api/contracts/${v1Identity(records.obligations.contractId)}/obligations`);
   routes.add(`GET /api/outside-counsel/matters/${v1Identity(records.counsel.matter.id)}/context`);
   routes.add('GET /api/recipient-inbox');

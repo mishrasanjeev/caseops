@@ -99,6 +99,23 @@ def private_reference(reference):
     return reference
 
 
+
+def actor_runtime_reference(actor, root):
+    """Keep immutable host provenance separate from the mounted descriptor.
+
+    A mount can expose the same bytes under a different path and numeric owner.
+    Neither reference authorizes a different credential payload or a pathname
+    outside the independently admitted runtime state directory.
+    """
+    original = private_reference(actor["credentialEvidence"])
+    if "runtimeCredentialEvidence" not in actor:
+        return original
+    runtime = private_reference(actor["runtimeCredentialEvidence"])
+    assert runtime["sha256"] == original["sha256"], "V1_RUNTIME_CREDENTIAL_HASH_REQUIRED"
+    assert Path(runtime["path"]).parent == root, "V1_RUNTIME_CREDENTIAL_NAMESPACE_REQUIRED"
+    return runtime
+
+
 def create_journal(root, identity):
     assert re.fullmatch(r"[a-f0-9]{16,64}", identity)
     target = root / f"v1-control-events-{identity}.jsonl"
@@ -230,10 +247,11 @@ def validate_registration(value, *, source, run, now):
     assert isinstance(value["ownerRecipes"], list) and len(value["ownerRecipes"]) <= 48
     actors = value["actors"]
     assert set(actors) == {"owner", "member", "second-company"}
+    private_reference(value["authorityEvidence"])
+    runtime_root = Path(value["authorityEvidence"]["path"]).parent
     for actor in actors.values():
         assert UUID.fullmatch(actor["companyId"]) and UUID.fullmatch(actor["membershipId"])
-        private_reference(actor["credentialEvidence"])
-    private_reference(value["authorityEvidence"])
+        actor_runtime_reference(actor, runtime_root)
     assert actors["owner"]["companyId"] == actors["member"]["companyId"] == value["companyId"]
     assert actors["second-company"]["companyId"] != value["companyId"]
     assert len({item["membershipId"] for item in actors.values()}) == 3
@@ -533,7 +551,7 @@ class RegisteredOwner:
         assert actor not in self.failed_actors, "V1_OWNER_AUTHENTICATION_NOT_REPLAYABLE"
         if actor not in self.clients:
             binding = self.registration["actors"][actor]
-            credentials = checked_json(binding["credentialEvidence"], self.root, private=True)
+            credentials = checked_json(actor_runtime_reference(binding, self.root), self.root, private=True)
             http = self.factory()
             try:
                 response = bounded_http(http, "POST", "/api/auth/login", {key: credentials[key] for key in ("email", "password", "company_slug")})

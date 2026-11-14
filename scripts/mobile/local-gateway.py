@@ -201,7 +201,7 @@ def verified_v1_controls(root, run_id, environment=None):
     extra = {}
     if profile in ("queue-privacy-v1", "native-client-extensions-v1"):
         base_path = Path(__file__).resolve().with_name("local-v1-controls.py")
-        base_bytes = runtime_source_bytes(base_path, "72c99df84d1a13c1cb8ade3902a6c5079a81c17404f71dfbb946b9ebd5832ec7")
+        base_bytes = runtime_source_bytes(base_path, "3f77c501a8f2e42aa1b6ad0a0a72d14e22ca4f5d065dee0da6e92bb60c861b36")
         base = ModuleType("caseops_queue_privacy_verified_helpers")
         base.__file__ = str(base_path)
         exec(compile(base_bytes, str(base_path), "exec"), base.__dict__)
