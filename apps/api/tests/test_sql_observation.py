@@ -17,6 +17,7 @@ from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.sql.visitors import InternalTraversal
 
+from caseops_api.db.models import IpDocketRecord, TrademarkApplication
 from tests import sql_observation
 from tests.sql_observation import is_read_only_select
 
@@ -61,6 +62,27 @@ def test_structured_read_only_observation(dialect, _name, statement, expected):
 
 def test_uncompiled_statement_is_not_assumed_read_only():
     assert not is_read_only_select(None)
+
+
+@pytest.mark.parametrize("dialect", [postgresql.dialect(), sqlite.dialect()], ids=["pg", "sqlite"])
+@pytest.mark.parametrize("kind", ["plain", "opaque", "writable"])
+def test_orm_projection_retains_internal_entity_traversal_and_write_rejection(dialect, kind):
+    statement = (
+        select(TrademarkApplication, IpDocketRecord)
+        .join(IpDocketRecord, IpDocketRecord.id == TrademarkApplication.docket_id)
+        .with_only_columns(
+            TrademarkApplication.id, TrademarkApplication.updated_at, maintain_column_froms=True
+        )
+    )
+    if kind == "opaque":
+        statement = statement.where(text("1 = 1"))
+    elif kind == "writable":
+        target = table("never_executed_orm_projection", column("id", Integer))
+        statement = statement.add_cte(delete(target).returning(target.c.id).cte("writable_orm"))
+    compiled = statement.compile(dialect=dialect).statement
+    nodes, _edges = _inventory(compiled)
+    assert any(not isinstance(node, ClauseElement) for node in nodes.values())
+    assert is_read_only_select(compiled) is (kind == "plain")
 
 
 def _shared_cte(depth=12):
@@ -244,7 +266,7 @@ def test_unexamined_late_negatives_beyond_bounds_never_false_accept(bound, _name
     "unsupported", [None, object(), "SELECT 1"], ids=["none", "object", "string"]
 )
 def test_unsupported_children_cannot_prove_read_only(unsupported):
-    with pytest.raises(TypeError, match="ClauseElement"):
+    with pytest.raises(TypeError, match="traversable SQLAlchemy"):
         is_read_only_select(_GraphNode([unsupported]))
 
 
@@ -255,7 +277,7 @@ def test_select_looking_non_clause_root_is_not_accepted():
         def get_children(self):
             return ()
 
-    with pytest.raises(TypeError, match="ClauseElement"):
+    with pytest.raises(TypeError, match="traversable SQLAlchemy"):
         is_read_only_select(Unsupported())
 
 

@@ -7,6 +7,10 @@
   prove recursive CTE reads still work. A crash during observation is not a
   database assertion failure; preserve its phase journal and replay the original
   PostgreSQL journey before attributing or closing the incident.
+  ORM projections can retain traversable entity containers which are not
+  ClauseElement instances. Cover real with_only_columns ORM projections on
+  both dialects, with opaque and writable siblings; core-only CTE tests do not
+  establish that the observer accepts the real mapped query.
 
 - Adding a real browser worker to a unit suite also adds its browser/runtime
   provisioning contract. Pin the job to an OS supported by the locked browser

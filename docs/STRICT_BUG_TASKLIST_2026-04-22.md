@@ -6371,3 +6371,15 @@ CA/hash/license/model checks, with no runtime proxy ENV/history leakage, no
 global config change and original container/volume inventories preserved.
 This is acquisition/cache preparation only. Canonical fresh builds/fullDocker
 and current-head hosted CI remain mandatory; no SkipBuild or timeout waiver.
+
+The first original-case replay is deliberately retained red:84cases=82pureP/
+2PGF,469.37s, complete native phase/XML evidence and unchanged source378255c6.
+Both fresh/analyzed variants hit a too-narrow ClauseElement check, not a SQL
+result/budget assertion. A minimal real ORM with_only_columns projection proves
+SQLAlchemy retains _MemoizedSelectEntities: it is traversable/Visitable but
+not ClauseElement. Six new compiledPG/SQLite plain/opaque/writable cases first
+reproduced6TypeErrors. The classifier now validates the actual traversable
+SQLAlchemy protocol, still rejects arbitrary objects and all DML/opaque/cycle/
+overbound controls. Complete pure file88P/264phases after wholeAPI Ruff passed;
+the second physical PG replay and complete hosted/fullDocker gates remain owed.
+No previous red is relabelled fixed, no original elapsed/work bound changed.

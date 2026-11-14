@@ -1,7 +1,8 @@
 """Structural classification for test-only SQL read observations."""
 
-from sqlalchemy.sql.elements import ClauseElement, TextClause
+from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql.selectable import TextualSelect
+from sqlalchemy.sql.visitors import Visitable
 
 _MAX_UNIQUE_NODES = 20_000
 _MAX_RAW_EDGES = 100_000
@@ -12,8 +13,8 @@ def is_read_only_select(statement):
         return False
 
     def children(node):
-        if not isinstance(node, ClauseElement):
-            raise TypeError("SQL read observation requires ClauseElement nodes")
+        if not isinstance(node, Visitable) or not callable(getattr(node, "get_children", None)):
+            raise TypeError("SQL read observation requires traversable SQLAlchemy nodes")
         return iter(node.get_children())
 
     if getattr(statement, "is_dml", False) or isinstance(statement, (TextClause, TextualSelect)):
@@ -37,8 +38,8 @@ def is_read_only_select(statement):
         edges += 1
         if edges > _MAX_RAW_EDGES:
             raise AssertionError("SQL read observation exceeded raw-edge limit")
-        if not isinstance(node, ClauseElement):
-            raise TypeError("SQL read observation requires ClauseElement nodes")
+        if not isinstance(node, Visitable) or not callable(getattr(node, "get_children", None)):
+            raise TypeError("SQL read observation requires traversable SQLAlchemy nodes")
         node_id = id(node)
         if node_id in active:
             raise AssertionError("SQL read observation encountered a cyclic graph")
