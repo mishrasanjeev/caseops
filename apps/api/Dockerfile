@@ -52,8 +52,8 @@ COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9
 # Exact upstream font sources/OFL notices and shaping-engine notices.
 COPY vendor/pdf-fonts-20261104 /usr/share/doc/caseops-api/third-party/pdf-fonts-20261104
 COPY vendor/uharfbuzz-0.57.0 /usr/share/doc/caseops-api/third-party/uharfbuzz-0.57.0
-# The official dnspython 2.9.0 archives omit their tagged ISC notice.
-COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0
+# Retain the official dnspython 2.9.2 tagged ISC notice beside its provenance.
+COPY vendor/dnspython-2.9.2 /usr/share/doc/caseops-api/third-party/dnspython-2.9.2
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently

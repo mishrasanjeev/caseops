@@ -13,7 +13,7 @@ dependencies = [
   "starlette>=1.3.1",
   "httpx==0.28.1",
   "email-validator==2.3.0",
-  "dnspython>=2.9.0",
+  "dnspython>=2.9.2",
   "psycopg[binary]==3.3.3",
   "PyJWT==2.15.0",
   "urllib3>=2.8.0,<3",
@@ -57,17 +57,17 @@ ocr = [
 ]
 # Observability. All opt-in via CASEOPS_OTEL_ENABLED; the skeleton in
 # core/observability.py degrades gracefully when these are absent so
-# local + CI stay fast. Cloud Run / staging builds install via
-# `pip install .[observability]` in the Dockerfile.
+# local + CI stay fast. Installing the optional libraries does not enable
+# telemetry; the default runtime image currently selects the OCR extra.
 observability = [
-  # CVE-2026-114603: keep the patched API and its exact compatible SDK /
+  # CVE-2026-114603 / CVE-2026-126360: keep the patched API and compatible SDK /
   # instrumentation cohort together; these remain optional and disabled by default.
-  "opentelemetry-api==1.45.1",
-  "opentelemetry-sdk==1.45.1",
-  "opentelemetry-exporter-otlp-proto-http==1.45.1",
-  "opentelemetry-instrumentation-fastapi==0.66b1",
-  "opentelemetry-instrumentation-sqlalchemy==0.66b1",
-  "opentelemetry-instrumentation-httpx==0.66b1",
+  "opentelemetry-api==1.45.2",
+  "opentelemetry-sdk==1.45.2",
+  "opentelemetry-exporter-otlp-proto-http==1.45.2",
+  "opentelemetry-instrumentation-fastapi==0.66b2",
+  "opentelemetry-instrumentation-sqlalchemy==0.66b2",
+  "opentelemetry-instrumentation-httpx==0.66b2",
 ]
 
 [project.scripts]

@@ -57,7 +57,7 @@ def test_manifest_lock_and_installed_optional_cohort_match_the_reviewed_patch():
         "opentelemetry-semantic-conventions",
         "opentelemetry-util-http",
     }
-    expected = {**dict.fromkeys(stable, "1.45.1"), **dict.fromkeys(beta, "0.66b1")}
+    expected = {**dict.fromkeys(stable, "1.45.2"), **dict.fromkeys(beta, "0.66b2")}
     direct = {
         "opentelemetry-api",
         "opentelemetry-sdk",

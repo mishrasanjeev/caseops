@@ -1,5 +1,37 @@
 # CaseOps agent instructions
 
+- Security advisory results are time-bound even for an unchanged source tree.
+  Recheck dependency security immediately before a protected release merge and
+  deployment after long-running acceptance. Retain the original passing audit
+  and a newly disclosed advisory separately; never waive a new failure or
+  relabel earlier tests as running the repaired dependency. Update the exact
+  locked artifact, installed-byte provenance, notices and protocol-boundary
+  regressions together, without broad dependency upgrades.
+  For already security-pinned direct dependencies, check the maintainer's
+  current official security releases/advisories before freezing acceptance:
+  registry and global vulnerability feeds can lag an upstream patch. Record
+  upstream release, upstream disclosure and feed-publication dates separately.
+  Audit the actual installed metadata for all supported optional extras as
+  well as core dependencies. A core-only passing audit cannot clear an
+  observability, OCR or other optional runtime; keep disabled features disabled
+  and retain each audit's installed-set scope and advisory outcomes.
+  Before freezing a dependency repair, inventory every dated manifest/lock/
+  installed-cohort assertion across the repository and execute the complete
+  security test family. Updating one floor test while an adjacent exact-cohort
+  test still pins the old release is incomplete propagation, not a CI outage.
+  Include workflow-command consumers even when their filenames describe a
+  different package. Search references to the changed workflow and step names,
+  not just dependency names and versions. Require the complete hosted CI result
+  before starting another long local Docker gate after a propagation failure;
+  pending shards are not evidence that the changed contract is accepted.
+  Treat fresh-transform-cache collection separately from warm-cache success.
+  Never filter or fake collection to meet a budget. A dynamic TypeScript import
+  can bypass the actual Playwright worker's transpilation path even when list,
+  typecheck and AST tests pass. Prove real worker loading before retaining that
+  optimization; restore the known-good import path if unproved. Keep unrelated
+  performance work separate from a security release. A larger profiling ceiling
+  is not acceptance at the original limit.
+
 - Use representative questions already supplied in a report before declaring
   reproduction input missing. Label newly chosen scenarios as such. Pair factual
   assistant requests with true legal/mixed requests and negated legal language;

@@ -21,7 +21,7 @@ from email_validator import validate_email
 from tests.test_fpdf2_packaging_20261027 import ignored
 
 ROOT = Path(__file__).resolve().parents[3]
-VENDOR = ROOT / "apps/api/vendor/dnspython-2.9.0"
+VENDOR = ROOT / "apps/api/vendor/dnspython-2.9.2"
 
 
 def _metadata(value):
@@ -134,7 +134,7 @@ def test_lock_matches_the_exact_official_patched_artifacts_without_optional_extr
     rows = [row for row in lock["package"] if row["name"] == "dnspython"]
     assert len(rows) == 1
     row = rows[0]
-    assert row["version"] == "2.9.0"
+    assert row["version"] == "2.9.2"
     assert row["source"] == {"registry": "https://pypi.org/simple"}
     assert "dependencies" not in row
     artifacts = _provenance()["artifacts"]
@@ -149,8 +149,15 @@ def test_lock_matches_the_exact_official_patched_artifacts_without_optional_extr
 def test_installed_distribution_is_the_reviewed_unmodified_parser_and_metadata():
     site = Path(dns.name.__file__).parent.parent
     retained = {}
-    for relative, expected in _provenance()["installedMembers"].items():
-        path = site / ("dnspython-2.9.0.dist-info/METADATA" if relative == "METADATA" else relative)
+    members = _provenance()["installedMembers"]
+    assert set(members) == {
+        "METADATA",
+        "dns/name.py",
+        "dns/rdtypes/IN/WKS.py",
+        "dnspython-2.9.2.dist-info/licenses/LICENSE",
+    }
+    for relative, expected in members.items():
+        path = site / ("dnspython-2.9.2.dist-info/METADATA" if relative == "METADATA" else relative)
         retained[relative] = _read_bound(
             path,
             limit=expected["sizeBytes"],
@@ -158,8 +165,9 @@ def test_installed_distribution_is_the_reviewed_unmodified_parser_and_metadata()
         )
     metadata = BytesParser().parsebytes(retained["METADATA"])
     assert metadata.get_all("Name") == ["dnspython"]
-    assert metadata.get_all("Version") == ["2.9.0"]
+    assert metadata.get_all("Version") == ["2.9.2"]
     assert metadata.get_all("License-Expression") == ["ISC"]
+    assert metadata.get_all("License-File") == ["LICENSE"]
     assert metadata.get_all("Requires-Python") == [">=3.11"]
 
 
@@ -221,9 +229,14 @@ def test_actual_email_validator_default_dependency_works_without_dns_network(mon
 
 def test_exact_tagged_isc_notice_is_in_api_copy_contexts_and_deploy_dirty_fence():
     provenance = _provenance()
-    assert provenance["release"]["commit"] == "e790c8f20a67ad439c7aafef2321e161c6028eee"
-    assert provenance["upstreamLicense"]["wheelLicensePresent"] is False
-    assert provenance["upstreamLicense"]["sdistLicensePresent"] is False
+    assert provenance["release"]["commit"] == "854bedd6d641cb42785d26ca674ed2c0f20131e0"
+    assert provenance["release"]["securityFixCommit"] == "a62e1be066da0ed71b5b59f37435bb17cfa0070f"
+    assert provenance["advisory"]["id"] == "GHSA-vvf4-9x63-8xvv"
+    assert provenance["advisory"]["cve"] == "CVE-2026-128089"
+    assert provenance["advisory"]["globalPublishedAt"] == "2026-11-13T20:19:13Z"
+    assert provenance["advisory"]["upstreamPatchedVersion"] == "2.9.2"
+    assert provenance["upstreamLicense"]["wheelLicensePresent"] is True
+    assert provenance["upstreamLicense"]["sdistLicensePresent"] is True
     for name, expected in provenance["bundledFiles"].items():
         _read_bound(
             VENDOR / name,
@@ -238,13 +251,13 @@ def test_exact_tagged_isc_notice_is_in_api_copy_contexts_and_deploy_dirty_fence(
     assert b"Copyright (C) 2001-2017 Nominum, Inc." in license_bytes
     assert b"Copyright (C) Google Inc." in license_bytes
     docker = _text(ROOT / "apps/api/Dockerfile")
-    copy = "COPY vendor/dnspython-2.9.0 /usr/share/doc/caseops-api/third-party/dnspython-2.9.0"
+    copy = "COPY vendor/dnspython-2.9.2 /usr/share/doc/caseops-api/third-party/dnspython-2.9.2"
     assert docker.splitlines().count(copy) == 1
     assert docker.index(copy) < docker.index("RUN uv export")
     for name in (".dockerignore", ".gcloudignore"):
         patterns = _text(ROOT / "apps/api" / name)
         for file in VENDOR.iterdir():
-            relative = "vendor/dnspython-2.9.0/" + file.name
+            relative = "vendor/dnspython-2.9.2/" + file.name
             assert not ignored(relative, patterns)
             assert ignored(relative, patterns + "\nvendor/\n")
     deployment = _text(ROOT / "scripts/deploy-prod.sh")
@@ -256,7 +269,7 @@ def test_exact_tagged_isc_notice_is_in_api_copy_contexts_and_deploy_dirty_fence(
 def test_reviewed_notice_bytes_are_pinned_across_checkout_platforms():
     attributes = _text(ROOT / ".gitattributes").splitlines()
     for name in ("LICENSE", "NOTICE.txt", "provenance.json"):
-        assert "apps/api/vendor/dnspython-2.9.0/" + name + " text eol=lf" in attributes
+        assert "apps/api/vendor/dnspython-2.9.2/" + name + " text eol=lf" in attributes
         assert b"\r\n" not in _read_bound(VENDOR / name)
 
 
