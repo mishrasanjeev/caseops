@@ -193,6 +193,18 @@ def bounded_http(http, method, route, body=None):
     return SimpleNamespace(status_code=status, content=data, json=lambda: value)
 
 
+def validate_manual_workspace_restore(recipe, index):
+    """Only SOURCE-04's normal manual-only restoration may use this global write."""
+    assert recipe["caseId"] == "SOURCE-04" and recipe["capability"] == "applyIpPolicy", "V1_MANUAL_RESTORATION_SCOPE_REQUIRED"
+    assert index > 0
+    prior, item = recipe["requests"][index - 1:index + 1]
+    assert prior["method"] == "GET" and prior["route"] == "/api/ip/workspace/configuration"
+    assert prior["expectedStatuses"] == [200]
+    assert item["method"] == "POST" and item["expectedStatuses"] == [200]
+    assert item.get("body") == {"expected_config_version": {"response": f"{index - 1}.configuration.version"},
+                                "enabled_automations": []}, "V1_MANUAL_ONLY_FRESH_VERSION_REQUIRED"
+
+
 def validate_registration(value, *, source, run, now):
     assert type(value["schemaVersion"]) is int and value["schemaVersion"] == 1 and value["kind"] == "registered-v1-qa-controls"
     assert value["readyForLive"] is True and value["preparedOnly"] is False and value["observed"] is True
@@ -235,8 +247,12 @@ def validate_registration(value, *, source, run, now):
         assert re.fullmatch(r"(?:GET|POST|PUT|PATCH|DELETE) /api/[a-z0-9_/-]{1,300}", route)
         identifiers = re.findall(r"[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}", route)
         assert all(item in ids for item in identifiers)
-        assert identifiers or route in ("GET /api/ip/readiness", "GET /api/ip/workspace/configuration", "PUT /api/ip/workspace/configuration")
+        assert identifiers or route in ("GET /api/ip/readiness", "GET /api/ip/workspace/configuration", "PUT /api/ip/workspace/configuration", "POST /api/ip/workspace/enable")
         assert "/api/recipient-inbox" not in route, "INBOX_STATUS_WRITES_BELONG_TO_NATIVE_ACTOR_ONLY"
+    for recipe in value["ownerRecipes"]:
+        for index, item in enumerate(recipe.get("requests", [])):
+            if item.get("route") == "/api/ip/workspace/enable":
+                validate_manual_workspace_restore(recipe, index)
     return value
 
 
@@ -622,13 +638,19 @@ class RegisteredOwner:
         if recipe.get("cleanupRecipeId"):
             self.pending_cleanup.setdefault(case, set()).add(recipe["cleanupRecipeId"])
         responses = []
-        for item in recipe["requests"]:
+        for index, item in enumerate(recipe["requests"]):
             method, route = item["method"], item["route"]
             assert f"{method} {route}" in self.registration["ownerExactRoutes"]
             assert re.fullmatch(r"(?:GET|POST|PUT|PATCH|DELETE)", method) and route.startswith("/api/") and not any(x in route for x in "?*{}")
             # A body is a reviewed immutable recipe, optionally filled by an
             # earlier acknowledged response. No submitted path or code is run.
+            if route == "/api/ip/workspace/enable":
+                assert case == "SOURCE-04"
+                validate_manual_workspace_restore(recipe, index)
             body = resolve_recipe(item.get("body"), responses)
+            if route == "/api/ip/workspace/enable":
+                assert type(body["expected_config_version"]) is int and body["expected_config_version"] > 0
+                assert body["enabled_automations"] == []
             response = bounded_http(self.client("owner"), method, route, body)
             assert response.status_code in item["expectedStatuses"], "V1_OWNER_API_OUTCOME_UNVERIFIED_NO_REPLAY"
             responses.append(response.json() if response.content else None)

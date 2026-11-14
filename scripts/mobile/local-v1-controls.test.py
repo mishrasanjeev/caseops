@@ -186,6 +186,52 @@ class ControlTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 M.validate_registration(changed, source="a" * 40, run="synthetic-run", now=1000)
 
+    def test_manual_workspace_restoration_admits_only_the_source_fault_cleanup(self):
+        recipe = {"id": "restore-readiness", "caseId": "SOURCE-04", "capability": "applyIpPolicy",
+                  "argumentsSha256": "b" * 64, "requests": [
+                      {"method": "GET", "route": "/api/ip/workspace/configuration", "expectedStatuses": [200]},
+                      {"method": "POST", "route": "/api/ip/workspace/enable", "expectedStatuses": [200],
+                       "body": {"expected_config_version": {"response": "0.configuration.version"}, "enabled_automations": []}}],
+                  "result": {"completed": True}}
+        value = registration(); value["ownerExactRoutes"] = ["GET /api/ip/workspace/configuration", "POST /api/ip/workspace/enable"]
+        value["ownerRecipes"] = [recipe]
+        self.assertIs(M.validate_registration(value, source="a" * 40, run="synthetic-run", now=1000), value)
+        import copy
+        for change in ("automation", "case", "capability", "fixed-version", "wrong-read", "extra-body", "no-read"):
+            bad = copy.deepcopy(value); target = bad["ownerRecipes"][0]
+            if change == "automation": target["requests"][1]["body"]["enabled_automations"] = ["notification_automation"]
+            elif change == "case": target["caseId"] = "WORK-05"
+            elif change == "capability": target["capability"] = "changeChild"
+            elif change == "fixed-version": target["requests"][1]["body"]["expected_config_version"] = 1
+            elif change == "wrong-read": target["requests"][0]["route"] = "/api/ip/readiness"
+            elif change == "extra-body": target["requests"][1]["body"]["provider_keys"] = ["unreviewed"]
+            else: target["requests"].pop(0)
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                M.validate_registration(bad, source="a" * 40, run="synthetic-run", now=1000)
+
+    def test_manual_workspace_restore_uses_fresh_version_and_refuses_automations_before_post(self):
+        import copy
+        recipe = {"id": "restore-readiness", "caseId": "SOURCE-04", "capability": "applyIpPolicy", "argumentsSha256": "b" * 64,
+                  "requests": [{"method": "GET", "route": "/api/ip/workspace/configuration", "expectedStatuses": [200]},
+                               {"method": "POST", "route": "/api/ip/workspace/enable", "expectedStatuses": [200],
+                                "body": {"expected_config_version": {"response": "0.configuration.version"}, "enabled_automations": []}}],
+                  "result": {"completed": True}}
+        value = registration(); value["ownerExactRoutes"] = ["GET /api/ip/workspace/configuration", "POST /api/ip/workspace/enable"]
+        calls = []
+        def request(_client, method, route, body):
+            calls.append((method, route, body))
+            return SimpleNamespace(status_code=200, content=b"{}", json=lambda: {"configuration": {"version": 7}})
+        owner = M.RegisteredOwner(value, Path("/not-read"), factory=lambda: None); owner.client = lambda _actor: object()
+        with patch.object(M, "bounded_http", side_effect=request):
+            self.assertEqual(owner.run_recipe(recipe, "SOURCE-04"), {"completed": True})
+            self.assertEqual(calls[-1], ("POST", "/api/ip/workspace/enable", {"expected_config_version": 7, "enabled_automations": []}))
+            bad = copy.deepcopy(recipe); bad["id"] = "unsafe"; bad["argumentsSha256"] = "c" * 64
+            bad["requests"][1]["body"]["enabled_automations"] = ["notification_automation"]
+            before = len(calls)
+            with self.assertRaises(AssertionError): owner.run_recipe(bad, "SOURCE-04")
+            self.assertEqual([method for method, _route, _body in calls[before:]], ["GET"])
+            self.assertEqual(len(calls), before + 1)
+
     def test_authority_and_marker_refusal_precede_owner_and_claim(self):
         for override in ({"marker": ""}, {"authority": "x" * 64}):
             with self.assertRaises(AssertionError):

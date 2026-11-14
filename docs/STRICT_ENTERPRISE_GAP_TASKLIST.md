@@ -1,3 +1,7 @@
+## November14 — Disposable native workspace restoration admission
+
+Partially implemented / Inconclusive; NO-GO. A pre-execution contract check found the exact normal manual-workspace restoration POST missing from QA owner-route admission. Permit only SOURCE-04/applyIpPolicy with an immediately observed configuration version and no automations or extra body fields; enforce before private admission and HTTP. Complete45-case Python module passes after original43pass/2failure. Actual API/native restoration remains due. See the dated native V1 setup document.
+
 ## November14 — Inbox native identity verification pending
 
 Partially implemented / Inconclusive; NO-GO. Actual Android setup exposed native button hosts outside their RN card's accessibility subtree. Preserve the failed setup and passive frame/tree observation. Add exact per-notification action identities and fail-closed typed/label/frame checks, with single protocol dispatch. Complete V1 replacement180/180 passes locally; native replacement and full83/platform remain unverified. See `docs/mobile/NATIVE_V1_SETUP_2026-11-14.md` for exact evidence and the earlier failed environment attempt.
