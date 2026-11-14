@@ -1,9 +1,20 @@
 # CaseOps agent instructions
 
+- SQL test observers must bound their own work without weakening the measured
+  query contract. Shared CTE objects form a DAG, not a tree: retain and visit
+  each object identity once, charge raw edges before deduplication, and bound
+  nodes/frontier. Keep writable/opaque/cyclic/overbound graphs rejecting and
+  prove recursive CTE reads still work. A crash during observation is not a
+  database assertion failure; preserve its phase journal and replay the original
+  PostgreSQL journey before attributing or closing the incident.
+
 - Adding a real browser worker to a unit suite also adds its browser/runtime
   provisioning contract. Pin the job to an OS supported by the locked browser
   registry, propagate the existing trust outputs to the install, reconcile
-  exact command inventories, and retain failed worker evidence. A floating
+  complete browser-job and command inventories plus their negative controls,
+  and retain failed worker evidence. Propagate additive tester cases into
+  isolated release-owned CLI assertions as well as discovery/native results.
+  A floating
   runner or green local browser cache cannot prove hosted provisioning.
 
 - A new test helper imported transitively by a colocated web unit can become a

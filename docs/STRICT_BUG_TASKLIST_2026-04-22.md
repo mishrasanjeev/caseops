@@ -6340,3 +6340,34 @@ The repair adds that one literal helper to the actual dirty-input path array
 and its shared omission/native-Git regression matrix. No whole test-tree
 allowlist or dirty-source waiver is introduced. Failed evidence remains in
 outputs/bugs5-20261111/ci621-291c-failures-01/api-shard4.log.
+
+November14 follow-up226482: API shard7 retained38 failures,1350P/546S. Complete
+structured results separate37 stale browser-job inventory assertions from one
+release-owned CLI count mismatch97vs101. The new web browser worker is now an
+explicit member of the reviewed job inventory and all three unsupported-label
+negative cases. The CLI assertion includes four dated IP India tester cases.
+Complete workflow plus new-worker modules:266P/0F/0S, not a changed production
+test filter or weaker version guard. Earlier38failures are retained unchanged.
+
+PG shard12 retained a nativeSIGSEGV139, not a failed SQL assertion:68fully-phased
+passes, one setup-only case, no session completion/XML,129intended identities.
+The active case is retained-width/date/category projection[analyzed]. Actual
+merge-source60f1e609 has treec43d302d, identical to PR226482; runtime was Linux
+CPython3.13.18. A partial60s faulthandler trace is inside SQLAlchemy child
+traversal. The shared read-only test observer used a tree traversal over shared
+CTE DAGs, which has separately reproduced bounded exponential expansion on
+compiled PG and SQLite statements. Its repair retains object identities and
+bounds unique nodes20000/rawedges100000/frontier, preserving opaque/DML,
+cycle and overbound rejection. Pure file82P/246phases with all26other consumers
+audited; original PG replay/fullCI remain required. No SQL rewrite, physical
+query/latency-budget change, interpreter pin or disabled faulthandler.
+
+Docker12/13 stopped before app tests on public-wheel download timeouts. Host
+hash-verified Pillow succeeds0.49s; default container fullbody stalls while
+headers succeed. The already-configured Docker Desktop proxy succeeds with
+the exact wheel hash1.18s. One isolated unchanged-source API-target cache build
+with predefined proxy build arguments completed315.9s/137packages and unchanged
+CA/hash/license/model checks, with no runtime proxy ENV/history leakage, no
+global config change and original container/volume inventories preserved.
+This is acquisition/cache preparation only. Canonical fresh builds/fullDocker
+and current-head hosted CI remain mandatory; no SkipBuild or timeout waiver.

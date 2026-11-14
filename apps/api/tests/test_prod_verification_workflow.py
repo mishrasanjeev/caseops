@@ -927,10 +927,10 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
     assert not (tmp_path / "test-results").exists()
     if release_contract == "current":
         assert result.returncode == 0, result.stderr
-        # The four Nov7 cases are mandatory in B5's correctly credentialed roles.
+        # Nov7 remains in B5; four Nov14 official-reference cases belong to tester.
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 3,
-            "partitions": {"tester": 97, "tester-catalog": 18,
+            "partitions": {"tester": 101, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13-a": 40,
                            "test-legal-write-oct13-b": 11},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
@@ -1331,7 +1331,7 @@ def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
 
 
 BROWSER_WORKFLOW_JOBS = {
-    "ci.yml": ("e2e-projects",),
+    "ci.yml": ("web", "e2e-projects"),
     "prod-verify.yml": (
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
