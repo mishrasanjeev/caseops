@@ -6692,3 +6692,17 @@ and inactive callbacks remain retired; previous results never transfer. Preserve
 The preceding Android APK build/postflight passes remain historical source
 proof, with zero acceptance credit for this follow-up. Fresh gates/builds and
 complete independent83-case native suites remain required.
+
+## 2026-11-14 — Native release integration and gate fixture repairs
+
+**Partially fixed / NO-GO.** Preserve six concurrent Copilot Autofix commits
+through20bc62bb and the navigation-instance repair. Restore acknowledged handler
+completion before transport unpatch on interruption; the real new regression
+reproduces the lost-cleanup wait and the complete122-case Python module passes.
+Bind the real navigation helper in the two existing whole-app reader fixtures,
+keeping all assertions. Retain the failed706mobile/1807harness gate and all454
+Python inventories. Reduce redundant physical synchronization only in explicitly
+counted offline saturation fixtures; native synchronization and every original
+security/time/entry bound remain unchanged. [Exact proof and remaining gates](mobile/NATIVE_RELEASE_INTEGRATION_2026-11-14.md)
+keep quiet diagnostic success distinct from a causal diagnosis or native pass.
+Fresh full gates/builds/83-case suites remain required.

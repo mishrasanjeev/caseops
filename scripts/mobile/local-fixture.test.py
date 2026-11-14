@@ -2287,6 +2287,9 @@ class GatewayTests(unittest.TestCase):
     def test_request_helper_completion_deadline_does_not_replay_http(self):
         release_close = threading.Event()
         error = None
+        def handler_completed():
+            return len(self.completed_handlers) == 1
+
         def close_upstream():
             released = release_close.wait(3)
             if not released:
@@ -2304,8 +2307,8 @@ class GatewayTests(unittest.TestCase):
                 elapsed = gateway_module.time.monotonic() - started
             finally:
                 release_close.set()
-            with self.handler_completion:
-                complete = self.handler_completion.wait_for(lambda: len(self.completed_handlers) == 1, timeout=3)
+                with self.handler_completion:
+                    complete = self.handler_completion.wait_for(handler_completed, timeout=3)
             self.assertTrue(complete)
             self.assertIsInstance(error, TimeoutError)
             self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
@@ -2314,6 +2317,53 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(len(self.gateway.state['requests']), 1)
             self.assertEqual(self.gateway.state['requests'][0]['trafficClass'], 'browser-preflight')
             self.assertNotIn('nativeMarker', self.gateway.state['requests'][0])
+
+    def test_completion_deadline_interrupt_finishes_owned_handler_before_transport_unpatch(self):
+        interruption = KeyboardInterrupt("SYNTHETIC_OWNED_HANDLER_INTERRUPT")
+        original_constructor = gateway_module.http.client.HTTPConnection
+        original_handler_wait = self.wait_for_handler
+        original_condition_wait = self.handler_completion.wait_for
+        owned, observations = {}, []
+
+        def interrupt_after_actual_timeout(server_port, peer, deadline):
+            try:
+                original_handler_wait(server_port, peer, deadline)
+            except TimeoutError as error:
+                self.assertEqual(str(error), "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED")
+                # request() reached this boundary only after its real socket
+                # response was read; the acknowledged handler still owns close.
+                with self.handler_completion:
+                    self.assertNotIn((server_port, peer), self.completed_handlers)
+                owned['peer'] = (server_port, peer)
+                owned['transport'] = gateway_module.http.client.HTTPConnection
+                raise interruption
+            self.fail("The actual owned handler did not reach its completion deadline")
+
+        def observe_completion(predicate, timeout):
+            complete = original_condition_wait(predicate, timeout=timeout)
+            if 'peer' in owned:
+                observations.append((
+                    complete,
+                    owned['peer'] in self.completed_handlers,
+                    gateway_module.http.client.HTTPConnection is owned['transport'],
+                ))
+            return complete
+
+        with patch.object(self, "wait_for_handler", side_effect=interrupt_after_actual_timeout), \
+                patch.object(self.handler_completion, "wait_for", side_effect=observe_completion):
+            with self.assertRaises(KeyboardInterrupt) as raised:
+                self.test_request_helper_completion_deadline_does_not_replay_http()
+
+        self.assertIs(raised.exception, interruption)
+        self.assertEqual(observations, [(True, True, True)])
+        self.assertIs(gateway_module.http.client.HTTPConnection, original_constructor)
+        self.assertEqual(owned['transport'].return_value.request.call_count, 1)
+        self.assertEqual(len(self.completed_handlers), 1)
+        self.assertEqual(len(self.gateway.state['requests']), 1)
+        row = self.gateway.state['requests'][0]
+        self.assertEqual((row['method'], row['route'], row['trafficClass']),
+                         ('OPTIONS', '/api/auth/login', 'browser-preflight'))
+        self.assertNotIn('nativeMarker', row)
 
     def test_public_identity_and_preflight_do_not_forge_a_native_marker(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:

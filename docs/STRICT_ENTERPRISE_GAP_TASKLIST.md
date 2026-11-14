@@ -5435,3 +5435,16 @@ reproduce and cover nested/tab/replacement ownership, inactive-reader disposal,
 late results and exact fresh authorization. See [dated remaining native gates](mobile/NATIVE_SOURCE_LIST_OWNERSHIP_2026-11-14.md).
 No old build or native case credit transfers; both platforms still require the
 final frozen source, actual artifacts and complete83-case native inventories.
+
+## 2026-11-14 — Integrated PR/native gate ownership
+
+**Partially implemented / Partially fixed / NO-GO.** Preserve concurrent PR612
+Autofix commits and repair their exceptional cleanup-order regression. Restore
+real navigation-module binding in whole-app reader fixtures; retain the failed
+complete source reports. Explicit offline saturation fixtures preserve2000real
+writes/API charges and final byte identity while avoiding redundant physical
+flushes; production/native synchronization and original deadlines stay intact.
+See [integration evidence and external/hardware prerequisites](mobile/NATIVE_RELEASE_INTEGRATION_2026-11-14.md).
+Final frozen gates, both actual builds and all83native cases per platform remain
+required. Play review and Apple organization review are external pending states,
+not passed release or hardware gates.

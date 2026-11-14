@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
 import { workspaceConductRepository } from "./workspace-conduct.ts";
+import { sourceListEntries } from "./source-navigation.ts";
 import {
   createReadthroughRepository,
   createReadthroughPageLease,
@@ -488,6 +489,8 @@ function readerHarness(loadReader: () => unknown) {
         return { createRepository: () => ({}) };
       case "../domain/source-records":
         return { createSourceRecordsRepository: () => ({}) };
+      case "../domain/source-navigation":
+        return { sourceListEntries };
       case "../domain/workspace-conduct":
         return { workspaceConductRepository };
       case "./useResource":

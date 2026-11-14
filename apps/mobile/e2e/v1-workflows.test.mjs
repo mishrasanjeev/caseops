@@ -1546,6 +1546,32 @@ function evidenceDirectory(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-v1-evidence-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory;
 }
+// Entry/counter/cleanup units retain every real append and verify every sync
+// request. Durability itself is covered by the real-IO happy/fault tests below;
+// avoid issuing 6,000 physical flushes beside unrelated bounded scanners.
+function countedSyncEvidence(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'caseops-v1-counted-sync-'));
+  const requests = []; let journal, flushed = false;
+  try { journal = new V1RunEvidence(directory, { ...fs, fsyncSync(fd) { requests.push(fd); } }); }
+  catch (error) { fs.rmSync(directory, { recursive: true, force: true }); throw error; }
+  // Close owned descriptors before removing files, including on assertion failure.
+  t.after(() => { try { journal.close(); } finally { fs.rmSync(directory, { recursive: true, force: true }); } });
+  return { journal, finish(index) {
+    const stream = journal.streams[index];
+    assert.equal(journal.io.appendFileSync, fs.appendFileSync, 'ENTRY_UNITS_REQUIRE_REAL_APPENDS');
+    assert.equal(requests.length, 2000, 'EVERY_ACCEPTED_ENTRY_REQUIRES_ITS_SYNC_REQUEST');
+    assert.ok(requests.every(fd => fd === stream.fd), 'SYNC_REQUEST_MUST_TARGET_EXACT_WRITTEN_STREAM');
+    assert.equal(stream.events.length, 2000);
+    assert.equal(flushed, false, 'ONE_FINAL_REAL_FLUSH_REQUIRED'); flushed = true;
+    fs.fsyncSync(stream.fd);
+    const manifest = journal.close();
+    assert.equal(manifest.streams[index].fileBytesVerified, true);
+    assert.equal(manifest.streams[index].count, 2000);
+    assert.equal(stream.finalBytes.toString('utf8').trimEnd().split('\n').length, 2000);
+    assert.equal(v1Hash(stream.finalBytes), manifest.streams[index].sha256);
+    return manifest;
+  } };
+}
 test('V1 evidence requires both complete streams with shared ordering and byte-exact hashes', t => {
   const directory = evidenceDirectory(t), journal = new V1RunEvidence(directory);
   journal.write({type:'run_started'});journal.write({type:'browser_step',control:'synthetic'});journal.write({type:'phase_started'});
@@ -1556,11 +1582,11 @@ test('V1 evidence requires both complete streams with shared ordering and byte-e
   assert.deepEqual(journal.close(),manifest); assert.throws(()=>journal.write({type:'late'}));
 });
 for (const type of ['native_ui_action','browser_step']) test(`V1 ${type} stream saturates at its unchanged 2000-entry cap and stops both streams`, t => {
-  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory);
+  const counted=countedSyncEvidence(t),journal=counted.journal;
   for(let i=0;i<2000;i++)journal.write({type});
   assert.throws(()=>journal.write({type}),/V1_EVIDENCE_EVENT_BOUND/);
   assert.throws(()=>journal.write({type:type==='browser_step'?'native_ui_action':'browser_step'}),/V1_EVIDENCE_EVENT_BOUND/);
-  const manifest=journal.close();assert.equal(manifest.status,'incomplete');assert.equal(manifest.totalEvents,2000);
+  const manifest=counted.finish(type==='browser_step'?1:0);assert.equal(manifest.status,'incomplete');assert.equal(manifest.totalEvents,2000);
 });
 test('V1 serialization and byte-bound failures poison the writer without exposing diagnostics', t => {
   for(const event of [{type:'synthetic',value:'x'.repeat(1048576)},(()=>{const x={type:'synthetic'};x.x=x;return x})(),{get type(){throw new Error('DO_NOT_RETAIN')}}]){
@@ -1582,7 +1608,7 @@ test('V1 final evidence verification detects replacement or altered retained byt
   assert.equal(manifest.status,'incomplete');assert.equal(manifest.streams[0].sha256,null);
 });
 test('V1 owned session cleanup survives saturated evidence and never repeats a lost acknowledgement',async t=>{
-  const directory=evidenceDirectory(t),journal=new V1RunEvidence(directory),owner=new V1OwnedSessions(10);let calls=0;
+  const counted=countedSyncEvidence(t),journal=counted.journal,owner=new V1OwnedSessions(10);let calls=0;
   const driver={sessionId:uuid(1),async deleteSession(){calls++}};owner.add(driver);
   for(let i=0;i<2000;i++)journal.write({type:'synthetic'});
   await assert.rejects(owner.remove(driver,()=>journal.write({type:'appium_session'})),/V1_EVIDENCE_EVENT_BOUND/);
@@ -1591,7 +1617,7 @@ test('V1 owned session cleanup survives saturated evidence and never repeats a l
   await assert.rejects(owner.remove(lost),/LOST_ACK/);await owner.close();assert.equal(calls,2);
   const hanging={sessionId:uuid(3),deleteSession(){calls++;return new Promise(()=>{})}};owner.add(hanging);
   const result=await owner.close();assert.equal(result.at(-1).acknowledged,false);assert.equal(calls,3);
-  await owner.close();assert.equal(calls,3);assert.equal(journal.close().status,'incomplete');
+  await owner.close();assert.equal(calls,3);assert.equal(counted.finish(0).status,'incomplete');
 });
 test('V1 session registry bounds actual registrations and rejects concurrent unknown owners',async()=>{
   const owner=new V1OwnedSessions(10);for(let i=0;i<17;i++){const d={sessionId:uuid(i+1),async deleteSession(){}};owner.add(d);assert.throws(()=>owner.add({sessionId:uuid(100)}),/V1_OWNED_SESSION_BOUND/);await owner.remove(d)}
