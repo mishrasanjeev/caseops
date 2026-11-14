@@ -123,11 +123,27 @@ async function segment(c, group, label) {
   c.budget.control(); await dispatchNativeClick(c, element);
   return { recipe, element };
 }
-async function selectedSegment(c, group, label) {
+export async function selectedSegment(c, group, label) {
   const recipe = c.fixture.v1.nativeSelectors.segments[group]?.[label]; assert.ok(recipe);
   const scope = recipe.scopeQuery ? await findQuery(c, recipe.scopeQuery) : c.driver;
   const element = await visible(scope, recipe.query); assert.ok(element);
-  const selected = await element.getAttribute(recipe.selectedAttribute);
+  assert.equal(await element.getAttribute(recipe.labelAttribute), label, 'RETAINED_SEGMENT_LABEL_REQUIRED');
+  let owner = element;
+  if (recipe.selectedOwner !== undefined) {
+    assert.equal(c.platform, 'android');
+    assert.equal(recipe.selectedOwner, 'checkable-label-parent', 'OBSERVED_SEGMENT_SELECTION_OWNER_REQUIRED');
+    assert.equal(recipe.selectedAttribute, 'checked'); assert.equal(recipe.selectedValue, 'true');
+    // Compose exposes the label as a TextView and checked state on its direct
+    // parent. Resolve that exact relationship globally: Android's scoped XPath
+    // root excludes ancestors. Never accept an arbitrary checked sibling.
+    const query = `//*[@text=${xpathText(label)}]/parent::*[@checkable='true']`;
+    owner = await visible(c.driver, query); assert.ok(owner, 'OBSERVED_CHECKABLE_SEGMENT_PARENT_REQUIRED');
+    assert.equal(await owner.getAttribute('class'), recipe.selectedType, 'OBSERVED_SEGMENT_PARENT_TYPE_REQUIRED');
+    assert.equal(await owner.getAttribute('checkable'), 'true');
+    const children = await owner.$$(recipe.query);
+    assert.equal(children.length, 1); assert.equal(children[0].elementId, element.elementId, 'EXACT_SEGMENT_LABEL_PARENT_REQUIRED');
+  }
+  const selected = await owner.getAttribute(recipe.selectedAttribute);
   assert.equal(String(selected), recipe.selectedValue, 'RETAINED_SEGMENT_SELECTION_REQUIRED');
 }
 async function row(c, id, fields) {
@@ -243,11 +259,30 @@ async function saveOnce(c, { target, kind, body, before, allowed = ['confirmed']
   return { id, record: matches[0], workspace: after, acknowledgement: acknowledged };
 }
 const targetAt = (c, index) => c.fixture.v1.records.work.targets[index];
+export async function confirmV1WorkLeave(c, action) {
+  assert.ok(['stay', 'leave'].includes(action), 'EXACT_WORK_LEAVE_ACTION_REQUIRED');
+  if (c.platform === 'android') {
+    assert.equal(await c.driver.getCurrentPackage(), c.fixture.appId, 'WORK_DIALOG_APP_REQUIRED');
+    const title = await read(c, 'id', `${c.fixture.appId}:id/alert_title`);
+    assert.ok(['Leave editor?', 'Save outcome unknown'].includes(title), 'EXACT_WORK_LEAVE_DIALOG_REQUIRED');
+    assert.equal(await read(c, 'id', 'android:id/button2'), 'STAY');
+    assert.equal(await read(c, 'id', 'android:id/button1'), 'LEAVE EDITOR');
+    await tap(c, action === 'stay' ? 'android:id/button2' : 'android:id/button1', { scroll: false });
+  } else {
+    assert.equal(c.platform, 'ios');
+    const titles = [];
+    for (const title of ['Leave editor?', 'Save outcome unknown'])
+      if (await visible(c.driver, selector('ios', 'text', title))) titles.push(title);
+    assert.equal(titles.length, 1, 'EXACT_WORK_LEAVE_DIALOG_REQUIRED');
+    await textTap(c, action === 'stay' ? 'Stay' : 'Leave editor');
+  }
+}
 export async function closeRejectedV1Editor(c, retainedDirtyFields) {
   assert.equal(typeof retainedDirtyFields, 'boolean');
   await tap(c, 'quick-close');
-  if (retainedDirtyFields) await textTap(c, 'Leave editor');
-  else assert.equal((await c.driver.$$(selector(c.platform, 'text', 'Leave editor'))).length, 0, 'PURGED_EDITOR_MUST_NOT_RETAIN_DIRTY_CONFIRMATION');
+  if (retainedDirtyFields) await confirmV1WorkLeave(c, 'leave');
+  else assert.equal((await c.driver.$$(selector(c.platform, c.platform === 'android' ? 'id' : 'text',
+    c.platform === 'android' ? 'android:id/button1' : 'Leave editor'))).length, 0, 'PURGED_EDITOR_MUST_NOT_RETAIN_DIRTY_CONFIRMATION');
   assert.equal(await rawCount(c, 'quick-work-editor'), 0, 'REJECTED_EDITOR_CLOSE_REQUIRED');
 }
 
@@ -479,7 +514,7 @@ export const v1WorkflowScenarios = Object.freeze([
     const before = await traffic(c), arm = await control(c, 'armUnknownResponse', { method: 'POST', route: `/api/matters/${target.matter.id}/tasks`, mode: 'drop-after-successful-upstream-ack', maxUses: 1 });
     const key = `${c.caseId}:creation`; await dispatchV1SaveOnce(c, key); await outcome(c, ['unknown']);
     assert.equal(await rawCount(c, 'quick-save'), 0); assert.equal(await rawCount(c, 'quick-new-request'), 0);
-    await tap(c, 'quick-close'); await textTap(c, 'Stay'); await waitId(c, 'quick-unknown'); await tap(c, 'quick-reload'); await waitId(c, 'quick-unknown');
+    await tap(c, 'quick-close'); await confirmV1WorkLeave(c, 'stay'); await waitId(c, 'quick-unknown'); await tap(c, 'quick-reload'); await waitId(c, 'quick-unknown');
     assert.equal(await rawCount(c, 'quick-new-request'), 0, 'UNKNOWN_CREATION_MUST_NOT_REARM');
     const receipt = await control(c, 'readControlReceipt', { id: arm.id }); assert.equal(receipt.requestsForwarded, 1); assert.equal(receipt.upstreamStatus, 200); assert.equal(receipt.clientResponseWithheld, true); v1Identity(receipt.acknowledgedId);
     const trace = await control(c, 'readNativeRequest', { afterSequence: before.lastSequence, method: 'POST', route: `/api/matters/${target.matter.id}/tasks` });
@@ -487,7 +522,7 @@ export const v1WorkflowScenarios = Object.freeze([
       body: { ...target.create.body, expected_lifecycle_version: prior.matter.lifecycle_version }, expectedStatus: [200] });
     const current = await workspace(c, target.matter), created = current.tasks.filter(x => x.id === receipt.acknowledgedId); assert.equal(created.length, 1); assert.equal(created[0].title, target.create.fields.title);
     assert.deepEqual(current.tasks.filter(row => !prior.tasks.some(old => old.id === row.id)).map(row => row.id), [receipt.acknowledgedId]);
-    await tap(c, 'quick-close'); await textTap(c, 'Leave editor');
+    await tap(c, 'quick-close'); await confirmV1WorkLeave(c, 'leave');
     const finalTrace = await control(c, 'readNativeRequest', { afterSequence: before.lastSequence, method: 'POST', route: `/api/matters/${target.matter.id}/tasks` }); assert.equal(finalTrace.requests.filter(x => x.method === 'POST').length, 1);
     event(c, 'unknown-creation-stay-reload-leave-no-replay', { acknowledgedId: receipt.acknowledgedId, requestsForwarded: 1 });
   } },

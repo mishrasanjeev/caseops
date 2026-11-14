@@ -477,20 +477,24 @@ export function validateV1InboxMutationEvidence(observed, completeJourney, { id,
   return row;
 }
 export function strictV1Routes(records) {
-  const routes = new Set(['GET /api/build', 'GET /api/health', 'GET /api/ip/readiness', 'GET /api/contracts/', 'GET /api/ip/portfolio', 'GET /api/calendar/events', 'GET /api/matters/']);
+  const routes = new Set(['GET /api/build', 'GET /api/health', 'GET /api/ip/readiness', 'GET /api/contracts/', 'GET /api/ip/portfolio', 'GET /api/calendar/events', 'GET /api/matters/',
+    'GET /api/auth/native/sessions', 'GET /api/account/deletion-requests', 'GET /api/account/workspace-conduct', 'GET /api/matter-work-queue']);
   for (const source of records.calendar.sources) routes.add(`GET /api/ip/dockets/${v1Identity(source.docket.id)}/summary`);
   routes.add(`GET /api/ip/dockets/${v1Identity(records.access.wall.docket.id)}/summary`);
   for (const row of records.contracts.pages.flatMap(x => x.contracts)) routes.add(`GET /api/contracts/${v1Identity(row.id)}`);
   const targets = [...records.work.targets.flatMap(target => [target, ...(target.races || []).filter(race => race.matter)]),
     records.policy.readOnly, records.policy.revokedWork];
-  routes.add(`GET /api/matters/${v1Identity(records.access.wall.linkedMatter.id)}/workspace`);
+  const linkedMatter = v1Identity(records.access.wall.linkedMatter.id);
+  routes.add(`GET /api/matters/${linkedMatter}`); routes.add(`GET /api/matters/${linkedMatter}/workspace`);
   routes.add(`GET /api/contracts/${v1Identity(records.obligations.contractId)}/obligations`);
   routes.add(`GET /api/outside-counsel/matters/${v1Identity(records.counsel.matter.id)}/context`);
   routes.add('GET /api/recipient-inbox');
   routes.add(`PATCH /api/recipient-inbox/${v1Identity(records.inbox.notification.id)}`);
-  routes.add(`GET /api/matters/${v1Identity(records.inbox.matter.id)}/workspace`);
+  const inboxMatter = v1Identity(records.inbox.matter.id);
+  routes.add(`GET /api/matters/${inboxMatter}`); routes.add(`GET /api/matters/${inboxMatter}/workspace`);
   for (const { matter, task, hearing } of targets) {
     const prefix = `/api/matters/${v1Identity(matter.id)}`;
+    routes.add(`GET ${prefix}`);
     routes.add(`GET ${prefix}/workspace`);
     if (matter.id !== records.policy.readOnly.matter.id) {
       for (const kind of ['tasks', 'hearings']) routes.add(`POST ${prefix}/${kind}`);

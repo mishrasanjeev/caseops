@@ -101,3 +101,55 @@ Bug verdict: Partially fixed; native verification remains incomplete. The actual
 Adjacent canonical viewer and inbox producers also assumed raw `is_disposed`. A shared strict boundary now validates actual company, UUID, lifecycle version, operational status and `is_active` before producing the internal `is_disposed: false` fixture field. Missing/unknown/closed/disposed status, missing/false activity, a foreign tenant or contradictory derived state remain rejected before any child write/worker. The external base plan must derive restriction from the acknowledged access response rather than MatterRecord. Raw API acknowledgements are not rewritten.
 
 Verification: complete 178-case V1 JavaScript module and the independent Python inventory passed at `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/v1-matter-record-contract-fix-01/`. Existing tests now exercise raw API-shaped matter responses without the derived key; the negative inbox journeys retain zero worker/child dispatch. The first focused attempt exposed an incomplete calendar composition double missing the actual lifecycle field (177 passed, one failed); the double now models the real required field, with original assertions and counts unchanged. Stronger fresh-profile API and native acceptance is still pending.
+
+
+## 2026-11-14 — Actual Android control and read-admission observations
+
+Status: Partially implemented. Bug verdict: Partially fixed. Release verdict: NO-GO.
+The current 19852a38 Android APK and iOS Simulator app both built successfully;
+these are local QA artifacts, not store archives. Normal primary and independent
+viewer Android Firefox/MFA/PKCE/native-identity/logout observations passed in
+`v1-19852a38-android-primary-auth-04/` and
+`v1-19852a38-android-viewer-auth-01/`. They earn no native inventory credit.
+The four-stage normal V1 producer completed all stages without replay; its
+immutable receipts and the earlier failed 723552ba producer remain retained.
+
+Actual Android observations found a TextView label with checked=false and its
+direct android.view.View parent with checkable=true, checked=true. The V1
+retained-selection assertion read only the label. Bind the checked-state read
+to that exact observed parent, require its measured type and the same unique
+label element, and reject unchecked, unrelated, ambiguous or unreviewed owners.
+Do not accept false as selected. iOS and directly selected label recipes keep
+their original path. Separately, the actual Android work-leave Alert exposes
+STAY/LEAVE EDITOR on android:id/button2/button1, rather than mixed-case text.
+Verify the owning app, exact work-dialog title and both captions before one
+protocol click. Preserve direct close for a purged editor and Stay for an
+unknown outcome. The actual repaired functions passed parent-selection and
+Stay/Leave checks on installed source19852a38; this diagnostic is not execution
+of the full seventeen-case inventory on the newer harness.
+
+Source-contract replay of the actual Matter and account-privacy repository
+constructors also found missing exact read routes. Admit only the returned
+Matter IDs and the same four read-only Account/Work routes already used by the
+Core setup; do not add account-deletion writes, wildcard records or manufactured
+Matter routes for an IP docket. The observed earlier gateway rejection counters
+remain incomplete diagnostics: no rejected URL was captured for those dated
+attempts, so this source finding is not a measured attribution of every earlier
+network refusal. The original ledgers and each failed observation remain failed.
+
+Evidence under `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`:
+`inspect-calendar-selected-198-04.json`, `inspect-work-alert-198-01.json`,
+`v1-19852a38-warm-selector-observation-06/actual-work-dialog-repair-proof.json`,
+that attempt's selector-group-1.json and result.json, plus the paired
+selected-segment/work-alert/native-read-admission regression red/green TAP files.
+The separate read-only PostgreSQL proof
+`v1-19852a38-notification-readonly-proof-02/proof.json` verifies the current
+explicit empty hearing channels, zero outbox records and zero provider attempts.
+Its prior UUID-vs-varchar diagnostic failure is retained separately.
+
+The complete V1 JavaScript module now discovers179 tests (one additional
+regression); the complete final changed module passes179/179 with zero failures, skips, cancellations or todos (`native-observed-controls-complete-green-01.tap`).
+Native acceptance is still0/83 Android and0/83 iOS for this candidate. Earlier
+native passes are not transferred. Fresh complete source gates, current-commit
+builds and actual complete native groups remain required before release sign-off.
+Apple organization enrollment remains a separate pending external review.

@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v1Inventory, V1_BUDGETS, V1_CASE_CONTROL_LIMITS, collectV1 } from './v1-workflows-inventory.mjs';
-import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor } from './v1-workflows.mjs';
+import { collectV1Workflows, v1WorkflowScenarios, dispatchV1SaveOnce, readOnlyV1Row, closeRejectedV1Editor, selectedSegment, confirmV1WorkLeave } from './v1-workflows.mjs';
 import { validateV1Fixture, v1CalendarDeadlineIdentity, v1OperationalMatter, v1Version, v1Lifecycle, validateMutationTrace, validateV1MutationEvidence, strictV1Routes,
   createV1CaseBudget, readV1Reference, V1_CONTROL_CAPABILITIES, v1Hash, reconcileV1Sessions, V1_FIXTURE_ENVELOPE, V1_FIXTURE_ADMISSION_HTTP, createV1FixtureAggregate, validateV1InboxMutationEvidence,
   V1_NATIVE_CREATION_RESERVE, v1OracleIdentityEvidence, validateV1OracleIdentityEvidence, requiredV1ControlIdentities, validateV1ControlIdentityCapacity, reconcileV1ControlIdentities } from './v1-workflows-contract.mjs';
@@ -26,6 +26,8 @@ import { admitV1BeforeMembers, observeInstalled, validateAndroidLayoutEvidence, 
 import { createControls, V1_CONTROL_PROTOCOL } from '../../../scripts/mobile/v1-workflows-controls.mjs';
 import https from 'node:https';
 import http from 'node:http';
+import { createRepository } from '../src/domain/repository.ts';
+import { createPrivacyRequestsRepository } from '../src/domain/privacy-requests.ts';
 import { once } from 'node:events';
 import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-route-file.mjs';
 import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
@@ -222,10 +224,23 @@ test('allfive source refusal modes bothworkraces and emptynotification proof are
   for (const change of [f => f.v1.records.access.faults.pop(), f => f.v1.records.work.targets[4].races.pop(),
     f => f.v1.notificationPolicy.explicitEmptyChannelsBackendVerified = false, f => f.v1.notificationPolicy.channels.push('email')]) { const f = fixture(); change(f); assert.throws(() => validateV1Fixture(f, 'ios')); }
 });
-test('gateway plan contains exact returned IDs and never wildcard or manufacturedMatterIP routes', () => {
+test('gateway plan contains exact returned IDs and never wildcard or manufacturedMatterIP routes', async () => {
   const f = fixture(), routes = strictV1Routes(f.v1.records); assert.ok(routes.includes(`GET /api/ip/dockets/${uuid(50)}/summary`));
   assert.equal(routes.includes(`GET /api/matters/${uuid(50)}/workspace`), false); assert.equal(routes.some(x => /[*{}?]/.test(x)), false);
   assert.equal(routes.filter(x => /^GET \/api\/contracts\/[a-f0-9-]{36}$/.test(x)).length, 26);
+  const stopped = Error('read observed before decode'); let requestPath;
+  const request = async value => { requestPath = value; throw stopped; };
+  for (const matter of [...f.v1.records.work.targets.map(value => value.matter), f.v1.records.policy.readOnly.matter,
+    f.v1.records.policy.revokedWork.matter, f.v1.records.access.wall.linkedMatter, f.v1.records.inbox.matter]) {
+    await assert.rejects(createRepository(request).matter(matter.id), error => error === stopped);
+    assert.ok(routes.includes('GET ' + requestPath), 'ACTUAL_MATTER_REPOSITORY_READ_MUST_BE_ADMITTED');
+  }
+  await assert.rejects(createPrivacyRequestsRepository(request).current(), error => error === stopped);
+  assert.ok(routes.includes('GET ' + requestPath), 'ACCOUNT_SCREEN_PRIVACY_READ_MUST_BE_ADMITTED');
+  for (const route of ['GET /api/auth/native/sessions', 'GET /api/account/workspace-conduct', 'GET /api/matter-work-queue']) assert.ok(routes.includes(route));
+  assert.equal(routes.includes(`GET /api/matters/${uuid(9999)}`), false);
+  assert.equal(routes.includes('POST /api/account/deletion-requests'), false);
+
 });
 test('one actual dirtyonly mutation hash with native refresh is accepted', () => {
   const body = { expected_lifecycle_version: 1, due_on: null, expected_updated_at: version, status: 'completed' };
@@ -451,17 +466,37 @@ test('old eleven-case request identity refuses before any evidence or private lo
   await assert.rejects(admitV1BeforeMembers(value.q, value.dependencies), /EXACT_V1_REQUEST_INVENTORY_REQUIRED/); assert.equal(reads, 0);
 });
 test('purged rejected editor closes directly while retained dirty conflict still requires one Leave confirmation', async () => {
-  for (const dirty of [false, true]) {
-    let editor = true, confirmation = false; const clicks = [];
-    const button = elementId => ({ elementId, isDisplayed: async () => true, isEnabled: async () => true });
-    const context = { platform: 'android', budget: createV1CaseBudget(), driver: {
-      $$: async query => query === selector('android', 'id', 'quick-close') && editor ? [button('close')]
-        : query === selector('android', 'text', 'Leave editor') && confirmation ? [button('leave')]
-        : query === selector('android', 'id', 'quick-work-editor') && editor ? [button('editor')] : [],
+  for (const platform of ['android', 'ios']) for (const dirty of [false, true]) {
+    let editor = true, confirmation = false; const clicks = [], appId = 'ai.caseops.mobile.dev.localacceptance';
+    const button = (elementId, text) => ({ elementId, isDisplayed: async () => true, isEnabled: async () => true,
+      getText: async () => text, getAttribute: async key => key === 'text' || key === 'label' ? text : 'true' });
+    const leave = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? 'android:id/button1' : 'Leave editor');
+    const stay = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? 'android:id/button2' : 'Stay');
+    const title = selector(platform, platform === 'android' ? 'id' : 'text', platform === 'android' ? appId + ':id/alert_title' : 'Leave editor?');
+    const context = { platform, fixture: { appId }, budget: createV1CaseBudget(), driver: {
+      getCurrentPackage: async () => appId,
+      $$: async query => query === selector(platform, 'id', 'quick-close') && editor ? [button('close', 'Return to Matter work')]
+        : query === leave && confirmation ? [button('leave', platform === 'android' ? 'LEAVE EDITOR' : 'Leave editor')]
+        : query === stay && confirmation ? [button('stay', platform === 'android' ? 'STAY' : 'Stay')]
+        : query === title && confirmation ? [button('title', 'Leave editor?')]
+        : query === selector(platform, 'id', 'quick-work-editor') && editor ? [button('editor', '')] : [],
       waitUntil: async fn => assert.equal(await fn(), true), elementClick: async id => { clicks.push(id); if (id === 'close' && dirty) confirmation = true; else { editor = false; confirmation = false; } },
     } };
     await closeRejectedV1Editor(context, dirty); assert.deepEqual(clicks, dirty ? ['close', 'leave'] : ['close']); assert.equal(editor, false);
   }
+  for (const invalid of ['package', 'title', 'stay', 'leave']) {
+    let clicks = 0; const appId = 'ai.caseops.mobile.dev.localacceptance';
+    const rows = new Map([[appId + ':id/alert_title', invalid === 'title' ? 'Unrelated dialog' : 'Save outcome unknown'],
+      ['android:id/button1', invalid === 'leave' ? 'DELETE' : 'LEAVE EDITOR'], ['android:id/button2', invalid === 'stay' ? 'CANCEL' : 'STAY']]);
+    const c = { platform: 'android', fixture: { appId }, budget: createV1CaseBudget(), driver: {
+      getCurrentPackage: async () => invalid === 'package' ? 'unrelated.package' : appId,
+      $$: async query => { const id = query.replace(/^id=/, ''); return rows.has(id) ? [{ elementId: id, isDisplayed: async () => true, getText: async () => rows.get(id) }] : []; },
+      waitUntil: async fn => assert.equal(await fn(), true), elementClick: async () => { clicks++; },
+    } };
+    await assert.rejects(confirmV1WorkLeave(c, 'leave')); assert.equal(clicks, 0);
+    await assert.rejects(confirmV1WorkLeave(c, 'unreviewed')); assert.equal(clicks, 0);
+  }
+
 });
 
 function aggregateModel() {
@@ -1290,3 +1325,26 @@ test('V1-PRODUCER-16 worker refuses original cloud nonlocal and changed revision
     routeFile.verifyRestored();
   });
 }
+
+test('Android retained segment selection follows its observed checkable parent and rejects false or unrelated state', async () => {
+  const recipe = { group: 'Event type', label: 'Deadlines', query: 'android=new UiSelector().text("Deadlines").className("android.widget.TextView")',
+    labelAttribute: 'text', selectedOwner: 'checkable-label-parent', selectedType: 'android.view.View', selectedAttribute: 'checked', selectedValue: 'true' };
+  const label = { elementId: 'actual-label', isDisplayed: async () => true, getAttribute: async key => key === 'text' ? 'Deadlines' : 'false' };
+  const state = { checked: 'true', checkable: 'true', class: 'android.view.View' };
+  let children = [label], parents;
+  const parent = { elementId: 'actual-parent', isDisplayed: async () => true, getAttribute: async key => state[key], $$: async () => children };
+  parents = [parent];
+  const c = { platform: 'android', fixture: { v1: { nativeSelectors: { segments: { 'Event type': { Deadlines: recipe } } } } },
+    driver: { $$: async query => query === recipe.query ? [label] : query === `//*[@text='Deadlines']/parent::*[@checkable='true']` ? parents : [] } };
+  await selectedSegment(c, 'Event type', 'Deadlines');
+  for (const [key, bad] of [['checked', 'false'], ['checkable', 'false'], ['class', 'android.widget.TextView']]) {
+    const prior = state[key]; state[key] = bad; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); state[key] = prior;
+  }
+  children = [{ ...label, elementId: 'unrelated-label' }]; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); children = [label];
+  parents = [parent, parent]; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); parents = [];
+  await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines')); parents = [parent];
+  recipe.selectedOwner = 'unreviewed'; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines'));
+  delete recipe.selectedOwner; recipe.selectedAttribute = 'selected';
+  label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'true'; await selectedSegment(c, 'Event type', 'Deadlines');
+  label.getAttribute = async key => key === 'text' ? 'Deadlines' : 'false'; await assert.rejects(selectedSegment(c, 'Event type', 'Deadlines'));
+});

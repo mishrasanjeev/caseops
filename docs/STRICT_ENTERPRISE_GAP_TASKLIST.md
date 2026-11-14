@@ -5218,3 +5218,19 @@ Bug verdict: Partially fixed; native verification remains incomplete. The actual
 Adjacent canonical viewer and inbox producers also assumed raw `is_disposed`. A shared strict boundary now validates actual company, UUID, lifecycle version, operational status and `is_active` before producing the internal `is_disposed: false` fixture field. Missing/unknown/closed/disposed status, missing/false activity, a foreign tenant or contradictory derived state remain rejected before any child write/worker. The external base plan must derive restriction from the acknowledged access response rather than MatterRecord. Raw API acknowledgements are not rewritten.
 
 Verification: complete 178-case V1 JavaScript module and the independent Python inventory passed at `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/v1-matter-record-contract-fix-01/`. Existing tests now exercise raw API-shaped matter responses without the derived key; the negative inbox journeys retain zero worker/child dispatch. The first focused attempt exposed an incomplete calendar composition double missing the actual lifecycle field (177 passed, one failed); the double now models the real required field, with original assertions and counts unchanged. Stronger fresh-profile API and native acceptance is still pending.
+
+
+## 2026-11-14 — Actual Android control and read-admission observations
+
+Partially implemented / Partially fixed / NO-GO. The installed19852a38 Android
+build exposed selection state on a checkable parent and uppercase native
+work-leave Alert buttons. Preserve those failed observations; the repaired
+canonical functions passed the exact parent and Stay/Leave boundaries on that
+installed build. The real Matter/privacy repository constructors independently
+reproduce missing exact read admissions; no wildcard, IP-as-Matter or deletion
+write route is added. The complete changed JavaScript module passes179/179,
+including the additional parent-selection regression and negative dialog guards.
+See [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#2026-11-14--actual-android-control-and-read-admission-observations).
+Full current-candidate native acceptance remains0/83 per platform; no earlier
+native pass is transferred, and earlier unclassified network refusals stay
+incomplete. Fresh full source gates and native builds/execution remain due.
