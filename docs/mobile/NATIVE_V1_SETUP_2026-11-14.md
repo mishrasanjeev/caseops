@@ -358,3 +358,36 @@ counts retain their actual source revision. No native credit transfers to this
 follow-up and no store archive is established by a Simulator build. All named
 evidence paths are under
 `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/`.
+
+
+## 2026-11-14 — preserve failing intrinsic Node child diagnostics
+
+J14/M14, QG-CI; **Partially implemented**, CI defect verdict **Inconclusive**,
+native release **NO-GO**. Hosted Mobile source run43568858887/job132368612254
+failed the real intrinsic Node24 child at `tooling.test.mjs:5932` with exit1 and
+empty stderr. Its synthetic evidence TAP was captured but absent from the
+assertion message. Preserve the original raw/clean logs under
+`native-release-20261111-ZzEIol4V/ci-672b2ed3-mobile-source-failure-01/`.
+
+Include the already bounded child stdout, stderr, signal and overflow in the
+existing failed-exit assertion, after child completion. This changes no child
+arguments, deadlines, guards, case counts or cleanup. It is diagnostic only;
+there is no measured root cause or fixed claim. Full Mac Node24 tooling passes
+456/456 with zero failures/skips; the unchanged two intrinsic CLI siblings pass
+on Mac and official integrity-verified Linux ARM64 Node24.15.0 in an isolated
+Debian container. Retain the earlier missing-dependency, image UID, Node22,
+unshared-bind and Alpine dynamic-loader setup refusals separately; they did
+not reproduce the hosted child failure. Evidence: `source-observer-diagnostic-
+full-tooling-01.tap` and `source-observer-linux-diagnostic-05/` under that same
+owned native evidence root. Exact invocation-owned diagnostic containers are
+independently absent; unrelated containers and native receipts are unchanged.
+
+Source6b44841b remains the actual native execution target. Fresh Android and iOS
+Simulator builds both passed; Android installed APK SHA
+`94eac488236ca37114d777dffedab7c1a41a866f0f6f772c367da9d5b3ab3942`
+matches its build receipt. The fresh disposable V1 owner, governance, member and
+complete producer finished normally; the first current Android browser attempt
+failed before any private credential read with Firefox Secure Connection Failed.
+Preserve `v1-6b44841b-android-primary-auth-01/`; complete known-session absence
+and an empty actual Appium inventory were proved. Current formal native counts
+remain0/83 per platform; compiled builds and setup do not earn case credit.

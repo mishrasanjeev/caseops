@@ -5929,7 +5929,7 @@ for (const [label, extra, compactCount] of [
     // Exercise Node's real controller-to-worker argv serialization. A synthetic
     // NODE_TEST_CONTEXT with direct entry execution does not reproduce it.
     const result = await run({ args: [...extra, '--test', '--test-reporter=tap', path.join(observerRoot, 'apps/mobile/e2e/evidence.test.mjs')] });
-    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.overflow, false);
+    assert.equal(result.code, 0, JSON.stringify({ signal: result.signal, overflow: result.overflow, stdout: result.stdout.toString(), stderr: result.stderr.toString() })); assert.equal(result.signal, null); assert.equal(result.overflow, false);
     const output = result.stdout.toString();
     for (const [name, value] of [['tests', 12], ['pass', 12], ['fail', 0], ['cancelled', 0], ['skipped', 0], ['todo', 0]])
       assert.match(output, new RegExp(`^# ${name} ${value}$`, 'm'));

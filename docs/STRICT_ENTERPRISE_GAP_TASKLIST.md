@@ -1,3 +1,14 @@
+## November14 — retain intrinsic Node24 child failure output
+
+Partially implemented / Inconclusive; NO-GO. Hosted672b2ed3 Mobile source child
+exit1 has no retained TAP in its assertion. Add only bounded captured child
+stdout/stderr/signal/overflow after completion; preserve all existing budgets,
+counts and guards. Full Mac tooling456/456 and both real intrinsic CLI siblings
+on official Linux Node24 pass, so root cause remains unmeasured. Fresh6b native
+builds pass and Android APK is installed; its first current browser attempt
+failed TLS before private admission and is retained with actual session absence.
+Current formal83/platform acceptance remains due. See the dated native setup doc.
+
 ## November14 — CI optional notice audit consumer
 
 Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
