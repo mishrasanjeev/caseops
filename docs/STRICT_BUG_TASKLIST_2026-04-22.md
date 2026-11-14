@@ -6556,3 +6556,12 @@ The narrow harness correction preserves every receipt value, negative guard,
 request count, gesture limit and deadline. Two red regressions became green
 in the complete77-case module; fresh full native and source gates remain open.
 See [retained evidence and limits](mobile/ANDROID_RECEIPT_SEARCH_LATENCY_2026-11-14.md).
+
+
+## 2026-11-14 — CI observability audit contract reconciliation
+
+Status: Partially implemented. Release verdict: NO-GO pending complete native execution and remaining CI.
+
+CI run 43535689936, API coverage shard 13/13 (job 132264142381), exposed the older FastEmbed workflow source assertion still requiring the base-only sync command. The security workflow intentionally installs `--extra observability` so the strict physical installed-metadata audit includes the optional telemetry packages. Reproduced against frozen revision 723552ba: 13 passed, one failed in `test_fastembed_pillow_rebuild_20261021.py`; updated only the expected exact sync command. All existing `uv pip check`, strict OSV, installed-site-package and no-ignore/no-fix guards remain intact.
+
+Verification: complete FastEmbed module plus the unchanged explicit hearing-channel module: 48 passed, zero skips/errors (33.40 seconds), retained JUnit `/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/ci723-contract-green-01.xml`. The second module independently verifies the backend's empty-channel contract; this is not a native or deployed-production acceptance claim. Native builds and executions remain bound to the separate clean 723552ba checkout; this test/document-only follow-up does not alter application, dependency, gateway, build or native harness bytes. Current native acceptance is still incomplete; no historical case credit is transferred.
