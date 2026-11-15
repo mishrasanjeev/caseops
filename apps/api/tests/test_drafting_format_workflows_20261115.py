@@ -105,10 +105,11 @@ def _reference_cases():
 class _ReferenceProvider(MockProvider):
     """Explicit owned offline transport with captured real builder messages."""
 
-    def __init__(self, body: str, citation: str | None):
+    def __init__(self, body: str, citation: str | None, *, structured_response: bool = True):
         super().__init__()
         self.body = body
         self.citation = citation
+        self.structured_response = structured_response
         self.observations = []
 
     def generate(self, messages, *, temperature=0.2, max_tokens=1024):
@@ -117,7 +118,7 @@ class _ReferenceProvider(MockProvider):
             text=json.dumps({
                 "body": self.body, "citations": [self.citation] if self.citation else [],
                 "summary": "Synthetic workflow only.",
-            }),
+            }) if self.structured_response else self.body,
             provider=self.name, model=self.model,
             prompt_tokens=120, completion_tokens=100, latency_ms=1,
         )
@@ -196,9 +197,14 @@ def test_new_format_preview_generation_review_history_and_real_exports(
     # Catalogue identity proves pipeline wiring only, never proposition accuracy.
     body += f"\n[{citation}]"
     provider = _ReferenceProvider(body, citation)
+    preview_body = (
+        ("RECITALS" if family == "deed" else "FACTS")
+        + "\n1. Synthetic supplied facts only; other particulars are [not yet specified]."
+    )
+    preview_provider = _ReferenceProvider(preview_body, None, structured_response=False)
     monkeypatch.setattr("caseops_api.services.drafting.build_provider", lambda **kw: provider)
     monkeypatch.setattr(
-        "caseops_api.services.drafting_preview._default_preview_provider", lambda: provider,
+        "caseops_api.services.drafting_preview._default_preview_provider", lambda: preview_provider,
     )
     from caseops_api.db.models import AuthorityDocument
 
@@ -217,9 +223,12 @@ def test_new_format_preview_generation_review_history_and_real_exports(
     })
     assert preview.status_code == 200, preview.text
     assert preview.json()["step_group"] == "facts"
+    assert preview.json()["template_type"] == template_type
+    assert preview.json()["preview_text"] == preview_body
+    assert len(preview_provider.observations) == 1
     assert (
         "For a partial preview, render only the requested step"
-        in provider.observations[-1][0][0].content
+        in preview_provider.observations[0][0][0].content
     )
 
     created = client.post(f"/api/matters/{matter_id}/drafts", headers=headers, json={
@@ -292,9 +301,10 @@ def test_new_format_preview_generation_review_history_and_real_exports(
     refused = client.post(f"{base}/generate", headers=headers, json={})
     assert refused.status_code == 409, refused.text
     assert _counts(matter_id) == frozen_counts
-    assert len(provider.observations) == 3  # one preview, one generation, one regeneration
-    assert all(marked for _, marked in provider.observations)
-    for messages, _ in provider.observations:
+    assert len(provider.observations) == 2  # one generation, one regeneration
+    observations = [*preview_provider.observations, *provider.observations]
+    assert len(observations) == 3 and all(marked for _, marked in observations)
+    for messages, _ in observations:
         assert "structure only, not legal authority or facts" in messages[0].content
         assert "Selected format: " + template_type in messages[0].content
 

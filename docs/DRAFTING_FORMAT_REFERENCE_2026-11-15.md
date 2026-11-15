@@ -12,6 +12,9 @@ The owner has now explicitly requested PR creation while the shared test window
 is still held. Publish this work as a draft stacked on PR621, with verification
 pending. After the parent merges, retarget to canonical main and complete the
 required checks before marking it ready for review or merging.
+The owner subsequently requested completion through green CI, main merge and
+production deployment. Those steps remain pending the explicit shared-window
+handoff and successful required verification; draft publication is not sign-off.
 
 PRD ownership: J07/M06, MOD-TS-008 and MOD-TS-012; US-017/018/019/020/021,
 FT-025..033. Existing IP drafting retains J08/M08 and its immutable docket,
@@ -218,6 +221,10 @@ cannot establish legal proposition accuracy or real-model format fidelity.
 The shared synthetic fixture now contains 31 workflow scenarios: 14 added forms,
 six deeds, all five civil-plaint choices, and both choices for each existing
 SLP, property-notice and writ family.
+Preview and full-generation fixtures now use their actual separate transport
+contracts: plain partial text for preview and structured JSON for generation.
+Every positive journey asserts the exact partial-preview response and all three
+marked provider observations. These strengthened assertions remain unexecuted.
 All four optional selector families also have authored HTTP admission and
 retained-input generation refusals, with zero provider/retrieval work and
 unchanged persisted counts. These remain unexecuted expectations.
