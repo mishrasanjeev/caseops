@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +5,7 @@ import path from "node:path";
 import { devices, expect, request, test, type APIRequestContext } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 import { localTransportHeaders } from "./support/cost-controls";
 import { runId } from "./support/run-id";
 import { productionDraftPdfJourney } from "./support/draft_pdf_production_20261111";
@@ -50,7 +50,7 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
         title: "Synthetic regular bail application", draft_type: "brief", template_type: "bail",
       });
       const python = process.env.CASEOPS_E2E_PYTHON || path.join(repoRoot, "apps/api/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-      const seeded = spawnSync(python, [path.join(repoRoot, "tests/e2e/support/draft_pdf_fixture_20261111.py")], {
+      const seeded = await runLocalPythonFileFixture(python, path.join(repoRoot, "tests/e2e/support/draft_pdf_fixture_20261111.py"), {
         cwd: repoRoot, encoding: "utf8", timeout: 30_000,
         env: { ...process.env, ...e2eEnv, CASEOPS_LLM_PROVIDER: "mock", PYTHONPATH: path.join(repoRoot, "apps/api/src") },
         input: JSON.stringify({ web: baseURL, api: apiBaseUrl, run, company_id: tenant.company.id,
