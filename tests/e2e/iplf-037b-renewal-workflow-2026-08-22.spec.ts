@@ -6,6 +6,7 @@ import { expect, request, test, type APIRequestContext, type Page } from "@playw
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { runLocalPythonFixture } from "./support/local-python-fixture";
+import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 
 const PASSWORD = "RenewalWorkflow2026!";
 
@@ -108,15 +109,22 @@ async function enableWorkspace(
 }
 
 async function seedRenewal(companyId: string, membershipId: string): Promise<Record<string, string>> {
-  return JSON.parse(
-    await runPython(
-      [path.join(repoRoot, "tests", "e2e", "support", "seed_iplf037b.py")],
-      {
+  const result = await runLocalPythonFileFixture(pythonPath(),
+    path.join(repoRoot, "tests", "e2e", "support", "seed_iplf037b.py"), {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ...e2eEnv,
         CASEOPS_E2E_COMPANY_ID: companyId,
         CASEOPS_E2E_MEMBERSHIP_ID: membershipId,
+        PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH]
+          .filter(Boolean)
+          .join(path.delimiter),
       },
-    ),
-  ) as Record<string, string>;
+    });
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  return JSON.parse(result.stdout.trim()) as Record<string, string>;
 }
 
 async function createTerm(

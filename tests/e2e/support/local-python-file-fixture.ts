@@ -8,9 +8,10 @@ import { runLocalPythonFixture } from "./local-python-fixture";
 type FixtureOptions = Parameters<typeof runLocalPythonFixture>[2];
 const sourceLimit = 16_384;
 const inputLimit = 1_048_576;
-const programs = ["draft_pdf_fixture_20261111.py", "ram_batch3_draft_fixture.py"] as const;
+const programs = ["draft_pdf_fixture_20261111.py", "ram_batch3_draft_fixture.py",
+  "assistant_history_fixture.py", "seed_iplf037b.py"] as const;
 
-// Only these two trusted checkout programs are bundled; admission and execution
+// Only these four trusted checkout programs are bundled; admission and execution
 // remain owned by the core helper, including its physical-interpreter expiry.
 const wrapper = `def _caseops_file_fixture():
     import io, json, sys, types
@@ -38,6 +39,10 @@ const wrapper = `def _caseops_file_fixture():
     exec(main, module.__dict__, module.__dict__)
 _caseops_file_fixture()
 `;
+
+// Core forwards only reviewed fields literally referenced by the inline program.
+// The other three programs use stdin, so must not request these renewal fields.
+const renewalWrapper = "# CASEOPS_E2E_COMPANY_ID CASEOPS_E2E_MEMBERSHIP_ID\n" + wrapper;
 
 function reject(code: string, message: string): never {
   throw Object.assign(new Error(message), { name: "LocalPythonFileFixtureError", code });
@@ -125,7 +130,9 @@ export async function runLocalPythonFileFixture(
     }
     const remaining = Math.min(options.timeout || 30_000, 30_000) - (performance.now() - started);
     if (remaining <= 0) reject("ETIMEDOUT", "Local fixture deadline exceeded.");
-    return await runLocalPythonFixture(command, ["-c", wrapper], { ...options, input: envelope, timeout: remaining });
+    const args = name === "assistant_history_fixture.py" ? ["-I", "-B", "-u"] : [];
+    args.push("-c", name === "seed_iplf037b.py" ? renewalWrapper : wrapper);
+    return await runLocalPythonFixture(command, args, { ...options, input: envelope, timeout: remaining });
   } catch (cause) {
     const error = cause instanceof Error && cause.name === "LocalPythonFileFixtureError" ? cause
       : Object.assign(new Error("Local fixture source inspection failed."), { name: "LocalPythonFileFixtureError", code: "EIO" });

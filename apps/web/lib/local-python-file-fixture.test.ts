@@ -13,6 +13,8 @@ const root = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const support = path.join(root, "tests/e2e/support");
 const pdf = path.join(support, "draft_pdf_fixture_20261111.py");
 const ram = path.join(support, "ram_batch3_draft_fixture.py");
+const assistant = path.join(support, "assistant_history_fixture.py");
+const renewal = path.join(support, "seed_iplf037b.py");
 const options = () => ({ cwd: root, encoding: "utf8" as const, timeout: 30_000,
   env: { NODE_ENV: "test" as const, CASEOPS_ENV: "e2e", CASEOPS_LLM_PROVIDER: "mock" } });
 const success = { pid: 17, status: 0, signal: null, stdout: "result", stderr: "", output: [null, "result", ""] } as const;
@@ -29,15 +31,14 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("finite local Python file fixture adapter", () => {
-  it.each([pdf, ram])("bundles exact public source bytes without evaluating them: %s", async file => {
+  it.each([pdf, ram, assistant, renewal])("bundles exact public source bytes without evaluating them: %s", async file => {
     const result = await runLocalPythonFileFixture("python", file, options());
     expect(result).toEqual(success);
     expect(vi.mocked(runLocalPythonFixture)).toHaveBeenCalledTimes(1);
     const [command, args, delegated] = vi.mocked(runLocalPythonFixture).mock.calls[0];
     expect(command).toBe("python");
-    expect(args).toHaveLength(2);
-    expect(args[0]).toBe("-c");
-    expect(args[1]).not.toContain(fs.readFileSync(file, "utf8"));
+    expect(args.slice(0, -1)).toEqual(file === assistant ? ["-I", "-B", "-u", "-c"] : ["-c"]);
+    expect(args.at(-1)).not.toContain(fs.readFileSync(file, "utf8"));
     expect(Buffer.from(bundle().main_source)).toEqual(fs.readFileSync(file));
     expect(bundle().main_file).toBe(file);
     expect(bundle().original_stdin).toBe("");
@@ -47,6 +48,30 @@ describe("finite local Python file fixture adapter", () => {
     if (file === pdf) {
       expect(bundle().modules).toEqual([{ name: "ram_batch3_draft_fixture", file: ram, source: fs.readFileSync(ram, "utf8") }]);
     } else expect(bundle().modules).toEqual([]);
+  });
+
+  it("requests exactly the two renewal environment fields from core, only for renewal", async () => {
+    for (const file of [pdf, ram, assistant, renewal]) {
+      vi.mocked(runLocalPythonFixture).mockClear();
+      const env = { ...options().env, CASEOPS_E2E_COMPANY_ID: "company-1", CASEOPS_E2E_MEMBERSHIP_ID: "member-1" };
+      await runLocalPythonFileFixture("python", file, { ...options(), env });
+      const [, args, delegated] = vi.mocked(runLocalPythonFixture).mock.calls[0];
+      const code = args.at(-1)!;
+      for (const key of ["CASEOPS_E2E_COMPANY_ID", "CASEOPS_E2E_MEMBERSHIP_ID"]) {
+        expect(code.includes(key)).toBe(file === renewal);
+      }
+      expect(code).not.toMatch(/CASEOPS_E2E_(MATTER_ID|ATTACHMENT_ID|PRIVATE_TEXT|FILENAME)/);
+      expect(delegated.env).toBe(env);
+      expect(bundle().modules).toHaveLength(file === pdf ? 1 : 0);
+    }
+  });
+
+  it.each([assistant, renewal])("reads only the admitted program, with no recursive import discovery: %s", async file => {
+    const open = vi.spyOn(fs, "openSync");
+    await runLocalPythonFileFixture("python", file, options());
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open.mock.calls[0][0]).toBe(file);
+    expect(bundle().modules).toEqual([]);
   });
 
   it.each([false, true])("leaves host/Docker mode, interpreter, environment and capture controls to core (%s)", async docker => {
@@ -109,7 +134,7 @@ describe("finite local Python file fixture adapter", () => {
     for (const log of logs) expect(log).not.toHaveBeenCalled();
   });
 
-  it.each(["other.py", "assistant_history_fixture.py", "../ram_batch3_draft_fixture.py", "draft_pdf_fixture_20261111.py/extra"])(
+  it.each(["other.py", "ip_entitlement_fixture.py", "../ram_batch3_draft_fixture.py", "draft_pdf_fixture_20261111.py/extra"])(
     "refuses a non-admitted source without reading or delegation: %s", async name => {
       const open = vi.spyOn(fs, "openSync");
       const result = await runLocalPythonFileFixture("python", path.join(support, name), options());
@@ -129,12 +154,13 @@ describe("finite local Python file fixture adapter", () => {
     expect(runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
-  it.each([pdf, ram, support, path.dirname(support), root])("rejects symlink/reparse sources and parents: %s", async linked => {
+  it.each([pdf, ram, assistant, renewal, support, path.dirname(support), root])("rejects symlink/reparse sources and parents: %s", async linked => {
     vi.spyOn(fs, "lstatSync").mockImplementation(((file: fs.PathLike) => {
       const value = namedStat(file, { bigint: true });
       return file === linked ? cloneStat(value, { isSymbolicLink: () => true }) : value;
     }) as typeof fs.lstatSync);
-    expect(errorCode(await runLocalPythonFileFixture("python", pdf, options()))).toBe("EINVAL");
+    const target = linked === assistant || linked === renewal ? linked : pdf;
+    expect(errorCode(await runLocalPythonFileFixture("python", target, options()))).toBe("EINVAL");
     expect(runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
