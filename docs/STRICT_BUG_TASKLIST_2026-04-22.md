@@ -1,5 +1,37 @@
 # Strict Bug Task List - 2026-04-22
 
+## November15: Async Fixture Consumer Verification Miss
+
+This was our integration defect, not a product/provider outage or a reason to
+raise a timeout. Candidate64432's full hosted frontend executed all310files:
+3134actual=3099passed/35failed plus one unhandled asynchronous rejection.
+The new142helper units passed while three existing declaration-extracting VM
+harnesses still injected spawnSync. Their extracted source now needed
+runLocalPythonFixture; IP13 also retained synchronous throw assertions and a
+void return type. TypeScript and the new helper-only tests could not catch the
+missing free binding inside transpiled VM strings. This regression entered
+November15; it does not explain every earlier day of the release delay.
+
+Repair all three harnesses under their actual async contract, preserve every
+original boundary/role/identity/cleanup assertion, and cover deferred success,
+rejection and nonzero runner outcomes. Independent adjacent audit inventories
+seven AST/extraction files/four VM consumers/seven execution sites and finds
+no additional concrete affected consumer. Agent red replay reproduced all35
+failures; replacement83cases include all74originals and9new regressions,
+all passed. These are component results, not full-frontend or production proof.
+Complete frontend coverage/typecheck/build must run before the replacement
+long Docker gate; fresh hosted/current-main/deployed acceptance remain required.
+
+Local full18 completed naturally, exit1/source_unchanged/evidence_complete,
+before application builds or PG/browser execution. Its separate blocker was
+actual Docker free space61347078144bytes below68719476736required. Complete
+790-case collection was not execution. A guarded attempt to stop an obsolete
+installer refused after its phase advanced; no process was stopped. Keep the
+storage refusal, all35CI failures and the unhandled rejection separately.
+Owner-authorized cleanup removes only freshly reference-checked historical
+local CaseOps web images; no containers, volumes, databases, shared build
+caches, other projects or native/MacBook work may be removed.
+
 ## November14: Secondary IP References Regressed Primary Desktop Visibility
 
 PR621 candidatecb2fb4b1's hosted desktop job132473139959 completed727cases:

@@ -4386,3 +4386,8 @@ requirements when using the fallback.
   through the real forwarding contract, not only a mocked delegate. Declare
   builder fixtures as exact literal file URLs so dependency-closure gates can
   inventory them; a passing adapter unit cannot replace full Docker replay.
+- Shared async helper changes must update declaration-extracting VM harnesses,
+  their injected dependencies, return types and awaited rejection assertions.
+  TypeScript cannot validate free names inside transpiled VM strings. Run the
+  complete dependent frontend suite, including unhandled-error checks, before
+  freezing a long Docker run; new-helper-only passes are not integration proof.
