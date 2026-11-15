@@ -1,3 +1,15 @@
+## November16 — PR621 integration verification
+
+Partially implemented / Inconclusive; NO-GO. PR612 is merged at main736c15d3;
+PR621 integrates its independently qualified safe timed observer without
+removing fatal reporting, workloads or budgets. Its original hosted crash root
+remains unproven. Native Windows controls exposed text-mode JSONL writes and
+different descriptor/pathname ctime semantics; binary output and shared creation
+identity are corrected with strict mutation/replacement regressions. Six native
+identity controls pass; complete replacement diagnostic/launcher and Linux helper
+modules, fresh hosted CI, canonical Docker and deployed workflows remain due.
+See [dated evidence](mobile/CI_THREAD_DIAGNOSTICS_2026-11-12.md).
+
 ## November14 — settled native Firefox Connect readiness
 
 Partially fixed / NO-GO. Source db725c01's full Android V1 attempt fails after

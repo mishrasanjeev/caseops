@@ -2,6 +2,8 @@
 import faulthandler
 import hashlib
 import json
+import os
+import subprocess
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,6 +86,7 @@ def test_exclusive_publication_preserves_existing_failure_and_never_replays(tmp_
     diagnostics._write(tmp_path, digest, {"original": True})
     path = next(tmp_path.iterdir())
     original = path.read_bytes()
+    assert original == b'{"original":true}\n'
     with pytest.raises(FileExistsError):
         diagnostics._write(tmp_path, digest, {"replacement": True})
     assert path.read_bytes() == original
@@ -96,7 +99,17 @@ def test_symlink_root_refuses_before_writing_and_observer_failure_is_not_silence
     target = tmp_path / "real"
     target.mkdir()
     link = tmp_path / "alias"
-    link.symlink_to(target, target_is_directory=True)
+    if os.name == "nt":
+        # Directory junctions exercise the real noncanonical namespace without
+        # requiring Windows symlink privileges or altering workstation policy.
+        result = subprocess.run(
+            ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert link.is_junction() and link.resolve(strict=True) == target.resolve(strict=True)
+    else:
+        link.symlink_to(target, target_is_directory=True)
     observer = diagnostics.TimedFrames(link, "synthetic-root-refusal", after=0.01)
     observer.start()
     observer.thread.join(2)

@@ -111,3 +111,31 @@ replayed with its real Homebrew GNU binary. This is host control evidence, not
 new PostgreSQL or Android/iOS acceptance. Fresh hosted analysis and independent
 alert verdicts remain required; the original native crash root cause remains
 Inconclusive without a core backtrace.
+
+## 2026-11-16 — PR621 integration and Windows controls
+
+Main `736c15d3fa742411207633b05517645348cca78c` (PR612) is integrated
+locally into PR621. Both branches' tests, the safe timed observer, fatal
+faulthandler, all32 PostgreSQL shards and original bounds remain. The original
+hosted crash remains **Inconclusive**; fresh complete CI is required.
+
+The complete Windows diagnostic/launcher selection collected140 cases:
+137passed/3failed. Windows text-mode `os.open` translated the JSONL newline;
+the noncanonical-root fixture required unavailable symlink privileges.
+Explicit binary output now has an independent literal LF-byte assertion.
+Windows exercises a real directory junction for the same root refusal; POSIX
+retains a real symlink. Complete replacement evidence is pending.
+
+Actual Windows helper admission reproduced different pathname/descriptor ctime
+values with identical positive creation times. Shared helper loaders, private
+metadata comparisons and the gateway constructor now compare their shared
+creation identity while retaining each channel's complete before/after checks.
+Six native Windows controls pass, including actual same-byte pathname replacement
+while the original descriptor stays open, zero execution on rejection, changed
+creation identity refusal and descriptor closure.
+
+The complete mobile helper module is declared for Ubuntu in CI. The retained
+Windows whole-module attempt has49failures/7errors/5declared skips across126
+cases, including POSIX mode/symlink assumptions. It is not Linux acceptance.
+Complete Linux, hosted CI, browser, canonical Docker and deployed workflow proof
+remain pending. Evidence: `C:/Users/mishr/.codex/merge161001`. **NO-GO**.

@@ -121,6 +121,8 @@ def request_headers(values):
 
 
 _SOURCE_METADATA = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+if os.name == "nt":
+    _SOURCE_METADATA += ("st_birthtime_ns",)
 _SOURCE_NAMESPACE_IDENTITY = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")
 
 
@@ -128,7 +130,15 @@ def source_named_identity_equal(descriptor, named, platform_name=os.name):
     # Windows may expose a different device ID through lstat and fstat. This
     # exception is only cross-API: both full descriptor observations and both
     # full named observations must still remain identical in runtime_source_bytes.
-    keys = tuple(key for key in _SOURCE_METADATA if platform_name != "nt" or key != "st_dev")
+    if platform_name == "nt":
+        birth = getattr(descriptor, "st_birthtime_ns", None)
+        if type(birth) is not int or birth <= 0 or birth != getattr(named, "st_birthtime_ns", None):
+            return False
+    # On Windows the pathname's legacy ctime is creation time, whereas the
+    # descriptor can expose change time. Compare their shared creation identity;
+    # retain each channel's complete ctime before/after observations below.
+    keys = tuple(key for key in _SOURCE_METADATA
+                 if platform_name != "nt" or key not in ("st_dev", "st_ctime_ns"))
     return all(getattr(descriptor, key) == getattr(named, key) for key in keys)
 
 
@@ -149,7 +159,8 @@ def runtime_source_bytes(path, expected=None):
     namespace = ancestors()
     named = path.lstat()
     assert stat.S_ISREG(named.st_mode) and not stat.S_ISLNK(named.st_mode)
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                         | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
         before = os.fstat(descriptor)
         assert stat.S_ISREG(before.st_mode) and not stat.S_ISLNK(named.st_mode)
