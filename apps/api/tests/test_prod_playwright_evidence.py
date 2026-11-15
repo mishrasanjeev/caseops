@@ -1912,6 +1912,71 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
     assert seen == [(capture.root, "offline", capture.args)]
 
 
+NOV15_REVIEWED_CASES = (
+    ("app-chromium", "drafting-formats20261115.spec.ts",
+     "Draft formats 2026-11-15 desktop: guided deed choice, version history and exact downloads"),
+    ("app-mobile", "drafting-formats20261115.spec.ts",
+     "Draft formats 2026-11-15 [mobile] phone: "
+     "guided deed choice, version history and exact downloads"),
+)
+
+
+def _nov15_fixture_rows():
+    return [{"id": f"nov15-{ordinal}:{project}:0", "native_spec_id": f"nov15-{ordinal}",
+             "file": file, "title_path": [file, title], "project_id": project,
+             "project_name": project, "expected_status": "passed", "status": "expected",
+             "retries": 0, "repeat_each_index": 0,
+             "results": [{"status": "passed", "retry": 0}]}
+            for ordinal, (project, file, title) in enumerate(NOV15_REVIEWED_CASES)]
+
+
+def test_nov15_requires_both_independent_literal_format_identities():
+    assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 728, "app-mobile": 64}
+    assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
+
+
+@pytest.mark.parametrize("ordinal", [0, 1])
+@pytest.mark.parametrize("damage", [
+    "title", "file", "missing", "duplicate", "project", "retry", "repeat", "expected_skip",
+    "skipped", "failed", "no_result", "second_attempt",
+])
+def test_nov15_each_format_identity_requires_one_exact_passing_attempt(ordinal, damage):
+    rows = _nov15_fixture_rows()
+    row = rows[ordinal]
+    if damage == "title":
+        row["title_path"][-1] += " changed"
+    elif damage == "file":
+        row["file"] = "other.spec.ts"
+    elif damage == "missing":
+        rows.pop(ordinal)
+    elif damage == "duplicate":
+        rows.append(copy.deepcopy(row))
+    elif damage == "project":
+        row["project_id"] = row["project_name"] = "other-project"
+    elif damage == "retry":
+        row["retries"] = 1
+    elif damage == "repeat":
+        row["repeat_each_index"] = 1
+    elif damage == "expected_skip":
+        row["expected_status"] = "skipped"
+    elif damage in {"skipped", "failed"}:
+        row["results"][0]["status"] = damage
+    elif damage == "no_result":
+        row["results"] = []
+    else:
+        row["results"].append({"status": "passed", "retry": 1})
+    with pytest.raises(evidence.EvidenceError, match="nov15_required_case"):
+        evidence._nov15_rows(rows, execution=True)
+
+
+def test_nov15_local_format_mutation_is_refused_from_production_inventory():
+    canonical = {"tests": _tester_canonical_rows()}
+    canonical["tests"][0]["file"] = "drafting-formats20261115.spec.ts"
+    with pytest.raises(evidence.EvidenceError, match="local_draft_quality_in_production_inventory"):
+        evidence._tester_inventory(canonical)
+
+
 NOV14_REVIEWED_CASES = (
     ("app-chromium", "ram-2026-11-14-prod.spec.ts",
      "IP India content and form references /app/ip/registry desktop"),
@@ -3009,7 +3074,7 @@ BATCH5_BUGS_CASES = (
 
 
 def _app_reviewed_counts():
-    return {project: count + 3 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
+    return {project: count + 4 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -3155,6 +3220,7 @@ def app_capture(capture):
                  for file, pair in evidence.BATCH5_CASE_COUNTS.items()
                  for number in range(pair[width])]
         added += [(file, title) for owner, file, title in NOV14_REVIEWED_CASES if owner == project]
+        added += [(file, title) for owner, file, title in NOV15_REVIEWED_CASES if owner == project]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]

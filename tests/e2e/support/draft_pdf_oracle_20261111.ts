@@ -4,11 +4,26 @@ export type DraftPdfProfile = {
   margin_left_mm: number; margin_right_mm: number; margin_top_mm: number; margin_bottom_mm: number;
   page_number_format: string;
 };
-export type DraftPdfSource = { title: string; body: string; citations: string[]; reviewRequired?: boolean };
+export type DraftPdfSource = { title: string; body: string; citations: string[]; reviewRequired?: boolean; presentationFamily?: string };
 export type DraftPdfRun = { text: string; left: number; top: number; right: number; bottom: number; contrast: number; darkPixels: number };
 export type DraftPdfPageProbe = { width: number; height: number; runs: DraftPdfRun[] };
 
 export const canonicalDraftText = (text: string) => text.normalize("NFC").replace(/\s+/gu, "");
+
+export function presentationFamilyFromManifest(manifest: unknown): string | undefined {
+  if (!manifest || typeof manifest !== "object" || !("presentation_reference" in manifest)) return undefined;
+  const ref = manifest.presentation_reference;
+  if (!ref || typeof ref !== "object"
+    || !("schema" in ref) || ref.schema !== "caseops.presentation-reference.v1"
+    || !("version" in ref) || ref.version !== "owner-manual-2026-11-15-v1"
+    || !("source_sha256" in ref) || ref.source_sha256 !== "cc50806727ff07306d6fe0b0bceee500061edb10577b9c350b63e31ce35c6cd0"
+    || !("legal_rules_verified" in ref) || ref.legal_rules_verified !== false
+    || !("family" in ref) || typeof ref.family !== "string"
+    || !["generic", "registry", "pleading", "application", "notice", "correspondence_reply", "deed", "affidavit", "reply", "authorization", "chronology", "index"].includes(ref.family)) {
+    throw new Error("Unsupported saved presentation reference in PDF acceptance.");
+  }
+  return ref.family;
+}
 
 export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfProfile, source: DraftPdfSource) {
   const result = { sourceComplete: false, titleComplete: false, citationsComplete: false,
@@ -42,7 +57,10 @@ export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfPro
     texts.push(printable.join(""));
   }
   const actual = canonicalDraftText(texts.join("")), body = canonicalDraftText(source.body);
-  const notice = canonicalDraftText(`Layout preset: ${profile.key}. Court rules unverified; lawyer review required.`);
+  const notice = canonicalDraftText(source.presentationFamily
+    && ["notice", "correspondence_reply", "deed"].includes(source.presentationFamily)
+    ? "Lawyer review required before signing, registration or service."
+    : `Layout preset: ${profile.key}. Court rules unverified; lawyer review required.`);
   const boundary = actual.indexOf(notice);
   let renderedBody = boundary >= 0 ? actual.slice(boundary + notice.length) : "";
   if (source.reviewRequired) {
@@ -50,7 +68,8 @@ export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfPro
     renderedBody = renderedBody.startsWith(review) ? renderedBody.slice(review.length) : "";
   }
   result.sourceComplete = body.length > 0 && boundary >= 0 && renderedBody.startsWith(body);
-  result.titleComplete = Boolean(canonicalDraftText(source.title)) && actual.slice(0, Math.max(0, boundary)).includes(canonicalDraftText(source.title));
+  result.titleComplete = Boolean(canonicalDraftText(source.title))
+    && (source.presentationFamily ? renderedBody : actual.slice(0, Math.max(0, boundary))).includes(canonicalDraftText(source.title));
   let tail = result.sourceComplete ? renderedBody.slice(body.length) : "";
   const authorities = tail.indexOf(canonicalDraftText("Authorities cited"));
   result.citationsComplete = source.citations.length === 0 || authorities >= 0;

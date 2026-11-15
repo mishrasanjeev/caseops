@@ -284,6 +284,17 @@ publication is established by these builds.
 
 ## 2026-11-11 - Workbook 5
 
+November15 separate owner request: apply the supplied pleading/conveyancing
+formats throughout active drafting and document output. Scope J07/M06,
+US-017..021/FT-025..033. Format-source inventory and first source integration
+are prepared, including46 prospective guided types, shared Word/PDF source
+layout and unexecuted API/render/browser regression sources. Generated client,
+full source review, actual visual checks, complete test execution and release
+verification remain in progress. Intended browser inventory792 is not a run. Do not
+claim the book's example facts or historical law as current matter evidence.
+See `DRAFTING_FORMAT_REFERENCE_2026-11-15.md`. Existing bug work and the active
+release owner's test window remain separate.
+
 November14 human continuation: PR621 remains open and unshipped. The patch
 adds structural drafting-quality and dated official IP India reference
 acceptance under the current PRD, without claiming legal accuracy, complete

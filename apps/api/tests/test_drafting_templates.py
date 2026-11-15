@@ -53,15 +53,9 @@ def test_registry_has_one_entry_per_template_type() -> None:
     types_in_registry = {s.template_type for s in schemas}
     expected = {t.value for t in DraftTemplateType}
     assert types_in_registry == expected
-    # 31 templates after MOD-LSE-3 (2026-05-03) added the SC + escalation
-    # pack (special_leave_petition, supreme_court_appeal, review_petition,
-    # curative_petition, transfer_petition, contempt_petition,
-    # interim_relief_application, condonation_of_delay,
-    # exemption_application, synopsis_list_of_dates,
-    # filing_index_checklist) on top of the 20 previously-registered
-    # templates. Update this count + the route test below in lockstep
-    # when a new template lands.
-    assert len(schemas) == 31
+    # Original 31 + six-instrument conveyancing + 14 additional manual forms.
+    # Keep the independent route count below aligned with the exact inventory.
+    assert len(schemas) == 46
 
 
 def test_every_template_has_fields_and_step_groups() -> None:
@@ -410,9 +404,8 @@ def test_facts_model_mapping_matches_enum() -> None:
 # ---------------------------------------------------------------
 
 
-def test_list_templates_route_returns_all_thirty_one(client: TestClient) -> None:
-    """31 templates after MOD-LSE-3 (2026-05-03) added the SC +
-    escalation pack on top of the 20 templates from PG-005 Sprint 2."""
+def test_list_templates_route_returns_all_forty_six(client: TestClient) -> None:
+    """Discovery includes every existing and owner-reference guided format."""
     from tests.test_auth_company import auth_headers, bootstrap_company
 
     bootstrap = bootstrap_company(client)
@@ -422,7 +415,7 @@ def test_list_templates_route_returns_all_thirty_one(client: TestClient) -> None
     resp = client.get("/api/drafting/templates", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["templates"]) == 31
+    assert len(body["templates"]) == 46
     types = {t["template_type"] for t in body["templates"]}
     assert types == {t.value for t in DraftTemplateType}
 

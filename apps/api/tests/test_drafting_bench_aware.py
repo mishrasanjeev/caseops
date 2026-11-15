@@ -9,6 +9,7 @@ templates that are intentionally outside the set
 """
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -34,6 +35,16 @@ def _matter() -> Matter:
         client_name="Sample",
         opposing_party="State",
         description="Sample matter for bench-aware drafting tests.",
+    )
+
+
+def _non_bench_draft(matter: Matter, template_type: str) -> Draft:
+    # The six-instrument selector is mandatory even in a direct builder probe.
+    # Keep the existing absence assertions and exercise an admitted instrument.
+    return Draft(
+        id="d-test", matter_id=matter.id, template_type=template_type,
+        facts_json=json.dumps({"instrument_type": "Gift deed"})
+        if template_type == "conveyancing_deed" else None,
     )
 
 
@@ -107,7 +118,7 @@ def test_predictive_addendum_does_not_fire_for_non_bench_templates(
     caveat) must NEVER receive the predictive addendum, even with the
     workspace flag on — bench tendencies are not relevant."""
     matter = _matter()
-    draft = Draft(id="d-test", matter_id=matter.id, template_type=template_type)
+    draft = _non_bench_draft(matter, template_type)
     messages = _build_messages(
         matter, draft, retrieved=[], focus_note=None,
         predictive_bench_enabled=True,
@@ -153,7 +164,7 @@ def test_bench_history_block_skipped_for_non_bench_template(
     the BENCH HISTORY CONTEXT block for templates outside the set —
     drafting a vakalat with bench analytics would be obviously wrong."""
     matter = _matter()
-    draft = Draft(id="d-test", matter_id=matter.id, template_type=template_type)
+    draft = _non_bench_draft(matter, template_type)
     messages = _build_messages(
         matter, draft, retrieved=[], focus_note=None,
         bench_context=_fake_bench_context(ctx_quality="high"),

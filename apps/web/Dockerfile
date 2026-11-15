@@ -79,6 +79,7 @@ COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/
 # The communications contract unit parses its dated journey as an AST input.
 # Retain that source and its exact transitive imports in the builder only.
 COPY tests/e2e/ram-2026-11-11-bugs.spec.ts /app/tests/e2e/ram-2026-11-11-bugs.spec.ts
+COPY tests/e2e/drafting-formats20261115.spec.ts /app/tests/e2e/drafting-formats20261115.spec.ts
 COPY tests/e2e/support/env.ts /app/tests/e2e/support/env.ts
 COPY tests/e2e/support/ram-bugs4.ts /app/tests/e2e/support/ram-bugs4.ts
 COPY tests/e2e/support/canonical-api-validators.ts /app/tests/e2e/support/canonical-api-validators.ts

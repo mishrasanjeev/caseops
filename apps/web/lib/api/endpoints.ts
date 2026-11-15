@@ -6608,7 +6608,22 @@ export type DraftTemplateType =
   | "condonation_of_delay"
   | "exemption_application"
   | "synopsis_list_of_dates"
-  | "filing_index_checklist";
+  | "filing_index_checklist"
+  | "conveyancing_deed"
+  | "injunction_breach_application"
+  | "indigent_person_application"
+  | "execution_application"
+  | "restitution_conjugal_rights"
+  | "judicial_separation_petition"
+  | "mutual_consent_divorce"
+  | "letters_of_administration"
+  | "succession_certificate"
+  | "cheque_bounce_complaint"
+  | "maintenance_application"
+  | "consumer_complaint"
+  | "domestic_violence_complaint"
+  | "government_suit_notice"
+  | "legal_notice_reply";
 
 export type DraftingFieldKind =
   | "string"

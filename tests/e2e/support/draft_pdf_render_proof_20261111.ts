@@ -2,7 +2,13 @@ import { expect, type Page } from "@playwright/test";
 
 import { assessDraftPdf, collectDraftPdfPage, type DraftPdfPageProbe, type DraftPdfProfile, type DraftPdfSource } from "./draft_pdf_oracle_20261111";
 
-export async function assertDraftPdfRender(page: Page, profile: DraftPdfProfile, source: DraftPdfSource) {
+export async function assertDraftPdfRender(
+  page: Page,
+  profile: DraftPdfProfile,
+  source: DraftPdfSource,
+  hasTouch = false,
+  capturePage?: (index: number) => Promise<void>,
+) {
   await expect(page.getByTestId("draft-download-pdf")).toBeEnabled();
   await expect(page.locator("[data-testid=draft-pdf-preview] canvas")).toBeVisible();
   const pages = Number((await page.getByTestId("draft-pdf-pagination").innerText()).split(" of ")[1]);
@@ -15,7 +21,13 @@ export async function assertDraftPdfRender(page: Page, profile: DraftPdfProfile,
     await expect(region).toHaveAttribute("data-text-page", String(index));
     await page.locator("[data-testid=draft-pdf-preview] canvas").scrollIntoViewIfNeeded();
     probes.push(await page.evaluate(collectDraftPdfPage));
-    if (index < pages) await page.getByRole("button", { name: "Next PDF page" }).click();
+    // Callers opt in only for owned synthetic documents; production probes
+    // retain their existing private-text/media policy.
+    await capturePage?.(index);
+    if (index < pages) {
+      const next = page.getByRole("button", { name: "Next PDF page" });
+      if (hasTouch) await next.tap(); else await next.click();
+    }
   }
   const assessment = assessDraftPdf(probes, profile, source);
   // Boolean assertions keep private draft text out of test failure reports.

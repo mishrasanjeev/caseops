@@ -163,6 +163,18 @@ no release AAB, review submission or publication is established by these fixes.
 
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+November15 J07/M06, MOD-TS-008/012: owner-supplied pleading/conveyancing formats
+are being integrated on a separate branch. Original31 guided types receive
+explicit format decisions; one additional guided conveyancing type offers the
+six source deed families, alongside14 missing manual forms (46 guided types).
+Civil-plaint choices and existing civil/criminal SLP source pages are explicit.
+Civil/criminal writs and general/quit property notices now have optional guided
+choices and specific presentation instructions; source tests remain unexecuted.
+Preview, generation, regeneration, discovery, facts,
+typed clients and Word/PDF presentation must be reconciled before acceptance.
+Source preparation is not executed coverage or current-law certification. See
+`DRAFTING_FORMAT_REFERENCE_2026-11-15.md`; all new acceptance remains pending.
+
 November14 J07/M06 draft-quality and existing J08/M08 IP acceptance are extended
 in the PRD. Candidate bounded multiline authority context, document-type review
 findings and seven dated official IP India references are not deployed proof.

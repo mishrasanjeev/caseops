@@ -229,6 +229,32 @@ _STRUCTURE_HEADINGS_BY_TEMPLATE: dict[str, list[tuple[str, list[str]]]] = {
 
 _STRUCTURE_HEADINGS = _PLEADING_RUBRIC  # Back-compat for any external readers.
 
+# These non-court formats must not earn/lose points for a plaint's prayer.
+# Lexical structure scores remain distinct from legal validity and completeness.
+_STRUCTURE_HEADINGS_BY_TEMPLATE.update({
+    "conveyancing_deed": [
+        ("instrument", ["DEED", "DISSOLUTION OF PARTNERSHIP"]),
+        ("parties", ["BETWEEN", "PARTIES", "IN FAVOUR OF"]),
+        ("recitals", ["RECITALS", "WHEREAS"]),
+        ("terms", ["OPERATIVE TERMS", "NOW THIS DEED", "AGREED AS FOLLOWS"]),
+        ("execution", ["EXECUTION", "IN WITNESS", "SIGNATURE"]),
+    ],
+    "government_suit_notice": [
+        ("sender", ["FROM:", "COUNSEL FOR", "ADVOCATE FOR"]),
+        ("recipient", ["TO:", "ADDRESSEE"]),
+        ("subject", ["SUBJECT:", "RE:"]),
+        ("facts", ["1.", "FACTS", "BACKGROUND"]),
+        ("demand", ["REQUEST", "DEMAND", "RELIEF"]),
+    ],
+    "legal_notice_reply": [
+        ("recipient", ["TO:", "ADDRESSEE"]),
+        ("notice_reference", ["YOUR NOTICE", "NOTICE DATED", "RE:"]),
+        ("objections", ["PRELIMINARY OBJECTIONS", "PRELIMINARY RESPONSE"]),
+        ("reply", ["PARAGRAPH-WISE", "PARA-WISE", "REPLY ON MERITS"]),
+        ("closing", ["SIGNATURE", "YOURS", "COUNSEL FOR", "ADVOCATE FOR"]),
+    ],
+})
+
 __all__ = ["_STRUCTURE_HEADINGS"]
 
 
@@ -287,6 +313,13 @@ def _iter_scenarios(max_per_type: int) -> list[tuple[str, str, dict]]:
                 continue
             seen[type_key] += 1
             out.append((type_key, s["key"], s["facts"]))
+    from caseops_api.scripts.drafting_reference_fixtures import reference_scenarios
+
+    for template, key, facts in reference_scenarios(_load("reference_formats.json")):
+        seen.setdefault(template, 0)
+        if seen[template] < max_per_type:
+            seen[template] += 1
+            out.append((template, key, facts))
     return out
 
 

@@ -75,6 +75,21 @@ class DraftTemplateType(StrEnum):
     EXEMPTION_APPLICATION = "exemption_application"
     SYNOPSIS_LIST_OF_DATES = "synopsis_list_of_dates"
     FILING_INDEX_CHECKLIST = "filing_index_checklist"
+    CONVEYANCING_DEED = "conveyancing_deed"
+    INJUNCTION_BREACH_APPLICATION = "injunction_breach_application"
+    INDIGENT_PERSON_APPLICATION = "indigent_person_application"
+    EXECUTION_APPLICATION = "execution_application"
+    RESTITUTION_CONJUGAL_RIGHTS = "restitution_conjugal_rights"
+    JUDICIAL_SEPARATION_PETITION = "judicial_separation_petition"
+    MUTUAL_CONSENT_DIVORCE = "mutual_consent_divorce"
+    LETTERS_OF_ADMINISTRATION = "letters_of_administration"
+    SUCCESSION_CERTIFICATE = "succession_certificate"
+    CHEQUE_BOUNCE_COMPLAINT = "cheque_bounce_complaint"
+    MAINTENANCE_APPLICATION = "maintenance_application"
+    CONSUMER_COMPLAINT = "consumer_complaint"
+    DOMESTIC_VIOLENCE_COMPLAINT = "domestic_violence_complaint"
+    GOVERNMENT_SUIT_NOTICE = "government_suit_notice"
+    LEGAL_NOTICE_REPLY = "legal_notice_reply"
 
 
 DraftTemplateTypeLiteral = Literal[
@@ -110,6 +125,12 @@ DraftTemplateTypeLiteral = Literal[
     "exemption_application",
     "synopsis_list_of_dates",
     "filing_index_checklist",
+    "conveyancing_deed",
+    "injunction_breach_application", "indigent_person_application", "execution_application",
+    "restitution_conjugal_rights", "judicial_separation_petition", "mutual_consent_divorce",
+    "letters_of_administration", "succession_certificate", "cheque_bounce_complaint",
+    "maintenance_application", "consumer_complaint", "domestic_violence_complaint",
+    "government_suit_notice", "legal_notice_reply",
 ]
 
 
@@ -195,6 +216,12 @@ class DivorcePetitionFacts(_TemplateFactsBase):
 class PropertyDisputeNoticeFacts(_TemplateFactsBase):
     """Pre-litigation demand notice in a property dispute."""
 
+    notice_format: Literal[
+        "General property dispute", "Notice to quit / ejectment",
+    ] = "General property dispute"
+    tenancy_particulars: str | None = Field(default=None, max_length=6000)
+    governing_law: str | None = Field(default=None, max_length=1000)
+    notice_requirements: str | None = Field(default=None, max_length=3000)
     sender_name: str = Field(min_length=2, max_length=255)
     recipient_name: str = Field(min_length=2, max_length=255)
     property_address: str = Field(min_length=10, max_length=1000)
@@ -249,6 +276,10 @@ class CriminalComplaintFacts(_TemplateFactsBase):
 class CivilSuitFacts(_TemplateFactsBase):
     """Plaint in a civil suit (CPC / Commercial Courts Act)."""
 
+    suit_format: Literal[
+        "General civil plaint", "Summary recovery", "Permanent injunction",
+        "Ejectment and damages", "Specific performance",
+    ] = "General civil plaint"
     plaintiff_name: str = Field(min_length=2, max_length=255)
     defendant_name: str = Field(min_length=2, max_length=255)
     cause_of_action_date: str = Field(min_length=10, max_length=10)
@@ -301,6 +332,7 @@ class WritPetitionFacts(_TemplateFactsBase):
     questions office, habeas corpus produces the body).
     """
 
+    writ_kind: Literal["civil", "criminal"] = "civil"
     petitioner_name: str = Field(min_length=2, max_length=255)
     respondent_name: str = Field(
         min_length=2,
@@ -1058,6 +1090,63 @@ class FilingIndexChecklistFacts(_TemplateFactsBase):
     total_pages_estimate: int = Field(ge=1, le=10000)
 
 
+class _ReferenceFactsBase(_TemplateFactsBase):
+    # New required particulars must contain text, not just spaces. This scoped
+    # base preserves the admission contract of existing free-form templates.
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class ConveyancingDeedFacts(_ReferenceFactsBase):
+    """One explicit instrument choice, grounded in the user's transaction."""
+
+    instrument_type: Literal[
+        "Sale deed", "Mortgage deed", "Partnership deed",
+        "Dissolution of partnership", "Relinquishment deed", "Gift deed",
+    ]
+    parties: str = Field(min_length=2, max_length=8000)
+    transaction_facts: str = Field(min_length=2, max_length=12000)
+    governing_law: str = Field(min_length=2, max_length=1000)
+    operative_terms: str = Field(min_length=2, max_length=12000)
+    execution_place: str | None = Field(default=None, max_length=500)
+    execution_date: str | None = Field(default=None, max_length=80)
+    consideration: str | None = Field(default=None, max_length=1000)
+    property_schedule: str | None = Field(default=None, max_length=12000)
+    execution_requirements: str | None = Field(default=None, max_length=4000)
+
+
+class ReferencePleadingFacts(_ReferenceFactsBase):
+    """Supplied particulars for the additional court-form examples."""
+
+    court_name: str = Field(min_length=2, max_length=500)
+    parties: str = Field(min_length=2, max_length=8000)
+    material_facts: str = Field(min_length=2, max_length=12000)
+    governing_law: str = Field(min_length=2, max_length=1000)
+    grounds: str = Field(min_length=2, max_length=8000)
+    relief_sought: str = Field(min_length=2, max_length=4000)
+    case_particulars: str | None = Field(default=None, max_length=4000)
+    procedure_details: str | None = Field(default=None, max_length=6000)
+    supporting_documents: str | None = Field(default=None, max_length=6000)
+    verification_details: str | None = Field(default=None, max_length=3000)
+
+
+class ReferenceNoticeFacts(_ReferenceFactsBase):
+    sender_details: str = Field(min_length=2, max_length=4000)
+    addressee_details: str = Field(min_length=2, max_length=4000)
+    subject: str = Field(min_length=2, max_length=1000)
+    material_facts: str = Field(min_length=2, max_length=12000)
+    governing_law: str = Field(min_length=2, max_length=1000)
+    required_action: str = Field(min_length=2, max_length=4000)
+    deadline_terms: str | None = Field(default=None, max_length=2000)
+    service_details: str | None = Field(default=None, max_length=2000)
+    reference_document: str | None = Field(default=None, max_length=12000)
+
+
+class ReferenceNoticeReplyFacts(ReferenceNoticeFacts):
+    reference_document: str = Field(min_length=2, max_length=12000)
+    paragraph_wise_reply: str = Field(min_length=2, max_length=12000)
+    preliminary_objections: str | None = Field(default=None, max_length=4000)
+
+
 class DraftTemplateSchema(BaseModel):
     """Endpoint response for ``/api/drafting/templates/{type}``."""
 
@@ -1169,6 +1258,10 @@ _DIVORCE_FIELDS: list[DraftingFieldSpec] = [
 
 
 _PROPERTY_NOTICE_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="notice_format", label="Property notice format", kind="enum", required=False,
+        enum_options=["General property dispute", "Notice to quit / ejectment"],
+    ),
     DraftingFieldSpec(name="sender_name", label="Sender's full name"),
     DraftingFieldSpec(name="recipient_name", label="Recipient's full name"),
     DraftingFieldSpec(
@@ -1187,6 +1280,22 @@ _PROPERTY_NOTICE_FIELDS: list[DraftingFieldSpec] = [
         label="Basis of title",
         kind="enum",
         enum_options=["sale_deed", "inheritance", "will", "gift_deed", "other"],
+    ),
+    DraftingFieldSpec(
+        name="tenancy_particulars", label="Tenancy or occupation particulars, if applicable",
+        kind="text", required=False,
+        help_text="Use the actual parties' relationship, terms and supplied chronology.",
+    ),
+    DraftingFieldSpec(
+        name="governing_law", label="Confirmed applicable law", required=False,
+    ),
+    DraftingFieldSpec(
+        name="notice_requirements", label="Confirmed termination and notice requirements",
+        kind="text", required=False, step_group="relief",
+        help_text=(
+            "Supply the applicable basis, period and service requirements; "
+            "do not assume a default."
+        ),
     ),
     DraftingFieldSpec(
         name="relief_sought", label="Relief demanded", kind="text", step_group="relief"
@@ -1267,6 +1376,15 @@ _CRIMINAL_COMPLAINT_FIELDS: list[DraftingFieldSpec] = [
 
 
 _CIVIL_SUIT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="suit_format", label="Plaint format", kind="enum", required=False,
+        enum_options=["General civil plaint", "Summary recovery", "Permanent injunction",
+                      "Ejectment and damages", "Specific performance"],
+        help_text=(
+            "Choose the requested document structure. "
+            "This does not establish procedural eligibility."
+        ),
+    ),
     DraftingFieldSpec(name="plaintiff_name", label="Plaintiff's full name"),
     DraftingFieldSpec(name="defendant_name", label="Defendant's full name"),
     DraftingFieldSpec(
@@ -1375,6 +1493,10 @@ _APPEAL_FIELDS: list[DraftingFieldSpec] = [
 
 
 _WRIT_FIELDS: list[DraftingFieldSpec] = [
+    DraftingFieldSpec(
+        name="writ_kind", label="Civil or criminal writ", kind="enum", required=False,
+        enum_options=["civil", "criminal"],
+    ),
     DraftingFieldSpec(name="petitioner_name", label="Petitioner's full name"),
     DraftingFieldSpec(
         name="respondent_name",
@@ -2938,6 +3060,152 @@ _register(
 )
 
 
+_register(
+    DraftTemplateType.CONVEYANCING_DEED,
+    display_name="Conveyancing Deed",
+    summary=(
+        "Sale, mortgage, partnership, dissolution, relinquishment or gift deed, "
+        "using your transaction details and the selected instrument's structure."
+    ),
+    statutory_basis=[],
+    fields=[
+        DraftingFieldSpec(
+            name="instrument_type", label="Deed format", kind="enum",
+            enum_options=["Sale deed", "Mortgage deed", "Partnership deed",
+                          "Dissolution of partnership", "Relinquishment deed", "Gift deed"],
+        ),
+        DraftingFieldSpec(name="parties", label="Parties, roles and addresses", kind="text"),
+        DraftingFieldSpec(
+            name="transaction_facts", label="Background and transaction details", kind="text",
+        ),
+        DraftingFieldSpec(name="governing_law", label="Confirmed governing law and jurisdiction"),
+        DraftingFieldSpec(
+            name="operative_terms", label="Terms agreed by the parties", kind="text",
+            step_group="terms",
+        ),
+        DraftingFieldSpec(
+            name="consideration", label="Consideration, if applicable", kind="text",
+            required=False, step_group="terms",
+        ),
+        DraftingFieldSpec(
+            name="property_schedule", label="Property or asset schedule, if applicable",
+            kind="text",
+            required=False, step_group="terms",
+        ),
+        DraftingFieldSpec(
+            name="execution_place", label="Place of execution", required=False,
+            step_group="execution",
+        ),
+        DraftingFieldSpec(
+            name="execution_date", label="Date of execution", kind="date", required=False,
+            step_group="execution",
+        ),
+        DraftingFieldSpec(
+            name="execution_requirements",
+            label="Confirmed signatures, witnesses and registration requirements", kind="text",
+            required=False, step_group="execution",
+        ),
+    ],
+    facts_model=ConveyancingDeedFacts,
+)
+
+
+def _register_reference_forms() -> None:
+    from caseops_api.services.drafting_formats import REFERENCE_TEMPLATES
+
+    for key, reference in REFERENCE_TEMPLATES.items():
+        facts_model: type[_TemplateFactsBase]
+        if reference.family in {"notice", "correspondence_reply"}:
+            facts_model = (
+                ReferenceNoticeReplyFacts if reference.family == "correspondence_reply"
+                else ReferenceNoticeFacts
+            )
+            fields = [
+                DraftingFieldSpec(
+                    name="sender_details", label="Sender or counsel details", kind="text",
+                ),
+                DraftingFieldSpec(name="addressee_details", label="Addressee details", kind="text"),
+                DraftingFieldSpec(name="subject", label="Subject"),
+                DraftingFieldSpec(name="material_facts", label="Facts and chronology", kind="text"),
+                DraftingFieldSpec(name="governing_law", label="Confirmed governing law"),
+                DraftingFieldSpec(
+                    name="required_action", label="Requested action or response", kind="text",
+                    step_group="response",
+                ),
+                DraftingFieldSpec(
+                    name="deadline_terms", label="Confirmed time period, if applicable",
+                    kind="text",
+                    required=False, step_group="response",
+                ),
+                DraftingFieldSpec(
+                    name="service_details", label="Service details", kind="text", required=False,
+                    step_group="response",
+                ),
+                DraftingFieldSpec(
+                    name="reference_document", label="Notice or document being addressed",
+                    kind="text",
+                    required=reference.family == "correspondence_reply", step_group="response",
+                ),
+            ]
+            if reference.family == "correspondence_reply":
+                fields.extend([
+                    DraftingFieldSpec(
+                        name="paragraph_wise_reply",
+                        label="Paragraph-wise admissions, denials and explanations", kind="text",
+                        step_group="response",
+                    ),
+                    DraftingFieldSpec(
+                        name="preliminary_objections", label="Preliminary objections, if any",
+                        kind="text", required=False, step_group="response",
+                    ),
+                ])
+        else:
+            facts_model = ReferencePleadingFacts
+            fields = [
+                DraftingFieldSpec(name="court_name", label="Actual court or forum"),
+                DraftingFieldSpec(
+                    name="parties", label="Parties, roles and addresses", kind="text",
+                ),
+                DraftingFieldSpec(
+                    name="material_facts", label="Material facts and chronology", kind="text",
+                ),
+                DraftingFieldSpec(name="governing_law", label="Confirmed governing law"),
+                DraftingFieldSpec(
+                    name="case_particulars", label="Existing case, order or decree particulars",
+                    kind="text", required=False,
+                ),
+                DraftingFieldSpec(
+                    name="procedure_details", label="Details specific to this application",
+                    kind="text", required=False, help_text=reference.instructions,
+                ),
+                DraftingFieldSpec(
+                    name="grounds", label="Grounds supported by the supplied facts", kind="text",
+                    step_group="grounds",
+                ),
+                DraftingFieldSpec(
+                    name="relief_sought", label="Relief requested", kind="text",
+                    step_group="relief",
+                ),
+                DraftingFieldSpec(
+                    name="supporting_documents", label="Supporting documents and schedules",
+                    kind="text", required=False, step_group="relief",
+                ),
+                DraftingFieldSpec(
+                    name="verification_details",
+                    label="Verification particulars and paragraph ranges",
+                    kind="text", required=False, step_group="relief",
+                ),
+            ]
+        _register(
+            DraftTemplateType(key), display_name=reference.label,
+            summary=reference.instructions,
+            statutory_basis=[], fields=fields, facts_model=facts_model,
+        )
+
+
+_register_reference_forms()
+
+
 def get_template_schema(template_type: DraftTemplateType) -> DraftTemplateSchema:
     """Return the form schema for ``template_type``.
 
@@ -2969,6 +3237,10 @@ __all__ = [
     "CompromisePetitionFacts",
     "CondonationOfDelayFacts",
     "ContemptPetitionFacts",
+    "ConveyancingDeedFacts",
+    "ReferencePleadingFacts",
+    "ReferenceNoticeFacts",
+    "ReferenceNoticeReplyFacts",
     "CriminalComplaintFacts",
     "CurativePetitionFacts",
     "DivorcePetitionFacts",

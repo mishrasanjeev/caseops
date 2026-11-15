@@ -29,6 +29,7 @@ API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
              "tests/e2e/ram-2026-11-11-bugs.spec.ts",
              "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+             "tests/e2e/drafting-formats20261115.spec.ts",
              "apps/api/pyproject.toml", "apps/api/uv.lock",
              "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
              "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",

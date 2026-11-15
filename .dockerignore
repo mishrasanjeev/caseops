@@ -62,6 +62,7 @@ tests/fixtures/statutes/**
 !tests/e2e/
 tests/e2e/**
 !tests/e2e/ram-2026-11-11-bugs.spec.ts
+!tests/e2e/drafting-formats20261115.spec.ts
 !tests/e2e/support/
 tests/e2e/support/**
 !tests/e2e/support/prod-failure-diagnostics.ts

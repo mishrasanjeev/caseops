@@ -305,13 +305,24 @@ function DraftBody({
   const canApprove = canReviewDraft && status === "in_review";
   const canFinalize = canFinalizeDraft && status === "approved";
   const canExport = !!currentVersion;
+  const isConveyancingDeed = draft.template_type === "conveyancing_deed";
+  const presentationReference = currentVersion?.template_manifest?.presentation_reference;
+  const hasNonCourtReference = typeof presentationReference === "object"
+    && presentationReference !== null
+    && "family" in presentationReference
+    && typeof presentationReference.family === "string"
+    && ["notice", "correspondence_reply", "deed"].includes(presentationReference.family);
+  const isNewNonCourtType = isConveyancingDeed
+    || draft.template_type === "government_suit_notice"
+    || draft.template_type === "legal_notice_reply";
+  const isNonCourtDocument = hasNonCourtReference || (!currentVersion && isNewNonCourtType);
   const [courtProfileKey, setCourtProfileKey] = useState("");
   const profilesQuery = useQuery({
     queryKey: ["drafting", "court-profiles"],
     queryFn: listCourtFormatProfiles,
-    enabled: canExport,
+    enabled: canExport && !isNonCourtDocument,
   });
-  const exportCourtProfile = courtProfileKey || undefined;
+  const exportCourtProfile = isNonCourtDocument ? "generic" : courtProfileKey || undefined;
   const selectedProfile = profilesQuery.data?.find(
     (profile) => profile.key === courtProfileKey,
   );
@@ -336,7 +347,7 @@ function DraftBody({
             {draft.title}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
-            <span className="capitalize">{draft.draft_type}</span>
+            <span className="capitalize">{isConveyancingDeed ? "Conveyancing deed" : draft.draft_type}</span>
             <span>·</span>
             <span data-testid="draft-current-revision">
               {currentVersion
@@ -431,13 +442,13 @@ function DraftBody({
           ) : null}
           {canExport ? (
             <>
-              <CourtProfileSelector
+              {!isNonCourtDocument ? <CourtProfileSelector
                 profiles={profilesQuery.data ?? []}
                 selectedProfile={selectedProfile}
                 value={courtProfileKey}
                 loading={profilesQuery.isLoading}
                 onChange={(value) => { pdfCompletionEpoch.current++; setCourtProfileKey(value); }}
-              />
+              /> : null}
               <Button
                 variant="outline"
                 href={draftDocxUrl(matterId, draft.id)}
@@ -458,15 +469,17 @@ function DraftBody({
               >
                 <Download className="h-4 w-4" aria-hidden /> Download PDF
               </Button>
-              <Button
-                variant="outline"
-                href={draftFilingBundleUrl(matterId, draft.id, {
-                  courtProfile: exportCourtProfile,
-                })}
-                data-testid="draft-download-filing-bundle"
-              >
-                <FolderArchive className="h-4 w-4" aria-hidden /> Filing bundle
-              </Button>
+              {!isNonCourtDocument ? (
+                <Button
+                  variant="outline"
+                  href={draftFilingBundleUrl(matterId, draft.id, {
+                    courtProfile: exportCourtProfile,
+                  })}
+                  data-testid="draft-download-filing-bundle"
+                >
+                  <FolderArchive className="h-4 w-4" aria-hidden /> Filing bundle
+                </Button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -582,7 +595,9 @@ function DraftBody({
                 </form>
               ) : bodyView === "pdf" ? (
                 <div id="draft-pdf-panel" role="tabpanel" aria-labelledby="draft-pdf-tab" className="min-w-0">
-                  <p className="mb-3 text-xs text-[var(--color-mute)]">Court-profile rules are unverified for filing. Lawyer review is required.</p>
+                  <p className="mb-3 text-xs text-[var(--color-mute)]">{isNonCourtDocument
+                    ? "Lawyer review is required before signing, registration or service."
+                    : "Court-profile rules are unverified for filing. Lawyer review is required."}</p>
                   <DraftPdfPreview url={pdfArtifact.url} file={pdfArtifact.file} error={pdfArtifact.error} retry={pdfArtifact.retry} />
                 </div>
               ) : (
@@ -673,11 +688,11 @@ function DraftBody({
             revisions={draft.versions.map((v) => v.revision)}
           />
 
-          <FilingChecklistCard
+          {!isNonCourtDocument ? <FilingChecklistCard
             matterId={matterId}
             draftId={draft.id}
             courtProfile={exportCourtProfile}
-          />
+          /> : null}
 
           <Card>
             <CardHeader>

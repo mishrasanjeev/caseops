@@ -44,10 +44,18 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 727, "app-mobile": 63}
+APP_PROJECT_COUNTS = {"app-chromium": 728, "app-mobile": 64}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
 NOV14_REFERENCE_FILE = "ram-2026-11-14-prod.spec.ts"
 NOV14_DRAFT_FILE = "draft-quality20261114.spec.ts"
+NOV15_DRAFT_FILE = "drafting-formats20261115.spec.ts"
+NOV15_APP_CASES = (
+    ("app-chromium", NOV15_DRAFT_FILE,
+     "Draft formats 2026-11-15 desktop: guided deed choice, version history and exact downloads"),
+    ("app-mobile", NOV15_DRAFT_FILE,
+     "Draft formats 2026-11-15 [mobile] phone: "
+     "guided deed choice, version history and exact downloads"),
+)
 NOV14_APP_CASES = (
     ("app-chromium", NOV14_REFERENCE_FILE,
      "IP India content and form references /app/ip/registry desktop"),
@@ -391,12 +399,33 @@ def _nov14_rows(rows, *, production=False, execution=False):
     return selected
 
 
+def _nov15_rows(rows, *, execution=False):
+    selected = [row for row in rows if row["file"] == NOV15_DRAFT_FILE]
+    expected = Counter((project, file, (file, title)) for project, file, title in NOV15_APP_CASES)
+    if (Counter((row["project_name"], row["file"], tuple(row["title_path"])) for row in selected) != expected
+            or len({row["id"] for row in selected}) != len(selected)
+            or any(row["project_id"] != row["project_name"]
+                   or type(row["retries"]) is not int or row["retries"] != 0
+                   or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+                   or row["expected_status"] != "passed" for row in selected)):
+        raise EvidenceError("nov15_required_case_identity_mismatch")
+    if execution and any(
+        row["status"] != "expected" or len(row["results"]) != 1
+        or row["results"][0]["status"] != "passed"
+        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        for row in selected
+    ):
+        raise EvidenceError("nov15_required_case_not_passed")
+    return selected
+
+
 def _app_inventory(canonical):
     rows = canonical["tests"]
     batch5 = [row for row in rows if row["file"] in BATCH5_FILES]
     _nov14_rows(rows)
+    _nov15_rows(rows)
     legacy = [row for row in rows
-              if row["file"] not in (*BATCH5_FILES, NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE)]
+              if row["file"] not in (*BATCH5_FILES, NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE, NOV15_DRAFT_FILE)]
     if batch5 or BATCH5_CASE_COUNTS:
         _batch5_rows(batch5, {"app-chromium": 0, "app-mobile": 1}, include_moved=False)
     if (Counter(row["project_name"] for row in rows) != APP_PROJECT_COUNTS
@@ -585,6 +614,8 @@ def _check_app_selection(binding, selected, canonical, *, execution=False):
     # A selected App project owns one half of the six-case reviewed cohort.
     _nov14_rows([row for row in canonical["tests"] if row["project_name"] != project]
                 + selected["tests"], execution=False)
+    _nov15_rows([row for row in canonical["tests"] if row["project_name"] != project]
+                + selected["tests"], execution=False)
     actual_skips = set()
     for row in selected["tests"]:
         attempts = row["results"]
@@ -616,7 +647,7 @@ def _tester_partition(binding):
 def _tester_inventory(canonical):
     projects = set(TESTER_PARTITIONS.values())
     rows = [row for row in canonical["tests"] if row["project_name"] in projects]
-    if any(row["file"] == NOV14_DRAFT_FILE for row in canonical["tests"]):
+    if any(row["file"] in {NOV14_DRAFT_FILE, NOV15_DRAFT_FILE} for row in canonical["tests"]):
         raise EvidenceError("local_draft_quality_in_production_inventory")
     _nov14_rows(rows, production=True)
     if not rows or len({row["id"] for row in rows}) != len(rows):

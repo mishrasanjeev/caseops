@@ -185,6 +185,19 @@ const nov14Cases = [
   ["app-mobile", "draft-quality20261114.spec.ts", "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"],
 ] as const;
 const isNov14 = (row: Case) => ["ram-2026-11-14-prod.spec.ts", "draft-quality20261114.spec.ts"].includes(row.file);
+const nov15Cases = [
+  ["app-chromium", "drafting-formats20261115.spec.ts", "Draft formats 2026-11-15 desktop: guided deed choice, version history and exact downloads"],
+  ["app-mobile", "drafting-formats20261115.spec.ts", "Draft formats 2026-11-15 [mobile] phone: guided deed choice, version history and exact downloads"],
+] as const;
+const isNov15 = (row: Case) => row.file === "drafting-formats20261115.spec.ts";
+function expectNov15(rows: Case[]) {
+  const selected = rows.filter(isNov15);
+  expect(selected.map(row => JSON.stringify([row.project, row.file, row.titles])).sort()).toEqual(
+    nov15Cases.map(([project, file, title]) => JSON.stringify([project, file, [file, title]])).sort(),
+  );
+  expect(new Set(selected.map(row => row.id)).size).toBe(2);
+  expect(selected.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+}
 function expectNov14(rows: Case[], production = false) {
   const selected = rows.filter(isNov14);
   const expected = nov14Cases.filter(([, file]) => !production || file === "ram-2026-11-14-prod.spec.ts")
@@ -292,13 +305,15 @@ describe("complete independent App CI project inventory", () => {
   let canonical: Case[];
   let batch5: Case[];
   let nov14: Case[];
+  let nov15: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
     const all = collectAppProject();
     batch5 = all.filter(isBatch5);
     nov14 = all.filter(isNov14);
-    canonical = all.filter(row => !isBatch5(row) && !isNov14(row));
+    nov15 = all.filter(isNov15);
+    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -329,7 +344,7 @@ describe("complete independent App CI project inventory", () => {
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
     const count = appSourceProjects[project];
     it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
-      const selected = collectAppProject(project).filter(row => !isBatch5(row) && !isNov14(row));
+      const selected = collectAppProject(project).filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
     }, 20_000);
@@ -348,8 +363,15 @@ describe("complete independent App CI project inventory", () => {
 
   it("requires all six Nov14 identities outside the unchanged774 and ten B5 cases", () => {
     expectNov14(nov14);
-    expect(canonical.length + batch5.length + nov14.length).toBe(790);
+    expect(canonical.length + batch5.length + nov14.length + nov15.length).toBe(792);
     expect(counts(nov14.map(row => row.project))).toEqual({ "app-chromium": 3, "app-mobile": 3 });
+  });
+
+  it("requires both exact Nov15 format journeys outside the unchanged prior cohorts", () => {
+    expectNov15(nov15);
+    expect(counts(nov15.map(row => row.project))).toEqual({ "app-chromium": 1, "app-mobile": 1 });
+    expect(counts([...canonical, ...batch5, ...nov14, ...nov15].map(row => row.project)))
+      .toEqual({ "app-chromium": 728, "app-mobile": 64 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {
@@ -392,6 +414,22 @@ describe("complete independent App CI project inventory", () => {
 });
 
 describe("App metadata constructor and source-order controls", () => {
+  it.each(["title", "missing", "duplicate", "project", "repeat", "retry", "executed", "expected-skip"])(
+    "Nov15 exact format identities reject %s", damage => {
+      const rows: Case[] = nov15Cases.map(([project, file, title], index) => ({
+        id: `nov15-${index}`, project, file, titles: [file, title], repeat: 0, retries: 0, results: [], expectedStatus: "passed",
+      }));
+      if (damage === "title") rows[0].titles[1] += " changed";
+      else if (damage === "missing") rows.pop();
+      else if (damage === "duplicate") rows[1] = rows[0];
+      else if (damage === "project") rows[0].project = "app-mobile";
+      else if (damage === "repeat") rows[0].repeat = 1;
+      else if (damage === "retry") rows[0].retries = 1;
+      else if (damage === "executed") rows[0].results = [{ status: "passed" }];
+      else rows[0].expectedStatus = "skipped";
+      expect(() => expectNov15(rows)).toThrow();
+    },
+  );
   it.each(["title", "missing", "duplicate", "project", "repeat", "retry", "executed", "foreign", "expected-skip"])(
     "Nov14 exact identities reject %s", damage => {
       const rows: Case[] = nov14Cases.map(([project, file, title], index) => ({

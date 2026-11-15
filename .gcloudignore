@@ -61,6 +61,7 @@ scripts/mobile/*
 !tests/fixtures/node-default-tls-probe.cjs
 !tests/e2e/
 !tests/e2e/ram-2026-11-11-bugs.spec.ts
+!tests/e2e/drafting-formats20261115.spec.ts
 !tests/e2e/support/
 !tests/e2e/support/prod-failure-diagnostics.ts
 !tests/e2e/support/bounded-network-evidence.ts
