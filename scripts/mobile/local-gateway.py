@@ -19,6 +19,9 @@ from urllib.parse import urlsplit
 ROOT = Path(os.environ.get("CASEOPS_MOBILE_STATE", "/fixture-state"))
 MARKER_HEADER = "X-CaseOps-Automated-Test"
 MARKER = "no-paid-providers"
+CORE_MATTER_ROUTE = "GET /api/matters/"
+CORE_MATTER_DEFAULT_TARGET = "/api/matters/?limit=25"
+CORE_MATTER_READ_COUNTS = {"consent": 2, "full-core": 9}
 # Covers 23 core journeys plus their account/restore checks without dropping evidence.
 MAX_SESSION_ADMISSION_EVENTS = 64
 BROWSER_ROUTES = {
@@ -47,6 +50,19 @@ _PRODUCER_PATHS = (
     rf"POST /api/ip/dockets/{_PRODUCER_UUID}/matter-links",
     rf"POST /api/teams/{_PRODUCER_UUID}/members",
 )
+_CALENDAR_PRODUCER_READ = re.compile(rf"GET /api/ip/dockets/{_PRODUCER_UUID}/deadline-workspace")
+_CALENDAR_PRODUCER_WRITE = re.compile(
+    rf"POST /api/ip/(?:dockets/{_PRODUCER_UUID}/(?:deadlines|access/(?:preview|apply))"
+    rf"|deadlines/{_PRODUCER_UUID}/confirm)"
+)
+
+
+def calendar_producer_method(route):
+    if _CALENDAR_PRODUCER_READ.fullmatch(route):
+        return "GET"
+    if _CALENDAR_PRODUCER_WRITE.fullmatch(route):
+        return "POST"
+    return None
 
 
 def upstream_destination(web):
@@ -105,6 +121,7 @@ def request_headers(values):
 
 
 _SOURCE_METADATA = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+_SOURCE_NAMESPACE_IDENTITY = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode")
 
 
 def source_named_identity_equal(descriptor, named, platform_name=os.name):
@@ -125,7 +142,9 @@ def runtime_source_bytes(path, expected=None):
         for parent in reversed(path.parents):
             value = parent.lstat()
             assert stat.S_ISDIR(value.st_mode) and not stat.S_ISLNK(value.st_mode)
-            result.append((str(parent), metadata(value)))
+            # Sibling creation changes a directory's size, links and timestamps
+            # without changing this source's namespace or access controls.
+            result.append((str(parent), tuple(getattr(value, key) for key in _SOURCE_NAMESPACE_IDENTITY)))
         return result
     namespace = ancestors()
     named = path.lstat()
@@ -182,7 +201,7 @@ def verified_v1_controls(root, run_id, environment=None):
     extra = {}
     if profile in ("queue-privacy-v1", "native-client-extensions-v1"):
         base_path = Path(__file__).resolve().with_name("local-v1-controls.py")
-        base_bytes = runtime_source_bytes(base_path, "399b458ca2eb9ad11724bf7a7a454cb89de37251c82debe4f7e0270e8cdc20ca")
+        base_bytes = runtime_source_bytes(base_path, "3f77c501a8f2e42aa1b6ad0a0a72d14e22ca4f5d065dee0da6e92bb60c861b36")
         base = ModuleType("caseops_queue_privacy_verified_helpers")
         base.__file__ = str(base_path)
         exec(compile(base_bytes, str(base_path), "exec"), base.__dict__)
@@ -216,17 +235,90 @@ class Gateway:
             elif self.v1.registration.get("profile") == "native-client-extensions-v1":
                 self.state["v1ControlProfile"] = "native-client-extensions-v1"
 
-    def allowed(self):
-        config = json.loads((self.root / "gateway-routes.json").read_text())
+    def observe_qa_route_rejection(self, method, path, *, native, browser, started):
+        # The explicitly enabled, verified local QP profile owns this diagnostic.
+        # Rejections stay rejections. Never retain a URL query, raw record ID,
+        # credentials, headers or bodies, or widen the admitted route set.
+        registration = getattr(self.v1, "registration", {}) if self.v1 else {}
+        if registration.get("profile") != "queue-privacy-v1" or registration.get("syntheticDataOnly") is not True:
+            return
+        rows = self.state.setdefault("rejectedRequests", [])
+        if len(rows) >= 16:
+            self.state["overflow"] = True
+            return
+        route = method + " " + path
+        fixed = {"POST /api/auth/native/refresh", "POST /api/auth/native/token", "POST /api/auth/native/logout",
+                 "GET /api/auth/native/compatibility", "GET /api/auth/me", "GET /api/me/today",
+                 "GET /api/matter-work-queue", "GET /api/account/deletion-requests", "POST /api/account/deletion-requests"}
+        template = route if route in fixed else None
+        if template is None and method == "GET":
+            match = re.fullmatch(r"/api/matters/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}(/workspace|/tasks|/drafts)?", path)
+            if match:
+                template = "GET /api/matters/{matterId}" + (match[1] or "")
+        elapsed = round((time.monotonic() - started) * 1000, 3)
+        if not 0 <= elapsed <= 20000:
+            self.state["overflow"] = True
+            return
+        event = {"type": "qa_route_rejection", "runId": self.state["runId"], "rejectionSequence": len(rows) + 1,
+                 "routeTemplate": template or "unclassified", "routeSha256": hashlib.sha256(route.encode()).hexdigest() if template else None,
+                 "status": 403, "authorityClass": "native" if native else "browser" if browser else "other",
+                 "observedAtUnixMs": time.time_ns() // 1000000, "decisionMs": elapsed}
+        rows.append(event)
+        try:
+            self.journal.write(json.dumps(event) + "\n")
+            self.journal.flush()
+            os.fsync(self.journal.fileno())
+        except OSError:
+            self.state["overflow"] = True
+
+    def route_configuration(self):
+        return json.loads((self.root / "gateway-routes.json").read_text())
+
+    def allowed(self, config=None):
+        if config is None:
+            config = self.route_configuration()
         return set(config["routes"]) | ((set(self.v1.registration["exactRoutes"]) | getattr(self.v1, "dynamic_routes", set())) if self.v1 and not self.v1.closed else set())
 
-    def consume_producer_permit(self, token, route, bearer):
+    def core_matter_read(self, config, target, native_bearer):
+        admission = config["coreMatterReadAdmission"]
+        if (os.environ.get("CASEOPS_ENV") != "local" or self.v1 is not None
+                or not native_bearer or CORE_MATTER_ROUTE in config["routes"]
+                or not isinstance(admission, dict) or set(admission) != {"runId", "stage", "targetSha256"}
+                or admission["runId"] != self.state["runId"]
+                or not re.fullmatch(r"[a-z0-9-]{8,140}-core-[a-f0-9]{8}", self.state["runId"])):
+            return False
+        targets = admission["targetSha256"]
+        stage = admission["stage"]
+        default = hashlib.sha256(CORE_MATTER_DEFAULT_TARGET.encode("ascii")).hexdigest()
+        if (not isinstance(stage, str) or stage not in CORE_MATTER_READ_COUNTS
+                or not isinstance(targets, list) or len(targets) != CORE_MATTER_READ_COUNTS[stage]
+                or targets[0] != default
+                or not all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value) for value in targets)
+                or len(set(targets)) != len(targets)):
+            return False
+        if target == CORE_MATTER_DEFAULT_TARGET:
+            return True
+        # Match the original encoded bytes without retaining any search value.
+        prefix = CORE_MATTER_DEFAULT_TARGET + "&q="
+        return (target.isascii() and target.startswith(prefix) and len(target) > len(prefix)
+                and "&" not in target[len(prefix):]
+                and hashlib.sha256(target.encode("ascii")).hexdigest() in targets)
+
+    def producer_permit_candidate(self, token, bearer):
+        return (os.environ.get("CASEOPS_ENV") == "local" and not self.v1
+                and bearer.startswith("Bearer ") and not bearer.startswith("Bearer cnat_")
+                and re.fullmatch(r"[a-f0-9]{64}", token) is not None
+                and re.fullmatch(r"[a-z0-9-]{8,160}", self.state["runId"]) is not None)
+
+    def consume_producer_permit(self, token, route, bearer, body=None):
         """Only a private, current, exact-route test capability can admit a request."""
-        if os.environ.get("CASEOPS_ENV") != "local" or self.v1 or not bearer.startswith("Bearer ") or bearer.startswith("Bearer cnat_"):
+        if not self.producer_permit_candidate(token, bearer):
             return None
-        if not re.fullmatch(r"[a-f0-9]{64}", token) or not re.fullmatch(r"[a-z0-9-]{8,160}", self.state["runId"]):
-            return None
-        if not any(re.fullmatch(pattern, route) for pattern in _PRODUCER_PATHS):
+        calendar_method = calendar_producer_method(route)
+        if calendar_method is None:
+            if not any(re.fullmatch(pattern, route) for pattern in _PRODUCER_PATHS):
+                return None
+        elif not isinstance(body, bytes) or bool(body) != (calendar_method == "POST"):
             return None
         digest = lambda raw: hashlib.sha256(raw).hexdigest()
         root = self.root / ("producer-permits-" + digest(self.state["runId"].encode()))
@@ -242,7 +334,13 @@ class Gateway:
                 raw = runtime_source_bytes(item)
                 assert len(raw) <= 2048
                 permit = json.loads(raw)
-                assert set(permit) == {"epoch", "route", "bearerSha256", "expires", "creatorAckSha256"}
+                fields = {"epoch", "route", "bearerSha256", "expires", "creatorAckSha256"}
+                if calendar_method == "POST":
+                    fields.add("bodySha256")
+                if not isinstance(permit, dict) or set(permit) != fields:
+                    return None
+                if calendar_method == "POST" and not secrets.compare_digest(permit["bodySha256"], digest(body)):
+                    return None
                 assert permit["epoch"] == self.state["runId"] and permit["route"] == route
                 assert permit["bearerSha256"] == digest(bearer.encode())
                 assert re.fullmatch(r"[a-f0-9]{64}", permit["creatorAckSha256"])
@@ -309,7 +407,13 @@ class Gateway:
                 self.wfile.write(data)
                 self.close_connection = True
 
+            def reject_producer_permit(self):
+                with gateway.lock:
+                    gateway.state["routeRejected"] += 1
+                return self.reply(403, {"code": "PRODUCER_PERMIT_NOT_ADMITTED"})
+
             def handle_request(self):
+                decision_started = time.monotonic()
                 try:
                     target = upstream_target(self.path)
                 except (ValueError, AssertionError):
@@ -363,26 +467,46 @@ class Gateway:
                     with gateway.lock:
                         gateway.state["markerRejected"] += 1
                     return self.reply(403, {"code": "AUTOMATED_MARKER_REQUIRED"})
-                admitted = route in gateway.allowed()
+                # Only the separately admitted normal workspace setup uses PUT.
+                # Keep it off the web proxy, reject query aliases and retain the
+                # exact-route, normal authorization and bounded-body checks below.
+                if self.command == "PUT" and (web or target != "/api/ip/workspace/configuration"):
+                    with gateway.lock:
+                        gateway.state["routeRejected"] += 1
+                    return self.reply(403, {"code": "ROUTE_NOT_ADMITTED"})
+                config = gateway.route_configuration()
+                guarded_matter_read = route == CORE_MATTER_ROUTE and "coreMatterReadAdmission" in config
+                if guarded_matter_read:
+                    admitted = not web and gateway.core_matter_read(config, target, native_bearer)
+                else:
+                    admitted = route in gateway.allowed(config)
                 producer_receipt = None
+                calendar_method = None
                 permit = incoming_headers.pop(PRODUCER_PERMIT, None)
                 if permit is not None:
-                    if (not web and not admitted and not browser and marked and not incoming_headers.get("Cookie")
-                            and self.command in ("GET", "POST", "PATCH")):
-                        producer_receipt = gateway.consume_producer_permit(permit, route, incoming_headers.get("Authorization", ""))
-                    if not producer_receipt:
-                        with gateway.lock:
-                            gateway.state["routeRejected"] += 1
-                        return self.reply(403, {"code": "PRODUCER_PERMIT_NOT_ADMITTED"})
-                    admitted = True
+                    if (guarded_matter_read or web or admitted or browser or not marked or incoming_headers.get("Cookie")
+                            or self.command not in ("GET", "POST", "PATCH")):
+                        return self.reject_producer_permit()
+                    bearer = incoming_headers.get("Authorization", "")
+                    calendar_method = calendar_producer_method(route)
+                    if calendar_method is not None:
+                        # The delimiter is significant even for an empty query.
+                        if target != path or not gateway.producer_permit_candidate(permit, bearer):
+                            return self.reject_producer_permit()
+                    else:
+                        producer_receipt = gateway.consume_producer_permit(permit, route, bearer)
+                        if not producer_receipt:
+                            return self.reject_producer_permit()
+                        admitted = True
                 if not web and self.command == "DELETE" and native_bearer:
                     with gateway.lock:
                         if route == gateway.session_delete_route:
                             admitted = True
                             gateway.session_delete_route = None
-                if not web and not admitted and not browser:
+                if not web and not admitted and not browser and calendar_method is None:
                     with gateway.lock:
                         gateway.state["routeRejected"] += 1
+                        gateway.observe_qa_route_rejection(self.command, path, native=native_bearer, browser=browser, started=decision_started)
                     return self.reply(403, {"code": "ROUTE_NOT_ADMITTED"})
                 if web and path.startswith("/api/") and route != "GET /api/release-identity":
                     return self.reply(403, {"code": "USE_REVIEWED_API_ORIGIN"})
@@ -393,15 +517,26 @@ class Gateway:
                 try:
                     if len(self.headers.get_all("Content-Length", [])) > 1:
                         return self.reply(400, {"code": "INVALID_BODY"})
-                    length = int(self.headers.get("Content-Length", "0"))
+                    length_header = self.headers.get("Content-Length", "0")
+                    if calendar_method is not None and not re.fullmatch(r"0|[1-9][0-9]{0,6}", length_header):
+                        return self.reply(400, {"code": "INVALID_BODY"})
+                    length = int(length_header)
                     if length < 0 or length > 1048576 or self.headers.get("Transfer-Encoding"):
                         return self.reply(413, {"code": "BOUNDED_BODY_REQUIRED"})
+                    if calendar_method is not None and bool(length) != (calendar_method == "POST"):
+                        return self.reject_producer_permit()
                     self.connection.settimeout(20)
                     body = self.rfile.read(length)
                     if len(body) != length:
                         return self.reply(400, {"code": "INCOMPLETE_BODY"})
                 except (ValueError, TimeoutError):
                     return self.reply(400, {"code": "INVALID_BODY"})
+                if calendar_method is not None:
+                    # Spend only after framing and byte verification. Forward this
+                    # held byte buffer, never parsed or reserialized JSON.
+                    producer_receipt = gateway.consume_producer_permit(permit, route, bearer, body)
+                    if not producer_receipt:
+                        return self.reject_producer_permit()
                 try:
                     headers = dict(incoming_headers)
                 except (ValueError, AssertionError):
@@ -520,6 +655,7 @@ class Gateway:
 
             do_GET = handle_request
             do_POST = handle_request
+            do_PUT = handle_request
             do_PATCH = handle_request
             do_DELETE = handle_request
             do_OPTIONS = handle_request

@@ -80,7 +80,7 @@ function fixture(t, extra = {}) {
   const files = ['scripts/mobile/android-host-launch.mjs', 'scripts/mobile/android-no-paid.gradle',
     'scripts/mobile/host-platform-trust.py', 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java',
     'scripts/mobile/host-node-trust.mjs', 'scripts/mobile/host-node-trust-start.mjs',
-    'scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/source-snapshot.mjs',
+    'scripts/mobile/build-android-local-acceptance.sh', 'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/android-sdk-xml.mjs', 'scripts/mobile/source-snapshot.mjs',
     'scripts/mobile/prepare-native-links.mjs', 'scripts/mobile/prepare-store-packaging.mjs', 'apps/mobile/metro.config.js',
     'apps/web/lib/native-link-policy.cjs', 'apps/web/lib/native-link-policy.d.cts',
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',

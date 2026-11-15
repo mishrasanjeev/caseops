@@ -246,6 +246,7 @@ function InboxPageContent({
             {record.status} · {new Date(record.createdAt).toLocaleString()}
           </Text>
           <NativeButton
+            testID={`notification-${record.id}-open-source`}
             label="Open source record"
             secondary
             disabled={busy}
@@ -253,6 +254,7 @@ function InboxPageContent({
           />
           {record.status !== "read" ? (
             <NativeButton
+              testID={`notification-${record.id}-mark-read`}
               label="Mark as read"
               secondary
               disabled={busy || blocked}
@@ -261,6 +263,7 @@ function InboxPageContent({
           ) : null}
           {record.status !== "dismissed" ? (
             <NativeButton
+              testID={`notification-${record.id}-dismiss`}
               label="Dismiss notification"
               secondary
               disabled={busy || blocked}
@@ -268,6 +271,7 @@ function InboxPageContent({
             />
           ) : (
             <NativeButton
+              testID={`notification-${record.id}-restore`}
               label="Restore notification"
               secondary
               disabled={busy || blocked}

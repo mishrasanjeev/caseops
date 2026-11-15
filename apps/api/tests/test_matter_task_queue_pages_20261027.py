@@ -590,24 +590,48 @@ def journal_rows(path):
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
-def fake_database_admin(fixtures, target, connection, monkeypatch, *, unknown_create=False):
+def fake_database_admin(
+    fixtures, target, connection, monkeypatch, *, unknown_create=False, absence_outcome="absent"
+):
     from contextlib import contextmanager
 
     effects = []
+    databases = set()
+    dropped = set()
 
     def execute(sql):
         rows = journal_rows(target)
         if sql.startswith("CREATE DATABASE "):
             assert [row["event"] for row in rows] == ["create_intent"]
+            name = sql.split()[2]
+            assert name not in databases
+            databases.add(name)
             effects.append("create_dispatched")
             if unknown_create:
                 raise OSError("synthetic lost create acknowledgement")
         elif sql.startswith("DROP DATABASE "):
+            name = sql.split()[2]
+            assert name in databases and sql == f"DROP DATABASE {name} WITH (FORCE)"
+            dropped.add(name)
+            if absence_outcome != "present":
+                databases.remove(name)
             effects.append("drop_ack")
         else:
             raise AssertionError("Unexpected database command")
 
     connection.exec_driver_sql = execute
+
+    def scalar(statement, parameters):
+        assert str(statement) == "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:name)"
+        assert set(parameters) == {"name"} and parameters["name"] in dropped
+        assert effects[-1] == "drop_ack"
+        effects.append("absence_read")
+        if absence_outcome == "transport-error":
+            raise OSError("synthetic lost database absence observation")
+        assert absence_outcome in ("absent", "present")
+        return parameters["name"] in databases
+
+    connection.scalar = scalar
 
     @contextmanager
     def connect():
@@ -655,7 +679,9 @@ def test_canonical_database_journal_records_intent_then_real_ack_before_yield(
         assert (
             "journal-fixture" not in target.read_text() and "postgresql" not in target.read_text()
         )
-    assert effects == ["create_dispatched", "probe_disposed", "drop_ack", "admin_disposed"]
+    assert effects == [
+        "create_dispatched", "probe_disposed", "drop_ack", "absence_read", "admin_disposed"
+    ]
 
 
 def test_database_journal_disabled_preserves_original_zero_journal_io(monkeypatch):
@@ -709,7 +735,24 @@ def test_database_journal_ack_write_failure_keeps_normal_owned_cleanup(
                 fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops"))
             )
     assert [row["event"] for row in journal_rows(target)] == ["create_intent"]
-    assert effects == ["create_dispatched", "drop_ack", "admin_disposed"]
+    assert effects == ["create_dispatched", "drop_ack", "absence_read", "admin_disposed"]
+
+
+@pytest.mark.parametrize("absence_outcome", ["present", "transport-error"])
+def test_database_journal_drop_ack_requires_independent_absence_observation(
+    database_journal, monkeypatch, absence_outcome
+):
+    from sqlalchemy.engine import make_url
+
+    fixtures, target, connection = database_journal
+    effects, _ = fake_database_admin(
+        fixtures, target, connection, monkeypatch, absence_outcome=absence_outcome
+    )
+    error = AssertionError if absence_outcome == "present" else OSError
+    with pytest.raises(error):
+        with fixtures.temporary_http_database(make_url("postgresql+psycopg://localhost/caseops")):
+            assert [row["event"] for row in journal_rows(target)] == ["create_intent", "create_ack"]
+    assert effects == ["create_dispatched", "probe_disposed", "drop_ack", "absence_read"]
 
 
 def test_database_journal_lost_create_ack_retains_intent_without_retry(

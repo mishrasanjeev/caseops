@@ -15,6 +15,7 @@ import ssl
 import stat
 import subprocess
 import sys
+import time
 import types
 from urllib.parse import urlsplit
 
@@ -119,12 +120,29 @@ def validate_workspace(workspace, seed, asset, expected):
     return {key: source[key] for key in ("id", "matter_id", "original_filename", "sha256_hex", "size_bytes", "content_type")}
 
 
-def add_exact_route(previous, route):
-    require(isinstance(previous, dict) and set(previous) == {"routes"} and isinstance(previous["routes"], list) and
-            len(previous["routes"]) <= 100 and len(set(previous["routes"])) == len(previous["routes"]) and
-            all(isinstance(value, str) and "*" not in value for value in previous["routes"]), "Exact existing route inventory required")
+def add_exact_route(previous, route, run_id=None):
+    require(isinstance(previous, dict) and "routes" in previous and
+            set(previous) <= {"routes", "coreMatterReadAdmission"} and
+            isinstance(previous["routes"], list) and len(previous["routes"]) <= 100 and
+            all(isinstance(value, str) and "*" not in value for value in previous["routes"]) and
+            len(set(previous["routes"])) == len(previous["routes"]), "Exact existing route inventory required")
+    if "coreMatterReadAdmission" in previous:
+        # Preserve the current exact-query fence; never replace it with a bare
+        # collection route when adding an acknowledged private source download.
+        scope = previous["coreMatterReadAdmission"]
+        require(isinstance(scope, dict) and set(scope) == {"runId", "stage", "targetSha256"} and
+                isinstance(run_id, str) and re.fullmatch(r"[a-z0-9-]{8,140}-core-[a-f0-9]{8}", run_id) and
+                scope["runId"] == run_id and "GET /api/matters/" not in previous["routes"],
+                "Current core matter read admission required")
+        stage, targets = scope["stage"], scope["targetSha256"]
+        require(isinstance(stage, str) and stage in ("consent", "full-core") and
+                isinstance(targets, list) and len(targets) == {"consent": 2, "full-core": 9}[stage] and
+                all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value) for value in targets) and
+                len(set(targets)) == len(targets) and
+                targets[0] == sha(b"/api/matters/?limit=25"), "Exact core matter read targets required")
+    require(isinstance(route, str) and "*" not in route, "Exact uploaded source route required")
     require(route not in previous["routes"], "Uploaded source route was already admitted; never replay")
-    return {"routes": sorted(previous["routes"] + [route])}
+    return {**previous, "routes": sorted(previous["routes"] + [route])}
 
 
 def checked_run(command, input_text=None, timeout=10, result_log=None):
@@ -286,7 +304,44 @@ def load_fixture(path, expected_hash):
     return module
 
 
-def container_admit(request, root=Path("/fixture-state")):
+def measured_source_get(operation, byte_range, expected_status, diagnostics=None):
+    """Retain only fixed source-GET status/timing; never replay or expose response bytes."""
+    require(byte_range in (None, "bytes=0-15") and expected_status == (200 if byte_range is None else 206),
+            "Fixed full or range source GET required")
+    started = time.monotonic()
+
+    def observation(status):
+        elapsed_ms = round((time.monotonic() - started) * 1000, 3)
+        value = {"method": "GET", "routeTemplate": "/api/matters/:matter/attachments/:attachment/download",
+                 "range": "full" if byte_range is None else "bytes=0-15",
+                 "status": status if type(status) is int and 100 <= status <= 599 else None,
+                 "expectedStatus": expected_status, "elapsedMs": elapsed_ms}
+        if diagnostics is not None:
+            diagnostics.append(value)
+        return elapsed_ms
+
+    try:
+        response = operation()
+    except BaseException:
+        # Observation failure must not replace an original transport exception.
+        try:
+            observation(None)
+        except BaseException:
+            pass
+        raise
+    elapsed_ms = observation(response[0])
+    return response, elapsed_ms
+
+
+def source_admission_failure(error, diagnostics):
+    reason = str(error) if isinstance(error, (ValueError, AssertionError, TimeoutError, FileExistsError)) else "Admission failed; retained attempt evidence"
+    result = {"sourceRouteAdmitted": False, "error": type(error).__name__, "reason": reason}
+    if diagnostics:
+        result["sourceReadDiagnostics"] = diagnostics
+    return result
+
+
+def container_admit(request, root=Path("/fixture-state"), diagnostics=None):
     require(os.environ.get("CASEOPS_ENV") == "local", "Only the local fixture API may admit sources")
     read_bound(Path(__file__).absolute(), request["admissionPythonSha256"])
     require(request.get("schemaVersion") == 1, "Admission request schema mismatch")
@@ -345,7 +400,7 @@ def container_admit(request, root=Path("/fixture-state")):
         route = "GET " + route_path
         route_file = root / "gateway-routes.json"
         previous_bytes, previous_ref = read_bound(route_file)
-        updated = add_exact_route(json.loads(previous_bytes), route)
+        updated = add_exact_route(json.loads(previous_bytes), route, current["gatewayRunId"])
         prefix = f"android-file-source-{claim_id[:16]}"
         before_name, after_name = prefix + ".routes-before.json", prefix + ".routes-after.json"
         new_file(root / before_name, previous_bytes)
@@ -362,7 +417,9 @@ def container_admit(request, root=Path("/fixture-state")):
             os.replace(temporary, route_file)
             observations = []
             for byte_range, expected_status in ((None, 200), ("bytes=0-15", 206)):
-                code, content, headers = tls_get(root, current, ca, route_path, http.headers["Authorization"], byte_range, MAX_SOURCE_BYTES)
+                (code, content, headers), elapsed_ms = measured_source_get(
+                    lambda: tls_get(root, current, ca, route_path, http.headers["Authorization"], byte_range, MAX_SOURCE_BYTES),
+                    byte_range, expected_status, diagnostics)
                 require(code == expected_status, "Actual admitted source response mismatch")
                 require("no-store" in headers.get("cache-control", "").lower(), "Private source no-store response required")
                 if byte_range is None:
@@ -371,7 +428,7 @@ def container_admit(request, root=Path("/fixture-state")):
                 else:
                     require(content == prefix_bytes and headers.get("content-range") == f"bytes 0-15/{asset['sizeBytes']}", "Persisted source range bytes mismatch")
                 observations.append({"range": byte_range, "status": code, "sizeBytes": len(content), "sha256": sha(content),
-                                     "cacheControl": headers.get("cache-control"), "actualNoPaidHeader": True})
+                                     "cacheControl": headers.get("cache-control"), "actualNoPaidHeader": True, "elapsedMs": elapsed_ms})
         evidence = {"schemaVersion": 1, "kind": "android-native-uploaded-source-admission", "sourceRouteAdmitted": True,
                     "syntheticDataOnly": True, "createdAt": datetime.now(UTC).isoformat(), "route": route,
                     "project": current["project"], "gatewayRunId": current["gatewayRunId"],
@@ -393,7 +450,7 @@ def container_admit(request, root=Path("/fixture-state")):
         return {"sourceRouteAdmitted": True, "route": route, "receiptFile": receipt_name, "receiptSha256": sha(receipt_bytes)}
 
 
-def main():
+def main(diagnostics=None):
     if sys.argv[1:] == ["_container"]:
         def expired(_signum, _frame):
             raise TimeoutError("Bounded source admission deadline")
@@ -401,7 +458,7 @@ def main():
         signal.alarm(50)
         data = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
         require(len(data) <= MAX_REQUEST_BYTES, "Admission stdin bound exceeded")
-        result = container_admit(json.loads(data))
+        result = container_admit(json.loads(data), diagnostics=diagnostics)
     else:
         parser = argparse.ArgumentParser(description=__doc__)
         for name in ("cache", "receipt", "manifest", "output"):
@@ -414,11 +471,11 @@ def main():
 
 
 if __name__ == "__main__":
+    source_read_diagnostics = []
     try:
-        main()
+        main(source_read_diagnostics)
     except Exception as error:
         # Child tracebacks/HTTP bodies may contain credentials. Retain attempts,
         # emit only the public failure class, and never retry an uncertain claim.
-        reason = str(error) if isinstance(error, (ValueError, AssertionError, TimeoutError, FileExistsError)) else "Admission failed; retained attempt evidence"
-        print(json.dumps({"sourceRouteAdmitted": False, "error": type(error).__name__, "reason": reason}), file=sys.stderr)
+        print(json.dumps(source_admission_failure(error, source_read_diagnostics)), file=sys.stderr)
         raise SystemExit(1)

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { totp } from './mfa.mjs';
-import { v1Hash, v1Identity, v1Reference, v1PrivateReference, collectV1OracleIdentities, v1OracleIdentityEvidence } from './v1-workflows-contract.mjs';
+import { v1Hash, v1Identity, v1OperationalMatter, v1Reference, v1PrivateReference, collectV1OracleIdentities, v1OracleIdentityEvidence } from './v1-workflows-contract.mjs';
 import { readV1Reference } from './v1-workflows-contract.mjs';
 
 export const V1_VIEWER_LIMITS = Object.freeze({ totalMs: 60000, requestMs: 10000, requests: 10, responseBytes: 1048576 });
@@ -88,7 +88,7 @@ export async function produceV1Viewer(plan, { admit, request, persistPrivate, pe
     assert.deepEqual(plan.work.hearing.reminder_channels, []); assert.deepEqual(plan.work.hearing.reminder_recipient_membership_ids, []);
     assert.equal(plan.work.hearing.notification_critical, false);
     const matter = await call('readonly-matter', 'owner', 'POST', '/api/matters/', plan.work.matter);
-    v1Identity(matter.id); assert.equal(matter.company_id, plan.companyId); assert.equal(matter.is_disposed, false);
+    v1OperationalMatter(matter, plan.companyId);
     assert.ok(Number.isSafeInteger(matter.lifecycle_version) && matter.lifecycle_version >= 0);
     const task = await call('readonly-task', 'owner', 'POST', `/api/matters/${matter.id}/tasks`, { ...plan.work.task, expected_lifecycle_version: matter.lifecycle_version });
     const hearing = await call('readonly-hearing', 'owner', 'POST', `/api/matters/${matter.id}/hearings`, { ...plan.work.hearing, expected_lifecycle_version: matter.lifecycle_version });
@@ -102,7 +102,7 @@ export async function produceV1Viewer(plan, { admit, request, persistPrivate, pe
     assert.equal(plan.work.rowFacts.task[0], task.title); assert.equal(plan.work.rowFacts.hearing[0], hearing.purpose || 'Hearing purpose not recorded');
     assert.ok(plan.work.rowFacts.task[2].endsWith(' · Read-only') && plan.work.rowFacts.hearing[2].endsWith(' · Read-only'));
     assert.ok(typeof workspace.matter.matter_code === 'string' && workspace.matter.matter_code && typeof workspace.matter.title === 'string' && workspace.matter.title);
-    const readOnlyWork = { expectedRole: 'viewer', expectedCanWrite: false, matter: { ...workspace.matter, search: workspace.matter.matter_code, identityLabel: workspace.matter.matter_code }, task, hearing,
+    const readOnlyWork = { expectedRole: 'viewer', expectedCanWrite: false, matter: { ...v1OperationalMatter(workspace.matter, plan.companyId), search: workspace.matter.matter_code, identityLabel: workspace.matter.matter_code }, task, hearing,
       rowFacts: { task: { [task.id]: plan.work.rowFacts.task }, hearing: { [hearing.id]: plan.work.rowFacts.hearing } } };
     const after = await admit(plan, { boundary: 'after', remaining: () => aggregate.remaining('viewer'), charge: value => aggregate.request('viewer', { ...value, admission: true }) });
     assert.equal(after.apiSourceSha, plan.sourceSha); assert.equal(after.webSourceSha, plan.sourceSha); assert.equal(after.binaryHash, admitted.binaryHash);

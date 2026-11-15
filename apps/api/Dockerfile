@@ -52,8 +52,10 @@ COPY vendor/fpdf2-2.8.9 /usr/share/doc/caseops-api/third-party/fpdf2-2.8.9
 # Exact upstream font sources/OFL notices and shaping-engine notices.
 COPY vendor/pdf-fonts-20261104 /usr/share/doc/caseops-api/third-party/pdf-fonts-20261104
 COPY vendor/uharfbuzz-0.57.0 /usr/share/doc/caseops-api/third-party/uharfbuzz-0.57.0
-# Retain the official dnspython 2.9.2 tagged ISC notice beside its provenance.
+# Retain the exact upstream ISC notice for the patched dnspython distribution.
 COPY vendor/dnspython-2.9.2 /usr/share/doc/caseops-api/third-party/dnspython-2.9.2
+# Supplemental Apache notice omitted from the optional upstream distribution.
+COPY vendor/opentelemetry-util-http-0.66b2 /usr/share/doc/caseops-api/third-party/opentelemetry-util-http-0.66b2
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently

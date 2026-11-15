@@ -1,0 +1,18 @@
+opentelemetry-util-http 0.66b2 — optional API observability dependency
+
+Copyright The OpenTelemetry Authors
+License: Apache-2.0. The accompanying LICENSE is copied without modification
+from the official opentelemetry-python-contrib v0.66b2 tag, commit
+a34b6fa56948bebb539cfece22adf5d022cc3c19.
+
+The official PyPI wheel and source archive omit their license files. This
+supplemental image notice retains the upstream license for the optional
+instrumentation cohort. The library is installed from its official hash-pinned
+artifact without code modifications. Observability remains optional.
+
+Source: https://github.com/open-telemetry/opentelemetry-python-contrib/tree/v0.66b2
+Release: https://pypi.org/project/opentelemetry-util-http/0.66b2/
+Exact upstream artifact, source and license references are in provenance.json.
+
+This API dependency is separate from web/mobile JavaScript notice inventories
+and their retained historical exceptions.

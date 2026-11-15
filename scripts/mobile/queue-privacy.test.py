@@ -40,4 +40,10 @@ class Inventory(unittest.TestCase):
         source=(ROOT/'scripts/mobile/prepare-queue-privacy-fixture.mjs').read_text();self.assertIn('observed:false,readyForLive:false,preparedOnly:true',source)
         source=(ROOT/'apps/mobile/src/application/screens/WorkScreen.tsx').read_text()
         for name in('queue-task-title','queue-task-matter','queue-task-id','queue-task-status','queue-task-priority','queue-task-due','queue-task-created','queue-task-updated','queue-task-lifecycle','queue-back'):self.assertEqual(source.count('testID="'+name+'"'),1)
+        privacy=(ROOT/'apps/mobile/src/components/AccountPrivacyRequests.tsx').read_text()
+        ordered=('privacy-request-state','privacy-request-receipt','privacy-request-id','privacy-request-operation','privacy-request-requested-at','privacy-request-status','privacy-request-not-completed')
+        positions=[]
+        for name in ordered:
+            literal='testID="'+name+'"';self.assertEqual(privacy.count(literal),1);positions.append(privacy.index(literal))
+        self.assertEqual(positions,sorted(positions),'Native receipt reads depend on the real state anchor and exact rendered fact order')
 if __name__=='__main__':unittest.main()

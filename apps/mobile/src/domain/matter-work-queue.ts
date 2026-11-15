@@ -349,17 +349,23 @@ export function createMatterWorkQueueController(
         : null;
       if (selected && !confirmed) {
         clearChain();
+        lease = null;
         publish("stale");
         return true;
       }
       inputCursor = token;
       for (const item of page.items) seenIds.add(item.id);
       if (page.next_cursor !== null) seenCursors.add(page.next_cursor);
+      // A ready observer may act immediately. Release this completed read
+      // before publishing, so its first action is admitted and this read's
+      // finally block cannot clear a successor's lease.
+      lease = null;
       publish(confirmed ? "detail" : "ready", page, null, filter, confirmed);
     } catch (error) {
       if (!admitted() || generation !== epoch || lease !== owned) return true;
       clearChain();
       const status = errorStatus(error);
+      lease = null;
       if (status === 401 || status === 403)
         publish("restricted", null, readFailure(error));
       else if (status === 409) publish("stale");

@@ -206,7 +206,8 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
             "-p", "tests.postgres_sharding", f"--postgres-shard={shard}",
             f"--postgres-shards={total}", f"--postgres-inventory=postgres-shard-{shard}.json",
             f"--junitxml=postgres-shard-{shard}.xml",
-            "-o", "faulthandler_timeout=60",
+            "-p", "tests.postgres_thread_diagnostics",
+            "--postgres-thread-diagnostics-after=60", "-o", "faulthandler_timeout=0",
         ]
         journal = _render_postgres_matrix(step["env"]["CASEOPS_TEST_RESULT_JOURNAL"], shard, total)
         assert journal == f"postgres-shard-{shard}.jsonl"
@@ -308,6 +309,10 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     shutil.copyfile(
         Path(__file__).with_name("retained_results.py"), tests / "retained_results.py"
     )
+    shutil.copyfile(
+        Path(__file__).with_name("postgres_thread_diagnostics.py"),
+        tests / "postgres_thread_diagnostics.py",
+    )
     (tests / "conftest.py").write_text('pytest_plugins = ["tests.retained_results"]\n')
     (tests / "test_sample.py").write_text(
         "import json,os,sys\nfrom pathlib import Path\nimport pytest\n"
@@ -337,11 +342,12 @@ def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath
     expected = sorted(f"tests/test_sample.py::test_marked[{item}]" for item in range(64))
     executed = []
     for shard in matrix["shard"]:
-        for key in ("PYTEST_ADDOPTS", "CASEOPS_TEST_RESULT_JOURNAL"):
+        for key in ("PYTEST_ADDOPTS", "CASEOPS_TEST_RESULT_JOURNAL",
+                    "CASEOPS_FINALIZER_EVIDENCE_DIR"):
             environment[key] = _render_postgres_matrix(step["env"][key], shard, total)
         expected_environment = {key: environment.get(key) for key in (
             "PATH", "VIRTUAL_ENV", "UV_RUN_RECURSION_DEPTH", "UV_CACHE_DIR", "PYTEST_ADDOPTS",
-            "CASEOPS_NATIVE_ENV_LITERAL", "PYTHONPATH",
+            "CASEOPS_NATIVE_ENV_LITERAL", "PYTHONPATH", "CASEOPS_FINALIZER_EVIDENCE_DIR",
         )}
         (tmp_path / "owned-child-environment.json").write_text(json.dumps(expected_environment))
         command = [_render_postgres_matrix(value, shard, total) for value in command_template]

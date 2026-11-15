@@ -826,3 +826,56 @@ test('a visible input covering the measured gutter or unknown input geometry for
     assert.deepEqual(fake.actions, []);
   }
 });
+
+function conductContext(platform, {hittable = true, frame = {x: 10, y: 20, width: 150, height: 48}, clickError, editor = true} = {}) {
+  const calls = [], records = [];
+  const button = {elementId: 'native-consent-unit', isDisplayed: async () => true,
+    getAttribute: async key => key === 'hittable' ? hittable : undefined};
+  const context = {platform, fixture: {environment: 'docker-integration', syntheticDataOnly: true},
+    record: row => records.push(row), driver: {
+      $$: async query => query === selector(platform, 'id', 'workspace-use-accept') ? [button]
+        : query === selector(platform, 'id', 'note-input') && editor ? [{elementId: 'native-note-unit', isDisplayed: async () => true}] : [],
+      waitUntil: async callback => { assert.ok(await callback(), 'UNIT_NATIVE_POSTCONDITION_MISSING'); },
+      getElementRect: async id => { assert.equal(id, button.elementId); return frame; },
+      getWindowRect: async () => ({x: 0, y: 0, width: 400, height: 800}),
+      elementClick: async id => { calls.push(id); if (clickError) throw clickError; },
+    }};
+  return {context, calls, records};
+}
+
+test('synthetic consent setup proves native control and editor on each platform without full-case credit', async () => {
+  const {acceptNativeWorkspaceRules} = await import('./native-conduct-setup.mjs');
+  for (const platform of ['android', 'ios']) {
+    const {context, calls, records} = conductContext(platform);
+    const proof = await acceptNativeWorkspaceRules(context);
+    assert.deepEqual(calls, ['native-consent-unit']);
+    assert.equal(proof.noteEditorObserved, true);
+    assert.equal(proof.fullCaseCredit, 0);
+    assert.equal(records.at(-1).type, 'workspace_conduct_setup');
+  }
+});
+
+test('synthetic consent setup refuses production, occluded and non-hittable controls before acceptance', async () => {
+  const {acceptNativeWorkspaceRules} = await import('./native-conduct-setup.mjs');
+  for (const options of [{hittable: false}, {frame: {x: 10, y: 790, width: 150, height: 48}},
+    {frame: {x: 10, y: 20, width: 150, height: 0}}]) {
+    const {context, calls} = conductContext('ios', options);
+    await assert.rejects(() => acceptNativeWorkspaceRules(context), /CONDUCT_CONTROL_/);
+    assert.deepEqual(calls, []);
+  }
+  const {context, calls} = conductContext('android');context.fixture.environment = 'production';
+  await assert.rejects(() => acceptNativeWorkspaceRules(context));assert.deepEqual(calls, []);
+});
+
+test('synthetic consent setup preserves lost mutation acknowledgement and missing editor without replay', async () => {
+  const {acceptNativeWorkspaceRules} = await import('./native-conduct-setup.mjs');
+  const lost = new Error('UNIT_LOST_CONSENT_ACK');
+  const first = conductContext('ios', {clickError: lost});
+  await assert.rejects(() => acceptNativeWorkspaceRules(first.context), error => error === lost);
+  assert.deepEqual(first.calls, ['native-consent-unit']);
+  assert.equal(first.records.some(row => row.type === 'workspace_conduct_setup'), false);
+  const second = conductContext('android', {editor: false});
+  await assert.rejects(() => acceptNativeWorkspaceRules(second.context), /NATIVE_CONTROL_NOT_VISIBLE/);
+  assert.deepEqual(second.calls, ['native-consent-unit']);
+  assert.equal(second.records.some(row => row.type === 'workspace_conduct_setup'), false);
+});

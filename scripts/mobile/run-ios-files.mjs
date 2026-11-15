@@ -7,16 +7,22 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { iosFilesInventory as inventory, iosFilesScenarios as scenarios, collectIosFiles, validateIosFilesContext,
-  validateSourceSeed, validatePickerProvider, validateAsset, validatePickerAsset } from '../../apps/mobile/e2e/ios-files.mjs';
+  validateSourceSeed, validatePickerProvider, validateAsset, validatePickerAsset, IOS_FILE_FACT_RESPONSE_ATTRIBUTES } from '../../apps/mobile/e2e/ios-files.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { FixtureUnavailable, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { appiumSessionEvent } from '../../apps/mobile/e2e/run-state.mjs';
-import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestIosFilesContainers, snapshotIosFilesPrivacy } from './ios-files-privacy.mjs';
+
+// The original entry fence reserves capacity; it does not guarantee an entire suite fits.
+export function assertFreshIosFilesLedger(state) {
+  assert.ok(Number.isSafeInteger(state.lastSequence) && state.lastSequence >= 0 && state.lastSequence < 100,
+    'FRESH_BOUNDED_FILES_LEDGER_REQUIRED');
+}
 
 export function captureIosFilesPrivacy(options, phase, snapshot = snapshotIosFilesPrivacy) {
   assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'FILES_PRIVACY_PHASE_REQUIRED');
@@ -178,14 +184,15 @@ export async function runIosFiles() {
     const staged = readRef(assets.providerEvidence);
     assert.equal(staged.folderName, assets.provider.folderName, 'FILES_STAGED_PICKER_FOLDER_MISMATCH');
     assert.deepEqual(staged.manifestEvidence, assets.manifestEvidence, 'FILES_STAGED_MANIFEST_MISMATCH');
+    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
+    baseline = gatewayBaseline(status, isolation);
+    assertFreshIosFilesLedger(status);
     const preflightPrivacy = captureIosFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
       knownSources: knownFileSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');
     assert.equal(preflightPrivacy.snapshot.complete, true, 'COMPLETE_FILES_PREFLIGHT_SCAN_REQUIRED');
     assert.equal(preflightPrivacy.snapshot.providerMetadataPreserved, true, 'FILES_PROVIDER_ORIGINALS_CHANGED');
     assert.equal(preflightPrivacy.snapshot.counts.privateAssetMatchCount, 0, 'FILES_PREFLIGHT_PRIVATE_COPY_REMAINS');
     assert.equal(preflightPrivacy.snapshot.counts.ownedStagingFiles, 0, 'FILES_PREFLIGHT_STAGING_REMAINS');
-    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
-    baseline = gatewayBaseline(status, isolation);
     for (const [url, expected, revision] of [[`${fixture.gatewayUrl}/api/build`, fixture.backendSha, fixture.backendRevision],
       [`${fixture.webGatewayUrl}/api/release-identity`, fixture.webSha, fixture.webRevision]]) {
       const identity = await localJson(url);
@@ -220,13 +227,17 @@ export async function runIosFiles() {
       const installed = execFileSync('xcrun', ['simctl', 'get_app_container', fixture.udid, fixture.appId, 'app'], { encoding: 'utf8', timeout: 10000 }).trim();
       assert.equal(binaryHash(installed), artifactHash, 'INSTALLED_BINARY_CHANGED');
       sessionRequested = true;
-      driver = await remote({ hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1),
+      driver = await remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1),
         path: appium.pathname, logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000,
         capabilities: { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:deviceName': fixture.deviceName,
           'appium:platformVersion': fixture.platformVersion, 'appium:udid': fixture.udid, 'appium:bundleId': fixture.appId,
-          'appium:noReset': true, 'appium:newCommandTimeout': 60, 'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000 } });
+          'appium:noReset': true, 'appium:newCommandTimeout': 60, 'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000,
+          'appium:shouldUseCompactResponses': false, 'appium:elementResponseAttributes': IOS_FILE_FACT_RESPONSE_ATTRIBUTES } });
       sessionId = driver.sessionId;
       journal.write({ ...appiumSessionEvent(sessionId, 'created'), id });
+      const factSettings = await driver.getSettings();
+      assert.equal(factSettings.shouldUseCompactResponses, false, 'IOS_FILES_NATIVE_FACT_SETTINGS_REQUIRED');
+      assert.equal(factSettings.elementResponseAttributes, IOS_FILE_FACT_RESPONSE_ATTRIBUTES, 'IOS_FILES_NATIVE_FACT_SETTINGS_REQUIRED');
       await driver.switchContext('NATIVE_APP');
       context = { fixture, driver, platform: 'ios', runId, gatewayBaseline: baseline, assets, source: assets.source, provider: assets.provider, uploaded, filesState,
         record: (event) => journal.write({ ...event, id }),

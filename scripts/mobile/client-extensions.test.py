@@ -86,6 +86,49 @@ class ClientExtensionInventory(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/mobile-source.yml").read_text()
         self.assertIn("run: python3 scripts/mobile/client-extensions.test.py", workflow)
 
+    def test_https_case_has_private_typed_dispatch_and_never_trusts_observed_json_alone(self):
+        callback = (ROOT / "apps/mobile/e2e/client-extensions-20261028.mjs").read_text().split("{id:'CX28-LINK-05'", 1)[1].split("{id:'CX28-READ-01'", 1)[0]
+        self.assertIn("withHttpsQualification", callback)
+        self.assertIn("terminateQualifiedApp(c)", callback)
+        self.assertEqual(callback.count("recordLink(c,c.fixture.cx.links.https,{verifiedHttps:true})"), 2)
+        self.assertEqual(callback.count("waitId(c,'matter-code',c.fixture.cx.links.matter.code)"), 2)
+        observer = (ROOT / "scripts/mobile/android-https-qualification.mjs").read_text()
+        self.assertIn("const leases = new WeakMap()", observer)
+        self.assertIn("QUAL_ACTUAL_WARM_STATE_REQUIRED", observer)
+        self.assertIn("QUAL_OS_VERIFIED_HOST_REQUIRED", observer)
+        self.assertIn("QUAL_UNFORCED_RESOLVER_REQUIRED", observer)
+        self.assertIn("if (bodyFailed) throw bodyError", observer)
+        positive = observer.split("const started = command('adb'", 1)[1].split("true);", 1)[0]
+        self.assertNotIn("'-p'", positive)
+        self.assertNotIn("'-n'", positive)
+
+    def test_qualification_and_promotion_keep_native_inventory_and_completion_boundaries(self):
+        package = (ROOT / "scripts/mobile/store-packaging-execution.mjs").read_text()
+        promotion = (ROOT / "scripts/mobile/android-qualification-promotion.mjs").read_text()
+        self.assertIn("QUALIFICATION_BUILD = Symbol", package)
+        self.assertIn("storeGatesFor('android').filter", package)
+        self.assertIn("validateV1EvidenceStreams", promotion)
+        self.assertIn("QUALIFICATION_FINAL_RUNNER_SUMMARY_REQUIRED", promotion)
+        self.assertIn("QUALIFICATION_ALL15_GATES_REQUIRED", promotion)
+        self.assertIn("[23, 17, 2, 24, 17]", promotion)
+        self.assertIn("artifactRebuilt: false", promotion)
+        source = (ROOT / "scripts/mobile/source-snapshot.mjs").read_text()
+        workflow = (ROOT / ".github/workflows/mobile-source.yml").read_text()
+        for name in ("android-sdk-xml", "android-https-qualification", "android-qualification-apk", "android-qualification-promotion", "android-https-subject"):
+            self.assertIn("scripts/mobile/" + name + ".mjs", source)
+        for name in ("android-https-qualification", "android-qualification-promotion", "android-https-subject"):
+            self.assertIn("scripts/mobile/" + name + ".test.mjs", workflow)
+
+    def test_disposable_https_subject_has_normal_api_producer_not_db_or_entitlement_override(self):
+        source = (ROOT / "scripts/mobile/android-https-subject.mjs").read_text()
+        for route in ("/api/bootstrap/company", "/api/auth/mfa/enroll", "/api/auth/mfa/enroll/verify", "/api/auth/me", "/api/matters/"):
+            self.assertIn(route, source)
+        self.assertIn("HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED", source)
+        self.assertIn("unknownMutationsMustNotReplay: true", source)
+        self.assertIn("nativeAuthenticationVerified: false", source)
+        self.assertIn("rejectUnauthorized: true", source)
+        self.assertIn("'X-CaseOps-Automated-Test': 'no-paid-providers'", source)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

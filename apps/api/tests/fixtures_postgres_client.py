@@ -188,6 +188,10 @@ def temporary_http_database(source_url: URL, *, template: URL | None = None):
             assert database_name != source_url.database
             with admin.connect() as connection:
                 connection.exec_driver_sql(f"DROP DATABASE {quote(database_name)} WITH (FORCE)")
+                assert not connection.scalar(
+                    text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:name)"),
+                    {"name": database_name},
+                )
         admin.dispose()
 
 
@@ -224,6 +228,58 @@ def migrated_http_template() -> Generator[URL]:
             yield template.url
         finally:
             admin.dispose()
+
+
+@contextmanager
+def dated_protocol_template(revision: str):
+    """Freeze only the two reviewed pre-protocol boundaries, never moving head.
+
+    Each template is built from template0. Callers still clone a new database
+    per test and run the actual forward/recovery migrations in that clone.
+    """
+    assert revision in {"20260928_0001", "20261010_0002"}
+    source_url = make_url(os.environ["CASEOPS_TEST_POSTGRES_URL"])
+    assert source_url.get_backend_name() == "postgresql"
+    with temporary_http_database(source_url) as template:
+        url = template.url.render_as_string(hide_password=False)
+        root = Path(__file__).resolve().parents[1]
+        config = Config(str(root / "alembic.ini"))
+        config.set_main_option("script_location", str(root / "alembic"))
+        config.set_main_option("sqlalchemy.url", url)
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setenv("CASEOPS_ENV", "local")
+            patch.setenv("CASEOPS_DATABASE_URL", url)
+            get_settings.cache_clear()
+            clear_engine_cache()
+            try:
+                command.upgrade(config, revision)
+            finally:
+                clear_engine_cache()
+                get_settings.cache_clear()
+        with template.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            assert connection.scalar(text("SELECT count(*) FROM companies")) == 0
+        template.dispose()
+        admin = create_engine(source_url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+        try:
+            name = admin.dialect.identifier_preparer.quote(template.url.database)
+            with admin.connect() as connection:
+                connection.exec_driver_sql(f"ALTER DATABASE {name} ALLOW_CONNECTIONS false")
+            yield template.url
+        finally:
+            admin.dispose()
+
+
+@pytest.fixture(scope="session")
+def document_protocol_template() -> Generator[URL]:
+    with dated_protocol_template("20260928_0001") as template:
+        yield template
+
+
+@pytest.fixture(scope="session")
+def compliance_tail_template() -> Generator[URL]:
+    with dated_protocol_template("20261010_0002") as template:
+        yield template
 
 
 @pytest.fixture

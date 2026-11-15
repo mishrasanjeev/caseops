@@ -12,7 +12,7 @@ import threading
 import time
 
 PROFILE = "queue-privacy-v1"
-BASE_SHA256 = "399b458ca2eb9ad11724bf7a7a454cb89de37251c82debe4f7e0270e8cdc20ca"
+BASE_SHA256 = "3f77c501a8f2e42aa1b6ad0a0a72d14e22ca4f5d065dee0da6e92bb60c861b36"
 CASES = {"QUEUE-01": 24, "PRIVACY-01": 24}
 CAPABILITIES = ("readQueue", "readOwnPrivacy", "changeAnchor", "armPrivacyAckLoss",
                 "readControlReceipt", "readNativeRequest", "closeCaseControls", "closeRunControls")
@@ -56,7 +56,7 @@ def validate_registration(v, *, source, run, now):
     assert len({a["userId"] for a in v["actors"].values()}) == 3
     assert len({a["membershipId"] for a in v["actors"].values()}) == 3
     anchor=v["anchor"];assert anchor["id"] in ids and anchor["matterId"] in ids
-    expected={"GET "+QUEUE,"GET "+PRIVACY,"POST "+PRIVACY,"GET /api/matters/"+anchor["matterId"]+"/workspace"}
+    expected={"GET "+QUEUE,"GET "+PRIVACY,"POST "+PRIVACY,"GET /api/matters/"+anchor["matterId"]+"/workspace","GET /api/matters/"+anchor["matterId"]+"/drafts"}
     assert set(v["exactRoutes"]) == expected and len(v["exactRoutes"]) == len(expected)
     allowed={"GET /api/matters/"+anchor["matterId"],"GET /api/matters/"+anchor["matterId"]+"/tasks",
              "PATCH /api/matters/"+anchor["matterId"]+"/tasks/"+anchor["id"]}
@@ -142,38 +142,58 @@ class Controls:
         arm.update(consumed=True,requestsForwarded=1,requestId=request_id);return {"arm":arm}
     def after_native(self,method,route,*,native,request_id,sequence,body,query,status,data,intercept):
         if not native or method+" "+route not in self.registration["exactRoutes"]:return False
-        assert len(self.records)<100
-        row={"sequence":sequence,"method":method,"route":route,"status":status,"requestId":request_id}
-        if route==QUEUE:
-            from urllib.parse import parse_qs
-            q=parse_qs(query,strict_parsing=True);assert set(q)<={"ownership","dates","limit","cursor"} and all(len(v)==1 for v in q.values())
-            assert q.get("ownership",["mine"])[0] in ("mine","team","unassigned") and q.get("dates",["all"])[0]in("all","dated","undated") and q.get("limit",["25"])[0]=="25"
-            assert "cursor"not in q or len(q["cursor"][0])<=4000
-            row["queryObservation"]={"ownership":q.get("ownership",["mine"])[0],"dates":q.get("dates",["all"])[0],"cursorSha256":sha(q["cursor"][0].encode())if"cursor"in q else None}
-        if method=="POST":
-            assert route==PRIVACY and self.privacy_attempted
-            row["bodyObservation"]={"keys":["confirmation","operation_id"],"canonicalSha256":sha(canonical(json.loads(body)))}
-            if status==202:
-                value=receipt(json.loads(data));assert value["operation_id"]==self.operation_id
-                assert len(self.known_ids|{value["id"],value["operation_id"]})<=96
-                row["responseObservation"]=value
-                assert intercept and intercept["arm"]["requestId"]==request_id
-        # The original upstream ACK must be fsynced before intentional client
-        # response loss is permitted. A failed journal leaves the attempt
-        # consumed and the ACK unknown; it can never authorize replay or loss.
-        self.persist({"type":"qp_native_request_observed",**row})
-        self.records.append(row)
-        if method=="POST" and status==202:
-            self.known_ids.update((value["id"],value["operation_id"]))
-            intercept["arm"].update(upstreamAcknowledged=True,upstreamStatus=202,responseObservation=value,durableAck=True)
-        return self.should_withhold(intercept,status)
+        with self.lock:
+            # The public gateway still forwards its statically allowed reads
+            # after this authority has closed its private evidence journal.
+            if self.closed:
+                assert method == "GET" and intercept is None, "QP_CLOSED_NATIVE_WRITE_EVIDENCE_UNAVAILABLE"
+                return False
+            assert len(self.records)<100
+            row={"sequence":sequence,"method":method,"route":route,"status":status,"requestId":request_id}
+            if route==QUEUE:
+                from urllib.parse import parse_qs
+                q=parse_qs(query,strict_parsing=True);assert set(q)<={"ownership","dates","limit","cursor"} and all(len(v)==1 for v in q.values())
+                assert q.get("ownership",["mine"])[0] in ("mine","team","unassigned") and q.get("dates",["all"])[0]in("all","dated","undated") and q.get("limit",["25"])[0]=="25"
+                assert "cursor"not in q or len(q["cursor"][0])<=4000
+                row["queryObservation"]={"ownership":q.get("ownership",["mine"])[0],"dates":q.get("dates",["all"])[0],"cursorSha256":sha(q["cursor"][0].encode())if"cursor"in q else None}
+                if status==200:
+                    value=json.loads(data)
+                    assert isinstance(value,dict) and "next_cursor" in value
+                    items=value.get("items");cursor=value["next_cursor"]
+                    assert isinstance(items,list) and len(items)<=25
+                    assert cursor is None or isinstance(cursor,str) and 0<len(cursor)<=4000
+                    assert all(isinstance(item,dict) and isinstance(item.get("id"),str) and item["id"] in self.known_ids for item in items)
+                    row["responseObservation"]={"nextCursorSha256":sha(cursor.encode()) if cursor is not None else None,
+                                                "anchorIdSha256":sha(items[-1]["id"].encode()) if items else None}
+            if method=="POST":
+                assert route==PRIVACY and self.privacy_attempted
+                row["bodyObservation"]={"keys":["confirmation","operation_id"],"canonicalSha256":sha(canonical(json.loads(body)))}
+                if status==202:
+                    value=receipt(json.loads(data));assert value["operation_id"]==self.operation_id
+                    assert len(self.known_ids|{value["id"],value["operation_id"]})<=96
+                    row["responseObservation"]=value
+                    assert intercept and intercept["arm"]["requestId"]==request_id
+            # The original upstream ACK must be fsynced before intentional client
+            # response loss is permitted. A failed journal leaves the attempt
+            # consumed and the ACK unknown; it can never authorize replay or loss.
+            self.persist({"type":"qp_native_request_observed",**row})
+            self.records.append(row)
+            if method=="POST" and status==202:
+                self.known_ids.update((value["id"],value["operation_id"]))
+                intercept["arm"].update(upstreamAcknowledged=True,upstreamStatus=202,responseObservation=value,durableAck=True)
+            return self.should_withhold(intercept,status)
     @staticmethod
     def should_withhold(intercept,status):return bool(intercept and status==202 and intercept["arm"].get("upstreamAcknowledged") is True and intercept["arm"].get("durableAck") is True)
     def close(self):
-        if not self.closed:
-            self.closed=True
-            try:self.owner.close()
-            finally:self.authority=None;self.close_journal()
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+        try:
+            self.owner.close()
+        finally:
+            self.authority = None
+            self.close_journal()
 
 def from_environment(root,run_id,*,environment=None,verified_implementation_sha256=None,verified_registration_bytes=None,base_module=None,**_unused):
     env=environment or {};assert env.get("CASEOPS_ENV")=="local" and env.get("CASEOPS_MOBILE_V1_CONTROLS")=="1"
@@ -181,6 +201,7 @@ def from_environment(root,run_id,*,environment=None,verified_implementation_sha2
     assert base_module is not None and env.get("CASEOPS_MOBILE_V1_PROFILE")==PROFILE,"QP_VERIFIED_BASE_REQUIRED"
     v=json.loads(verified_registration_bytes);assert sha(verified_registration_bytes)==env["CASEOPS_MOBILE_V1_REGISTRATION_SHA256"]
     validate_registration(v,source=env["CASEOPS_RELEASE_SHA"],run=run_id,now=time.time())
+    claim=base_module.create_attempt_claim(root,v["runId"],"qp-attempt")
     assert v["implementationSha256"]==verified_implementation_sha256
     # This is a private copy of the descriptor-compiled helper module, never the
     # ordinary old17 module. Charge every authentication/admission/owner HTTP call.
@@ -221,8 +242,6 @@ def from_environment(root,run_id,*,environment=None,verified_implementation_sha2
             r=charged(h,"GET","/api/auth/me");assert r.status_code==200;value=r.json()
             return {"userId":value["user"]["id"],"membershipId":value["membership"]["id"],"companyId":value["company"]["id"]}
     persist,close=base_module.create_journal(root,v["registrationId"])
-    def claim(identity):
-        with (root/("qp-attempt-"+sha(identity.encode())+".json")).open("x",encoding="utf-8")as f:f.write(json.dumps({"identitySha256":sha(identity.encode()),"noReplay":True}))
     try:
         owner.claim=claim
         return Controls(v,sha(verified_registration_bytes),authority,base=base_module,owner=owner,persist=persist,claim=claim,close_journal=close,principal=principal,http_count=lambda:calls["count"])

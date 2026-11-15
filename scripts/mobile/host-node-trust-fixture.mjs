@@ -11,7 +11,7 @@ import { assertHostNodeTrust, HOST_NODE_TRUST_ENV } from './host-node-trust.mjs'
 export function localCertificates() {
   const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
   const forge = require('node-forge');
-  if (require('node-forge/package.json').version !== '1.4.1') throw new Error('HOST_TLS_FIXTURE_FORGE_VERSION');
+  if (require('node-forge/package.json').version !== '1.4.3') throw new Error('HOST_TLS_FIXTURE_FORGE_VERSION');
   function material(name, issuer = null, wrongHost = false) {
     const generated = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const key = forge.pki.privateKeyFromPem(generated.privateKey.export({ type: 'pkcs1', format: 'pem' }));

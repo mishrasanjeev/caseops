@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { executeStorePackaging, pendingStoreExecution, admitTools, GATES } from './store-packaging-execution.mjs';
+import { executeStorePackaging, pendingStoreExecution, admitTools, GATES, storeGatesFor,
+  executeAndroidQualification, pendingAndroidQualification, androidQualificationGates } from './store-packaging-execution.mjs';
 import crypto from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
 import { digest, gitSource } from './store-packaging-inputs.mjs';
@@ -34,14 +35,14 @@ function fixture(t, { androidOnly = false, reservationDirectory } = {}) {
     marketingVersion: '0.9.0', iosBuildNumber: '0', androidVersionCode: 0, scope: 'operator-declared-not-store-verified' });
   const storeBuild = save('build.json', { schemaVersion: 1, kind: 'caseops-store-build', syntheticDataOnly: true, nativeLinkConfigSha256: nativeLinks.sha256,
     identities, version: '1.0.0', iosBuildNumber: '1', androidVersionCode: 1, baseline });
-  const gateValue = { schemaVersion: 1, kind: 'caseops-reviewed-store-gates', sourceSha: source.sourceSha, tree: source.tree,
+  const gateValue = { schemaVersion: 2, kind: 'caseops-reviewed-store-gates', platform: null, sourceSha: source.sourceSha, tree: source.tree,
     sourceFingerprint: sourceContract.sourceFingerprint, inputFileCount: 100, reviewedAt: new Date().toISOString(), reservationDirectory: reservations,
     inputBindings: null, results: Object.fromEntries(GATES.map(name => [name, 'passed'])), evidence: GATES.map((name, i) => save('evidence-' + i + '.json', { kind: 'SYNTHETIC_GATE_ONLY', name })) };
   const historyValue = { kind: 'caseops-reviewed-actual-store-history', identities, observedAt: new Date().toISOString(),
     iosBuildNumber: '0', androidVersionCode: 0, evidence: [save('history-evidence.json', { synthetic: true })] };
   const history = save('history.json', historyValue);
   const iosNames = ['node', 'python', 'git', 'ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'];
-  const names = [...iosNames, 'java', 'keytool', 'jarsigner', 'bundletool'];
+  const names = [...iosNames, 'java', 'keytool', 'jarsigner', 'bundletool', 'aapt2'];
   const allTools = Object.fromEntries(names.map(name => { const ref = save(name + '-tool', 'SYNTHETIC_TOOL'); fs.chmodSync(ref.path, 0o700);
     return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.15.0', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
   const hostRef = save('synthetic-ios-host-policy.json', { syntheticContractOnly: true });
@@ -73,6 +74,8 @@ function fixture(t, { androidOnly = false, reservationDirectory } = {}) {
     const recipe = { schemaVersion: 1, kind: 'caseops-store-packaging-request', preparedOnly: true, syntheticDataOnly: true, platform,
       source: sourceContract, nativeLinks, storeBuild, apiOrigin: 'https://api.contract-fixture.org', webOrigin: 'https://auth.contract-fixture.org', signing: s };
     const toolsRef = save('tools-' + n + '.json', toolsValue(platform));
+    gateValue.platform = platform;
+    gateValue.results = Object.fromEntries(storeGatesFor(platform).map(name => [name, 'passed']));
     gateValue.inputBindings = { toolsSha256: toolsRef.sha256, nativeLinkConfigSha256: nativeLinks.sha256, storeBuildSha256: storeBuild.sha256,
       privacyPolicySha256: privacyPolicy.sha256, signingPublicInputs: s, architecture: pendingStoreExecution(platform).architecture };
     const boundGates = save('bound-gates-' + n + '.json', structuredClone(gateValue));
@@ -128,6 +131,60 @@ test('complete synthetic iOS command graph is contractOnly and cannot certify di
   assert.equal(result.observed, true, JSON.stringify(result.originalFailure)); assert.equal(result.contractOnly, true); assert.equal(result.distributionSigningVerified, false);
   assert.equal(result.storeAcceptance, false); assert.equal(result.uploaded, false); assert.deepEqual(result.phases.map(p => p.status), ['passed', 'passed', 'passed', 'passed', 'passed']);
   assert.deepEqual(f.reads(), { signingReads: 1, sourceReads: 2 }); assert.equal(f.calls.length, 6);
+});
+function qualificationFixture(f) {
+  const a = f.make('android');
+  a.q.kind = pendingAndroidQualification().kind;
+  const gates = JSON.parse(fs.readFileSync(a.q.gates.path));
+  const tools = JSON.parse(fs.readFileSync(a.q.tools.path)); tools.entries.aapt2 = f.allTools.aapt2;
+  a.q.tools = f.save('qualification-tools.json', tools); gates.inputBindings.toolsSha256 = a.q.tools.sha256;
+  gates.kind = 'caseops-reviewed-qualification-gates';
+  gates.results = Object.fromEntries(androidQualificationGates().map(name => [name, 'passed']));
+  a.q.gates = f.save('qualification-gates.json', gates);
+  f.adapter.qualificationApk = async ({ aab, tools: pinned }) => {
+    assert.equal(pinned.aapt2.sha256, f.allTools.aapt2.sha256); assert.ok(aab.path.endsWith('CaseOps.aab'));
+    return { artifact: f.save('synthetic-qualified.apk', 'SYNTHETIC_APK'), submissionAllowed: false, installedAcceptance: false };
+  };
+  return a;
+}
+test('qualification requires fourteen shared gates and stays explicitly non-submittable', async t => {
+  const f = fixture(t), a = qualificationFixture(f);
+  assert.equal(androidQualificationGates().length, 14);
+  assert.equal(storeGatesFor('android').length, 15);
+  const result = await executeAndroidQualification(a.ref(), { root: f.root, adapter: f.adapter });
+  assert.equal(result.observed, true, JSON.stringify(result.originalFailure));
+  assert.equal(result.kind, 'caseops-android-qualification-result');
+  assert.equal(result.qualificationOnly, true); assert.equal(result.submissionAllowed, false);
+  assert.equal(result.storeAcceptance, false); assert.equal(result.uploaded, false);
+  const embedded = JSON.parse(fs.readFileSync(path.join(a.q.outputDirectory, 'artifact-attestation.json')));
+  assert.equal(embedded.qualificationOnly, true); assert.equal(embedded.nativeAcceptanceClaimed, false);
+  assert.equal(embedded.submissionAuthorization, 'separate-artifact-bound-promotion-required');
+});
+test('qualification request and fourteen-gate evidence cannot enter final packaging', async t => {
+  for (const replaceKind of [false, true]) {
+    const f = fixture(t), a = qualificationFixture(f);
+    if (replaceKind) a.q.kind = pendingStoreExecution('android').kind;
+    await assert.rejects(executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }));
+    assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
+  }
+});
+test('every shared qualification failure refuses before any signing or build', async t => {
+  for (const name of androidQualificationGates()) {
+    const f = fixture(t), a = qualificationFixture(f);
+    const gates = JSON.parse(fs.readFileSync(a.q.gates.path)); gates.results[name] = 'failed';
+    a.q.gates = f.save('failed-' + name + '.json', gates);
+    await assert.rejects(executeAndroidQualification(a.ref(), { root: f.root, adapter: f.adapter }), /STORE_REQUIRED_GATE_FAILED/);
+    assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
+  }
+});
+test('qualification never accepts a fabricated native pass or an iOS request', async t => {
+  const f = fixture(t), a = qualificationFixture(f);
+  const gates = JSON.parse(fs.readFileSync(a.q.gates.path)); gates.results.nativeAndroid = 'passed';
+  a.q.gates = f.save('fabricated-native.json', gates);
+  await assert.rejects(executeAndroidQualification(a.ref(), { root: f.root, adapter: f.adapter }), /STORE_COMPLETE_GATE_INVENTORY_REQUIRED/);
+  const b = f.make('ios'); b.q.kind = pendingAndroidQualification().kind;
+  await assert.rejects(executeAndroidQualification(b.ref(), { root: f.root, adapter: f.adapter }), /STORE_QUALIFICATION_ANDROID_ONLY/);
+  assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
 });
 test('the same approved build batch serves both platforms but each platform can dispatch only once', async t => {
   const f = fixture(t), a = f.make('ios'); const first = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }); assert.equal(first.observed, true);
@@ -374,4 +431,34 @@ test('late iOS constructor refusal consumes only its existing claim and does not
   assert.equal(result.observed, false); assert.equal(result.originalFailure.code, 'IOS_HOST_OWNER_CONFIG_REFUSED'); assert.equal(f.reads().signingReads, 0);
   assert.equal(f.calls.some(c => c.args.includes('archive')), false); assert.ok(fs.readdirSync(f.reservations).some(n => n.endsWith('.claim')));
   assert.equal(result.phases.find(p => p.name === 'artifact-postflight').status, 'unreached');
+});
+
+
+test('Android and iOS release gates require every common gate and their own complete native acceptance', async t => {
+  const common = GATES.filter(name => !['nativeAndroid', 'nativeIos'].includes(name));
+  for (const platform of ['android', 'ios']) {
+    const native = platform === 'android' ? 'nativeAndroid' : 'nativeIos';
+    assert.deepEqual(storeGatesFor(platform), GATES.filter(name => common.includes(name) || name === native));
+    for (const gate of storeGatesFor(platform)) {
+      const f = fixture(t), a = f.make(platform);
+      const bad = structuredClone(f.gateValue);bad.results[gate] = 'failed';
+      a.q.gates = f.save('failed-platform-gate.json', bad);
+      await assert.rejects(executeStorePackaging(a.ref(), {root: f.root, adapter: f.adapter}), /STORE_REQUIRED_GATE_FAILED/);
+      assert.equal(f.reads().signingReads, 0);assert.equal(f.calls.length, 0);
+    }
+  }
+});
+
+test('a foreign native gate, mismatched platform or old combined manifest cannot authorize a platform build', async t => {
+  for (const platform of ['android', 'ios']) for (const change of ['foreign', 'platform', 'old']) {
+    const f = fixture(t), a = f.make(platform), bad = structuredClone(f.gateValue);
+    if (change === 'foreign') {
+      delete bad.results[platform === 'android' ? 'nativeAndroid' : 'nativeIos'];
+      bad.results[platform === 'android' ? 'nativeIos' : 'nativeAndroid'] = 'passed';
+    } else if (change === 'platform') bad.platform = platform === 'android' ? 'ios' : 'android';
+    else {bad.schemaVersion = 1;delete bad.platform;bad.results = Object.fromEntries(GATES.map(name => [name, 'passed']));}
+    a.q.gates = f.save('mismatched-platform-gates.json', bad);
+    await assert.rejects(executeStorePackaging(a.ref(), {root: f.root, adapter: f.adapter}), /STORE_(?:GATE_PLATFORM|REVIEWED_GATES|COMPLETE_GATE_INVENTORY|CURRENT_SOURCE_GATES)_/);
+    assert.equal(f.reads().signingReads, 0);assert.equal(f.calls.length, 0);
+  }
 });
