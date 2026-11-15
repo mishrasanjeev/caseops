@@ -18,6 +18,12 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestIosFilesContainers, snapshotIosFilesPrivacy } from './ios-files-privacy.mjs';
 
+// The original entry fence reserves capacity; it does not guarantee an entire suite fits.
+export function assertFreshIosFilesLedger(state) {
+  assert.ok(Number.isSafeInteger(state.lastSequence) && state.lastSequence >= 0 && state.lastSequence < 100,
+    'FRESH_BOUNDED_FILES_LEDGER_REQUIRED');
+}
+
 export function captureIosFilesPrivacy(options, phase, snapshot = snapshotIosFilesPrivacy) {
   assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'FILES_PRIVACY_PHASE_REQUIRED');
   const result = snapshot({ ...options, verifyProviderBytes: phase === 'postflight' }), value = result.snapshot;
@@ -178,14 +184,15 @@ export async function runIosFiles() {
     const staged = readRef(assets.providerEvidence);
     assert.equal(staged.folderName, assets.provider.folderName, 'FILES_STAGED_PICKER_FOLDER_MISMATCH');
     assert.deepEqual(staged.manifestEvidence, assets.manifestEvidence, 'FILES_STAGED_MANIFEST_MISMATCH');
+    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
+    baseline = gatewayBaseline(status, isolation);
+    assertFreshIosFilesLedger(status);
     const preflightPrivacy = captureIosFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
       knownSources: knownFileSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');
     assert.equal(preflightPrivacy.snapshot.complete, true, 'COMPLETE_FILES_PREFLIGHT_SCAN_REQUIRED');
     assert.equal(preflightPrivacy.snapshot.providerMetadataPreserved, true, 'FILES_PROVIDER_ORIGINALS_CHANGED');
     assert.equal(preflightPrivacy.snapshot.counts.privateAssetMatchCount, 0, 'FILES_PREFLIGHT_PRIVATE_COPY_REMAINS');
     assert.equal(preflightPrivacy.snapshot.counts.ownedStagingFiles, 0, 'FILES_PREFLIGHT_STAGING_REMAINS');
-    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
-    baseline = gatewayBaseline(status, isolation);
     for (const [url, expected, revision] of [[`${fixture.gatewayUrl}/api/build`, fixture.backendSha, fixture.backendRevision],
       [`${fixture.webGatewayUrl}/api/release-identity`, fixture.webSha, fixture.webRevision]]) {
       const identity = await localJson(url);

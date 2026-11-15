@@ -15,6 +15,7 @@ import ssl
 import stat
 import subprocess
 import sys
+import time
 import types
 from urllib.parse import urlsplit
 
@@ -303,7 +304,44 @@ def load_fixture(path, expected_hash):
     return module
 
 
-def container_admit(request, root=Path("/fixture-state")):
+def measured_source_get(operation, byte_range, expected_status, diagnostics=None):
+    """Retain only fixed source-GET status/timing; never replay or expose response bytes."""
+    require(byte_range in (None, "bytes=0-15") and expected_status == (200 if byte_range is None else 206),
+            "Fixed full or range source GET required")
+    started = time.monotonic()
+
+    def observation(status):
+        elapsed_ms = round((time.monotonic() - started) * 1000, 3)
+        value = {"method": "GET", "routeTemplate": "/api/matters/:matter/attachments/:attachment/download",
+                 "range": "full" if byte_range is None else "bytes=0-15",
+                 "status": status if type(status) is int and 100 <= status <= 599 else None,
+                 "expectedStatus": expected_status, "elapsedMs": elapsed_ms}
+        if diagnostics is not None:
+            diagnostics.append(value)
+        return elapsed_ms
+
+    try:
+        response = operation()
+    except BaseException:
+        # Observation failure must not replace an original transport exception.
+        try:
+            observation(None)
+        except BaseException:
+            pass
+        raise
+    elapsed_ms = observation(response[0])
+    return response, elapsed_ms
+
+
+def source_admission_failure(error, diagnostics):
+    reason = str(error) if isinstance(error, (ValueError, AssertionError, TimeoutError, FileExistsError)) else "Admission failed; retained attempt evidence"
+    result = {"sourceRouteAdmitted": False, "error": type(error).__name__, "reason": reason}
+    if diagnostics:
+        result["sourceReadDiagnostics"] = diagnostics
+    return result
+
+
+def container_admit(request, root=Path("/fixture-state"), diagnostics=None):
     require(os.environ.get("CASEOPS_ENV") == "local", "Only the local fixture API may admit sources")
     read_bound(Path(__file__).absolute(), request["admissionPythonSha256"])
     require(request.get("schemaVersion") == 1, "Admission request schema mismatch")
@@ -379,7 +417,9 @@ def container_admit(request, root=Path("/fixture-state")):
             os.replace(temporary, route_file)
             observations = []
             for byte_range, expected_status in ((None, 200), ("bytes=0-15", 206)):
-                code, content, headers = tls_get(root, current, ca, route_path, http.headers["Authorization"], byte_range, MAX_SOURCE_BYTES)
+                (code, content, headers), elapsed_ms = measured_source_get(
+                    lambda: tls_get(root, current, ca, route_path, http.headers["Authorization"], byte_range, MAX_SOURCE_BYTES),
+                    byte_range, expected_status, diagnostics)
                 require(code == expected_status, "Actual admitted source response mismatch")
                 require("no-store" in headers.get("cache-control", "").lower(), "Private source no-store response required")
                 if byte_range is None:
@@ -388,7 +428,7 @@ def container_admit(request, root=Path("/fixture-state")):
                 else:
                     require(content == prefix_bytes and headers.get("content-range") == f"bytes 0-15/{asset['sizeBytes']}", "Persisted source range bytes mismatch")
                 observations.append({"range": byte_range, "status": code, "sizeBytes": len(content), "sha256": sha(content),
-                                     "cacheControl": headers.get("cache-control"), "actualNoPaidHeader": True})
+                                     "cacheControl": headers.get("cache-control"), "actualNoPaidHeader": True, "elapsedMs": elapsed_ms})
         evidence = {"schemaVersion": 1, "kind": "android-native-uploaded-source-admission", "sourceRouteAdmitted": True,
                     "syntheticDataOnly": True, "createdAt": datetime.now(UTC).isoformat(), "route": route,
                     "project": current["project"], "gatewayRunId": current["gatewayRunId"],
@@ -410,7 +450,7 @@ def container_admit(request, root=Path("/fixture-state")):
         return {"sourceRouteAdmitted": True, "route": route, "receiptFile": receipt_name, "receiptSha256": sha(receipt_bytes)}
 
 
-def main():
+def main(diagnostics=None):
     if sys.argv[1:] == ["_container"]:
         def expired(_signum, _frame):
             raise TimeoutError("Bounded source admission deadline")
@@ -418,7 +458,7 @@ def main():
         signal.alarm(50)
         data = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
         require(len(data) <= MAX_REQUEST_BYTES, "Admission stdin bound exceeded")
-        result = container_admit(json.loads(data))
+        result = container_admit(json.loads(data), diagnostics=diagnostics)
     else:
         parser = argparse.ArgumentParser(description=__doc__)
         for name in ("cache", "receipt", "manifest", "output"):
@@ -431,11 +471,11 @@ def main():
 
 
 if __name__ == "__main__":
+    source_read_diagnostics = []
     try:
-        main()
+        main(source_read_diagnostics)
     except Exception as error:
         # Child tracebacks/HTTP bodies may contain credentials. Retain attempts,
         # emit only the public failure class, and never retry an uncertain claim.
-        reason = str(error) if isinstance(error, (ValueError, AssertionError, TimeoutError, FileExistsError)) else "Admission failed; retained attempt evidence"
-        print(json.dumps({"sourceRouteAdmitted": False, "error": type(error).__name__, "reason": reason}), file=sys.stderr)
+        print(json.dumps(source_admission_failure(error, source_read_diagnostics)), file=sys.stderr)
         raise SystemExit(1)

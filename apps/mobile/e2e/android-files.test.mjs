@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidTextFirstSegment, awaitAndroidUploadReadback, chooseAndroidFile,
+import { ANDROID_PICKER_CANCEL_BACK_LIMIT, ANDROID_PICKER_RETURN_MS, ANDROID_UPLOAD_STATUS_QUERY, ANDROID_SCROLL_INTO_VIEW_SWIPES, androidFilesInventory, androidFilesScenarios, androidTextSegments, assertAndroidViewerAbsent, awaitAndroidTextFirstSegment, awaitAndroidUploadReadback, chooseAndroidFile,
   collectAndroidFiles, rapidActivateAndroidUpload, readAndroidFileDetails, repeatAndroidFileSelection, scrollAndroidIntoView, validateAndroidFileAsset, validateAndroidFilesContext,
   validateAndroidPicker, validateAndroidPrivacyReceipt, validateAndroidSourceSeed,
   validateAndroidUploadAcknowledgement } from './android-files.mjs';
@@ -147,8 +147,8 @@ test('observed Android picker binds exact selected device, app, build, manifest,
   }
 });
 
-function pickerDouble(context, asset, cancel = false, { headerBelowFold = false } = {}) {
-  let state = 'app', headerShown = !headerBelowFold; const commands = [], callbacks = new Map();
+function pickerDouble(context, asset, cancel = false, { headerBelowFold = false, cancelDepth = 1 } = {}) {
+  let state = 'app', headerShown = !headerBelowFold, backsRemaining = cancelDepth; const commands = [], callbacks = new Map();
   const packageName = JSON.parse(readFileSync(context.provider.evidence.path)).packageName;
   const element = (id, text = '', next) => {
     callbacks.set(id, () => { commands.push(id); if (next) state = next; });
@@ -157,7 +157,7 @@ function pickerDouble(context, asset, cancel = false, { headerBelowFold = false 
   };
   const driver = { elementClick: async id => { assert.ok(callbacks.has(id)); callbacks.get(id)(); },
     getCurrentPackage: async () => state === 'app' || state === 'selected' ? APP : packageName,
-    pressKeyCode: async code => { assert.equal(code, 4); assert.equal(cancel, true); commands.push('android-back'); state = 'app'; },
+    pressKeyCode: async code => { assert.equal(code, 4); assert.equal(cancel, true); commands.push('android-back'); state = --backsRemaining <= 0 ? 'app' : 'picker-parent'; },
     waitUntil: async (predicate, options) => { if (!await predicate()) throw new Error(options.timeoutMsg); },
     getWindowRect: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
     performActions: async ([pointer]) => {
@@ -177,7 +177,7 @@ function pickerDouble(context, asset, cancel = false, { headerBelowFold = false 
       if (query === 'id=files-matter-code' || query === 'id=files-selection' && state === 'selected' || query === 'id=files-upload' && state === 'selected') return [element('returned')];
       return [];
     } };
-  context.driver = driver; return { driver, commands, state: () => state };
+  context.driver = driver; return { driver, commands, state: () => state, setState: value => { state = value; } };
 }
 function repeatSelectionFixture(t) {
   const f = fixture(t), fake = pickerDouble(f.context, f.uploads.txt);
@@ -212,6 +212,121 @@ test('actual Android picker wrapper uses only observed Downloads/folder/file con
     await chooseAndroidFile(f.context, cancel ? null : f.uploads.txt, { cancel });
     assert.deepEqual(fake.commands, cancel ? ['choose', 'android-back'] : ['choose', 'roots', 'downloads', 'folder', 'chosen-file']);
     assert.equal(fake.state(), cancel ? 'app' : 'selected');
+  }
+});
+
+test('picker cancellation dismisses remembered DocumentsUI folders without selecting or uploading', async t => {
+  assert.equal(ANDROID_PICKER_CANCEL_BACK_LIMIT, 4); assert.equal(ANDROID_PICKER_RETURN_MS, 15000);
+  for (const packageName of ['com.android.documentsui', 'com.google.android.documentsui']) for (const cancelDepth of [2, 4]) {
+    const f = fixture(t, packageName), fake = pickerDouble(f.context, null, true, { cancelDepth });
+    await chooseAndroidFile(f.context, null, { cancel: true });
+    assert.deepEqual(fake.commands, ['choose', ...Array(cancelDepth).fill('android-back')]);
+    assert.equal(fake.state(), 'app');
+  }
+});
+
+test('picker cancellation does not send Back after the app has already returned', async t => {
+  const f = fixture(t), fake = pickerDouble(f.context, null, true); let reads = 0;
+  fake.driver.getCurrentPackage = async () => {
+    if (++reads === 1) return 'com.android.documentsui';
+    fake.setState('app'); return APP;
+  };
+  await chooseAndroidFile(f.context, null, { cancel: true });
+  assert.deepEqual(fake.commands, ['choose']);
+});
+
+test('picker cancellation refuses a changed package without a second Back', async t => {
+  for (const other of ['com.android.launcher3', 'com.google.android.documentsui']) {
+    const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 2 });
+    const current = fake.driver.getCurrentPackage;
+    fake.driver.getCurrentPackage = async () => fake.commands.includes('android-back') ? other : current();
+    await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), /ANDROID_FILES_PICKER_CANCEL_PACKAGE_REQUIRED/);
+    assert.deepEqual(fake.commands, ['choose', 'android-back']);
+  }
+});
+
+test('picker cancellation preserves a lost Back acknowledgement without replay', async t => {
+  const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 2 });
+  const press = fake.driver.pressKeyCode, failure = Error('BACK_ACK_LOST');
+  fake.driver.pressKeyCode = async code => { await press(code); throw failure; };
+  await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), error => error === failure);
+  assert.deepEqual(fake.commands, ['choose', 'android-back']);
+});
+
+test('picker cancellation shares the original return deadline and refuses late Back completion', async t => {
+  const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 2 });
+  let now = 0; t.mock.method(performance, 'now', () => now);
+  const press = fake.driver.pressKeyCode;
+  fake.driver.pressKeyCode = async code => { await press(code); now = ANDROID_PICKER_RETURN_MS; };
+  await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), /ANDROID_FILES_PICKER_RETURN_REQUIRED/);
+  assert.deepEqual(fake.commands, ['choose', 'android-back']);
+});
+
+test('picker cancellation never exceeds four acknowledged Back commands or replaces its wait deadline', async t => {
+  const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 5 });
+  const initialWait = fake.driver.waitUntil;
+  fake.driver.waitUntil = async (predicate, options) => {
+    if (options.timeoutMsg !== 'ANDROID_FILES_PICKER_RETURN_REQUIRED') return initialWait(predicate, options);
+    assert.ok(options.timeout > 0 && options.timeout <= ANDROID_PICKER_RETURN_MS);
+    assert.equal(options.interval, 200); assert.equal(await predicate(), false);
+    throw Error(options.timeoutMsg);
+  };
+  await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), /ANDROID_FILES_PICKER_RETURN_REQUIRED/);
+  assert.deepEqual(fake.commands, ['choose', ...Array(4).fill('android-back')]);
+});
+
+test('picker cancellation preserves falsy observation failures without another read or Back', async t => {
+  for (const failure of [null, false, 0, '', Object.freeze(Error('FROZEN_PACKAGE_READ_FAILURE'))]) {
+    const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 5 });
+    const current = fake.driver.getCurrentPackage, initialWait = fake.driver.waitUntil; let failedReads = 0;
+    fake.driver.getCurrentPackage = async () => {
+      if (fake.commands.filter(value => value === 'android-back').length === 4) { failedReads++; throw failure; }
+      return current();
+    };
+    fake.driver.waitUntil = async (predicate, options) => {
+      if (options.timeoutMsg !== 'ANDROID_FILES_PICKER_RETURN_REQUIRED') return initialWait(predicate, options);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { await predicate(); assert.fail('FAILED_PACKAGE_READ_MUST_REJECT'); }
+        catch (error) { assert.equal(error, failure); }
+      }
+      throw Error('WRAPPED_WAIT_FAILURE');
+    };
+    let caught = false;
+    try { await chooseAndroidFile(f.context, null, { cancel: true }); }
+    catch (error) { caught = true; assert.equal(error, failure); }
+    assert.equal(caught, true); assert.equal(failedReads, 1);
+    assert.deepEqual(fake.commands, ['choose', ...Array(4).fill('android-back')]);
+  }
+});
+
+test('picker cancellation does not let a retained wait callback issue a native read after closure', async t => {
+  const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 5 });
+  const current = fake.driver.getCurrentPackage, initialWait = fake.driver.waitUntil; let pending, reads = 0;
+  fake.driver.getCurrentPackage = async () => { reads++; return current(); };
+  fake.driver.waitUntil = async (predicate, options) => {
+    if (options.timeoutMsg !== 'ANDROID_FILES_PICKER_RETURN_REQUIRED') return initialWait(predicate, options);
+    pending = predicate; throw Error(options.timeoutMsg);
+  };
+  await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), /ANDROID_FILES_PICKER_RETURN_REQUIRED/);
+  const before = reads;
+  await assert.rejects(pending(), /ANDROID_FILES_PICKER_RETURN_REQUIRED/);
+  assert.equal(reads, before);
+  assert.deepEqual(fake.commands, ['choose', ...Array(4).fill('android-back')]);
+});
+
+test('slow cancellation action recording cannot dispatch an expired package read or Back', async t => {
+  for (const slowAction of ['read', 'input']) {
+    const f = fixture(t), fake = pickerDouble(f.context, null, true, { cancelDepth: 2 });
+    let now = 0, reads = 0; const current = fake.driver.getCurrentPackage;
+    t.mock.method(performance, 'now', () => now);
+    fake.driver.getCurrentPackage = async () => { reads++; return current(); };
+    f.context.record = entry => {
+      if (entry.type === 'native_ui_action' && entry.action === slowAction) now = ANDROID_PICKER_RETURN_MS;
+    };
+    await assert.rejects(chooseAndroidFile(f.context, null, { cancel: true }), /ANDROID_FILES_PICKER_RETURN_REQUIRED/);
+    assert.equal(reads, slowAction === 'read' ? 1 : 2);
+    assert.deepEqual(fake.commands, ['choose']);
+    t.mock.restoreAll();
   }
 });
 

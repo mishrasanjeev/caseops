@@ -22,6 +22,12 @@ import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { OBSERVER_IDENTITY, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy } from './android-files-privacy.mjs';
 
+// The original entry fence reserves capacity; it does not guarantee an entire suite fits.
+export function assertFreshAndroidFilesLedger(state) {
+  assert.ok(Number.isSafeInteger(state.lastSequence) && state.lastSequence >= 0 && state.lastSequence < 100,
+    'FRESH_BOUNDED_FILES_LEDGER_REQUIRED');
+}
+
 export function captureAndroidFilesPrivacy(options, phase, snapshot = snapshotAndroidFilesPrivacy) {
   assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'ANDROID_FILES_PRIVACY_PHASE_REQUIRED');
   const result = snapshot({ ...options, verifyProviderBytes: phase === 'postflight' }), value = result.snapshot;
@@ -294,7 +300,10 @@ export async function runAndroidFiles() {
         const identity = await localJson(url); assert.equal(identity.release_sha, sha, 'ANDROID_FILES_SERVING_SHA_CHANGED'); assert.equal(identity.revision, revision, 'ANDROID_FILES_SERVING_REVISION_CHANGED');
       }
     };
-    await runtimeFence(); baseline = gatewayBaseline(await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`), isolation);
+    await runtimeFence();
+    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
+    baseline = gatewayBaseline(status, isolation);
+    assertFreshAndroidFilesLedger(status);
     containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, privacyObserver: fixture.privacyObserverEvidence });
     const before = captureAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
       priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');

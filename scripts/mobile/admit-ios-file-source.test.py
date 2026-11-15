@@ -212,7 +212,7 @@ class Admissions(unittest.TestCase):
             with self.assertRaises(ValueError):
                 admission.add_exact_route(invalid, route, run_id)
 
-    def integration(self, bad_workspace=False, bad_bytes=False, scoped=False):
+    def integration(self, bad_workspace=False, bad_bytes=False, scoped=False, diagnostics=None, range_status=206):
         request, _ = admission.host_request(self.args())
         credentials = self.cache / "credentials.json"
         generator.new_file(credentials, b'{"email":"synthetic@example.com","password":"unit-only","company_slug":"test-legal"}')
@@ -246,11 +246,11 @@ class Admissions(unittest.TestCase):
                 return 200, json.dumps(self.status).encode(), {}
             self.assertEqual(authorization, "unit-only-never-output")
             headers = {"cache-control": "private, no-store", "content-range": f"bytes 0-15/{len(content)}"}
-            return (206, content[:16], headers) if byte_range else (200, b"wrong" if bad_bytes else content, headers)
+            return (range_status, content[:16], headers) if byte_range else (200, b"wrong" if bad_bytes else content, headers)
         with patch.dict(os.environ, {"CASEOPS_ENV": "local", "CASEOPS_DATABASE_URL": "unit-only"}), \
              patch.dict("sys.modules", {"sqlalchemy": types.ModuleType("sqlalchemy"), "sqlalchemy.engine": engine}), \
              patch.object(admission, "load_fixture", return_value=fixture), patch.object(admission, "tls_get", side_effect=tls):
-            result = admission.container_admit(request, self.cache)
+            result = admission.container_admit(request, self.cache, diagnostics=diagnostics)
         return result, actions, calls
 
     def test_complete_flow_has_exact_bytes_range_and_immutable_route_snapshots_no_db_writes(self):
@@ -326,6 +326,121 @@ class Admissions(unittest.TestCase):
         docker.assert_not_called()
         self.assertFalse((self.root / "nonexistent-output.json").exists())
 
+
+
+    def test_full_and_range_source_reads_retain_monotonic_elapsed_without_changing_bytes(self):
+        diagnostics = []
+        with patch.object(admission.time, "monotonic", side_effect=[10, 10.125, 20, 20.25]):
+            result, _actions, calls = self.integration(diagnostics=diagnostics)
+        evidence = json.loads((self.cache / result["receiptFile"]).read_text())
+        self.assertEqual([row[1] for row in calls], [None, None, "bytes=0-15"])
+        self.assertEqual([row["elapsedMs"] for row in evidence["observations"]], [125.0, 250.0])
+        self.assertEqual([row["status"] for row in evidence["observations"]], [200, 206])
+        self.assertEqual(evidence["observations"][0]["sha256"], self.asset["sha256"])
+        self.assertEqual(evidence["observations"][0]["sizeBytes"], self.asset["sizeBytes"])
+        self.assertEqual([row["status"] for row in diagnostics], [200, 206])
+        self.assertEqual([row["expectedStatus"] for row in diagnostics], [200, 206])
+        self.assertEqual([row["elapsedMs"] for row in diagnostics], [125.0, 250.0])
+        self.assertEqual(admission.source_admission_failure(ValueError("pre-source refusal"), []),
+                         {"sourceRouteAdmitted": False, "error": "ValueError", "reason": "pre-source refusal"})
+
+    def test_failed_range_retains_redacted_response_status_timing_and_original_refusal(self):
+        diagnostics = []
+        with patch.object(admission.time, "monotonic", side_effect=[10, 10.125, 20, 20.25]), \
+             self.assertRaisesRegex(ValueError, "Actual admitted source response mismatch") as raised:
+            self.integration(diagnostics=diagnostics, range_status=503)
+        self.assertEqual(diagnostics, [
+            {"method": "GET", "routeTemplate": "/api/matters/:matter/attachments/:attachment/download",
+             "range": "full", "status": 200, "expectedStatus": 200, "elapsedMs": 125.0},
+            {"method": "GET", "routeTemplate": "/api/matters/:matter/attachments/:attachment/download",
+             "range": "bytes=0-15", "status": 503, "expectedStatus": 206, "elapsedMs": 250.0}])
+        failure = admission.source_admission_failure(raised.exception, diagnostics)
+        self.assertEqual(failure["error"], "ValueError")
+        self.assertEqual(failure["reason"], "Actual admitted source response mismatch")
+        self.assertEqual(failure["sourceReadDiagnostics"], diagnostics)
+        public = json.dumps(failure)
+        for private in ("unit-only-never-output", self.seed["matter"]["id"], self.expected["attachmentId"], self.asset["filename"]):
+            self.assertNotIn(private, public)
+        self.assertFalse(any(path.name.startswith("ios-file-source-") and ".routes-" not in path.name
+                             and "attempt-" not in path.name for path in self.cache.glob("ios-file-source-*.json")))
+
+    def test_measured_source_get_preserves_actual_https_constructor_on_status_and_transport_failures(self):
+        for outcome in (206, 503, "transport", "observation-failure"):
+            with self.subTest(outcome=outcome):
+                diagnostics, events = [], []
+                raw, secured = object(), object()
+                body = b"PRIVATE_PROVIDER_RESPONSE"
+                class FrozenTransportError(RuntimeError):
+                    def __setattr__(self, _name, _value):
+                        raise AssertionError("Original transport exception is immutable")
+                transport_error = FrozenTransportError("PRIVATE_TRANSPORT_DETAIL")
+                case = self
+                class Context:
+                    def wrap_socket(self, connection, *, server_hostname):
+                        case.assertIs(connection, raw)
+                        events.append(("verified-hostname", server_hostname))
+                        return secured
+                context_value = Context()
+                class Response:
+                    status = outcome
+                    def read(self, bound):
+                        case.assertEqual(bound, 33)
+                        return body
+                    def getheaders(self):
+                        return [("Cache-Control", "private, no-store")]
+                class Connection:
+                    def __init__(self, host, port, timeout):
+                        events.append(("http", host, port, timeout))
+                    def request(self, method, route, *, headers):
+                        case.assertIs(self.sock, secured)
+                        events.append(("request", method, route, headers))
+                    def getresponse(self):
+                        if outcome in ("transport", "observation-failure"):
+                            raise transport_error
+                        return Response()
+                    def close(self):
+                        events.append(("closed",))
+                route = "/api/matters/private-matter/attachments/private-attachment/download?privateQuery=redact"
+                with patch.object(admission.ssl, "create_default_context", return_value=context_value) as context, \
+                     patch.object(admission.socket, "create_connection", return_value=raw) as connect, \
+                     patch.object(admission.http.client, "HTTPConnection", Connection), \
+                     patch.object(admission.time, "monotonic", side_effect=[10, RuntimeError("PRIVATE_CLOCK_DETAIL")] if outcome == "observation-failure" else [10, 10.125]):
+                    operation = lambda: admission.tls_get(self.cache, self.core, b"synthetic-ca", route,
+                                                         "Bearer synthetic-private-token", "bytes=0-15", 32)
+                    if outcome in ("transport", "observation-failure"):
+                        with self.assertRaises(RuntimeError) as raised:
+                            admission.measured_source_get(operation, "bytes=0-15", 206, diagnostics)
+                        self.assertIs(raised.exception, transport_error)
+                    else:
+                        response, elapsed = admission.measured_source_get(operation, "bytes=0-15", 206, diagnostics)
+                        self.assertEqual(response[0], outcome)
+                        self.assertIs(response[1], body)
+                        self.assertEqual(elapsed, 125.0)
+                context.assert_called_once_with(cadata="synthetic-ca")
+                connect.assert_called_once_with(("gateway", 8443), timeout=3)
+                self.assertEqual(context_value.minimum_version, admission.ssl.TLSVersion.TLSv1_2)
+                requests = [event for event in events if event[0] == "request"]
+                self.assertEqual(requests, [("request", "GET", route, {
+                    "X-CaseOps-Automated-Test": "no-paid-providers", "Host": "localhost:8443",
+                    "Authorization": "Bearer synthetic-private-token", "Range": "bytes=0-15"})])
+                self.assertEqual(events[-1], ("closed",))
+                if outcome == "observation-failure":
+                    self.assertEqual(diagnostics, [])
+                else:
+                    self.assertEqual(diagnostics, [{"method": "GET", "routeTemplate": "/api/matters/:matter/attachments/:attachment/download",
+                        "range": "bytes=0-15", "status": None if outcome == "transport" else outcome,
+                        "expectedStatus": 206, "elapsedMs": 125.0}])
+                if outcome in ("transport", "observation-failure"):
+                    failure = admission.source_admission_failure(transport_error, diagnostics)
+                    self.assertEqual(failure["error"], "FrozenTransportError")
+                    self.assertEqual(failure["reason"], "Admission failed; retained attempt evidence")
+                    self.assertEqual("sourceReadDiagnostics" in failure, bool(diagnostics))
+                    public = json.dumps(failure)
+                else:
+                    public = json.dumps(diagnostics)
+                for private in (route, "private-matter", "private-attachment", "privateQuery", body.decode(),
+                                "synthetic-private-token", "PRIVATE_TRANSPORT_DETAIL", "PRIVATE_CLOCK_DETAIL"):
+                    self.assertNotIn(private, public)
 
 if __name__ == "__main__":
     unittest.main()

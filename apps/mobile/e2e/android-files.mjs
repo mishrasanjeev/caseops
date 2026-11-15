@@ -152,11 +152,50 @@ async function reload(context, anchor) {
   await readAndroidFileDetails(context, anchor);
 }
 async function noSelection(context) { for (const id of ['files-selection', 'files-upload']) await absent(context, 'id', id); await find(context, 'id', 'files-choose', { scroll: true }); }
+export const ANDROID_PICKER_CANCEL_BACK_LIMIT = 4;
+export const ANDROID_PICKER_RETURN_MS = 15000;
+async function cancelAndroidPicker(context, picker) {
+  // DocumentsUI remembers its last folder. Back may navigate to its parent
+  // before it dismisses the picker. Never dispatch another Back after QA has
+  // returned, an unexpected package, an unknown acknowledgement or expiry.
+  const end = performance.now() + ANDROID_PICKER_RETURN_MS;
+  let active = true, hasReadFailure = false, readFailure;
+  const check = () => assert.ok(active && performance.now() < end, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
+  const currentPackage = async () => {
+    check(); nativeAction(context, 'read'); check();
+    const value = await context.driver.getCurrentPackage();
+    check();
+    assert.ok(value === context.fixture.appId || value === picker.packageName, 'ANDROID_FILES_PICKER_CANCEL_PACKAGE_REQUIRED');
+    return value;
+  };
+  try {
+    for (let attempt = 0; attempt < ANDROID_PICKER_CANCEL_BACK_LIMIT; attempt++) {
+      if (await currentPackage() === context.fixture.appId) return;
+      check(); nativeAction(context, 'input'); check();
+      await context.driver.pressKeyCode(4);
+      check();
+    }
+    const remaining = Math.floor(end - performance.now());
+    assert.ok(remaining > 0, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
+    let returned = false;
+    await context.driver.waitUntil(async () => {
+      // waitUntil can retain an asynchronous condition after its outer wait.
+      // A failed or late observation cannot start another native read.
+      if (hasReadFailure) throw readFailure;
+      try { returned = await currentPackage() === context.fixture.appId; return returned; }
+      catch (error) { hasReadFailure = true; readFailure = error; throw error; }
+    }, { timeout: remaining, interval: 200, timeoutMsg: 'ANDROID_FILES_PICKER_RETURN_REQUIRED' });
+    check();
+    if (hasReadFailure) throw readFailure;
+    assert.ok(returned, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
+  } catch (error) { throw hasReadFailure ? readFailure : error; }
+  finally { active = false; }
+}
 export async function chooseAndroidFile(context, asset, { cancel = false } = {}) {
   const picker = validateAndroidPicker(context, asset);
   await click(context, 'id', 'files-choose', { scroll: true });
   await wait(context, async () => await context.driver.getCurrentPackage() === picker.packageName, 15000, 'ANDROID_FILES_PICKER_PACKAGE_REQUIRED');
-  if (cancel) await context.driver.pressKeyCode(4);
+  if (cancel) await cancelAndroidPicker(context, picker);
   else {
     await click(context, picker.controls.roots.kind, picker.controls.roots.value);
     const roots = await find(context, 'id', picker.controls.rootList.value);
@@ -167,8 +206,8 @@ export async function chooseAndroidFile(context, asset, { cancel = false } = {})
     const selected = await findQuery(context, `android=new UiSelector().resourceId("android:id/title").text(${JSON.stringify(asset.filename)})`, { scroll: true });
     assert.equal(await selected.getText(), asset.filename, 'ANDROID_FILES_WRONG_PICKER_FILENAME');
     await dispatchNativeClick(context, selected, 'text', asset.filename);
+    await wait(context, async () => await context.driver.getCurrentPackage() === context.fixture.appId, 15000, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
   }
-  await wait(context, async () => await context.driver.getCurrentPackage() === context.fixture.appId, 15000, 'ANDROID_FILES_PICKER_RETURN_REQUIRED');
   // Choose was reached by scrolling down; the returned Files screen keeps that
   // position, so its header needs the same bounded sweep as every other read.
   await find(context, 'id', 'files-matter-code', { scroll: true });

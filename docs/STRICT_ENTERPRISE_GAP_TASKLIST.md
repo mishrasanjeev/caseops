@@ -5554,3 +5554,36 @@ has not passed closure/smoke.
 The unshipped private host-tool repair is outside this repo; actual closure/smoke
 are pending, without an app-vulnerability or distribution claim. See
 [dated transport proof and immutable host-tool plan](mobile/NATIVE_WEBDRIVER_ISOLATION_2026-11-15.md).
+
+
+### 2026-11-15 — native Files cancellation and bounded evidence
+
+J20/M22, US-MOB-02/03/04/08, FILES-02/05: **Partially implemented;
+Inconclusive; release NO-GO**. At source9d5c3124, actual Android Core23 passed
+all69 phases with acknowledged owned-session cleanup. The following Files17
+run retained3 passed calls,2 failed calls and12 unexecuted calls. Cancellation
+did not return from the system picker; PDF upload was acknowledged200 and its
+full-source read was200 at the gateway's500th retained row, with overflow true.
+The failing range response/status/timing were not retained; later bounded logs
+contained no rows. Capacity is a source-supported mechanism, not a measured
+503 or PDF product-defect claim. Both acknowledged uploads remain unreplayed.
+
+The isolated successor bounds positively identified DocumentsUI Back navigation
+to four single acknowledged commands sharing the original15-second return
+window; it stops on QA return, foreign package, lost acknowledgement or expiry.
+All27 previous Android Files unit cases and9 new composition/negative cases
+passed36/36. Android/iOS source-admission units passed49/49, retaining all43
+old test methods and adding6 cases. These are harness/source proofs, not
+replacement native acceptance. Expensive picker/staging preparation stays in
+its retained setup phase. A fresh final Files epoch must precede the final
+auth/control/export binding through a reviewed phase transition, preserving
+the original500-row bound and all prior evidence. The original under100-row
+entry fence is restored before privacy/session work; it does not guarantee
+that every permitted starting count can complete the full suite. Shared Android/iOS source-admission diagnostics retain allowlisted
+status/timing without private bodies, IDs, queries or mutation replay.
+
+Host-only SDK repair separately passed exact-schema compilation, identical
+private repacks, strict negative and all17 positive compatibility checks; it
+grants no app/native/store credit. Fresh final source/CI/build acceptance and
+complete83 cases per platform, physical checks and signing/promotion remain
+required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
