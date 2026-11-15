@@ -1802,7 +1802,7 @@ class GatewayTests(unittest.TestCase):
                     gateway_module.MARKER_HEADER: gateway_module.MARKER,
                     "Content-Type": "application/json",
                 }, b'{"code":"synthetic"}'))
-            except BaseException as error:
+            except Exception as error:
                 errors.append(error)
             finally:
                 finished.set()
