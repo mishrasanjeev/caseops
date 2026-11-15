@@ -486,7 +486,7 @@ async function recordalJourney(page: Page, rt: TesterRuntime, info: TestInfo, mo
 
 async function saasInvoicesJourney(page: Page, rt: TesterRuntime, info: TestInfo, mobile: boolean) {
   const number = `CASEOPS-SAAS-SUBSCRIPTION-${code("ADJ13")}`.slice(0, 80);
-  seedLocalSaasInvoice(rt, number);
+  await seedLocalSaasInvoice(rt, number);
   const listed = page.waitForResponse(r => new URL(r.url()).pathname === "/api/billing/invoices" && r.request().method() === "GET");
   await page.goto(`${rt.web.origin}/app/admin/billing`);
   const body = await json<{ invoices: { id: string; invoice_number: string }[] }>(await listed, "Invoices the billing page received");

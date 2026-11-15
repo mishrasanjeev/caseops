@@ -12,7 +12,7 @@
  * run that only reads (or branches around the write) cannot be counted as a
  * pass in the fix summary.
  */
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./local-python-fixture";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
@@ -113,7 +113,7 @@ function localDatabase(): { database: string; python: string } {
  * nonbillable manual subscription carrying every IP entitlement. Restricted to
  * the exact tenant this runtime just bootstrapped on a loopback database.
  */
-function grantLocalFullIp(actor: TesterActor, slug: string) {
+async function grantLocalFullIp(actor: TesterActor, slug: string) {
   if (!slug.startsWith("bugs4-") || actor.company.slug !== slug) {
     throw new Error("Local IP grant requires the exact freshly bootstrapped tenant.");
   }
@@ -133,7 +133,7 @@ function grantLocalFullIp(actor: TesterActor, slug: string) {
     "        entitlement_overrides_json=json.loads(os.environ['BUGS4_OVERRIDES'])))",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: {
       ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, BUGS4_COMPANY_ID: actor.company.id,
@@ -151,7 +151,7 @@ function grantLocalFullIp(actor: TesterActor, slug: string) {
  * no tenant-facing path to drive; the row mirrors what that path writes.
  * Restricted to the exact tenant this runtime bootstrapped on a loopback database.
  */
-export function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
+export async function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
   if (!rt.local || !rt.credentials.slug.startsWith("bugs4-") || rt.actor.company.slug !== rt.credentials.slug) {
     throw new Error("Local SaaS invoice fixture requires the exact freshly bootstrapped tenant.");
   }
@@ -169,7 +169,7 @@ export function seedLocalSaasInvoice(rt: TesterRuntime, invoiceNumber: string) {
     "        metadata_json={'reason': 'bugs4 local layout fixture'}))",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: {
       ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, BUGS4_COMPANY_ID: rt.actor.company.id,
@@ -247,7 +247,7 @@ export async function prepareTester(
   }
   const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${actor.access_token}` };
   if (local) {
-    grantLocalFullIp(actor, credentials.slug);
+    await grantLocalFullIp(actor, credentials.slug);
     await configureLocalWorkspace(request, api, headers, actor);
   }
   const readiness = await json(await request.get(`${api.origin}/api/ip/readiness`, { headers }), "Tester IP readiness");

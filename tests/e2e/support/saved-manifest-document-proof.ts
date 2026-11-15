@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./local-python-fixture";
 import path from "node:path";
 
 import { expect, type APIRequestContext } from "@playwright/test";
@@ -10,12 +10,12 @@ export function isLoopback(url: string): boolean {
   return ["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname);
 }
 
-export function runLoopbackSavedManifestFixture(
+export async function runLoopbackSavedManifestFixture(
   api: string,
   web: string,
   operation: "seed" | "rebuild",
   values: Record<string, string>,
-): void {
+): Promise<void> {
   if (!isLoopback(api) || !isLoopback(web)) {
     throw new Error("Saved-manifest Python fixtures are strictly loopback-only.");
   }
@@ -41,7 +41,7 @@ export function runLoopbackSavedManifestFixture(
     " rebuild_private_index(s,company_id=os.environ['QA_COMPANY_ID'],activate=True)",
     " s.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot, encoding: "utf8", timeout: 180_000,
     env: {
       ...process.env,

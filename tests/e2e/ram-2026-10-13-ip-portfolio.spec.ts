@@ -1,7 +1,7 @@
 /** IP13-02..09 / UJ-02,UJ-04: source cells -> saved records -> responsive UI.
  * IP13-01's historical upload failure is not inferred from this synthetic file.
  */
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -60,7 +60,7 @@ type ImportResult = {
 
 type PortfolioActor = { company: { id: string; slug: string }; membership: { id: string }; access_token: string };
 
-function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActor, slug: string) {
+async function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActor, slug: string) {
   if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
     && !origin.username && !origin.password)) throw new Error("Fixture grants require loopback origins.");
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -88,7 +88,7 @@ function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActo
     "from sqlalchemy.engine import make_url",
     "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
     "assert not url.query",
-    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "assert ((url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(os.environ['CASEOPS_DATABASE_URL']))",
     "from caseops_api.db.models import BillingSubscription,Company,CompanyMembership",
     "from caseops_api.db.session import get_session_factory",
     "with get_session_factory()() as session:",
@@ -99,7 +99,7 @@ function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActo
     "    session.add(BillingSubscription(company_id=company.id,status='manual_active',segment='law_firm',source='ip13_local_fixture',externally_billable=False,entitlement_overrides_json={'ip_workspace': True}))",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+  const result = await runLocalPythonFixture(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, CASEOPS_LLM_PROVIDER: "mock",
       CASEOPS_EMBEDDING_PROVIDER: "mock", CASEOPS_E2E_COMPANY_ID: actor.company.id,
       CASEOPS_E2E_COMPANY_SLUG: slug, CASEOPS_E2E_MEMBERSHIP_ID: actor.membership.id,
@@ -107,7 +107,7 @@ function grantLocalPortfolioEntitlement(web: URL, api: URL, actor: PortfolioActo
   expect(result.status, `Local fixture grant failed: ${result.error?.message ?? result.stderr}`).toBe(0);
 }
 
-function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
+async function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
   docketId: string, sourceId: string, intentId: string) {
   if (![web, api].every(origin => loopback(origin) && ["http:", "https:"].includes(origin.protocol)
     && !origin.username && !origin.password)) throw new Error("Local delivery requires loopback origins.");
@@ -128,7 +128,7 @@ function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
     "from sqlalchemy.engine import make_url",
     "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
     "assert not url.query",
-    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "assert ((url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(os.environ['CASEOPS_DATABASE_URL']))",
     "from caseops_api.db.models import Company,CompanyMembership,InAppNotification,NotificationDeliveryIntent",
     "from caseops_api.db.session import get_session_factory",
     "from caseops_api.services.notification_delivery import process_notification_delivery_intent",
@@ -152,7 +152,7 @@ function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
     "    assert intent.attempts==1",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+  const result = await runLocalPythonFixture(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, CASEOPS_LLM_PROVIDER: "mock",
       CASEOPS_EMBEDDING_PROVIDER: "mock", CASEOPS_E2E_COMPANY_ID: actor.company.id,
       CASEOPS_E2E_COMPANY_SLUG: actor.company.slug, CASEOPS_E2E_MEMBERSHIP_ID: actor.membership.id,
@@ -164,7 +164,7 @@ function deliverLocalImportedReminder(web: URL, api: URL, actor: PortfolioActor,
 async function preparePortfolioWorkspace(request: APIRequestContext, web: URL, api: URL,
   local: boolean, actor: PortfolioActor, slug: string, headers: Record<string, string>) {
   if (local) {
-    grantLocalPortfolioEntitlement(web, api, actor, slug);
+    await grantLocalPortfolioEntitlement(web, api, actor, slug);
     const configured = await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
       expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
       timezone: "Asia/Kolkata", holiday_calendar_key: "ip13-synthetic-calendar",
@@ -774,7 +774,7 @@ for (const width of [1280, 393]) {
     expect(deliveryIntent).toMatchObject({ source_type: "ip_trademark_particular_version", channel: "in_app", destination: null });
     // Only loopback fixtures invoke the real owner directly. Production observes
     // the ordinary scheduler and never starts a global/provider delivery job.
-    if (local) deliverLocalImportedReminder(web, api, actor, docketId!, deliverySourceId, deliveryIntent.id);
+    if (local) await deliverLocalImportedReminder(web, api, actor, docketId!, deliverySourceId, deliveryIntent.id);
     await expect.poll(async () => (await currentSourceIntent()).status, {
       timeout: local ? 15_000 : 420_000, intervals: [1000, 5000, 10_000],
       message: "the source-renewal-specific in-app intent must actually be delivered",

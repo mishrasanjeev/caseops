@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
@@ -64,7 +64,7 @@ async function localSignedMatterSelection(matterId: string, membershipId: string
   requireFixtureDatabaseUrl(e2eEnv.CASEOPS_DATABASE_URL, dockerProject ? "" : ownedSqliteUrl);
   const startedAt = new Date().toISOString();
   const started = performance.now();
-  const run = spawnSync(python, ["-c", script, matterId, membershipId], {
+  const run = await runLocalPythonFixture(python, ["-c", script, matterId, membershipId], {
     cwd: path.join(repoRoot, "apps", "api"),
     env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
     encoding: "utf8",

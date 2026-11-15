@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./local-python-fixture";
 import path from "node:path";
 
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
@@ -64,7 +64,7 @@ export async function signInJudgeTenant(
   return session;
 }
 
-export function createJudgeWorkflowFixture(): JudgeWorkflowFixture {
+export async function createJudgeWorkflowFixture(): Promise<JudgeWorkflowFixture> {
   const python =
     process.env.CASEOPS_E2E_PYTHON?.trim() ||
     (process.platform === "win32"
@@ -110,7 +110,7 @@ s.commit()
 print(json.dumps({'courtId': court.id, 'judgeId': judge.id, 'emptyJudgeId': empty_judge.id, 'noCorpusJudgeId': no_corpus_judge.id, 'reviewId': review.id, 'reviewAuthorityId': review_document.id, 'duplicateJudgeId': duplicate.id, 'benchId': bench.id}))
 s.close()
 `;
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {

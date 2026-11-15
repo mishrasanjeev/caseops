@@ -13,7 +13,7 @@ test("IPLF-060B completes UJ-20 normal and exception paths", async ({ page }) =>
   page.setDefaultTimeout(25_000);
   const api = await request.newContext();
   const tenant = await bootstrapJudgeTenant(api);
-  const fixture = createJudgeWorkflowFixture();
+  const fixture = await createJudgeWorkflowFixture();
   await signInJudgeTenant(page, tenant);
 
   await page.setViewportSize({ width: 360, height: 800 });

@@ -37,7 +37,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
       }
     };
     await identities();
-    if (local) runLoopbackSavedManifestFixture(api, web, "seed", {
+    if (local) await runLoopbackSavedManifestFixture(api, web, "seed", {
       QA_SLUG: slug, QA_EMAIL: email, QA_PASSWORD: password, QA_SHA: sha,
     });
     const login = await owner.post(`${api}/api/auth/login`, {
@@ -203,7 +203,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
       await lifecycle("disposed");
       await lifecycle("intake");
       await identities();
-      runLoopbackSavedManifestFixture(api, web, "rebuild", { QA_COMPANY_ID: ownerIdentity.company.id });
+      await runLoopbackSavedManifestFixture(api, web, "rebuild", { QA_COMPANY_ID: ownerIdentity.company.id });
       await settledGeneration(owner, api, initialGeneration);
     } else if (local) {
       await settledGeneration(owner, api, initialGeneration);

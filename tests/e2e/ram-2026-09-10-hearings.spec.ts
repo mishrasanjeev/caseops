@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { apiBaseUrl, repoRoot } from "./support/env";
+import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { plusDays } from "./support/helpers";
 import { fixtureProcessEvidence } from "./support/fixture-process";
 
@@ -68,7 +69,7 @@ async function poll() {
   expect(result.status, evidence).toBe(0);
 }
 
-function seedLegacyBookmark(matterId: string, membershipId: string): string {
+async function seedLegacyBookmark(matterId: string, membershipId: string): Promise<string> {
   const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
   const file = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
   if (!dockerAcceptance || !project || !file) {
@@ -100,10 +101,8 @@ function seedLegacyBookmark(matterId: string, membershipId: string): string {
     "    session.commit()",
     "    print(json.dumps({'id': fixture_id}))",
   ].join("\n");
-  const result = spawnSync("docker", [
-    "compose", "--project-name", project, "--file", file,
-    "exec", "-T", "api", "python", "-c", script, matterId, membershipId,
-  ], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 });
+  const result = await runLocalPythonFixture("python", ["-c", script, matterId, membershipId], { cwd: repoRoot, encoding: "utf8", timeout: 30_000,
+    env: { ...process.env, ...e2eEnv } });
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   return (JSON.parse(result.stdout.trim()) as { id: string }).id;
 }
@@ -155,7 +154,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   const beforeSeed = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
   expect(beforeSeed.status(), await beforeSeed.text()).toBe(200);
   expect((await beforeSeed.json()).bookmarks).toHaveLength(0);
-  const legacyBookmarkId = seedLegacyBookmark(legacyMatter.id, bootData.membership.id);
+  const legacyBookmarkId = await seedLegacyBookmark(legacyMatter.id, bootData.membership.id);
   const before = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
   expect(before.status()).toBe(200);
   const beforeRows = (await before.json()).bookmarks;
