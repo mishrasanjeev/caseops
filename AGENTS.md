@@ -4391,3 +4391,14 @@ requirements when using the fallback.
   TypeScript cannot validate free names inside transpiled VM strings. Run the
   complete dependent frontend suite, including unhandled-error checks, before
   freezing a long Docker run; new-helper-only passes are not integration proof.
+- An installer bootstrap download failure is not proof that its pinned version
+  is absent. Preserve the actual resolver and full-body transport failures.
+  Prefer the approved upstream tool's digest-pinned producer image, verify the
+  installed binary version and retain its exact license/provenance. Do not
+  weaken certificate validation, change application locks, or call a HEAD,
+  partial download or bootstrap-only build full application acceptance.
+- Windows named-file ctime and opened-descriptor ctime can represent different
+  timestamps. Compare their real shared identity fields and creation time, while
+  retaining each channel's own before/after mutation checks. A replacement-race
+  test must actually replace the named file while the original descriptor stays
+  open; a sharing violation or earlier metadata refusal is not race coverage.

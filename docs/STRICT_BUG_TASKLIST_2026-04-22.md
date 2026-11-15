@@ -6493,3 +6493,40 @@ to executed8f5, not restamped onto a changed candidate; any component reuse
 requires independent source/dependency/native-evidence admission and fresh
 new-head hosted PG proof where dynamic inputs are unresolved. All current
 production bug verdicts remain unupgraded until their deployed journeys pass.
+
+### November 15: Immutable API Installer Bootstrap
+
+J14/M14 release verification remains Inconclusive. Full-docker-19 on724786
+failed before API application installation, PostgreSQL or browser execution.
+The fresh Python/OCR/CA layers completed; pip's initial uv0.13.5 no-candidate
+message was not a reliable missing-version diagnosis. The unchanged installer
+reproduction found that exact official version and then failed after six
+interrupted wheel downloads. Both complete native failures remain retained.
+
+The candidate copies the same approved uv0.13.5 binaries from the official
+multi-architecture producer index pinned by SHA256, records the producer and
+source commit in existing provenance, and checks the installed executable's
+version before either runtime image. Exact upstream licenses, the compromised
+CA removal, certificate verification and application frozen/hash-locked
+installation remain unchanged. Two added contracts first failed against the
+old bootstrap. That Windows red also exposed three preexisting notice-reader
+fixture/platform failures; they are distinct from those two expected failures,
+not discarded or relabelled as a successful red run. Component build/test
+acceptance, fresh current-head CI/full Docker and deployed workflows remain
+required. An upstream image/version probe is not whole-release certification.
+
+The Windows test-reader diagnosis distinguishes named creation-time ctime from
+descriptor change-time ctime. Shared identity uses the platform's real birth
+time while each original before/after mutation comparison stays strict. The
+replacement fixture opens a real delete-sharing Windows descriptor and proves
+the old/new inode distinction before rejection, rather than accepting a sharing
+exception. The original failed fixtures remain retained. No production reader,
+runtime ACL, application schema or legal-source admission policy is changed.
+
+Focused replacement on dirty724base completed54/54 cases with162 passed
+setup/call/teardown reports, exact collected identities, native exit0 and
+unchanged four source inputs. Both complete TLS/bootstrap and Teams-fence
+modules ran. Full API Ruff passed. Real runtime-base component build and its
+offline uv/uvx0.13.5, three exact notice hashes and148-root Python CA checks
+also passed. Independent source review found no blocker. These are scoped
+proofs only; new-head hosted/fullDocker and production certification remain owed.

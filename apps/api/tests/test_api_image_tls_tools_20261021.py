@@ -15,6 +15,16 @@ import pytest
 DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
 CA_POLICY = DOCKERFILE.parent / "docker" / "remove_compromised_ca.py"
 DENIED = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
+UV_IMAGE = (
+    "ghcr.io/astral-sh/uv:0.13.5@sha256:"
+    "32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff"
+)
+UV_IMAGE_COPY = f"COPY --from={UV_IMAGE} /uv /uvx /usr/local/bin/"
+UV_VERSION_CHECK = (
+    "RUN python -c 'import subprocess; version = subprocess.check_output("
+    '["/usr/local/bin/uv", "--version"], text=True).split(); '
+    'assert version[:2] == ["uv", "0.13.5"], version\''
+)
 
 
 @pytest.mark.parametrize(
@@ -123,8 +133,32 @@ def test_ca_removal_rejects_unsafe_effective_after_state(tmp_path, after, verify
 def test_api_image_pins_fixed_uv_without_changing_python_base():
     source = DOCKERFILE.read_text()
     assert "FROM python:3.13-slim AS runtime-base" in source
-    assert "RUN pip install --no-cache-dir uv==0.13.5" in source
+    assert UV_IMAGE_COPY in source
     assert "uv==0.11.6" not in source
+
+
+def test_uv_bootstrap_binds_the_official_immutable_multiarch_producer():
+    source = DOCKERFILE.read_text()
+    assert source.count(UV_IMAGE_COPY) == 1
+    provenance = json.loads((DOCKERFILE.parent / "vendor/uv-0.13.5/provenance.json").read_text())
+    assert provenance["dockerBootstrap"] == {
+        "image": UV_IMAGE,
+        "indexDigest": "sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff",
+        "sourceCommit": provenance["sourceCommit"],
+        "platforms": ["linux/amd64", "linux/arm64"],
+        "installMethod": "copy-official-distroless-binaries",
+        "livePackageIndexBootstrap": False,
+    }
+
+
+def test_uv_bootstrap_checks_installed_version_before_both_runtime_images():
+    source = DOCKERFILE.read_text()
+    base, _api = source.split("FROM runtime-base AS api", 1)
+    assert base.count(UV_VERSION_CHECK) == 1
+    assert base.index(UV_IMAGE_COPY) < base.index(UV_VERSION_CHECK)
+    assert "pip install" not in base
+    assert source.index(UV_VERSION_CHECK) < source.index("RUN uv export")
+    assert 'subprocess.check_output(["/usr/local/bin/uv", "--version"]' in UV_VERSION_CHECK
 
 
 def test_api_bootstrap_selects_verified_patched_ca_before_pip():
@@ -134,7 +168,7 @@ def test_api_bootstrap_selects_verified_patched_ca_before_pip():
     )
     policy = source.index("RUN python /tmp/caseops-remove-compromised-ca.py")
     pip_ca = source.index("PIP_CERT=/etc/ssl/certs/ca-certificates.crt")
-    install = source.index("RUN pip install --no-cache-dir uv==0.13.5")
+    install = source.index(UV_IMAGE_COPY)
     assert copy < policy < pip_ca < install
     assert "&& rm /tmp/caseops-remove-compromised-ca.py" in source
     assert "PIP_USE_DEPRECATED=legacy-certs" in source
@@ -172,7 +206,7 @@ UV_NOTICES = DOCKERFILE.parent / "vendor" / "uv-0.13.5"
 UV_MATERIALS = {
     "LICENSE-APACHE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
     "LICENSE-MIT": "860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c",
-    "provenance.json": "d97cc222e4b1fbea11ddeddcd855de429b1f28270b61c6070f5cc5ab246d2b80",
+    "provenance.json": "f94654b56ccdd70c8c86e21df8df82c02598f64bd3c5ba3e13417750a58354b6",
 }
 
 
@@ -216,10 +250,12 @@ def _read_uv_notice(file, expected_sha256, *, after_open=None):
         if after_open:
             after_open(fd)
         named = file.lstat()
+        # Windows lstat reports creation time as ctime; fstat reports change time.
+        # Keep the original per-channel before/after checks below intact.
+        identity_fields = (*fields[:-1], "st_birthtime_ns") if sys.platform == "win32" else fields
         same = all(
             getattr(named, key) == getattr(opened, key)
-            for key in fields
-            if not (sys.platform == "win32" and key == "st_dev" and named.st_dev == 0)
+            for key in identity_fields
         )
         if not stat.S_ISREG(named.st_mode) or stat.S_ISLNK(named.st_mode) or not same:
             raise ValueError("UV_NOTICE_NAMED_FD_REQUIRED")
@@ -297,7 +333,7 @@ def test_uv_installer_notices_enter_only_the_api_runtime_base_before_install():
     base, api = source.split("FROM runtime-base AS api", 1)
     copy = "COPY vendor/uv-0.13.5 /usr/share/doc/caseops-api/third-party/uv-0.13.5"
     assert base.count(copy) == source.count(copy) == 1
-    assert base.index(copy) < base.index("RUN pip install --no-cache-dir uv==0.13.5")
+    assert base.index(copy) < base.index(UV_IMAGE_COPY)
     assert "uv-0.13.5" not in api
     assert "COPY vendor/ ./vendor/" not in source
     assert "COPY vendor/*" not in source
@@ -305,7 +341,7 @@ def test_uv_installer_notices_enter_only_the_api_runtime_base_before_install():
 
 def test_uv_verifier_upgrade_preserves_clean_stores_and_existing_install_contracts():
     source = DOCKERFILE.read_text()
-    assert source.count("pip install --no-cache-dir uv==0.13.5") == 1
+    assert source.count(UV_IMAGE_COPY) == 1
     assert "uv==0.13.4" not in source
     assert "PIP_CERT=/etc/ssl/certs/ca-certificates.crt" in source
     assert "PIP_USE_DEPRECATED=legacy-certs" in source
@@ -328,10 +364,32 @@ def test_uv_notice_reader_real_fd_refusals_are_bounded_and_closed(tmp_path, monk
     if fault == "hardlink":
         os.link(file, tmp_path / "second-name")
     real_open, real_read = os.open, os.read
-    observed = {"fd": None, "bytes": 0, "grown": False}
+    observed = {"fd": None, "bytes": 0, "grown": False, "replaced": False}
 
     def opened(path, *args, **kwargs):
-        fd = real_open(path, *args, **kwargs)
+        if path == file and fault == "replacement" and sys.platform == "win32":
+            import ctypes
+            import msvcrt
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            create = kernel.CreateFileW
+            create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                               ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+            create.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel.CloseHandle.restype = wintypes.BOOL
+            # Allow a real replacement race without closing the reader's FD.
+            handle = create(str(path), 0x80000000, 0x1 | 0x2 | 0x4, None, 3, 0x00200000, None)
+            if handle in (None, wintypes.HANDLE(-1).value):
+                raise ctypes.WinError(ctypes.get_last_error())
+            try:
+                fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+            except BaseException:
+                kernel.CloseHandle(handle)
+                raise
+        else:
+            fd = real_open(path, *args, **kwargs)
         if path == file:
             observed["fd"] = fd
         return fd
@@ -350,17 +408,26 @@ def test_uv_notice_reader_real_fd_refusals_are_bounded_and_closed(tmp_path, monk
         if fault == "replacement":
             file.rename(tmp_path / "retained-original")
             file.write_bytes(original)
+            assert file.lstat().st_ino != os.fstat(_fd).st_ino
+            assert (tmp_path / "retained-original").lstat().st_ino == os.fstat(_fd).st_ino
+            observed["replaced"] = True
 
     monkeypatch.setattr(os, "open", opened)
     monkeypatch.setattr(os, "read", consumed)
     expected = "0" * 64 if fault == "hash" else hashlib.sha256(original).hexdigest()
-    with pytest.raises(ValueError):
+    error = {"hash": "UV_NOTICE_CONTENT_OR_IDENTITY_CHANGED",
+             "growth": "UV_NOTICE_CONTENT_OR_IDENTITY_CHANGED",
+             "replacement": "UV_NOTICE_NAMED_FD_REQUIRED",
+             "hardlink": "UV_NOTICE_OWNED_REGULAR_REQUIRED"}[fault]
+    with pytest.raises(ValueError, match=error):
         _read_uv_notice(file, expected, after_open=after_open)
     assert observed["fd"] is not None
     with pytest.raises(OSError):
         os.fstat(observed["fd"])
     if fault in ["replacement", "hardlink"]:
         assert observed["bytes"] == 0
+    if fault == "replacement":
+        assert observed["replaced"] is True
     if fault == "growth":
         assert observed["grown"] is True
         assert observed["bytes"] == 65537

@@ -39,7 +39,9 @@ ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
 # uv0.13.5 keeps the clean120 Mozilla roots and fixes the separate verifier advisory.
 # Retain both exact upstream base-policy notices with this API-only installer.
 COPY vendor/uv-0.13.5 /usr/share/doc/caseops-api/third-party/uv-0.13.5
-RUN pip install --no-cache-dir uv==0.13.5
+# Bootstrap from the immutable upstream producer, not a live package-index download.
+COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /uvx /usr/local/bin/
+RUN python -c 'import subprocess; version = subprocess.check_output(["/usr/local/bin/uv", "--version"], text=True).split(); assert version[:2] == ["uv", "0.13.5"], version'
 
 FROM runtime-base AS api
 

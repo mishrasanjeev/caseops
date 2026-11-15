@@ -1,5 +1,18 @@
 # Strict Enterprise Gap Tasklist
 
+## November15: API Bootstrap Producer Must Be Immutable
+
+J14/M14 release verification remains NO-GO pending full replacement gates.
+Full-docker-19 completed its Python/OCR/CA layers but failed the live pip
+installer bootstrap before application/PG/browser execution. The unchanged
+reproduction resolved the approved uv0.13.5 and then exhausted interrupted
+downloads; the original no-candidate message is not missing-version proof.
+Use that same tool version from the official digest-pinned multi-architecture
+producer, retain exact license/source provenance and verify the installed
+binary version. Application locks, trust roots, CA remediation and secure
+transport remain unchanged. A successful bootstrap component cannot replace
+fresh current-head CI, full Docker or exact-serving production acceptance.
+
 ## November14: Windows Collection Is Not A Passing Local Component
 
 Issue615 remains Not fixed. On integrated790-case source, fresh-cache baseline

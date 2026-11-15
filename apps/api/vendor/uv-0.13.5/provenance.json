@@ -36,5 +36,13 @@
     "previousVerifierVersion": "0.103.14",
     "cleanRootsDoNotCertifyOldVerifier": true
   },
+  "dockerBootstrap": {
+    "image": "ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff",
+    "indexDigest": "sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff",
+    "sourceCommit": "46776a95d6686ac0160c10611327ce491e6b202f",
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "installMethod": "copy-official-distroless-binaries",
+    "livePackageIndexBootstrap": false
+  },
   "installedLinuxImageVerification": "required separately; source provenance is not image acceptance"
 }

@@ -190,7 +190,7 @@ def test_blocked_team_db_work_does_not_monopolize_the_http_event_loop(monkeypatc
     app = FastAPI()
     app.include_router(routes.router, prefix="/api/teams")
     app.dependency_overrides[get_current_context] = object
-    app.dependency_overrides[get_db_session] = lambda: object()
+    app.dependency_overrides[get_db_session] = object
 
     @app.get("/unrelated")
     async def unrelated():
