@@ -32,11 +32,16 @@ const actor = { company: { id: companyId, slug: `ip15-${run}` }, membership: { i
 
 function fixture(overrides: Record<string, string> = {}, ready = true, returnedSha = sha, loginId = companyId) {
   const ast = ts.createSourceFile("ip15-workspace.ts", source, ts.ScriptTarget.Latest, true);
-  const body = ast.statements.filter(statement => ts.isFunctionDeclaration(statement)
+  const declarations = ast.statements.filter(statement => ts.isFunctionDeclaration(statement)
     || ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration =>
       ts.isIdentifier(declaration.name) && ["loopback", "uuid"].includes(declaration.name.text)),
-  ).map(statement => statement.getText(ast)).join("\n");
-  const spawnSync = vi.fn(() => ({ status: 0 }));
+  );
+  expect(declarations.filter(ts.isFunctionDeclaration).map(statement => statement.name?.text)).toEqual([
+    "required", "body", "localRuntime", "grantFreshLocalWorkspace", "prepareIp15Workspace", "createIp15ManualTrademark",
+  ]);
+  expect(declarations.filter(ts.isVariableStatement)).toHaveLength(2);
+  const body = declarations.map(statement => statement.getText(ast)).join("\n");
+  const runLocalPythonFixture = vi.fn(async () => ({ status: 0 }));
   const events: string[] = [];
   const publicContexts: Array<{ get: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> }> = [];
   const publicRequest = { newContext: vi.fn(async (options: unknown) => {
@@ -49,14 +54,16 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
     publicContexts.push(api);
     return api;
   }) };
-  const context = vm.createContext({ URL, path, expect, spawnSync, repoRoot: root, exports: {},
+  const context = vm.createContext({ URL, path, expect, runLocalPythonFixture, repoRoot: root, exports: {},
     process: { platform: process.platform, env: { CASEOPS_EXPECTED_RELEASE_SHA: sha,
       CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides } },
     e2eEnv: { CASEOPS_RELEASE_SHA: sha, CASEOPS_ENV: "e2e",
       CASEOPS_DATABASE_URL: `sqlite+pysqlite:///${path.join(root, "caseops-e2e.db").replaceAll("\\", "/")}` },
     randomUUID: () => run, runId: () => run, RUN_ID, noPaidProviderHeaders: marker, localTransportHeaders, request: publicRequest });
   const publicAst = ts.createSourceFile("public-release-identity.ts", publicSource, ts.ScriptTarget.Latest, true);
-  const publicBody = publicAst.statements.filter(ts.isFunctionDeclaration).map(statement => statement.getText(publicAst)).join("\n");
+  const publicDeclarations = publicAst.statements.filter(ts.isFunctionDeclaration);
+  expect(publicDeclarations.map(statement => statement.name?.text)).toEqual(["assertPublicReleaseIdentity"]);
+  const publicBody = publicDeclarations.map(statement => statement.getText(publicAst)).join("\n");
   vm.runInContext(ts.transpileModule(publicBody + "\n" + body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS } }).outputText, context);
   const helper = context as unknown as {
@@ -88,11 +95,40 @@ function fixture(overrides: Record<string, string> = {}, ready = true, returnedS
   const control = () => ({ fill: vi.fn(async () => {}), click: vi.fn(async () => {}) });
   const page = { setViewportSize: vi.fn(async () => {}), setExtraHTTPHeaders: vi.fn(async () => {}), goto: vi.fn(async () => {}),
     locator: control, getByRole: control, waitForURL: vi.fn(async () => {}) };
-  return { helper, request, page, spawnSync, events, publicRequest, publicContexts,
+  return { helper, request, page, runLocalPythonFixture, events, publicRequest, publicContexts,
     run: (base = "http://127.0.0.1:3100") => helper.prepareIp15Workspace(page, request, base, 393) };
 }
 
 describe("IP15 shared workspace fixture boundaries", () => {
+  it("awaits the injected async grant before configuring the workspace", async () => {
+    const f = fixture();
+    let complete!: (result: { status: number }) => void;
+    f.runLocalPythonFixture.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    const pending = f.run();
+    await vi.waitFor(() => expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1));
+    expect(f.request.put).not.toHaveBeenCalled();
+    expect(f.page.goto).not.toHaveBeenCalled();
+    complete({ status: 0 });
+    await pending;
+    expect(f.request.put).toHaveBeenCalledTimes(1);
+    expect(f.publicRequest.newContext).toHaveBeenCalledTimes(4);
+    for (const api of f.publicContexts) expect(api.dispose).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it.each(["rejection", "nonzero status"])("stops workspace setup after async grant %s", async boundary => {
+    const f = fixture();
+    if (boundary === "rejection") f.runLocalPythonFixture.mockRejectedValueOnce(new Error("Synthetic grant failure"));
+    else f.runLocalPythonFixture.mockResolvedValueOnce({ status: 1 });
+    await expect(f.run()).rejects.toThrow(boundary === "rejection" ? "Synthetic grant failure" : "Isolated IP15 fixture grant failed");
+    expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1);
+    expect(f.request.put).not.toHaveBeenCalled();
+    expect(f.events).not.toContain("/api/ip/workspace/enable");
+    expect(f.events).not.toContain("/api/ip/readiness");
+    expect(f.page.goto).not.toHaveBeenCalled();
+    expect(f.publicContexts).toHaveLength(2);
+    for (const api of f.publicContexts) expect(api.dispose).toHaveBeenCalledExactlyOnceWith();
+  });
+
   it("does not send public identity reads through the authenticated workspace fixture", async () => {
     expect(localTransportHeaders("http://127.0.0.1:3100")).toEqual({ ...marker, Connection: "close" });
     expect(localTransportHeaders("https://caseops.ai")).toEqual(marker);
@@ -108,7 +144,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
   it("prepares only a fresh local tenant, manual workspace and two exact-release identity pairs", async () => {
     const f = fixture();
     const result = await f.run();
-    expect(f.spawnSync).toHaveBeenCalledTimes(1);
+    expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ actor, local: true, run, timezone: "Asia/Kolkata" });
     expect(typeof result.release).toBe("function");
     expect(f.page.setExtraHTTPHeaders).toHaveBeenCalledWith(localTransportHeaders("http://127.0.0.1:3100"));
@@ -117,7 +153,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
     expect(f.request.put).toHaveBeenCalledWith(expect.stringMatching(/configuration$/), expect.objectContaining({ data: expect.objectContaining({
       provider_keys: [], accept_provider_terms: false, provider_terms_version: null, timezone: "Asia/Kolkata", holiday_calendar_key: "ip15",
     }) }));
-    const args = f.spawnSync.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
+    const args = f.runLocalPythonFixture.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
     expect(args[1][1]).toContain("owner.role=='owner'");
     expect(args[1][1]).toContain("company.slug==os.environ['IP15_SLUG']");
     expect(args[1][1]).toContain("externally_billable=False");
@@ -128,7 +164,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
     const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" });
     const result = await f.run("https://caseops.ai");
     expect(result).toMatchObject({ local: false, actor: { company: { slug: "test-legal" } } });
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/api/auth/login"]);
     expect(f.page.setExtraHTTPHeaders).toHaveBeenCalledWith(marker);
@@ -147,7 +183,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
     expect(f.request.get).not.toHaveBeenCalled();
     expect(f.publicRequest.newContext).not.toHaveBeenCalled();
     expect(f.request.post).not.toHaveBeenCalled();
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
   it.each(["main", "c".repeat(39), "C".repeat(40)])("rejects malformed expected release %s", async release => {
@@ -160,7 +196,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
     const f = fixture({}, true, "d".repeat(40));
     await expect(f.run()).rejects.toThrow();
     expect(f.request.post).not.toHaveBeenCalled();
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.publicContexts).toHaveLength(1);
     expect(f.publicContexts[0].dispose).toHaveBeenCalledExactlyOnceWith();
   });
@@ -173,7 +209,7 @@ describe("IP15 shared workspace fixture boundaries", () => {
   ])("rejects unowned database %s before direct grant/configuration", async database => {
     const f = fixture({ CASEOPS_E2E_DATABASE_URL: database });
     await expect(f.run()).rejects.toThrow(/database|SQLite|PostgreSQL/);
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post).not.toHaveBeenCalled();
   });
@@ -181,13 +217,13 @@ describe("IP15 shared workspace fixture boundaries", () => {
   it("rejects a foreign login identity before direct local grant", async () => {
     const f = fixture({}, true, sha, applicationId);
     await expect(f.run()).rejects.toThrow(/tenant identity/);
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
   it("fails unavailable production readiness without trying a grant or reconfiguration", async () => {
     const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, false);
     await expect(f.run("https://caseops.ai")).rejects.toThrow();
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
   });
 

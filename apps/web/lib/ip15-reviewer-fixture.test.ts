@@ -41,7 +41,7 @@ function fixture(options: Options = {}) {
   const ast = ts.createSourceFile("ip-controls.spec.ts", source, ts.ScriptTarget.Latest, true);
   const declarations = ast.statements.filter(statement => ts.isFunctionDeclaration(statement)
     && ["json", "prepare"].includes(statement.name?.text ?? ""));
-  expect(declarations).toHaveLength(2);
+  expect(declarations.filter(ts.isFunctionDeclaration).map(statement => statement.name?.text)).toEqual(["json", "prepare"]);
   const body = declarations.map(statement => statement.getText(ast)).join("\n");
   const identity: Identity = { company: { id: companyId, slug: `ip15-${run}`, is_active: true },
     membership: { id: legalId, role: "admin", is_active: true }, capabilities: ["ip:read", "ip:rules_activate"] };
@@ -104,10 +104,10 @@ function fixture(options: Options = {}) {
     memberCount += 1;
     return response({ membership_id: options.duplicateMemberIds || memberCount === 1 ? legalId : reviewerId });
   }) };
-  const spawnSync = vi.fn(() => ({ status: 0 }));
+  const runLocalPythonFixture = vi.fn(async () => ({ status: 0 }));
   const prepareIp15Workspace = vi.fn(async () => workspace);
   const createIp15ManualTrademark = vi.fn(async () => ({ docket: { id: run }, application: { id: otherId } }));
-  const context = vm.createContext({ URL, path, expect, spawnSync, repoRoot: root,
+  const context = vm.createContext({ URL, path, expect, runLocalPythonFixture, repoRoot: root,
     process: { platform: process.platform, env: {} }, e2eEnv: { CASEOPS_DATABASE_URL: "postgresql+psycopg://fixture:fixture@127.0.0.1/fixture" },
     randomUUID: () => run, noPaidProviderHeaders: marker, prepareIp15Workspace, createIp15ManualTrademark,
     playwrightRequest: { newContext } });
@@ -117,11 +117,42 @@ function fixture(options: Options = {}) {
     legal: typeof legal | null; reviewerId: string; docketId: string; applicationId: string; proceedingId: string;
   }> };
   return { run: () => helper.prepare({}, request, workspace.web.origin, 393), authentication, legal, newContext,
-    request, release, spawnSync, events, activationRequests, workspace, prepareIp15Workspace, createIp15ManualTrademark,
+    request, release, runLocalPythonFixture, events, activationRequests, workspace, prepareIp15Workspace, createIp15ManualTrademark,
     headers: () => legalHeaders };
 }
 
 describe("IP15 independent reviewer fixture authentication", () => {
+  it("awaits the injected async role promotion before authenticating the legal actor", async () => {
+    const f = fixture();
+    let complete!: (result: { status: number }) => void;
+    f.runLocalPythonFixture.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    const pending = f.run();
+    await vi.waitFor(() => expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1));
+    expect(f.newContext).not.toHaveBeenCalled();
+    expect(f.authentication.post).not.toHaveBeenCalled();
+    expect(f.release).not.toHaveBeenCalled();
+    complete({ status: 0 });
+    const result = await pending;
+    expect(result.legal).toBe(f.legal);
+    expect(f.newContext).toHaveBeenCalledTimes(2);
+    expect(f.authentication.dispose).toHaveBeenCalledExactlyOnceWith();
+    await result.legal!.dispose();
+  });
+
+  it.each(["rejection", "nonzero status"])("stops legal authentication after async role promotion %s", async boundary => {
+    const f = fixture();
+    if (boundary === "rejection") f.runLocalPythonFixture.mockRejectedValueOnce(new Error("Synthetic role failure"));
+    else f.runLocalPythonFixture.mockResolvedValueOnce({ status: 1 });
+    await expect(f.run()).rejects.toThrow(boundary === "rejection" ? "Synthetic role failure" : "Isolated fixture role setup must succeed");
+    expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1);
+    expect(f.newContext).not.toHaveBeenCalled();
+    expect(f.authentication.post).not.toHaveBeenCalled();
+    expect(f.authentication.dispose).not.toHaveBeenCalled();
+    expect(f.legal.get).not.toHaveBeenCalled();
+    expect(f.legal.dispose).not.toHaveBeenCalled();
+    expect(f.release).not.toHaveBeenCalled();
+  });
+
   it("uses a separate Bearer context for the exact legal actor and both activations", async () => {
     const f = fixture();
     const result = await f.run();
@@ -162,7 +193,7 @@ describe("IP15 independent reviewer fixture authentication", () => {
       const f = fixture({ local, proceeding });
       await expect(f.run()).rejects.toThrow("The created proceeding must return its canonical identity.");
       expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([`/api/ip/dockets/${run}/proceedings`]);
-      expect(f.spawnSync).not.toHaveBeenCalled();
+      expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
       expect(f.newContext).not.toHaveBeenCalled();
       expect(f.authentication.post).not.toHaveBeenCalled();
       expect(f.authentication.dispose).not.toHaveBeenCalled();
@@ -256,7 +287,7 @@ describe("IP15 independent reviewer fixture authentication", () => {
     const result = await f.run();
     expect(result).toMatchObject({ legal: null, reviewerId: "", docketId: run, applicationId: otherId, proceedingId });
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([`/api/ip/dockets/${run}/proceedings`]);
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.newContext).not.toHaveBeenCalled();
     expect(f.release).not.toHaveBeenCalled();
   });

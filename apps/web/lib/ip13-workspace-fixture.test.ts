@@ -20,21 +20,25 @@ function fixture(overrides: Record<string, string> = {}, ready = true, loginComp
   configurationTimezone: unknown = "Asia/Kolkata") {
   const functions = new Set(["required", "grantLocalPortfolioEntitlement", "preparePortfolioWorkspace", "preparePortfolio"]);
   const ast = ts.createSourceFile("dated-fixture.ts", source, ts.ScriptTarget.Latest, true);
-  const body = ast.statements.filter(statement =>
+  const declarations = ast.statements.filter(statement =>
     ts.isFunctionDeclaration(statement) && statement.name && functions.has(statement.name.text)
     || ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration =>
       ts.isIdentifier(declaration.name) && declaration.name.text === "loopback"),
-  ).map(statement => statement.getText(ast)).join("\n");
-  const spawnSync = vi.fn(() => ({ status: 0, stderr: "" }));
+  );
+  expect(declarations.filter(ts.isFunctionDeclaration).map(statement => statement.name?.text).sort())
+    .toEqual([...functions].sort());
+  expect(declarations.filter(ts.isVariableStatement)).toHaveLength(1);
+  const body = declarations.map(statement => statement.getText(ast)).join("\n");
+  const runLocalPythonFixture = vi.fn(async () => ({ status: 0, stderr: "" }));
   const env = { CASEOPS_RELEASE_SHA: "c".repeat(40), CASEOPS_EXPECTED_RELEASE_SHA: "c".repeat(40),
     CASEOPS_RAM_PROD_EMAIL: "offline@example.com", CASEOPS_RAM_PROD_PASSWORD: "offline-password", ...overrides };
-  const context = vm.createContext({ URL, path, expect, spawnSync, repoRoot: root,
+  const context = vm.createContext({ URL, path, expect, runLocalPythonFixture, repoRoot: root,
     process: { env, platform: process.platform }, e2eEnv: { CASEOPS_DATABASE_URL: database, CASEOPS_ENV: "e2e" },
     randomUUID: () => runId, runId: () => runId, RUN_ID, noPaidProviderHeaders: marker });
   vm.runInContext(ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS } }).outputText, context);
   const helper = context as unknown as {
-    grantLocalPortfolioEntitlement: (web: URL, api: URL, actor: FixtureActor, slug: string) => void;
+    grantLocalPortfolioEntitlement: (web: URL, api: URL, actor: FixtureActor, slug: string) => Promise<void>;
     preparePortfolio: (...args: unknown[]) => Promise<unknown>;
   };
   const events: string[] = [];
@@ -64,18 +68,44 @@ function fixture(overrides: Record<string, string> = {}, ready = true, loginComp
   const locator = () => ({ fill: vi.fn(async () => {}), click: vi.fn(async () => {}) });
   const page = { setViewportSize: vi.fn(async () => {}), goto: vi.fn(async () => {}),
     locator, getByRole: locator, waitForURL: vi.fn(async () => {}) };
-  return { helper, spawnSync, request, page, events,
+  return { helper, runLocalPythonFixture, request, page, events,
     run: (base = "http://127.0.0.1:3100") => helper.preparePortfolio(page, request, base, 1280) };
 }
 
 describe("IP13 fresh workspace fixture boundaries", () => {
+  it("awaits the injected async grant before configuring the workspace", async () => {
+    const f = fixture();
+    let complete!: (result: { status: number; stderr: string }) => void;
+    f.runLocalPythonFixture.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    const pending = f.run();
+    await vi.waitFor(() => expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1));
+    expect(f.request.put).not.toHaveBeenCalled();
+    expect(f.events).not.toContain("/api/ip/workspace/enable");
+    complete({ status: 0, stderr: "" });
+    await pending;
+    expect(f.request.put).toHaveBeenCalledTimes(1);
+    expect(f.events.at(-1)).toBe("/api/ip/readiness");
+  });
+
+  it.each(["rejection", "nonzero status"])("stops workspace setup after async grant %s", async boundary => {
+    const f = fixture();
+    if (boundary === "rejection") f.runLocalPythonFixture.mockRejectedValueOnce(new Error("Synthetic grant failure"));
+    else f.runLocalPythonFixture.mockResolvedValueOnce({ status: 1, stderr: "Synthetic grant failure" });
+    await expect(f.run()).rejects.toThrow(boundary === "rejection" ? "Synthetic grant failure" : "Local fixture grant failed");
+    expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1);
+    expect(f.request.put).not.toHaveBeenCalled();
+    expect(f.events).not.toContain("/api/ip/workspace/enable");
+    expect(f.events).not.toContain("/api/ip/readiness");
+    expect(f.page.goto).not.toHaveBeenCalled();
+  });
+
   it("grants only the fresh fixture, configures/enables manual workspace and reads actual readiness", async () => {
     const python = path.join(root, "apps/api/.venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
     const f = fixture({ CASEOPS_E2E_PYTHON: python });
     const result = await f.run() as { timezone: string };
     expect(result.timezone).toBe("Asia/Kolkata");
-    expect(f.spawnSync).toHaveBeenCalledTimes(1);
-    const [executable, args, options] = f.spawnSync.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
+    expect(f.runLocalPythonFixture).toHaveBeenCalledTimes(1);
+    const [executable, args, options] = f.runLocalPythonFixture.mock.calls[0] as unknown as [string, string[], { env: Record<string, string> }];
     expect(executable).toBe(python);
     expect(args[0]).toBe("-c");
     expect(args[1]).toContain("company.slug==os.environ['CASEOPS_E2E_COMPANY_SLUG']");
@@ -104,36 +134,36 @@ describe("IP13 fresh workspace fixture boundaries", () => {
   ])("rejects unsafe database %s before any grant or configuration", async databaseUrl => {
     const f = fixture({ CASEOPS_E2E_DATABASE_URL: databaseUrl });
     await expect(f.run()).rejects.toThrow(/database/i);
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
   });
 
   it("rejects foreign candidate Python before the grant", async () => {
     const f = fixture({ CASEOPS_E2E_PYTHON: path.resolve(root, "../unowned/python.exe") });
     await expect(f.run()).rejects.toThrow("Python must belong to this candidate");
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
   it("rejects a login for a different company before the grant", async () => {
     const f = fixture({}, true, "33333333-3333-4333-8333-333333333333");
     await expect(f.run()).rejects.toThrow();
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
-  it("rejects a direct remote-origin or wrong-slug grant even if the caller mislabels it local", () => {
+  it("rejects a direct remote-origin or wrong-slug grant even if the caller mislabels it local", async () => {
     const f = fixture();
-    expect(() => f.helper.grantLocalPortfolioEntitlement(new URL("https://caseops.ai"),
-      new URL("https://api.caseops.ai"), actor, slug)).toThrow("loopback origins");
-    expect(() => f.helper.grantLocalPortfolioEntitlement(new URL("http://127.0.0.1"),
-      new URL("http://127.0.0.1"), actor, "test-legal")).toThrow("newly bootstrapped");
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    await expect(f.helper.grantLocalPortfolioEntitlement(new URL("https://caseops.ai"),
+      new URL("https://api.caseops.ai"), actor, slug)).rejects.toThrow("loopback origins");
+    await expect(f.helper.grantLocalPortfolioEntitlement(new URL("http://127.0.0.1"),
+      new URL("http://127.0.0.1"), actor, "test-legal")).rejects.toThrow("newly bootstrapped");
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
   });
 
   it("uses read-only readiness on canonical production and never grants/configures/enables", async () => {
     const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, true, tenantId, "Europe/London");
     const result = await f.run("https://caseops.ai") as { timezone: string };
     expect(result.timezone).toBe("Europe/London");
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/api/auth/login"]);
     expect(f.events.at(-1)).toBe("/api/ip/readiness");
@@ -142,7 +172,7 @@ describe("IP13 fresh workspace fixture boundaries", () => {
   it.each([null, 17])("rejects malformed production timezone %s without workspace mutation", async timezone => {
     const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, true, tenantId, timezone);
     await expect(f.run("https://caseops.ai")).rejects.toThrow();
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post.mock.calls.map(([url]) => new URL(url).pathname)).toEqual(["/api/auth/login"]);
   });
@@ -150,7 +180,7 @@ describe("IP13 fresh workspace fixture boundaries", () => {
   it("fails remote readiness with its real entitlement/configuration reasons, without mutation", async () => {
     const f = fixture({ PROD_API_BASE_URL: "https://api.caseops.ai" }, false);
     await expect(f.run("https://caseops.ai")).rejects.toThrow(/missing_entitlement.*workspace_configuration_missing/);
-    expect(f.spawnSync).not.toHaveBeenCalled();
+    expect(f.runLocalPythonFixture).not.toHaveBeenCalled();
     expect(f.request.put).not.toHaveBeenCalled();
     expect(f.request.post).toHaveBeenCalledTimes(1);
   });
