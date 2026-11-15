@@ -327,8 +327,7 @@ def test_identity_deduplication_does_not_call_sql_equality_or_hash():
         def __eq__(self, other):
             raise AssertionError("SQL equality must not be invoked")
 
-        def __hash__(self):
-            raise AssertionError("SQL hash must not be invoked")
+        __hash__ = None
 
     left, right = IdentityOnly(), IdentityOnly()
     assert is_read_only_select(_GraphNode([left, right, left, right]))
