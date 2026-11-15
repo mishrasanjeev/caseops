@@ -6,7 +6,7 @@ export const reportedDraftTarget = {
 } as const;
 
 export function assertReportedDraftSource<T extends { id: string; body: string }>(
-  draft: { id: string; matter_id: string; current_version_id: string | null; versions: T[] },
+  draft: { id: string; matter_id: string | null; current_version_id: string | null; versions: T[] },
   digest: (body: string) => string,
 ): T {
   if (draft.id !== reportedDraftTarget.draftId || draft.matter_id !== reportedDraftTarget.matterId

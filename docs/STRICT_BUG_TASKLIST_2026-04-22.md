@@ -2,6 +2,34 @@
 
 ## November15: Installer Consumer And Original Draft Proof Follow-up
 
+Candidate2a723774's fresh CI exposed two further integration omissions before
+release: the new guard narrowed canonical Draft.matter_id from nullable to
+non-null in TypeScript, and its VM unit read two helpers omitted from the web
+builder COPY/upload closure. Web typecheck failed before Vitest/build, while
+the Mobile source harness independently rejected both missing COPY inputs.
+These are our verification-code defects, not new application/provider failures.
+Accept the canonical input type while retaining the exact runtime identity
+rejection; add both builder-only paths and their finite upload regression.
+The failed2a results remain failed. Do not certify the next source from2a's
+passing sibling jobs or promote a local missing-Expo-dependency refusal to a
+successful native-source test.
+
+The completed2a-tree Linux component collected904cases with complete native
+setup/call/teardown and unchanged-source seals. All11 prior failures and the
+new import-isolation guard passed; the whole component still failed five cases.
+One actual JS-to-Python bridge showed generic pre-disk JSON redaction dropping
+the new receipt; four native privacy/config checks lacked the real Playwright
+CLI in the isolated tools closure. These were separately diagnosed, not assumed
+to share a cause. The strict reporter repair now passes42/42 native JS cases
+and a real Playwright1.60 runtime receipt through both annotation channels,
+JSON, JUnit, progress and Python validation. The actual three-package tool
+closure is staged separately; no fake CLI, browser download or provider call.
+Nullable repair:18pureunits/29existingDOMunits pass; Web/E2eTSC both exit0.
+Parent's three finite COPY/upload regressions pass, including the older computed
+AST input and its diagnostic dependency. Full native SDK working-tree check
+retains two60-second SDK timeouts and one corrected bad direct-read assertion;
+it is not a whole upload pass. Full final CI/Docker and deployed proof remain open.
+
 PR621 remains unshipped. The complete offline seven-module consumer run on the
 held test snapshot executed 537 cases: 526 passed and 11 failed, with no skips.
 Seven failures lacked real Node in that test-only image; two namespace-negative

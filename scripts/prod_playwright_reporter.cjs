@@ -8,6 +8,17 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const limit = 64 * 1024 * 1024;
 const diagnosticLimit = 64 * 1024;
+const reportedDraftType = "caseops-b5-reported-draft";
+const reportedDraftProof = Object.freeze({
+  schema_version: 1,
+  status: "READ_ONLY_PARITY_VERIFIED",
+  matter_id: "7771c86f-a6d6-442f-a675-4be40622dc05",
+  draft_id: "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+  version_id: "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+  body_sha256: "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
+  unchanged: true,
+  attempted_mutations: 0,
+});
 const routes = new Set(["auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
   "ip/title-interest", "ip/application", "calendar/events", "ip/renewal-tracker",
   "ip/madrid-list", "ip/madrid-workspace", "ip/foreign-associate-list",
@@ -116,10 +127,25 @@ function location(value) {
   return { file: relative.replaceAll("\\", "/"), line: value.line, column: value.column };
 }
 
+function reportedDraftDescription(description) {
+  const rejected = "[redacted invalid reported draft receipt]";
+  if (typeof description !== "string" || Buffer.byteLength(description, "utf8") > 1024) return rejected;
+  let proof;
+  try { proof = JSON.parse(description); } catch { return rejected; }
+  const keys = Object.keys(reportedDraftProof);
+  if (!exact(proof, keys) || !keys.every((key) => proof[key] === reportedDraftProof[key])) return rejected;
+  // Every approved key/string is ASCII without whitespace. After exact-schema
+  // validation this round trip also rejects duplicate keys, escapes and numeric
+  // spellings (1.0, 1e0, -0) that JSON.parse would otherwise normalize away.
+  if (description.replace(/[ \t\r\n]/g, "") !== JSON.stringify(proof)) return rejected;
+  return JSON.stringify(reportedDraftProof);
+}
+
 function annotations(values) {
   return (values ?? []).map((value) => ({
     type: safe(value.type),
-    ...(value.description === undefined ? {} : { description: safe(value.description) }),
+    ...(value.description === undefined ? {} : { description: value.type === reportedDraftType
+      ? reportedDraftDescription(value.description) : safe(value.description) }),
     ...(location(value.location) ? { location: location(value.location) } : {}),
   }));
 }

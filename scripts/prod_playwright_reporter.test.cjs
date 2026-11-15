@@ -274,6 +274,135 @@ test("sensitive annotation fragments redacted before first write", async () => {
   assert.match(body.json.suites[0].suites[0].specs[0].tests[0].annotations[0].description, /sensitive annotation/);
 });
 
+// Independent synthetic expectation, not imported from the serializer under test.
+const reportedDraftType = "caseops-b5-reported-draft";
+const reportedDraftProof = {
+  schema_version: 1,
+  status: "READ_ONLY_PARITY_VERIFIED",
+  matter_id: "7771c86f-a6d6-442f-a675-4be40622dc05",
+  draft_id: "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+  version_id: "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+  body_sha256: "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
+  unchanged: true,
+  attempted_mutations: 0,
+};
+
+async function draftReceipt(description, type, extra = {}) {
+  if (arguments.length < 2) type = reportedDraftType;
+  return capture({ mutate: ({ testCase }) => {
+    const annotation = { type, description };
+    Object.defineProperties(annotation, Object.getOwnPropertyDescriptors(extra));
+    testCase.annotations = [annotation];
+    testCase.results[0].annotations = [annotation];
+    testCase.results[0].attachments.push({ name: "bug001-production-parity",
+      get body() { return forbidden(); }, get path() { return forbidden(); } });
+  } });
+}
+
+function assertDraftReceipt(result, expected) {
+  const native = result.json.suites[0].suites[0].specs[0].tests[0];
+  assert.equal(native.annotations[0].description, expected);
+  assert.equal(native.results[0].annotations[0].description, expected);
+  for (const row of result.progress.filter((row) => row.suites)) {
+    const test = row.suites[0].suites[0].specs[0].tests[0];
+    assert.equal(test.annotations[0].description, expected);
+    for (const run of test.results) assert.equal(run.annotations[0].description, expected);
+  }
+  assert.ok(result.xml.includes(`name="${reportedDraftType}" value="${expected.replaceAll('"', "&quot;")}"`));
+  assert.equal(native.results[0].networkEvidence.status, "absent");
+}
+
+test("only the exact reviewed draft receipt survives native JSON XML and durable progress", async () => {
+  const canonical = JSON.stringify(reportedDraftProof);
+  const reversed = JSON.stringify(Object.fromEntries(Object.entries(reportedDraftProof).reverse()), null, 2);
+  for (const description of [canonical, reversed, canonical.padEnd(1024)]) {
+    const result = await draftReceipt(description, reportedDraftType, {
+      get body() { return forbidden(); }, get attachment() { return forbidden(); },
+    });
+    assertDraftReceipt(result, canonical);
+    assert.deepEqual(Object.keys(result.json.suites[0].suites[0].specs[0].tests[0].annotations[0]),
+      ["type", "description"]);
+  }
+});
+
+test("reviewed draft schema refuses every field's wrong scalar or structured type", async () => {
+  for (const key of Object.keys(reportedDraftProof)) {
+    for (const value of [null, false, true, 0, 1, "1", "0", "true", [], {}, [sentinel]]) {
+      if (value === reportedDraftProof[key]) continue;
+      assertDraftReceipt(await draftReceipt(JSON.stringify({ ...reportedDraftProof, [key]: value })),
+        "[redacted invalid reported draft receipt]");
+    }
+  }
+});
+
+test("missing extra private and changed draft proof fields never reach the first write", async () => {
+  for (const key of Object.keys(reportedDraftProof)) {
+    const missing = { ...reportedDraftProof }; delete missing[key];
+    assertDraftReceipt(await draftReceipt(JSON.stringify(missing)), "[redacted invalid reported draft receipt]");
+  }
+  for (const key of ["body", "source_fingerprint", "payload", "token", "attachments", "__proto__"]) {
+    const description = JSON.stringify({ ...reportedDraftProof, [key]: `private-legal-body ${sentinel}` });
+    assertDraftReceipt(await draftReceipt(description), "[redacted invalid reported draft receipt]");
+  }
+  for (const [key, value] of [
+    ["status", "PASSED"], ["matter_id", "00000000-0000-0000-0000-000000000000"],
+    ["draft_id", reportedDraftProof.version_id], ["version_id", reportedDraftProof.draft_id],
+    ["body_sha256", "7e83f20a36d662d4b6748542ebf2460daf141f86b9dc3a006baede20d0848504"],
+    ["attempted_mutations", -1], ["schema_version", 2],
+    ["body_sha256", reportedDraftProof.body_sha256.toUpperCase()],
+  ]) {
+    assertDraftReceipt(await draftReceipt(JSON.stringify({ ...reportedDraftProof, [key]: value })),
+      "[redacted invalid reported draft receipt]");
+  }
+});
+
+test("duplicate plain or escaped draft keys reject even when JSON.parse would erase private values", async () => {
+  const canonical = JSON.stringify(reportedDraftProof);
+  for (const [key, value] of Object.entries(reportedDraftProof)) {
+    const escapedKey = `\\u${key.charCodeAt(0).toString(16).padStart(4, "0")}${key.slice(1)}`;
+    for (const spelling of [key, escapedKey]) {
+      for (const duplicate of [JSON.stringify(value), JSON.stringify(`private-legal-body ${sentinel}`)]) {
+        const description = `{"${spelling}":${duplicate},${canonical.slice(1)}`;
+        assertDraftReceipt(await draftReceipt(description), "[redacted invalid reported draft receipt]");
+      }
+    }
+  }
+});
+
+test("draft receipt rejects malformed nonstring oversized and floating point descriptions", async () => {
+  const canonical = JSON.stringify(reportedDraftProof);
+  const opaque = { get toJSON() { return forbidden(); }, toString: forbidden };
+  for (const description of [undefined, null, 1, true, opaque, Buffer.from(canonical),
+    canonical.padEnd(1025), `${canonical}${canonical}`, `${canonical} private-legal-body`,
+    canonical.slice(0, -1), "null", "[]", JSON.stringify(canonical),
+    canonical.replace('"schema_version":1', '"schema_version":1.0'),
+    canonical.replace('"schema_version":1', '"schema_version":1e0'),
+    canonical.replace('"attempted_mutations":0', '"attempted_mutations":0.0'),
+    canonical.replace('"attempted_mutations":0', '"attempted_mutations":0e1'),
+    canonical.replace('"attempted_mutations":0', '"attempted_mutations":-0'),
+    canonical.replace('"matter_id"', '"\\u006datter_id"'),
+    canonical.replace("READ_ONLY", "\\u0052EAD_ONLY"),
+  ]) {
+    const result = await draftReceipt(description);
+    if (description === undefined) {
+      assert.equal(result.json.suites[0].suites[0].specs[0].tests[0].annotations[0].description, undefined);
+    } else assertDraftReceipt(result, "[redacted invalid reported draft receipt]");
+  }
+});
+
+test("draft allowlist does not enable generic structured annotations or attachment payloads", async () => {
+  for (const type of ["caseops-b5-proof", "caseops-b5-reported-draft-extra", "CASEOPS-B5-REPORTED-DRAFT",
+    "caseops-b5-reported-draft ", "", undefined, null, 1]) {
+    const { json, xml, progress } = await draftReceipt(JSON.stringify(reportedDraftProof), type);
+    const native = json.suites[0].suites[0].specs[0].tests[0];
+    assert.equal(native.annotations[0].description, "[redacted structured or sensitive annotation]");
+    for (const content of [JSON.stringify(json), xml, JSON.stringify(progress)]) {
+      assert.ok(!content.includes(reportedDraftProof.matter_id));
+      assert.ok(!content.includes(reportedDraftProof.body_sha256));
+    }
+  }
+});
+
 test("legacy skip response bodies are redacted even when plain unstructured legal text", async () => {
   for (const reason of [`Upload failed (403): private-legal-body; cannot seed BUG-028 fixture.`,
     "Could not create probe matter: 409 private-legal-body"]) {
@@ -530,6 +659,93 @@ test("network snapshot bounds, exact schema and drains remain strict at 64 recor
   for (const [key, value] of [["schemaVersion", 2], ["drainTimedOut", "private-legal-body"], ["omitted", -1], ["records", {}]]) {
     const invalid = snapshot(); invalid[key] = value;
     assert.equal((await diagnostic(attach(invalid))).evidence.status, "rejected");
+  }
+});
+
+test("real offline Playwright runtime draft annotation survives the actual Python reader", () => {
+  const invocation = `draft-receipt-${process.pid}-${require("node:crypto").randomBytes(4).toString("hex")}`;
+  const directory = path.join(root, "test-results/prod-native-evidence", invocation);
+  const fixtureDirectory = path.join(root, ".tmp", invocation);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.mkdirSync(fixtureDirectory, { recursive: true });
+  fs.writeFileSync(path.join(fixtureDirectory, "probe.spec.ts"), `
+import { test } from "@playwright/test";
+test("synthetic read-only draft receipt", async ({}, testInfo) => {
+  testInfo.annotations.push({ type: ${JSON.stringify(reportedDraftType)},
+    description: JSON.stringify(${JSON.stringify(reportedDraftProof)}) });
+  await testInfo.attach("bug001-production-parity", { contentType: "application/json",
+    body: Buffer.from(${JSON.stringify(`private-legal-body ${sentinel}`)}) });
+});
+`, { flag: "wx" });
+  const configFile = path.join(fixtureDirectory, "playwright.config.cjs");
+  fs.writeFileSync(configFile, `module.exports = { testDir: __dirname, testMatch: "probe.spec.ts", timeout: 30000,
+    outputDir: ${JSON.stringify(path.join(fixtureDirectory, "output"))},
+    workers: 1, retries: 0, reporter: [[${JSON.stringify(path.join(root, "scripts/prod_playwright_reporter.cjs"))}]],
+    use: { trace: "off", screenshot: "off", video: "off" }, projects: [{ name: "offline" }] };`, { flag: "wx" });
+  const env = Object.fromEntries(Object.entries(process.env)
+    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
+  Object.assign(env, { CASEOPS_EXPECTED_RELEASE_SHA: sha, CASEOPS_PW_EVIDENCE_INVOCATION: invocation,
+    CASEOPS_PW_EVIDENCE_PHASE: "execution", CASEOPS_PW_EVIDENCE_JSON_FILE: path.join(directory, "native-results.json"),
+    CASEOPS_PW_EVIDENCE_JUNIT_FILE: path.join(directory, "native-results.xml") });
+  const playwrightCli = process.env.CASEOPS_TEST_PLAYWRIGHT_CLI ?? path.join(root, "node_modules/@playwright/test/cli.js");
+  assert.ok(path.isAbsolute(playwrightCli) && fs.statSync(playwrightCli).isFile(), "Installed Playwright CLI is required");
+  const installed = JSON.parse(fs.readFileSync(path.join(path.dirname(playwrightCli), "package.json"), "utf8"));
+  const locked = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  assert.equal(installed.version, locked.packages["node_modules/@playwright/test"].version);
+  env.NODE_PATH = path.resolve(path.dirname(playwrightCli), "../..");
+  const child = spawnSync(process.execPath, [playwrightCli, "test", `--config=${configFile}`,
+    "--workers=1", "--retries=0"], { cwd: root, env, encoding: "utf8", timeout: 60000 });
+  fs.writeFileSync(path.join(fixtureDirectory, "child.stdout.log"), child.stdout ?? "", { flag: "wx" });
+  fs.writeFileSync(path.join(fixtureDirectory, "child.stderr.log"), child.stderr ?? "", { flag: "wx" });
+  assert.ifError(child.error);
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  const text = fs.readFileSync(path.join(directory, "native-results.json"), "utf8");
+  const native = JSON.parse(text);
+  const journal = fs.readFileSync(path.join(directory, "progress.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+  const xml = fs.readFileSync(path.join(directory, "native-results.xml"), "utf8");
+  assert.deepEqual(native.stats, { ...native.stats, expected: 1, skipped: 0, unexpected: 0, flaky: 0 });
+  assert.equal(native.status, "passed");
+  assert.equal(native.errors.length, 0);
+  assert.equal(native.suites.length, 1);
+  const nativeTest = native.suites[0].specs[0].tests[0];
+  const expected = { type: reportedDraftType, description: JSON.stringify(reportedDraftProof) };
+  // Playwright must promote runtime annotations onto TestCase for JUnit parity.
+  assert.deepEqual(nativeTest.annotations, [expected]);
+  assert.equal(nativeTest.results.length, 1);
+  assert.equal(nativeTest.results[0].retry, 0);
+  assert.equal(nativeTest.results[0].status, "passed");
+  assert.equal(nativeTest.results[0].networkEvidence.status, "absent");
+  assert.deepEqual(journal.map((row) => row.event), ["invocation_started", "collection", "test_end", "session_finished"]);
+  assert.deepEqual(journal[2].suites, native.suites);
+  assert.deepEqual(journal[1].suites[0].specs[0].tests[0].annotations, []);
+  assert.deepEqual(journal.at(-1), { event: "session_finished", status: "passed", test_count: 1 });
+  const script = `import importlib.util, json, pathlib, sys
+root, directory = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("receipt_reader", root / "scripts/prod_playwright_evidence.py")
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+raw = json.loads((directory / "native-results.json").read_text(encoding="utf-8"))
+env = {"CASEOPS_EXPECTED_RELEASE_SHA": sys.argv[3]}
+rows = reader._inventory(raw, env)
+assert len(rows) == 1 and len(rows[0]["results"]) == 1
+assert rows[0]["results"][0]["status"] == "passed"
+assert len(rows[0]["annotations"]) == 1
+assert json.loads(rows[0]["annotations"][0]["description"]) == json.loads(sys.argv[4])
+reader._app_native_fields(raw)
+reader._junit(directory / "native-results.xml", directory / "results.xml", env,
+              {"tests": rows, "stats": raw["stats"]})
+print("synthetic real-Playwright-to-Python receipt: 1 passed, 0 skipped, 0 retries")
+`;
+  const python = process.env.CASEOPS_TEST_PYTHON ?? (process.platform === "win32" ? "python" : "python3");
+  const bridge = spawnSync(python, ["-X", "utf8", "-B", "-c", script, root, directory, sha,
+    JSON.stringify(reportedDraftProof)], { cwd: root, env, encoding: "utf8", timeout: 15000 });
+  fs.writeFileSync(path.join(fixtureDirectory, "python.stdout.log"), bridge.stdout ?? "", { flag: "wx" });
+  fs.writeFileSync(path.join(fixtureDirectory, "python.stderr.log"), bridge.stderr ?? "", { flag: "wx" });
+  assert.ifError(bridge.error);
+  assert.equal(bridge.status, 0, bridge.stdout + bridge.stderr);
+  for (const content of [text, xml, JSON.stringify(journal),
+    fs.readFileSync(path.join(directory, "results.xml"), "utf8")]) {
+    assert.ok(!content.includes(sentinel) && !content.includes("private-legal-body"));
   }
 });
 

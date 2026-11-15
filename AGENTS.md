@@ -4,6 +4,16 @@
   not its UTF-8 body hash. Reconcile the persisted version and independently
   compute the named hash before pinning it; retain a mistaken historical label
   as a correction, not as invented record drift or a reason to alter the record.
+  Type-check the guard with the canonical nullable DTO, not only a narrowed unit
+  fixture; accepting that input type must still reject a nonmatching identity.
+- A colocated unit's source/AST reads are builder dependencies just like imports.
+  Add their complete finite closure to web COPY, Docker and Cloud upload filters,
+  and the native upload inventory together. Keep them builder-only and prove the
+  unchanged context canaries; a pure-unit pass cannot certify its build context.
+- A typed safe receipt must survive the actual runtime producer, native reporter
+  before its first disk write, and downstream validator. A mocked annotation
+  channel cannot prove that chain. Keep its exact scalar allowlist in both
+  languages and retain generic private-body/attachment redaction unchanged.
 - Isolated test tools must include every real executable their selected tests
   invoke. Assert that closure before pytest, and keep narrow ASGI fixtures free
   of helper imports that construct the entire application. Repair fixture

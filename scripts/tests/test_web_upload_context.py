@@ -1,6 +1,7 @@
 """Native gcloud upload discovery; no credentials, uploads or provider calls."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -48,6 +49,7 @@ BUILDER_INPUTS = {
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+    "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
@@ -55,6 +57,8 @@ BUILDER_INPUTS = {
         "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
+        "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",
+        "prod-diagnostic-test",
         "env", "ram-bugs4", "canonical-api-validators",
         "local-python-fixture", "local-python-file-fixture",
     )),
@@ -227,6 +231,54 @@ class NativeUploadTests(unittest.TestCase):
                     self.assertIn(
                         f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines()
                     )
+
+    def test_original_draft_proof_unit_inputs_have_explicit_builder_admission(self):
+        unit = (ROOT / "apps/web/lib/e2e-canonical-validator-loading.test.ts").read_text(
+            encoding="utf-8"
+        )
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8"
+        ).split("FROM trusted-base AS runner", 1)
+        self.assertIn("draft_pdf_production_20261111.ts", unit)
+        journey = (ROOT / "tests/e2e/support/draft_pdf_production_20261111.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('from "./draft_pdf_render_proof_20261111"', journey)
+        older = "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"
+        self.assertIn("ram-2026-10-22-drafting.prod.spec.ts", unit)
+        self.assertIn(
+            'from "./support/prod-diagnostic-test"', (ROOT / older).read_text(encoding="utf-8")
+        )
+        for source in (
+            "tests/e2e/support/draft_pdf_production_20261111.ts",
+            "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+            older, "tests/e2e/support/prod-diagnostic-test.ts",
+        ):
+            with self.subTest(helper=source):
+                self.assertIn(source, BUILDER_INPUTS)
+                self.assertIn(f"COPY {source} /app/{source}", builder.splitlines())
+                self.assertNotIn(source, runner)
+                for ignore in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(
+                        f"!{source}", (ROOT / ignore).read_text(encoding="utf-8").splitlines()
+                    )
+
+    def test_draft_proof_inputs_remain_in_the_finite_native_web_fingerprint(self):
+        tree = ast.parse((ROOT / "scripts/mobile/local-bootstrap.py").read_text(encoding="utf-8"))
+        declarations = [node for node in tree.body if isinstance(node, ast.Assign)
+                        and any(isinstance(target, ast.Name) and target.id == "WEB_PATHS"
+                                for target in node.targets)]
+        self.assertEqual(len(declarations), 1)
+        scopes = ast.literal_eval(declarations[0].value)
+        for source in (
+            "tests/e2e/support/draft_pdf_production_20261111.ts",
+            "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+            "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+            "tests/e2e/support/prod-diagnostic-test.ts",
+        ):
+            self.assertTrue(any(source == scope or source.startswith(scope + "/") for scope in scopes))
+        canary = "tests/e2e/unlisted.spec.ts"
+        self.assertFalse(any(canary == scope or canary.startswith(scope + "/") for scope in scopes))
 
     def test_colocated_communications_ast_read_has_explicit_builder_admission(self):
         source = (ROOT / "apps/web/lib/communications-journey.test.ts").read_text(
