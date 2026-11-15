@@ -175,9 +175,9 @@ test('APK signer, package, source, non-submission and link-policy facts are inde
 });
 test('actual OS verified state and unforced default resolution cannot be replaced by DAL alone', t => {
   const f = fixture(t), facts = { dal: [{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: 'ai.caseops.mobile', sha256_cert_fingerprints: [f.q.certificateSha256] } }], verified: f.state.verified, resolver: f.state.resolver };
-  verifyQualificationAssociation(facts, f.q, 'ai.caseops.mobile', f.expected);
+  verifyQualificationAssociation(facts, f.q, 'ai.caseops.mobile');
   for (const patch of [{ verified: 'caseops.ai: approved' }, { verified: 'other.caseops.ai: verified' }, { resolver: 'android/com.android.internal.app.ResolverActivity' }, { dal: [] }, { resolver: f.state.resolver + '\n' + f.state.resolver }])
-    assert.throws(() => verifyQualificationAssociation({ ...facts, ...patch }, f.q, 'ai.caseops.mobile', f.expected));
+    assert.throws(() => verifyQualificationAssociation({ ...facts, ...patch }, f.q, 'ai.caseops.mobile'));
 });
 test('the complete LINK05 callback dispatches cold/warm unforced once and restores QA identity', async t => {
   const f = fixture(t); await clientExtensionScenarios.find(row => row.id === 'CX28-LINK-05').run(f.context);

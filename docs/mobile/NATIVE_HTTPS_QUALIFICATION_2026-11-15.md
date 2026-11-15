@@ -145,3 +145,11 @@ adding the actual parser to the existing fixture copy restored49/49 passes.
 Independent review confirmed identical case titles, assertions and deadlines.
 This fixture repair adds no native acceptance credit and still requires the
 complete frozen source gate before pushing the candidate.
+
+The 1cab4eb4 CodeQL analysis and separate alert verdict succeeded, but the
+verdict retained two maintainability warnings for unused fourth arguments in
+the association-verifier tests. The isolated follow-up removes only those two
+arguments; the APK verifier's required fourth argument remains unchanged. All
+23 qualification cases passed with their original titles and assertions. This
+test-only correction does not transfer native acceptance: fresh complete source
+gates and hosted CodeQL verification remain required for the follow-up revision.
