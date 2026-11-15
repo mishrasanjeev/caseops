@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from tests.test_prod_playwright_evidence import (
     BASE,
     BATCH5_BUGS_CASES,
     BATCH5_BUGS_FILE,
+    REPORTED_DRAFT_PROOF,
     ROOT,
     _tester_canonical_rows,
     evidence,
@@ -24,6 +26,13 @@ from tests.test_prod_playwright_evidence import verified_tester_union as _verifi
 
 capture = _native_capture
 verified_tester_union = _verified_tester_union
+PROOF_HELPERS = (
+    "tests/e2e/support/draft_pdf_production_policy_20261111.ts",
+    "tests/e2e/support/draft_pdf_production_20261111.ts",
+    "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+    "tests/e2e/support/draft_pdf_oracle_20261111.ts",
+    "tests/e2e/support/bugs5_contract_reported_20261111.ts",
+)
 
 
 def _reviewed_batch5_counts():
@@ -62,6 +71,10 @@ def batch5_capture(capture, monkeypatch):
         source.parent.mkdir(parents=True, exist_ok=True)
         source.touch()
     (state.root / "tests/e2e/ram-2026-11-14-prod.spec.ts").touch()
+    for file in PROOF_HELPERS:
+        source = state.root / file
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("// committed offline assertion helper\n", encoding="utf-8")
     template = copy.deepcopy(state.discovery)
     template["config"]["configFile"] = str(config)
     template["stats"]["startTime"] = "2026-10-09T00:00:00.000Z"
@@ -113,6 +126,11 @@ def batch5_capture(capture, monkeypatch):
                     {"status": "passed", "retry": 0, "duration": 1, "errors": [], "annotations": []}
                 ],
             )
+            if suite["title"] == "ram-2026-11-11-drafting.spec.ts":
+                suite["specs"][0]["tests"][0]["annotations"].append({
+                    "type": "caseops-b5-reported-draft",
+                    "description": json.dumps(REPORTED_DRAFT_PROOF),
+                })
         runtime["stats"].update(expected=len(runtime["suites"]), skipped=0)
         state.batch5_documents[role] = (discovery, runtime)
     delegate = state.launch
@@ -129,6 +147,8 @@ def batch5_capture(capture, monkeypatch):
         result = delegate(command, **kwargs)
         if getattr(state, "change_source", False) and "--list" not in command:
             (state.root / "tests/e2e" / evidence.BATCH5_FILES[0]).write_text("// changed\n")
+        if getattr(state, "change_helper", None) and "--list" not in command:
+            (state.root / state.change_helper).write_text("// changed imported assertion\n")
         return result
 
     state.batch5_run = lambda role: evidence.run(
@@ -196,6 +216,76 @@ def test_batch5_full_native_envelopes_bind_canonical_collection_and_actual_posit
     width = list(evidence.BATCH5_PROJECTS).index(role)
     assert {(row["title_path"][-1], proofs[row["id"]]) for row in result["tests"]
             if row["file"] == BATCH5_BUGS_FILE} == set(BATCH5_BUGS_CASES[width])
+
+
+@pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
+@pytest.mark.parametrize("damage", ["missing", "wrong_type", "duplicate", "wrong_case", "mutated"])
+def test_batch5_pass_requires_the_exact_original_draft_receipt(batch5_capture, role, damage):
+    state = batch5_capture
+    runtime = state.batch5_documents[role][1]
+    target = next(s["specs"][0]["tests"][0] for s in runtime["suites"]
+                  if s["title"] == "ram-2026-11-11-drafting.spec.ts")
+    receipt = target["annotations"].pop()
+    if damage == "wrong_type":
+        target["annotations"].append({**receipt, "type": "unreviewed-draft-proof"})
+    elif damage == "duplicate":
+        target["annotations"].extend([receipt, receipt])
+    elif damage == "wrong_case":
+        runtime["suites"][0]["specs"][0]["tests"][0]["annotations"].append(receipt)
+    elif damage == "mutated":
+        proof = {**REPORTED_DRAFT_PROOF, "attempted_mutations": 1}
+        target["annotations"].append({**receipt, "description": json.dumps(proof)})
+    assert state.batch5_run(role) == 1
+    assert not (state.root / evidence.EVIDENCE / role / "completion.json").exists()
+
+
+@pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
+def test_reported_draft_receipt_survives_all_native_channels_without_private_bytes(
+    batch5_capture, role,
+):
+    state = batch5_capture
+    assert state.batch5_run(role) == 0
+    evidence.validate(state.root, [role], BASE)
+    directory = state.root / evidence.EVIDENCE / role
+    for name in (
+        "native-results.json", "results.json", "progress.jsonl",
+        "native-results.xml", "results.xml",
+    ):
+        text = (directory / name).read_text()
+        assert "caseops-b5-reported-draft" in text and REPORTED_DRAFT_PROOF["body_sha256"] in text
+        assert "private-test-password" not in text and "private-legal-body" not in text
+
+
+@pytest.mark.parametrize("damage", [
+    "missing", "wrong_version", "private_field", "private_attribute", "private_text",
+])
+def test_rehashed_xml_cannot_drop_or_substitute_reported_draft_proof(batch5_capture, damage):
+    state = batch5_capture
+    assert state.batch5_run("batch5-desktop") == 0
+    directory = state.root / evidence.EVIDENCE / "batch5-desktop"
+    path = directory / "native-results.xml"
+    tree = ET.parse(path)
+    properties = next(p for p in tree.iter("properties") if any(
+        item.get("name") == "caseops-b5-reported-draft" for item in p
+    ))
+    item = next(p for p in properties if p.get("name") == "caseops-b5-reported-draft")
+    if damage == "missing":
+        properties.remove(item)
+    elif damage == "private_attribute":
+        item.set("body", "SYNTHETIC_PRIVATE_LEGAL_BODY")
+    elif damage == "private_text":
+        item.text = "SYNTHETIC_PRIVATE_LEGAL_BODY"
+    else:
+        proof = {**REPORTED_DRAFT_PROOF}
+        key = "version_id" if damage == "wrong_version" else "body"
+        proof[key] = "SYNTHETIC_PRIVATE_LEGAL_BODY"
+        item.set("value", json.dumps(proof))
+    tree.write(path, encoding="utf-8")
+    receipt = evidence._json(directory / "completion.json")
+    receipt["sha256"]["native-results.xml"] = evidence._hash(path)
+    (directory / "completion.json").write_text(json.dumps(receipt))
+    with pytest.raises(evidence.EvidenceError, match="reported_draft_proof"):
+        evidence.validate(state.root, ["batch5-desktop"], BASE)
 
 
 @pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
@@ -321,6 +411,8 @@ def test_batch5_canonical_source_binding_includes_reference_spec_but_not_local_g
 ):
     state = batch5_capture
     before = evidence._batch5_source_hashes(state.root)
+    assert evidence.BATCH5_PROOF_HELPERS == PROOF_HELPERS
+    assert set(PROOF_HELPERS) <= before.keys()
     reference = "tests/e2e/ram-2026-11-14-prod.spec.ts"
     assert reference in before
     assert "tests/e2e/draft-quality20261114.spec.ts" not in before
@@ -331,6 +423,95 @@ def test_batch5_canonical_source_binding_includes_reference_spec_but_not_local_g
         file: digest for file, digest in before.items() if file != reference
     }
     assert not (state.root / evidence.EVIDENCE / "batch5-desktop/completion.json").exists()
+
+
+def _commit_offline_capture_source(state, monkeypatch):
+    for key in tuple(os.environ):
+        if key.startswith("GIT_"):
+            monkeypatch.delenv(key)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_TERMINAL_PROMPT", "0")
+    monkeypatch.setenv("GIT_ALLOW_PROTOCOL", "file")
+    (state.root / ".gitignore").write_text("test-results/\nnode_modules/\n.env\n", encoding="utf-8")
+
+    def git(*args):
+        return state.real_run(
+            ["git", "-c", f"core.hooksPath={os.devnull}", "-C", str(state.root), *args],
+            check=True, capture_output=True, text=True, timeout=15,
+        ).stdout.strip()
+
+    git("init", "--quiet", "--initial-branch=main")
+    git("config", "core.autocrlf", "false")
+    git("add", "--all")
+    git("-c", "user.name=Offline", "-c", "user.email=offline@example.invalid",
+        "commit", "--quiet", "-m", "Independent synthetic capture source")
+    head = git("rev-parse", "HEAD")
+    state.env["CASEOPS_EXPECTED_RELEASE_SHA"] = head
+    monkeypatch.setitem(state.launch.__globals__, "BASE", head)
+    monkeypatch.setattr(evidence.subprocess, "run", state.real_run)
+    return head, git
+
+
+@pytest.mark.parametrize("helper", PROOF_HELPERS)
+@pytest.mark.parametrize("phase", ["admission", "staged_admission", "completion"])
+def test_same_head_tracked_assertion_tamper_refuses_before_or_after_capture(
+    batch5_capture, monkeypatch, helper, phase,
+):
+    state = batch5_capture
+    head, git = _commit_offline_capture_source(state, monkeypatch)
+    if phase == "completion":
+        state.change_helper = helper
+        assert state.batch5_run("batch5-desktop") == 1
+        marker = evidence._json(state.root / evidence.EVIDENCE / "batch5-desktop/exit.json")
+        assert marker["incomplete_reason"] == "tracked_source_changed_during_execution"
+        assert marker["execution_exit"] == 0 and marker["completed"] is False
+        assert not (state.root / evidence.EVIDENCE / "batch5-desktop/completion.json").exists()
+        assert (state.root / evidence.EVIDENCE / "batch5-desktop/native-results.json").is_file()
+    else:
+        (state.root / helper).write_text(
+            "// changed without changing the commit\n", encoding="utf-8"
+        )
+        if phase == "staged_admission":
+            git("add", "--", helper)
+        with pytest.raises(evidence.EvidenceError, match="^tracked_source_dirty$"):
+            state.batch5_run("batch5-desktop")
+        assert not state.calls and not (state.root / evidence.EVIDENCE).exists()
+    assert git("rev-parse", "HEAD") == head
+
+
+@pytest.mark.parametrize("role", ["batch5-desktop", "batch5-mobile"])
+def test_clean_tracked_source_allows_ignored_native_reports_and_process_secrets(
+    batch5_capture, monkeypatch, role,
+):
+    state = batch5_capture
+    head, git = _commit_offline_capture_source(state, monkeypatch)
+    secret = "SYNTHETIC_PROCESS_ONLY_SECRET"
+    (state.root / ".env").write_text(secret, encoding="utf-8")
+    state.env["CASEOPS_QA_PASSWORD"] = secret
+    assert state.batch5_run(role) == 0
+    evidence.validate(state.root, [role], head)
+    assert git("diff", "--name-only", "HEAD", "--") == ""
+    for path in (state.root / evidence.EVIDENCE / role).iterdir():
+        assert secret not in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("role,config", [
+    ("legacy", "playwright.prod-ram.config.ts"),
+    ("notice", "playwright.notice-prod.config.ts"),
+    ("ip-cost", "playwright.ip-cost-prod.config.ts"),
+])
+def test_other_production_profiles_share_the_tracked_helper_admission_guard(
+    batch5_capture, monkeypatch, role, config,
+):
+    state = batch5_capture
+    (state.root / config).touch(exist_ok=True)
+    head, git = _commit_offline_capture_source(state, monkeypatch)
+    (state.root / PROOF_HELPERS[0]).write_text("// dirty proof implementation\n", encoding="utf-8")
+    with pytest.raises(evidence.EvidenceError, match="^tracked_source_dirty$"):
+        evidence._binding(state.root, role, [f"--config={config}", "--reporter=list",
+                                           f"--output=test-results/{role}"], state.env)
+    assert git("rev-parse", "HEAD") == head and not state.calls
 
 
 @pytest.mark.parametrize(

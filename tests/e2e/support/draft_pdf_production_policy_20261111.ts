@@ -1,7 +1,24 @@
 export const reportedDraftTarget = {
   matterId: "7771c86f-a6d6-442f-a675-4be40622dc05",
   draftId: "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+  versionId: "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+  bodySha256: "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
 } as const;
+
+export function assertReportedDraftSource<T extends { id: string; body: string }>(
+  draft: { id: string; matter_id: string; current_version_id: string | null; versions: T[] },
+  digest: (body: string) => string,
+): T {
+  if (draft.id !== reportedDraftTarget.draftId || draft.matter_id !== reportedDraftTarget.matterId
+    || draft.current_version_id !== reportedDraftTarget.versionId) {
+    throw new Error("Reported draft identity/version differs; retained source was not changed.");
+  }
+  const versions = draft.versions.filter(row => row.id === reportedDraftTarget.versionId);
+  if (versions.length !== 1 || digest(versions[0].body) !== reportedDraftTarget.bodySha256) {
+    throw new Error("Reported draft source digest differs or version is absent/ambiguous; retained source was not changed.");
+  }
+  return versions[0];
+}
 
 export function productionDraftSettings(baseURL: string, env: Record<string, string | undefined>) {
   const required = (key: string) => {

@@ -1,9 +1,13 @@
 // @vitest-environment node
 
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import vm from "node:vm";
 
 import ts from "typescript";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+
+import * as draftPolicy from "../../../tests/e2e/support/draft_pdf_production_policy_20261111";
 
 it.each([
   { file: "support/draft_pdf_production_20261111.ts", validators: ["authContext", "draftSchema"] },
@@ -70,4 +74,111 @@ it("uses only the literal canonical module through Playwright's native synchrono
   expect(statement.expression.expression.getText(source)).toBe("require");
   expect(statement.expression.arguments.map(argument => argument.getText(source)))
     .toEqual(['"../../../apps/web/lib/api/schemas"']);
+});
+
+function productionDraftSource() {
+  return ts.createSourceFile("draft_pdf_production_20261111.ts", readFileSync(
+    new URL("../../../tests/e2e/support/draft_pdf_production_20261111.ts", import.meta.url), "utf8",
+  ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+}
+
+it.each(["version", "body"])("rejects reported Draft %s drift before render/export without a mutation", async fault => {
+  const source = productionDraftSource();
+  const constants = source.statements.filter(node => ts.isVariableStatement(node));
+  const functions = source.statements.filter(node => ts.isFunctionDeclaration(node));
+  expect(constants.flatMap(node => node.declarationList.declarations.map(item => item.name.getText(source))))
+    .toEqual(["hash", "fingerprint", "mediaOff"]);
+  expect(functions.map(node => node.name?.text)).toEqual(["productionDraftPdfJourney"]);
+  const target = draftPolicy.reportedDraftTarget;
+  const retained = { id: target.draftId, matter_id: target.matterId, company_id: "tenant-unit",
+    current_version_id: fault === "version" ? "different-version" : target.versionId,
+    versions: [{ id: target.versionId, body: "Synthetic unreviewed unit source" }] };
+  const before = JSON.stringify(retained), reads: string[] = [], attemptedMutations: string[] = [];
+  const forbiddenWrite = vi.fn(async () => { throw new Error("Original mutation forbidden"); });
+  const fill = vi.fn(async () => {}), click = vi.fn(async () => {});
+  const page = {
+    goto: vi.fn(async () => {}), locator: vi.fn(() => ({ fill })),
+    getByRole: vi.fn(() => ({ click })), on: vi.fn(),
+    waitForResponse: vi.fn(async () => ({ status: () => 200 })), waitForURL: vi.fn(async () => {}),
+    request: { post: forbiddenWrite, patch: forbiddenWrite, delete: forbiddenWrite, get: vi.fn(async (url: string) => {
+      const pathname = new URL(url).pathname;
+      reads.push(pathname);
+      return { status: () => 200, json: async () => pathname === "/api/auth/me" ? {
+        company: { id: "tenant-unit", slug: "test-legal", is_active: true },
+        user: { email: "ram@testfirm.com", is_active: true }, membership: { is_active: true },
+      } : retained };
+    }) },
+  };
+  let route: (value: unknown) => Promise<unknown>;
+  const browserContext = { newPage: vi.fn(async () => page), addInitScript: vi.fn(async () => {}),
+    route: vi.fn(async (_pattern: string, handler: typeof route) => { route = handler; }), close: vi.fn(async () => {}) };
+  const browser = { newContext: vi.fn(async () => browserContext) };
+  const assertDraftPdfRender = vi.fn(async () => { throw new Error("Rendering a mismatched original is forbidden"); });
+  const info = { config: { workers: 1 }, project: { retries: 0, use: { trace: "off", screenshot: "off", video: "off" } },
+    annotations: [], attach: vi.fn(async () => {}) };
+  const sourceGuard = vi.fn(draftPolicy.assertReportedDraftSource);
+  const context = vm.createContext({ ...draftPolicy, exports: {}, Buffer, URL, createHash, expect,
+    assertReportedDraftSource: sourceGuard,
+    devices: {}, noPaidProviderHeaders: { "X-CaseOps-Automated-Test": "no-paid-providers" },
+    canonicalApiValidators: () => ({ authContext: { safeParse: (data: unknown) => ({ success: true, data }) },
+      draft: { safeParse: (data: unknown) => ({ success: true, data }) } }),
+    assertPublicReleaseIdentity: vi.fn(async () => {}), assertDraftPdfRender,
+    process: { env: { PROD_API_BASE_URL: "https://api.caseops.ai", CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40),
+      CASEOPS_RAM_PROD_SLUG: "test-legal", CASEOPS_RAM_PROD_EMAIL: "ram@testfirm.com",
+      CASEOPS_RAM_PROD_PASSWORD: "Synthetic-unit-secret-only" } },
+  });
+  // Extract every declaration and bind every runtime import used by the journey.
+  vm.runInContext(ts.transpileModule([...constants, ...functions].map(node => node.getText(source)).join("\n"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText, context);
+  await expect(context.exports.productionDraftPdfJourney(browser, "https://caseops.ai", info, false))
+    .rejects.toThrow("failed at authorized-persisted-version; private details omitted");
+  expect(page.goto).toHaveBeenCalledTimes(1);
+  expect(reads).toEqual(["/api/auth/me", `/api/matters/${target.matterId}/drafts/${target.draftId}`]);
+  expect(assertDraftPdfRender).not.toHaveBeenCalled();
+  expect(sourceGuard).toHaveBeenCalledExactlyOnceWith(retained, expect.any(Function));
+  expect(sourceGuard.mock.results[0].type).toBe("throw");
+  expect(sourceGuard.mock.results[0].value.message).toMatch(/Reported draft.*differs/);
+  expect(forbiddenWrite).not.toHaveBeenCalled();
+  expect(info.attach).not.toHaveBeenCalled();
+  expect(info.annotations).toEqual([]);
+  expect(JSON.stringify(retained)).toBe(before);
+  expect(browserContext.close).toHaveBeenCalledTimes(1);
+  for (const method of ["POST", "PATCH", "DELETE"]) {
+    const abort = vi.fn(async () => {}), forward = vi.fn(async () => { attemptedMutations.push(method); });
+    await route!({ request: () => ({ url: () => `https://api.caseops.ai/api/matters/${target.matterId}/drafts/${target.draftId}`,
+      method: () => method, headers: () => ({ "x-caseops-automated-test": "no-paid-providers" }) }), abort, continue: forward });
+    expect(abort).toHaveBeenCalledExactlyOnceWith("blockedbyclient");
+    expect(forward).not.toHaveBeenCalled();
+  }
+  expect(attemptedMutations).toEqual([]);
+});
+
+it("emits only the bounded reported-Draft annotation after final source and read-only assertions", () => {
+  const source = productionDraftSource();
+  const nodes: ts.Node[] = [];
+  const visit = (node: ts.Node) => { nodes.push(node); ts.forEachChild(node, visit); };
+  visit(source);
+  const pushes = nodes.filter(node => ts.isCallExpression(node)
+    && node.expression.getText(source) === "info.annotations.push");
+  expect(pushes).toHaveLength(1);
+  const push = pushes[0] as ts.CallExpression;
+  const target = draftPolicy.reportedDraftTarget;
+  const info = { annotations: [] as Array<{ type: string; description: string }> };
+  const hash = vi.fn(() => target.bodySha256);
+  const context = vm.createContext({ info, settings: target,
+    version: { id: target.versionId, body: "Synthetic unit source, never serialized" }, hash, attemptedMutations: 0 });
+  vm.runInContext(ts.transpileModule(push.getText(source), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText, context);
+  expect(info.annotations).toHaveLength(1);
+  expect(info.annotations[0].type).toBe("caseops-b5-reported-draft");
+  expect(Buffer.byteLength(info.annotations[0].description, "utf8")).toBeLessThan(512);
+  expect(JSON.parse(info.annotations[0].description)).toEqual({ schema_version: 1, status: "READ_ONLY_PARITY_VERIFIED",
+    matter_id: target.matterId, draft_id: target.draftId, version_id: target.versionId,
+    body_sha256: target.bodySha256, unchanged: true, attempted_mutations: 0 });
+  expect(hash).toHaveBeenCalledExactlyOnceWith("Synthetic unit source, never serialized");
+  const preceding = source.text.slice(0, push.pos);
+  expect(preceding.lastIndexOf("await unchanged();")).toBeGreaterThan(preceding.lastIndexOf('stage = "reload-parity"'));
+  expect(preceding.lastIndexOf("attemptedMutations === 0")).toBeGreaterThan(preceding.lastIndexOf("await unchanged();"));
 });

@@ -6,7 +6,7 @@ import type { Draft } from "../../../apps/web/lib/api/schemas";
 import { canonicalApiValidators } from "./canonical-api-validators";
 import { noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
-import { allowedProductionDraftRead, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
+import { allowedProductionDraftRead, assertReportedDraftSource, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
 import { assertDraftPdfRender } from "./draft_pdf_render_proof_20261111";
 import type { DraftPdfProfile } from "./draft_pdf_oracle_20261111";
 
@@ -28,6 +28,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     acceptDownloads: false, extraHTTPHeaders: noPaidProviderHeaders });
   const page = await context.newPage();
   let logins = 0, nativeDownloads = 0, blockedExternal = 0;
+  let attemptedMutations = 0;
   let pdfActionAllowed = false, passiveExports = 0;
   const violations = new Set<string>();
   const draftPath = `/api/matters/${settings.matterId}/drafts/${settings.draftId}`;
@@ -56,6 +57,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       return route.abort("blockedbyclient");
     }
     const decision = productionDraftRequestPolicy(url.href, method, request.headers()["x-caseops-automated-test"], settings);
+    if (!["GET", "HEAD", "OPTIONS"].includes(method) && decision !== "login") attemptedMutations++;
     if (decision === "external") { blockedExternal++; return route.abort("blockedbyclient"); }
     if (decision === "blocked" || (decision === "login" && ++logins > 1)) {
       violations.add("prohibited-operation-or-missing-marker");
@@ -85,8 +87,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     const before = await readDraft();
     expect(before.id === settings.draftId && before.matter_id === settings.matterId && before.company_id === actor.data.company.id,
       "Exact reported draft and tenant").toBe(true);
-    const version = before.versions.find(row => row.id === before.current_version_id);
-    if (!version) throw new Error("Persisted current version is absent.");
+    const version = assertReportedDraftSource(before, hash);
     const catalogue = await read("/api/drafting/court-profiles") as { profiles: Array<DraftPdfProfile & { key: string }> };
     const profileFor = (key: string | null) => {
       const profile = catalogue.profiles.find(row => row.key === key);
@@ -94,7 +95,11 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       return profile;
     };
     const source = { title: before.title, body: version.body, citations: version.citations, reviewRequired: before.review_required };
-    const unchanged = async () => expect(fingerprint(await readDraft()) === fingerprint(before), "Retained content and review state remain unchanged").toBe(true);
+    const unchanged = async () => {
+      const after = await readDraft();
+      assertReportedDraftSource(after, hash);
+      expect(fingerprint(after) === fingerprint(before), "Retained content and review state remain unchanged").toBe(true);
+    };
     const pinned = async (response: Response, profile?: string) => {
       expect(await response.finished(), "PDF transport completes").toBeNull();
       const url = new URL(response.url());
@@ -121,7 +126,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       await expect(page.locator("[data-testid=draft-pdf-preview] canvas")).toHaveCount(0);
       await unchanged();
       await release();
-      expect(violations.size === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
+      expect(violations.size === 0 && attemptedMutations === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
       await info.attach("bug001-production-parity", { body: JSON.stringify({ outcome: "PARITYUNVERIFIED", reason: "existing-citation-review-guard", httpStatus: initial.status(), sha: settings.sha }), contentType: "application/json" });
       parityUnverified = true;
       throw new Error("PARITYUNVERIFIED");
@@ -179,11 +184,16 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
     await unchanged();
     await release();
-    expect(violations.size === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
+    expect(violations.size === 0 && attemptedMutations === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
     await info.attach("bug001-production-parity", { body: JSON.stringify({ outcome: "READ_ONLY_PARITY_VERIFIED", sha: settings.sha,
       autoHash: auto.hash, selectedHash: selected.hash, autoPages, selectedPages, blockedExternal,
       autoProfile: auto.profile, selectedProfile: selected.profile,
       nativeDownloadSuppressed: true, legalSuitability: "UNVERIFIED" }), contentType: "application/json" });
+    info.annotations.push({ type: "caseops-b5-reported-draft", description: JSON.stringify({
+      schema_version: 1, status: "READ_ONLY_PARITY_VERIFIED", matter_id: settings.matterId,
+      draft_id: settings.draftId, version_id: version.id, body_sha256: hash(version.body),
+      unchanged: true, attempted_mutations: attemptedMutations,
+    }) });
   } catch {
     failure = parityUnverified ? "BUG001 PARITYUNVERIFIED: the existing citation/review guard blocks export; no production record was changed."
       : `BUG001 production read-only parity failed at ${stage}; private details omitted.`;

@@ -123,6 +123,38 @@ def test_supported_native_cli_preserves_actual_peer_and_unsigned_http(name, tmp_
         assert process.poll() is not None
 
 
+def test_native_http_fixture_import_does_not_construct_the_full_application(tmp_path):
+    code = """import importlib
+import importlib.abc
+import sys
+
+sys.path[:0] = sys.argv[1:]
+blocked = {
+    "caseops_api.main",
+    "tests.test_rate_identity_edge_20261009",
+    "tests.test_rate_limiting",
+    "tests.test_seo_demo_20261009",
+}
+
+class RefuseApplicationImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname in blocked:
+            raise AssertionError("Unexpected heavyweight fixture import: " + fullname)
+
+sys.meta_path.insert(0, RefuseApplicationImports())
+importlib.import_module("tests.fixtures_rate_identity")
+fixture = importlib.import_module("tests.test_rate_identity_http_20261009")
+assert fixture.app is not None
+assert blocked.isdisjoint(sys.modules), sorted(blocked.intersection(sys.modules))
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", code,
+         str(ROOT / "apps/api"), str(ROOT / "apps/api/src")],
+        cwd=tmp_path, capture_output=True, text=True, timeout=45, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize(
     "change",
     [

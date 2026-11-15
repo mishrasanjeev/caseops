@@ -1,5 +1,28 @@
 # Strict Bug Task List - 2026-04-22
 
+## November15: Installer Consumer And Original Draft Proof Follow-up
+
+PR621 remains unshipped. The complete offline seven-module consumer run on the
+held test snapshot executed 537 cases: 526 passed and 11 failed, with no skips.
+Seven failures lacked real Node in that test-only image; two namespace-negative
+fixtures did not establish a distinguishable directory metadata change; two
+native ASGI cases exceeded the original 45-second startup/10-second shutdown
+budgets after a helper import pulled in application construction. Preserve all
+structured failures and reconcile the corrected replay, not just progress text.
+The successor tools image adds official pinned Node22.23.4; source repairs are
+test-only and keep those budgets and the production verifier unchanged.
+
+Fresh marked read-only production observations at12:57 and12:59UTC retain Draft
+3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5, current version
+cc114a40-7bb5-422d-9499-988b69c0f4d4, on API34ce599d. Independent Node and
+WebCrypto UTF-8 body hashing agree at
+71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074.
+The earlier7e83 value was labelled source_fingerprint, not body_sha256. Its
+derivation must be reconciled before original-record proof admission. No source
+body, credential, PDF export, or original-record mutation was retained/performed.
+Pending fixes also retain a typed safe original-Draft receipt and tracked-source
+cleanliness checks; none of this is a production PDF or whole-release pass.
+
 ## November15: Async Fixture Consumer Verification Miss
 
 This was our integration defect, not a product/provider outage or a reason to

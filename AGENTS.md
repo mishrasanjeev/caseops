@@ -1,5 +1,15 @@
 # CaseOps agent instructions
 
+- A proof hash must name its exact input. A complete Draft DTO fingerprint is
+  not its UTF-8 body hash. Reconcile the persisted version and independently
+  compute the named hash before pinning it; retain a mistaken historical label
+  as a correction, not as invented record drift or a reason to alter the record.
+- Isolated test tools must include every real executable their selected tests
+  invoke. Assert that closure before pytest, and keep narrow ASGI fixtures free
+  of helper imports that construct the entire application. Repair fixture
+  coupling and establish negative-test preconditions instead of raising the
+  existing startup/shutdown budgets or weakening integrity assertions.
+
 - Optional reference content must not push established operational controls out
   of the desktop viewport. Keep secondary sources after the primary workflow,
   with same-page access and return navigation that preserves unsaved state.

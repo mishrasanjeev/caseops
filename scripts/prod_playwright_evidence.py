@@ -67,6 +67,24 @@ BATCH5_FILES = tuple(
     f"ram-2026-11-11-{name}.spec.ts" for name in ("statutes", "drafting", "contracts", "bugs")
 )
 BATCH5_PROJECTS = {"batch5-desktop": "batch5-prod-chromium", "batch5-mobile": "batch5-prod-mobile"}
+BATCH5_PROOF_HELPERS = (
+    "tests/e2e/support/draft_pdf_production_policy_20261111.ts",
+    "tests/e2e/support/draft_pdf_production_20261111.ts",
+    "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+    "tests/e2e/support/draft_pdf_oracle_20261111.ts",
+    "tests/e2e/support/bugs5_contract_reported_20261111.ts",
+)
+REPORTED_DRAFT_ANNOTATION = "caseops-b5-reported-draft"
+REPORTED_DRAFT_PROOF = {
+    "schema_version": 1,
+    "status": "READ_ONLY_PARITY_VERIFIED",
+    "matter_id": "7771c86f-a6d6-442f-a675-4be40622dc05",
+    "draft_id": "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+    "version_id": "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+    "body_sha256": "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
+    "unchanged": True,
+    "attempted_mutations": 0,
+}
 BATCH5_MOVED_CASES = (
     ("ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"),
     ("ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"),
@@ -515,13 +533,24 @@ def _batch5_proofs(document):
             expected = "legacy-workflow-outcome" if moved else BATCH5_PROOF_SCOPES[row["file"]]
         if (not moved and declared != {expected}) or (moved and declared and declared != {expected}):
             raise EvidenceError("batch5_proof_scope_mismatch")
+        receipts = [item for item in annotations if item["type"] == REPORTED_DRAFT_ANNOTATION]
+        if row["file"] == "ram-2026-11-11-drafting.spec.ts":
+            if not receipts:
+                raise EvidenceError("missing_reported_draft_proof")
+            for item in receipts:
+                _reported_draft_description(item.get("description"))
+            if any(sum(item["type"] == REPORTED_DRAFT_ANNOTATION for item in channel) > 1
+                   for channel in (row["annotations"], row["results"][0]["annotations"])):
+                raise EvidenceError("duplicate_reported_draft_proof")
+        elif receipts:
+            raise EvidenceError("reported_draft_proof_scope_mismatch")
         scopes.append({"id": row["id"], "file": row["file"], "scope": expected})
     return scopes
 
 
 def _batch5_source_hashes(root):
     files = ("playwright.app.config.ts", "playwright.prod-ram.config.ts",
-             "scripts/prod_playwright_evidence.py", REPORTER,
+             "scripts/prod_playwright_evidence.py", REPORTER, *BATCH5_PROOF_HELPERS,
              f"tests/e2e/{NOV14_REFERENCE_FILE}",
              *(f"tests/e2e/{file}" for file in (*BATCH5_FILES, *(file for file, _ in BATCH5_MOVED_CASES))))
     if any(not (root / file).is_file() or (root / file).is_symlink() for file in files):
@@ -813,11 +842,36 @@ def _safe(value, env) -> str:
     return result
 
 
+def _reported_draft_description(description):
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = value
+        return result
+
+    try:
+        if type(description) is not str or len(description.encode("utf-8")) > 1024:
+            raise ValueError
+        proof = json.loads(description, object_pairs_hook=unique_object)
+        if (type(proof) is not dict or proof.keys() != REPORTED_DRAFT_PROOF.keys()
+                or any(type(proof[key]) is not type(value) or proof[key] != value
+                       for key, value in REPORTED_DRAFT_PROOF.items())):
+            raise ValueError
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        raise EvidenceError("invalid_reported_draft_proof") from None
+    # Emit only reviewed constants, never arbitrary structured annotation data.
+    return json.dumps(REPORTED_DRAFT_PROOF, sort_keys=True, separators=(",", ":"))
+
+
 def _annotations(items, env):
     return [
         {
             "type": _safe(item.get("type", ""), env),
-            "description": _safe(item.get("description", ""), env),
+            "description": (_reported_draft_description(item.get("description"))
+                            if item.get("type") == REPORTED_DRAFT_ANNOTATION
+                            else _safe(item.get("description", ""), env)),
         }
         for item in items
     ]
@@ -1128,6 +1182,7 @@ def _junit(raw: Path, output: Path | None, env, result):
     ):
         raise EvidenceError("junit_failed_mismatch")
     actual = []
+    by_identity = {_identity(row): row for row in result["tests"]}
     root = tree.getroot()
     if root.tag != "testsuites" or any(s.tag != "testsuite" for s in root):
         raise EvidenceError("junit_structure_mismatch")
@@ -1174,6 +1229,18 @@ def _junit(raw: Path, output: Path | None, env, result):
             or outcome not in {"expected", "skipped", "unexpected", "flaky"}
         ):
             raise EvidenceError("junit_case_outcome_or_display_mismatch")
+        properties = case.findall("properties/property")
+        if any(set(item.attrib) != {"name", "value"} or list(item) or (item.text or "").strip()
+               for item in properties if item.get("name") == REPORTED_DRAFT_ANNOTATION):
+            raise EvidenceError("invalid_reported_draft_proof")
+        proof_values = [_reported_draft_description(item.get("value")) for item in properties
+                        if item.get("name") == REPORTED_DRAFT_ANNOTATION]
+        if identity in by_identity:
+            expected_proofs = [_reported_draft_description(item.get("description"))
+                               for item in by_identity[identity]["annotations"]
+                               if item["type"] == REPORTED_DRAFT_ANNOTATION]
+            if Counter(proof_values) != Counter(expected_proofs):
+                raise EvidenceError("junit_reported_draft_proof_mismatch")
         actual.append((identity, outcome))
     # Multiplicity is part of the proof: never deduplicate or match joined titles.
     if Counter(actual) != Counter(
@@ -1184,10 +1251,13 @@ def _junit(raw: Path, output: Path | None, env, result):
         return
     # Native XML structure/outcomes survive; body/error/output/attachment data do not.
     for element in tree.iter():
+        proof_property = (element.tag == "property"
+                          and element.get("name") == REPORTED_DRAFT_ANNOTATION)
         element.attrib = {
             key: value
             if element.tag == "testcase" and key == "caseops-title-path"
-            else _safe(value, env)
+            else (_reported_draft_description(value) if proof_property and key == "value"
+                  else _safe(value, env))
             for key, value in element.attrib.items()
             if key
             in {
@@ -1235,20 +1305,38 @@ def _junit(raw: Path, output: Path | None, env, result):
         tree.write(stream, encoding="utf-8", xml_declaration=True)
 
 
+def _check_checkout(root, expected, *, completion=False):
+    command = ["git", "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}"]
+    head = subprocess.run(
+        [*command, "rev-parse", "HEAD"], cwd=root, check=True,
+        capture_output=True, text=True, timeout=15,
+    ).stdout.strip()
+    if head != expected:
+        raise EvidenceError("checkout_changed_during_execution" if completion else "checkout_sha_mismatch")
+    # Native reports and process-only secrets are ignored/untracked, not source.
+    dirty = subprocess.run(
+        [*command, "diff", "--no-ext-diff", "--no-textconv", "--quiet", expected, "--"],
+        cwd=root, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+    )
+    if dirty.returncode:
+        if dirty.returncode != 1:
+            raise EvidenceError("source_checkout_verification_failed")
+        raise EvidenceError("tracked_source_changed_during_execution" if completion else "tracked_source_dirty")
+    final_head = subprocess.run(
+        [*command, "rev-parse", "HEAD"], cwd=root, check=True,
+        capture_output=True, text=True, timeout=15,
+    ).stdout.strip()
+    if final_head != expected:
+        raise EvidenceError("checkout_changed_during_execution" if completion else "checkout_sha_mismatch")
+    return head
+
+
 def _binding(root, invocation, args, env):
     expected = env.get("CASEOPS_EXPECTED_RELEASE_SHA", "")
     if not SHA.fullmatch(expected) or not INVOCATION.fullmatch(invocation):
         raise EvidenceError("invalid_release_or_invocation")
     _require_current_oct13_namespace(invocation)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if head != expected:
-        raise EvidenceError("checkout_sha_mismatch")
+    head = _check_checkout(root, expected)
     options = {}
     for argument in args:
         if not re.fullmatch(
@@ -1479,15 +1567,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         )
         if _hash(root / binding["config"]) != binding["config_sha256"]:
             raise EvidenceError("config_changed_during_execution")
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        if head != binding["checkout_sha"]:
-            raise EvidenceError("checkout_changed_during_execution")
+        _check_checkout(root, binding["checkout_sha"], completion=True)
         if batch5_sources is not None and _batch5_source_hashes(root) != batch5_sources:
             raise EvidenceError("batch5_source_changed_during_execution")
         marker["phase"] = "complete"
@@ -1612,7 +1692,10 @@ def _app_native_fields(document):
             fields(value, strings="type description", objects="location", required="type")
             for key in ("type", "description"):
                 if key in value:
-                    safe_string(value[key])
+                    if key == "description" and value["type"] == REPORTED_DRAFT_ANNOTATION:
+                        _reported_draft_description(value[key])
+                    else:
+                        safe_string(value[key])
             if "location" in value:
                 location(value["location"])
 
