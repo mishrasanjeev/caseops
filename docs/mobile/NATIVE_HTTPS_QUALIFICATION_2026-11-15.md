@@ -153,3 +153,46 @@ arguments; the APK verifier's required fourth argument remains unchanged. All
 23 qualification cases passed with their original titles and assertions. This
 test-only correction does not transfer native acceptance: fresh complete source
 gates and hosted CodeQL verification remain required for the follow-up revision.
+
+
+## 2026-11-15 — normal subject capability contract repair
+
+J20/M22, US-MOB-01/02/08, CX28-LINK-05: **Partially fixed / Inconclusive;
+release NO-GO**; the actual producer repair is verified separately from
+native/store evidence.
+The first real producer acknowledged a fresh bootstrap, then stopped before MFA
+because it required an invented `matters:read` capability. A separate normal
+sign-in/current-identity/list read confirmed the active owner identities,
+`matters:create`, absence of `matters:read`, and a successful authorized matter
+read. The actual serving API capability catalogue and matter route use creation
+capability plus current tenant/per-record read authorization; the API does not
+define the extra read capability. The previous synthetic fixture incorrectly
+supplied it. No entitlement, API permission or server behavior changes here.
+
+Both bootstrap and fresh `/api/auth/me` checks now require the canonical
+`matters:create`. The unchanged single matter create and authenticated exact
+GET readback still require status200, the owned tenant, exact created matter ID,
+code and active state before publication. Loss of creation capability on the
+fresh identity, a403 read, another tenant or another record remains refused,
+retains incomplete evidence, and never retries acknowledged mutations.
+
+Using the real create-only capability fixture against the original producer
+retains a complete seven-case red result (6passed,1failed at the impossible
+capability check). The repaired complete module passes11/11 with zero failures,
+skips, cancellations or todo: all seven original test titles/bodies are retained,
+with four refusal regressions added. Evidence is retained under
+`native-release-20261111-ZzEIol4V/https-subject-14179-repair-01`; production CLI
+and native acceptance are separate from these contract tests. The repaired
+default CLI then completed a fresh production subject through all nine marked
+normal-API acknowledgements (bootstrap, MFA, current identity, exact new matter
+create/readback and unchanged final build), exit0, with no injected dependencies
+and `contractOnly:false`. Root evidence
+`android-https-qualification-14179de8-01/production-subject-02-actual-default-cli-pass.json`
+(SHA-256 `b6fac7e942469de05f7a6d68823fb446184f9436eb8c9bd20865cdffa90b15d1`)
+binds the stable repaired producer. The original subject01 remains incomplete,
+and its bootstrap was not replayed. This proves API enrollment, not rendered QR,
+native authentication, a signed artifact or a native case. The earlier
+partially created account/failed attempt and original14179 APK remain historical;
+no native result is transferred to this changed source. Both83-case inventories,
+all fixed deadlines, no-paid/TLS constructors, no-retry behavior and final store
+gates remain unchanged. No dependency or licence changes are introduced.

@@ -6764,3 +6764,24 @@ all83 cases independently on each platform, hardware checks and store review
 remain required. iOS HTTPS qualification is still unavailable pending
 Orchestrum's Apple Team/provisioning/AASA; never substitute MU-ZERO.
 See docs/mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md and the MacBook runbook.
+
+
+### 2026-11-15 — J20/M22 normal HTTPS subject capability mismatch
+
+US-MOB-01/02/08, CX28-LINK-05: **Partially fixed / Inconclusive; release NO-GO**.
+The actual producer acknowledged bootstrap but an invented `matters:read` guard
+stopped it before MFA; the normal API catalogue/current owner/read200 evidence
+instead establishes `matters:create` and tenant/per-record read authorization.
+Require actual creation capability both initially and on fresh identity; retain
+the exact authorized status/tenant/matter readback, no entitlement changes and
+no mutation retries. The complete original seven-case module with a real
+create-only fixture reproduces6pass/1failure; the repair passes11/11, preserving
+all seven original test bodies/titles and adding four refused identity/readback
+cases. The repaired default production CLI then passed all9 marked normal-API
+acknowledgements with a fresh subject, exact created-matter readback and exit0
+(proof `production-subject-02-actual-default-cli-pass.json`, SHA-256
+`b6fac7e942469de05f7a6d68823fb446184f9436eb8c9bd20865cdffa90b15d1`).
+The original incomplete subject01 was not replayed. Native authentication and
+rendered QR remain unverified. Final source/security gates, native83/platform
+and store evidence remain due; old14179 native/build proof cannot transfer.
+See [contract and retained proof](mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md).

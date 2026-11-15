@@ -81,7 +81,7 @@ export async function prepareAndroidHttpsSubject(requestRef, dependencies = {}) 
     for (const key of ['company', 'user', 'membership']) { assert.match(auth[key].id, uuid); assert.equal(auth[key].is_active, true); }
     assert.equal(auth.company.slug, slug); assert.equal(auth.company.name, label); assert.equal(auth.user.email, credentials.email); assert.equal(auth.user.full_name, label);
     assert.equal(auth.membership.role, 'owner');
-    assert.ok(['matters:create', 'matters:read'].every(capability => auth.capabilities.includes(capability)), 'HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED');
+    assert.ok(auth.capabilities.includes('matters:create'), 'HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED');
     const enrollment = await call('POST', '/api/auth/mfa/enroll'); assert.equal(enrollment.status, 'pending'); assert.match(enrollment.secret, /^[A-Z2-7]{16,128}$/);
     // API enrollment verification is not a rendered-QR acceptance claim.
     writePrivate(path.join(q.output, 'private-mfa.json'), Buffer.from(JSON.stringify({ totp_secret: enrollment.secret }) + '\n'), { deadline });
@@ -90,7 +90,7 @@ export async function prepareAndroidHttpsSubject(requestRef, dependencies = {}) 
     const security = await call('GET', '/api/auth/security'); assert.equal(security.mfa_status, 'enrolled');
     const me = await call('GET', '/api/auth/me');
     for (const key of ['company', 'user', 'membership']) assert.equal(me[key].id, auth[key].id);
-    assert.ok(['matters:create', 'matters:read'].every(capability => me.capabilities.includes(capability)), 'HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED');
+    assert.ok(me.capabilities.includes('matters:create'), 'HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED');
     const code = 'TEST-HTTPS-' + nonce.toUpperCase();
     const matter = await call('POST', '/api/matters/', { title: label, matter_code: code, practice_area: 'General', forum_level: 'advisory', status: 'active' });
     assert.match(matter.id, uuid); assert.equal(matter.company_id, auth.company.id); assert.equal(matter.matter_code, code); assert.equal(matter.is_active, true);

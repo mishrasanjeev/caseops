@@ -15,20 +15,23 @@ function fixture(t) {
   const q = { schemaVersion: 1, kind: 'caseops-fresh-https-qualification-subject-request', api: { origin: 'https://api.caseops.ai', sourceSha: 'a'.repeat(40), revision: 'synthetic-api' }, workEmailDomain: 'orchestrum.in', output: path.join(root, 'subject') };
   const bytes = Buffer.from(JSON.stringify(q)); const request = path.join(root, 'request.json'); fs.writeFileSync(request, bytes, { mode: 0o600 });
   const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444'];
-  let auth, matter; const calls = [], state = { loseBootstrap: false, deniedCapabilities: false, late: false }, now = Date.now();
+  let auth, matter; const calls = [], state = { loseBootstrap: false, deniedCapabilities: false, meDeniedCreate: false, readbackStatus: 200, readbackWrongTenant: false, readbackWrongId: false, late: false }, now = Date.now();
   const dependencies = { now: () => now + (state.late ? 180001 : 0), random: size => Buffer.alloc(size, 1),
     async api(options) {
       calls.push(options); let value;
       if (options.route === '/api/build') value = { release_sha: q.api.sourceSha, revision: q.api.revision };
       else if (options.route === '/api/bootstrap/company') { if (state.loseBootstrap) throw Error('SYNTHETIC_UNKNOWN_BOOTSTRAP');
         const p = options.body; auth = { access_token: 'SYNTHETIC_PRIVATE_TOKEN', token_type: 'bearer', company: { id: ids[0], is_active: true, slug: p.company_slug, name: p.company_name },
-          user: { id: ids[1], is_active: true, email: p.owner_email, full_name: p.owner_full_name }, membership: { id: ids[2], is_active: true, role: 'owner' }, capabilities: state.deniedCapabilities ? [] : ['matters:create', 'matters:read'] }; value = auth; }
+          user: { id: ids[1], is_active: true, email: p.owner_email, full_name: p.owner_full_name }, membership: { id: ids[2], is_active: true, role: 'owner' }, capabilities: state.deniedCapabilities ? [] : ['matters:create'] }; value = auth; }
       else if (options.route === '/api/auth/mfa/enroll') value = { status: 'pending', secret: 'JBSWY3DPEHPK3PXP' };
       else if (options.route === '/api/auth/mfa/enroll/verify') { assert.match(options.body.code, /^\d{6}$/); value = { status: 'enrolled', recovery_codes: ['SYNTHETIC_PRIVATE_RECOVERY'] }; }
       else if (options.route === '/api/auth/security') value = { mfa_status: 'enrolled' };
-      else if (options.route === '/api/auth/me') value = auth;
+      else if (options.route === '/api/auth/me') value = { ...auth, capabilities: state.meDeniedCreate ? [] : auth.capabilities };
       else if (options.route === '/api/matters/') { matter = { id: ids[3], company_id: ids[0], matter_code: options.body.matter_code, is_active: true }; value = matter; }
-      else if (options.route === '/api/matters/' + ids[3]) value = matter;
+      else if (options.route === '/api/matters/' + ids[3]) {
+        value = { ...matter, ...(state.readbackWrongTenant ? { company_id: ids[1] } : {}), ...(state.readbackWrongId ? { id: ids[2] } : {}) };
+        if (state.readbackStatus !== 200) return { status: state.readbackStatus, value, requestId: 'synthetic-request-' + calls.length };
+      }
       else throw Error('UNDECLARED_NORMAL_API_ROUTE');
       return { status: 200, value, requestId: 'synthetic-request-' + calls.length };
     } };
@@ -104,4 +107,51 @@ test('failed normal API POST constructors retain marker, TLS, auth and exact pay
 test('subject output rejects normalized source root, children and alternate spellings before private creation', () => {
   const root = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
   for (const output of [root, root + '/', path.join(root, 'private-subject'), root + '/folder/../private-subject', root + '/../' + path.basename(root) + '/private-subject']) assert.throws(() => admitHttpsSubjectOutput(output), /HTTPS_SUBJECT_OUTPUT_OUTSIDE_SOURCE_REQUIRED/);
+});
+
+
+test('fresh identity losing matter-create capability cannot reach matter mutation or publish', async t => {
+  const f = fixture(t); f.state.meDeniedCreate = true;
+  await assert.rejects(prepareAndroidHttpsSubject(f.ref, f.dependencies), /HTTPS_SUBJECT_REAL_CAPABILITY_REQUIRED/);
+  assert.equal(f.calls.at(-1).route, '/api/auth/me');
+  assert.equal(f.calls.filter(row => row.route === '/api/bootstrap/company').length, 1);
+  assert.equal(f.calls.some(row => row.route === '/api/matters/'), false);
+  assert.equal(fs.existsSync(path.join(f.q.output, 'subject-evidence.json')), false);
+  const incomplete = JSON.parse(fs.readFileSync(path.join(f.q.output, 'incomplete.json')));
+  assert.equal(incomplete.createdAcknowledged, true); assert.equal(incomplete.observed, false);
+  assert.equal(incomplete.unknownMutationsMustNotReplay, true);
+});
+
+test('denied matter readback cannot publish or retry acknowledged account and matter mutations', async t => {
+  const f = fixture(t); f.state.readbackStatus = 403;
+  await assert.rejects(prepareAndroidHttpsSubject(f.ref, f.dependencies), /HTTPS_SUBJECT_NORMAL_API_ACK_REQUIRED/);
+  assert.equal(f.calls.length, 8); assert.match(f.calls.at(-1).route, /^\/api\/matters\/[a-f0-9-]{36}$/);
+  for (const route of ['/api/bootstrap/company', '/api/auth/mfa/enroll', '/api/auth/mfa/enroll/verify', '/api/matters/']) assert.equal(f.calls.filter(row => row.method === 'POST' && row.route === route).length, 1);
+  assert.equal(f.calls.filter(row => row.method === 'GET' && /^\/api\/matters\/[a-f0-9-]{36}$/.test(row.route)).length, 1);
+  assert.equal(fs.existsSync(path.join(f.q.output, 'subject-evidence.json')), false);
+  const incomplete = JSON.parse(fs.readFileSync(path.join(f.q.output, 'incomplete.json')));
+  assert.equal(incomplete.acknowledgements.length, 7); assert.equal(incomplete.observed, false);
+  assert.equal(incomplete.createdAcknowledged, true); assert.equal(incomplete.unknownMutationsMustNotReplay, true);
+});
+
+test('another tenant in matter readback cannot publish or repeat successful mutations', async t => {
+  const f = fixture(t); f.state.readbackWrongTenant = true;
+  await assert.rejects(prepareAndroidHttpsSubject(f.ref, f.dependencies), { name: 'AssertionError' });
+  assert.equal(f.calls.length, 8); assert.match(f.calls.at(-1).route, /^\/api\/matters\/[a-f0-9-]{36}$/);
+  for (const route of ['/api/bootstrap/company', '/api/auth/mfa/enroll', '/api/auth/mfa/enroll/verify', '/api/matters/']) assert.equal(f.calls.filter(row => row.method === 'POST' && row.route === route).length, 1);
+  assert.equal(fs.existsSync(path.join(f.q.output, 'subject-evidence.json')), false);
+  const incomplete = JSON.parse(fs.readFileSync(path.join(f.q.output, 'incomplete.json')));
+  assert.equal(incomplete.acknowledgements.length, 8); assert.equal(incomplete.observed, false);
+  assert.equal(incomplete.createdAcknowledged, true); assert.equal(incomplete.unknownMutationsMustNotReplay, true);
+});
+
+test('another matter identity in readback cannot publish or repeat successful mutations', async t => {
+  const f = fixture(t); f.state.readbackWrongId = true;
+  await assert.rejects(prepareAndroidHttpsSubject(f.ref, f.dependencies), { name: 'AssertionError' });
+  assert.equal(f.calls.length, 8); assert.match(f.calls.at(-1).route, /^\/api\/matters\/[a-f0-9-]{36}$/);
+  for (const route of ['/api/bootstrap/company', '/api/auth/mfa/enroll', '/api/auth/mfa/enroll/verify', '/api/matters/']) assert.equal(f.calls.filter(row => row.method === 'POST' && row.route === route).length, 1);
+  assert.equal(fs.existsSync(path.join(f.q.output, 'subject-evidence.json')), false);
+  const incomplete = JSON.parse(fs.readFileSync(path.join(f.q.output, 'incomplete.json')));
+  assert.equal(incomplete.acknowledgements.length, 8); assert.equal(incomplete.observed, false);
+  assert.equal(incomplete.createdAcknowledged, true); assert.equal(incomplete.unknownMutationsMustNotReplay, true);
 });
