@@ -69,7 +69,8 @@ def _mutate(session, context, identity, mutation):
             payload=TeamUpdateRequest(is_active=False),
         )
     assert mutation == "delete"
-    return teams.delete_team(session, context=context, team_id=team_id)
+    teams.delete_team(session, context=context, team_id=team_id)
+    return None
 
 
 @pytest.mark.parametrize("mutation", ["remove", "deactivate", "delete"])
