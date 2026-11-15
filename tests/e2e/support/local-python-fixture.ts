@@ -4,15 +4,21 @@ import path from "node:path";
 type FixtureOptions = SpawnSyncOptionsWithStringEncoding & { signal?: AbortSignal };
 const wallLimitMs = 30_000;
 const byteLimit = 1_048_576;
+const safeDiagnostic = Symbol("safeFixtureDiagnostic");
 // The 32-call adjacent inventory includes private-document fixtures as well as entitlements.
 const fixtureKeys = ["CASEOPS_E2E_COMPANY_ID", "CASEOPS_E2E_MEMBERSHIP_ID",
   "CASEOPS_E2E_MATTER_ID", "CASEOPS_E2E_ATTACHMENT_ID", "CASEOPS_E2E_PRIVATE_TEXT",
-  "CASEOPS_E2E_FILENAME"] as const;
+  "CASEOPS_E2E_FILENAME", "CASEOPS_E2E_WHITESPACE_COMPANY", "CASEOPS_E2E_WHITESPACE_BOOTSTRAP",
+  "CASEOPS_E2E_COMPANY_SLUG", "CASEOPS_E2E_DOCKET_ID", "CASEOPS_E2E_INTENT_ID", "CASEOPS_E2E_SOURCE_ID",
+  "COMPANY_ID", "CITATION", "TITLE", "IP15_COMPANY_ID", "IP15_SLUG", "IP15_OWNER_ID", "IP15_MEMBERS",
+  "IP17_COMPANY", "IP17_SLUG", "IP17_MEMBER", "IP17_DOCKET", "IP17_SOURCE", "IP17_INTENT",
+  "BUGS4_COMPANY_ID", "BUGS4_SLUG", "BUGS4_OWNER_ID", "BUGS4_OVERRIDES", "BUGS4_INVOICE",
+  "QA_COMPANY_ID", "QA_EMAIL", "QA_SHA", "QA_SLUG", "QA_PASSWORD", "RENEWAL_ID", "GRACE_ID"] as const;
 
 // This runs inside the physical interpreter, not its uv/venv/docker launcher.
 // Leave the daemon timer armed even after exec returns: fixture-created threads
 // must not keep a transaction alive indefinitely. Closing the process rolls back.
-const boundedPython = `def _caseops_bounded_inline():
+const boundedPython = (owned?: { databaseUrl: string; release: string }) => `def _caseops_bounded_inline():
     import os, sys, threading, time
     code, deadline = sys.argv[1], float(sys.argv[2])
     remaining = deadline - time.time()
@@ -24,16 +30,22 @@ const boundedPython = `def _caseops_bounded_inline():
     sys.argv[:] = ['-c', *sys.argv[3:]]
     namespace = globals()
     del namespace['_caseops_bounded_inline']
+${owned ? `    validated_database = ${JSON.stringify(owned.databaseUrl)}
+    validated_release = ${JSON.stringify(owned.release)}
+    namespace['__caseops_is_owned_fixture_database__'] = lambda value: isinstance(value, str) and value == validated_database and os.environ.get('CASEOPS_RELEASE_SHA') == validated_release
+` : ""}
     exec(compile(code, '<string>', 'exec'), namespace, namespace)
 _caseops_bounded_inline()
 `;
 
 function failure(code: string, message: string): NodeJS.ErrnoException {
-  return Object.assign(new Error(message), { code });
+  return Object.assign(new Error(message), { code, [safeDiagnostic]: true });
 }
 
 function empty(error: Error): SpawnSyncReturns<string> {
-  return { pid: 0, output: [null, "", ""], stdout: "", stderr: "", status: null, signal: null, error };
+  const diagnostic = (error as Error & { [safeDiagnostic]?: boolean })[safeDiagnostic]
+    ? error.message : "Local fixture validation failed; inspect the structured error type.";
+  return { pid: 0, output: [null, "", diagnostic], stdout: "", stderr: diagnostic, status: null, signal: null, error };
 }
 
 function requireThat(value: unknown, message: string): asserts value {
@@ -106,7 +118,7 @@ export async function runLocalPythonFixture(
     fixtureFence(env);
     const index = inlineIndex(command, args);
     const code = args[index + 1];
-    const wrapped = ["-c", boundedPython, code, String(wallDeadline), ...args.slice(index + 2)];
+    const wrapped = ["-c", boundedPython(), code, String(wallDeadline), ...args.slice(index + 2)];
 
     const run = (executable: string, argv: string[], childEnv: NodeJS.ProcessEnv,
       input?: FixtureOptions["input"]): Promise<SpawnSyncReturns<string>> => new Promise((resolve) => {
@@ -188,7 +200,7 @@ export async function runLocalPythonFixture(
       || ["npipe:////./pipe/docker_engine", "npipe:////./pipe/dockerDesktopLinuxEngine"].includes(value);
     requireThat(!process.env.DOCKER_HOST || localEndpoint(process.env.DOCKER_HOST), "Remote Docker hosts are forbidden.");
     requireThat(!process.env.DOCKER_TLS_VERIFY && !process.env.DOCKER_CERT_PATH, "Docker TLS overrides are forbidden.");
-    const dockerEnv: NodeJS.ProcessEnv = {};
+    const dockerEnv: NodeJS.ProcessEnv = { NODE_ENV: "test" };
     for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TEMP", "TMP",
       "DOCKER_CONFIG", "DOCKER_CONTEXT"]) {
       if (process.env[key] !== undefined) dockerEnv[key] = process.env[key];
@@ -231,20 +243,29 @@ export async function runLocalPythonFixture(
     requireThat(["e2e", "ci"].includes(values.get("CASEOPS_ENV") ?? "") && values.get("CASEOPS_RELEASE_SHA") === release
       && values.get("CASEOPS_DATABASE_URL") === "postgresql+psycopg://caseops:caseops@postgres:5432/caseops"
       && container?.NetworkSettings?.Networks?.[`${project}_default`], "Docker API is not an isolated fixture target.");
+    requireThat(values.get("CASEOPS_LLM_PROVIDER") === "mock"
+      && (!values.has("CASEOPS_EMBEDDING_PROVIDER") || values.get("CASEOPS_EMBEDDING_PROVIDER") === "mock"),
+    "Docker fixtures require the deterministic provider environment.");
     const ports = container?.NetworkSettings?.Ports?.["8000/tcp"];
     requireThat(Array.isArray(ports) && ports.length > 0
       && ports.every((port) => ["127.0.0.1", "::1"].includes(port.HostIp)), "Docker API must be published only on loopback.");
     const forwarded: string[] = [];
+    const fixtureEnvironment: NodeJS.ProcessEnv = { ...dockerEnv };
     for (const key of fixtureKeys) {
-      if (!code.includes(key)) continue;
+      if (!code.includes(`'${key}'`) && !code.includes(`"${key}"`)) continue;
       const value = env[key];
       requireThat(typeof value === "string" && !value.includes("\0") && Buffer.byteLength(value) <= 16_384,
         "Missing or oversized caller fixture field.");
-      forwarded.push("--env", `${key}=${value}`);
+      fixtureEnvironment[key] = value;
+      forwarded.push("--env", key);
     }
     const flagsStart = /^uv(?:\.exe)?$/.test(path.basename(command.replaceAll("\\", "/"))) ? 5 : 0;
-    return await run("docker", [...prefix, "exec", "--interactive", ...forwarded, id,
-      "/usr/local/bin/python", ...args.slice(flagsStart, index), ...wrapped], dockerEnv, options.input);
+    const childEnvironment = ["CASEOPS_ENV=e2e", "CASEOPS_LLM_PROVIDER=mock", "CASEOPS_EMBEDDING_PROVIDER=mock"]
+      .flatMap(value => ["--env", value]);
+    const dockerWrapped = ["-c", boundedPython({ databaseUrl: values.get("CASEOPS_DATABASE_URL")!, release }),
+      code, String(wallDeadline), ...args.slice(index + 2)];
+    return await run("docker", [...prefix, "exec", "--interactive", ...childEnvironment, ...forwarded, id,
+      "/usr/local/bin/python", ...args.slice(flagsStart, index), ...dockerWrapped], fixtureEnvironment, options.input);
   } catch (error) {
     // Inspection errors retain structured process semantics, never fall back to the host.
     if (error && typeof error === "object" && "output" in error && "status" in error) {

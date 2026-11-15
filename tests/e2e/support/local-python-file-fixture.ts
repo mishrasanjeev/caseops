@@ -42,7 +42,7 @@ _caseops_file_fixture()
 
 // Core forwards only reviewed fields literally referenced by the inline program.
 // The other three programs use stdin, so must not request these renewal fields.
-const renewalWrapper = "# CASEOPS_E2E_COMPANY_ID CASEOPS_E2E_MEMBERSHIP_ID\n" + wrapper;
+const renewalWrapper = "import os\nos.environ['CASEOPS_E2E_COMPANY_ID']\nos.environ['CASEOPS_E2E_MEMBERSHIP_ID']\n" + wrapper;
 
 function reject(code: string, message: string): never {
   throw Object.assign(new Error(message), { name: "LocalPythonFileFixtureError", code });

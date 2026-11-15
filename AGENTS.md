@@ -4370,3 +4370,19 @@ requirements when using the fallback.
   preserve ambient temp/cache assets and failed workspaces, and clean only an
   exact owned workspace. Unchanged-helper controls and hosted PostgreSQL passes
   do not diagnose an earlier capture failure or replace full Docker acceptance.
+- Local fixture setup must not block the browser worker with unbounded host
+  Python calls. Use bounded asynchronous execution; for Docker acceptance,
+  verify the local daemon, owned API container and exact release before using
+  its installed interpreter. Keep fixture writes loopback-only, propagate only
+  required fixture fields, bound the physical child independently of its
+  launcher, and preserve every failed/incomplete result before replacement.
+- Dated calendar journeys must enter the existing durable day/date route and
+  assert that date and its event destination. Keep bounded adjacent-day
+  navigation coverage; never walk one day per click from the current date to
+  a historical fixture, freeze today's clock, or raise the workflow deadline
+  to conceal growing test setup.
+- A fixture-runner migration must reconcile every inline and file caller,
+  interpreter flag and required environment field. Exercise the file adapter
+  through the real forwarding contract, not only a mocked delegate. Declare
+  builder fixtures as exact literal file URLs so dependency-closure gates can
+  inventory them; a passing adapter unit cannot replace full Docker replay.

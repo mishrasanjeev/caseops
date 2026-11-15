@@ -15,7 +15,7 @@ const id = "a".repeat(64);
 const endpoint = "npipe:////./pipe/dockerDesktopLinuxEngine";
 const compose = path.resolve("fixture", "docker-compose.yml");
 const code = "import os; print(os.environ['CASEOPS_E2E_COMPANY_ID'])";
-const env = { CASEOPS_ENV: "e2e", CASEOPS_E2E_COMPANY_ID: "company-1" };
+const env = { NODE_ENV: "test" as const, CASEOPS_ENV: "e2e", CASEOPS_E2E_COMPANY_ID: "company-1" };
 
 class FakeChild extends EventEmitter {
   pid: number | undefined = 123;
@@ -48,6 +48,7 @@ function container() {
         "org.opencontainers.image.revision": release,
       },
       Env: ["CASEOPS_ENV=e2e", `CASEOPS_RELEASE_SHA=${release}`,
+        "CASEOPS_LLM_PROVIDER=mock", "CASEOPS_EMBEDDING_PROVIDER=mock",
         "CASEOPS_DATABASE_URL=postgresql+psycopg://caseops:caseops@postgres:5432/caseops"],
     },
     State: { Running: true, Paused: false, Restarting: false, Dead: false },
@@ -108,6 +109,28 @@ afterEach(() => {
 });
 
 describe("local inline Python fixture", () => {
+  it("surfaces a fixed preflight reason without echoing a rejected origin", async () => {
+    vi.stubEnv("PROD_API_BASE_URL", "https://synthetic-private-origin.example");
+    const result = await runLocalPythonFixture("python", ["-c", code], options());
+    expect(result.stderr).toBe("Local Python fixtures reject production configuration.");
+    expect(result.stderr).not.toContain("synthetic-private-origin");
+    expect(calls()).toHaveLength(0);
+  });
+
+  it("does not echo malformed inspection JSON into a caller assertion", async () => {
+    docker();
+    act = (child, _args, call) => {
+      if (call !== 4) return false;
+      child.stdout.write('{"synthetic-private-value":');
+      child.close();
+      return true;
+    };
+    const result = await runLocalPythonFixture("python", ["-c", code], options());
+    expect(result.stderr).toBe("Local fixture validation failed; inspect the structured error type.");
+    expect(result.stderr).not.toContain("synthetic-private-value");
+    expect(calls()).toHaveLength(4);
+  });
+
   it("retains the original host interpreter, options, environment, argv and stdin", async () => {
     const originalEnv = { ...env, CASEOPS_DATABASE_URL: "owned-host-database", PATH: "owned-path" };
     const result = await runLocalPythonFixture("C:/fixture/.venv/Scripts/python.exe",
@@ -144,8 +167,9 @@ describe("local inline Python fixture", () => {
     expect(calls()[2][1]).toEqual(["--host", endpoint, "compose", "--project-name", project,
       "--file", compose, "ps", "--quiet", "--no-trunc", "api"]);
     expect(calls()[3][1]).toEqual(["--host", endpoint, "inspect", "--type", "container", id]);
-    expect(calls()[4][1]).toEqual(["--host", endpoint, "exec", "--interactive", "--env",
-      "CASEOPS_E2E_COMPANY_ID=company-1", id, "/usr/local/bin/python", "-c", expect.any(String), code,
+    expect(calls()[4][1]).toEqual(["--host", endpoint, "exec", "--interactive",
+      "--env", "CASEOPS_ENV=e2e", "--env", "CASEOPS_LLM_PROVIDER=mock", "--env", "CASEOPS_EMBEDDING_PROVIDER=mock", "--env",
+      "CASEOPS_E2E_COMPANY_ID", id, "/usr/local/bin/python", "-c", expect.any(String), code,
       expect.any(String), "tail"]);
     expect(Buffer.concat(children[4].input).toString()).toBe("stdin");
   });
@@ -172,13 +196,83 @@ describe("local inline Python fixture", () => {
     await runLocalPythonFixture("python", ["-c", privateCode], options({ env: extra }));
     const exec = calls()[4][1];
     expect(exec.filter((_, index) => exec[index - 1] === "--env")).toEqual([
-      "CASEOPS_E2E_PRIVATE_TEXT=fixture content", "CASEOPS_E2E_FILENAME=fixture.txt"]);
+      "CASEOPS_ENV=e2e", "CASEOPS_LLM_PROVIDER=mock", "CASEOPS_EMBEDDING_PROVIDER=mock",
+      "CASEOPS_E2E_PRIVATE_TEXT", "CASEOPS_E2E_FILENAME"]);
+    expect(calls()[4][2].env).toMatchObject({ CASEOPS_E2E_PRIVATE_TEXT: "fixture content", CASEOPS_E2E_FILENAME: "fixture.txt" });
     for (const [, args, settings] of calls()) {
       expect(settings.env).not.toHaveProperty("CASEOPS_DATABASE_URL");
       expect(settings.env).not.toHaveProperty("CASEOPS_ECOURTSINDIA_API_TOKEN");
       expect(settings.env).not.toHaveProperty("PYTHONPATH");
       expect(args.join(" ")).not.toMatch(/do-not-forward|other-db|host-only|=unused/);
     }
+  });
+
+  it("does not confuse legacy environment names with longer field suffixes", async () => {
+    docker();
+    const result = await runLocalPythonFixture("python", ["-c", code], options());
+    expect(result.status).toBe(0);
+    expect(calls()[4][1]).not.toContain("COMPANY_ID");
+    expect(calls()[4][2].env).not.toHaveProperty("COMPANY_ID");
+  });
+
+  it("forwards both renewal grace identities without exposing values in command arguments", async () => {
+    docker();
+    const fixtureCode = "import os; print(os.environ['RENEWAL_ID'], os.environ['GRACE_ID'])";
+    const result = await runLocalPythonFixture("python", ["-c", fixtureCode], options({
+      env: { ...env, RENEWAL_ID: "synthetic-renewal-id", GRACE_ID: "synthetic-grace-id" },
+    }));
+    expect(result.status).toBe(0);
+    expect(calls()[4][2].env).toMatchObject({
+      RENEWAL_ID: "synthetic-renewal-id", GRACE_ID: "synthetic-grace-id",
+    });
+    for (const key of ["RENEWAL_ID", "GRACE_ID"]) expect(calls()[4][1]).toContain(key);
+    for (const [, args, settings] of calls().slice(0, 4)) {
+      expect(settings.env).not.toHaveProperty("RENEWAL_ID");
+      expect(settings.env).not.toHaveProperty("GRACE_ID");
+      expect(args.join(" ")).not.toContain("synthetic-renewal-id");
+    }
+    expect(calls()[4][1].join(" ")).not.toMatch(/synthetic-(?:renewal|grace)-id/);
+  });
+
+  it("carries the exact synthetic fixture credential only in the final child's environment", async () => {
+    docker();
+    const secret = "synthetic-fixture-only-value";
+    const result = await runLocalPythonFixture("python", ["-c", "import os; value = os.environ['QA_PASSWORD']"],
+      options({ env: { ...env, QA_PASSWORD: secret } }));
+    expect(result.status).toBe(0);
+    for (const [, args, settings] of calls().slice(0, 4)) {
+      expect(args.join(" ")).not.toContain(secret);
+      expect(settings.env).not.toHaveProperty("QA_PASSWORD");
+    }
+    expect(calls()[4][1]).toContain("QA_PASSWORD");
+    expect(calls()[4][1].join(" ")).not.toContain(secret);
+    expect(calls()[4][2].env.QA_PASSWORD).toBe(secret);
+    expect(result.stdout + result.stderr).not.toContain(secret);
+  });
+
+  it.each(["CASEOPS_LLM_PROVIDER", "CASEOPS_EMBEDDING_PROVIDER"])(
+    "rejects a non-mock inspected provider %s before fixture execution", async key => {
+      docker();
+      inspect.Config.Env = inspect.Config.Env.map(value => value.startsWith(`${key}=`) ? `${key}=non-mock` : value);
+      const result = await runLocalPythonFixture("python", ["-c", code], options());
+      expect(errorCode(result)).toBe("EINVAL");
+      expect(result.stderr).toContain("deterministic provider environment");
+      expect(calls()).toHaveLength(4);
+    });
+
+  it("injects the database predicate only after owned-container admission, never from a caller flag", async () => {
+    const fakeFlag = { ...env, __caseops_is_owned_fixture_database__: "true" };
+    await runLocalPythonFixture("python", ["-c", code], options({ env: fakeFlag }));
+    expect(calls()[0][1][1]).not.toContain("__caseops_is_owned_fixture_database__");
+    vi.mocked(spawn).mockClear();
+    docker();
+    await runLocalPythonFixture("python", ["-c", code], options({ env: fakeFlag }));
+    const args = calls()[4][1];
+    const script = args[args.indexOf("/usr/local/bin/python") + 2];
+    expect(script).toContain("namespace['__caseops_is_owned_fixture_database__']");
+    expect(script).toContain('validated_database = "postgresql+psycopg://caseops:caseops@postgres:5432/caseops"');
+    expect(script).toContain(`validated_release = "${release}"`);
+    expect(args).not.toContain("__caseops_is_owned_fixture_database__=true");
   });
 
   it.each(["https://127.0.0.1:8000", "http://remote.invalid", "http://user:pass@localhost:8000",
@@ -196,7 +290,7 @@ describe("local inline Python fixture", () => {
     });
 
   it.each(["production", "cloud", "local"])("rejects non-fixture environment %s", async (value) => {
-    const result = await runLocalPythonFixture("python", ["-c", code], options({ env: { CASEOPS_ENV: value } }));
+    const result = await runLocalPythonFixture("python", ["-c", code], options({ env: { NODE_ENV: "test", CASEOPS_ENV: value } }));
     expect(errorCode(result)).toBe("EINVAL");
     expect(calls()).toHaveLength(0);
   });
@@ -434,7 +528,7 @@ describe("local inline Python fixture", () => {
     docker();
     const value = kind === "missing" ? undefined : "x".repeat(16_385);
     const result = await runLocalPythonFixture("python", ["-c", code],
-      options({ env: { CASEOPS_ENV: "e2e", CASEOPS_E2E_COMPANY_ID: value } }));
+      options({ env: { NODE_ENV: "test", CASEOPS_ENV: "e2e", CASEOPS_E2E_COMPANY_ID: value } }));
     expect(errorCode(result)).toBe("EINVAL");
     expect(calls()).toHaveLength(4);
   });

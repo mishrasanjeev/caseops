@@ -6410,3 +6410,54 @@ SQLAlchemy protocol, still rejects arbitrary objects and all DML/opaque/cycle/
 overbound controls. Complete pure file88P/264phases after wholeAPI Ruff passed;
 the second physical PG replay and complete hosted/fullDocker gates remain owed.
 No previous red is relabelled fixed, no original elapsed/work bound changed.
+
+### November 15: Browser Fixture Isolation And Dated Calendar Acceptance
+
+PR621 full-docker-17 executed all4152 PostgreSQL cases successfully, with
+12456 passed setup/call/teardown phases, eight reconciled groups and zero
+skips/retries. Its later browser run is FAILED/INCOMPLETE, not release proof:
+five actual timeouts and one worker-interruption result remain retained in
+outputs/bugs5-20261111/owned-interruption-full17-04. Only157of790 browser
+identities ended;150passed/1explicit skip/6nonpassing,633without terminal
+results, including the interrupted in-flight workflow.
+Independent full traces distinguish a209.460s pre-UI seed, a192.230s document
+fixture and deadline setup plus89calendar clicks. Post-timeout assertions
+cannot rehabilitate failed cases or establish sibling causes.
+
+The test-only repair replaces all32 unbounded inline Python calls across
+30dated specs with an awaited bounded helper. Local Docker fixtures use the
+inspected owned API container's installed interpreter; local daemon, exact
+release, loopback ports, fixture environment, output and independent child
+deadline remain machine-enforced. There is no retry or silent host fallback
+after Docker refusal. The adjacent audit also migrates fourteen already-bounded
+inline launches and four finite file-program callers; it does not admit
+arbitrary Python files. Independent review caught a renewal file being passed
+to the inline-only runner and missing renewal/grace fields; the file adapter
+and exact forwarding regressions address both. The
+deadline journey uses the existing durable date route, verifies the event
+destination and reload, and retains one adjacent-day round trip. All original
+case identities, legal assertions and workflow deadlines remain unchanged.
+Builder/cloud allowlists and the deploy dirty-input regression include the
+new test helper; it is not admitted into the web runtime. No API application,
+PG case, migration, provider policy, native/MacBook or customer data changes.
+
+The initial helper74-case mock pass was followed by134 and142 integrated mock
+cases on installed Vitest4.1.12. The latter predates the final quoted-field
+renewal correction and is not final-source acceptance. Full web and E2E
+TypeScript checks passed before the file-program extension; both are rerun.
+A rejected/aborted fixture may leave its physical interpreter alive until its
+independent30-second deadline; launcher kill is not claimed as immediate
+physical-child termination. No such refusal is successful setup. These mocks
+do not prove real Docker execution.
+The deploy-closure component then exposed an integration defect in the new
+unit's directory-only URL:16failed/7passed, all sixteen native failures name
+that unresolved import. Replace it with four exact fixture file URLs, preserving
+the existing fail-closed closure validator and finite COPY/ignore admission.
+The failed XML remains retained. No missing-import assertion is waived.
+Complete replacement790browser
+acceptance, fresh exact-head CI, protected merge, exact-main deployment and
+whole production replay remain required. The completed PG evidence is bound
+to executed8f5, not restamped onto a changed candidate; any component reuse
+requires independent source/dependency/native-evidence admission and fresh
+new-head hosted PG proof where dynamic inputs are unresolved. All current
+production bug verdicts remain unupgraded until their deployed journeys pass.

@@ -9,12 +9,12 @@ import { runLocalPythonFileFixture } from "../../../tests/e2e/support/local-pyth
 
 vi.mock("../../../tests/e2e/support/local-python-fixture", () => ({ runLocalPythonFixture: vi.fn() }));
 
-const root = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+const pdf = fileURLToPath(new URL("../../../tests/e2e/support/draft_pdf_fixture_20261111.py", import.meta.url));
+const ram = fileURLToPath(new URL("../../../tests/e2e/support/ram_batch3_draft_fixture.py", import.meta.url));
+const assistant = fileURLToPath(new URL("../../../tests/e2e/support/assistant_history_fixture.py", import.meta.url));
+const renewal = fileURLToPath(new URL("../../../tests/e2e/support/seed_iplf037b.py", import.meta.url));
+const root = path.resolve(path.dirname(pdf), "../../..");
 const support = path.join(root, "tests/e2e/support");
-const pdf = path.join(support, "draft_pdf_fixture_20261111.py");
-const ram = path.join(support, "ram_batch3_draft_fixture.py");
-const assistant = path.join(support, "assistant_history_fixture.py");
-const renewal = path.join(support, "seed_iplf037b.py");
 const options = () => ({ cwd: root, encoding: "utf8" as const, timeout: 30_000,
   env: { NODE_ENV: "test" as const, CASEOPS_ENV: "e2e", CASEOPS_LLM_PROVIDER: "mock" } });
 const success = { pid: 17, status: 0, signal: null, stdout: "result", stderr: "", output: [null, "result", ""] } as const;
@@ -59,6 +59,7 @@ describe("finite local Python file fixture adapter", () => {
       const code = args.at(-1)!;
       for (const key of ["CASEOPS_E2E_COMPANY_ID", "CASEOPS_E2E_MEMBERSHIP_ID"]) {
         expect(code.includes(key)).toBe(file === renewal);
+        expect(code.includes(`os.environ['${key}']`)).toBe(file === renewal);
       }
       expect(code).not.toMatch(/CASEOPS_E2E_(MATTER_ID|ATTACHMENT_ID|PRIVATE_TEXT|FILENAME)/);
       expect(delegated.env).toBe(env);

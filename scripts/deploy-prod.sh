@@ -428,6 +428,12 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "tests/e2e/support/env.ts" \
   "tests/e2e/support/ram-bugs4.ts" \
   "tests/e2e/support/canonical-api-validators.ts" \
+  "tests/e2e/support/local-python-fixture.ts" \
+  "tests/e2e/support/local-python-file-fixture.ts" \
+  "tests/e2e/support/draft_pdf_fixture_20261111.py" \
+  "tests/e2e/support/ram_batch3_draft_fixture.py" \
+  "tests/e2e/support/assistant_history_fixture.py" \
+  "tests/e2e/support/seed_iplf037b.py" \
   "tests/e2e/support/retained-assistant-evidence.ts" \
   "tests/e2e/support/draft_pdf_oracle_20261111.ts" \
   "tests/e2e/support/draft_pdf_production_policy_20261111.ts" \
