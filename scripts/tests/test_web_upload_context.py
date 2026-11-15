@@ -56,6 +56,11 @@ BUILDER_INPUTS = {
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
         "env", "ram-bugs4", "canonical-api-validators",
+        "local-python-fixture", "local-python-file-fixture",
+    )),
+    *(f"tests/e2e/support/{name}.py" for name in (
+        "draft_pdf_fixture_20261111", "ram_batch3_draft_fixture",
+        "assistant_history_fixture", "seed_iplf037b",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -171,6 +176,25 @@ class NativeUploadTests(unittest.TestCase):
         self.assertTrue(sources)
         missing = sources - BUILDER_INPUTS - self.required
         self.assertFalse(missing, f"Dockerfile COPY inputs not declared: {sorted(missing)}")
+
+    def test_bounded_python_fixture_inputs_remain_finite_and_builder_only(self):
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8",
+        ).split("FROM trusted-base AS runner", 1)
+        for name in (
+            "local-python-fixture.ts", "local-python-file-fixture.ts",
+            "draft_pdf_fixture_20261111.py", "ram_batch3_draft_fixture.py",
+            "assistant_history_fixture.py", "seed_iplf037b.py",
+        ):
+            with self.subTest(name=name):
+                source = f"tests/e2e/support/{name}"
+                self.assertIn(source, BUILDER_INPUTS)
+                self.assertIn(f"COPY {source} /app/{source}", builder.splitlines())
+                self.assertNotIn(source, runner)
+                for ignore in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(f"!{source}", (ROOT / ignore).read_text(
+                        encoding="utf-8",
+                    ).splitlines())
 
     def test_colocated_retained_evidence_helper_has_explicit_builder_admission(self):
         helper = "tests/e2e/support/retained-assistant-evidence.ts"
