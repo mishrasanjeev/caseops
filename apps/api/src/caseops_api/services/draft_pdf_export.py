@@ -444,32 +444,33 @@ def _draw_execution_table(
     widths = tuple(pdf.epw * share for share in EXECUTION_COLUMN_SHARES)
     padding = EXECUTION_PADDING_MM
     height = profile.body_line_height_mm
-    with pdf.local_context():
-        pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.15)
-        for number_lines, label_lines, value_lines in layout:
-            offset = 0
-            first = True
-            total = max(len(number_lines), len(label_lines), len(value_lines))
-            while offset < total:
-                available = int((pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height)
-                minimum = max(len(number_lines), len(label_lines)) if first else 1
-                if available < minimum:
-                    pdf.add_page()
-                    available = int(
-                        (pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height
-                    )
-                    if available < minimum:
-                        raise FormatStructureError(
-                            "The execution table label cannot fit this layout.",
-                        )
-                count = min(available, total - offset)
-                row_height = count * height + 2 * padding
-                left, top = pdf.l_margin, pdf.get_y()
-                cell_lines = (
-                    number_lines if first else [], label_lines if first else [],
-                    value_lines[offset:offset + count],
+    for number_lines, label_lines, value_lines in layout:
+        offset = 0
+        first = True
+        total = max(len(number_lines), len(label_lines), len(value_lines))
+        while offset < total:
+            available = int((pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height)
+            minimum = max(len(number_lines), len(label_lines)) if first else 1
+            if available < minimum:
+                pdf.add_page()
+                available = int(
+                    (pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height
                 )
+                if available < minimum:
+                    raise FormatStructureError(
+                        "The execution table label cannot fit this layout.",
+                    )
+            count = min(available, total - offset)
+            row_height = count * height + 2 * padding
+            left, top = pdf.l_margin, pdf.get_y()
+            cell_lines = (
+                number_lines if first else [], label_lines if first else [],
+                value_lines[offset:offset + count],
+            )
+            # Each graphics context belongs to one physical page. Restoring a
+            # pre-table font state after several pages can leave its cached
+            # "font already emitted" flag attached to the wrong page.
+            with pdf.local_context(draw_color=(0, 0, 0), line_width=0.15):
                 for index, lines in enumerate(cell_lines):
                     x = left + sum(widths[:index])
                     pdf.rect(x, top, widths[index], row_height)
@@ -484,9 +485,9 @@ def _draw_execution_table(
                             align="C" if index == 0 else "L",
                             new_x="LMARGIN", new_y="NEXT",
                         )
-                pdf.set_xy(left, top + row_height)
-                first = False
-                offset += count
+            pdf.set_xy(left, top + row_height)
+            first = False
+            offset += count
 
 
 def _ascii_safe(text: str) -> str:

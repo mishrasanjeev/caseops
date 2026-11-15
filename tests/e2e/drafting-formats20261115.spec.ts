@@ -8,7 +8,7 @@ import { localTransportHeaders } from "./support/cost-controls";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
-import { assertDraftPdfRender } from "./support/draft_pdf_render_proof_20261111";
+import { assertDraftPdfRender, readDraftPdfTitle } from "./support/draft_pdf_render_proof_20261111";
 import { presentationFamilyFromManifest, type DraftPdfProfile } from "./support/draft_pdf_oracle_20261111";
 
 async function json(api: APIRequestContext, url: string, method = "GET", data?: object) {
@@ -229,6 +229,7 @@ for (const phone of [false, true]) {
         if (!profile) throw new Error("Generic document layout is absent.");
         const renderedPages = await assertDraftPdfRender(page, profile, {
           title: saved.title, body, citations: third.citations, presentationFamily: presentationFamilyFromManifest(third.template_manifest),
+          pdfTitle: await readDraftPdfTitle(displayedBytes),
         }, hasTouch, async index => {
           await info.attach(`synthetic-format-pdf-page-${index}.png`, {
             body: await page.locator("[data-testid=draft-pdf-preview] canvas").screenshot(),

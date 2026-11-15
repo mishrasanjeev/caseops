@@ -382,6 +382,38 @@ claim supersedes the failed setup or authorizes a replacement gate.
 
 ## Pending verification sequence
 
+### November16 takeover evidence
+
+The owner explicitly released takeover after the previous jobs ended and
+authorized CI, merge and production deployment. Earlier holds and failed
+preparations above remain historical evidence; they are superseded for current
+work, not relabeled successful.
+
+This worktree's own frozen npm installation completed using Node22.23.4.
+Canonical OpenAPI dump/client generation completed. Complete format reference,
+rendering and HTTP workflow replacement passed221cases, zero failures or skips,
+including all44 SQLite workflow cases. The original44failures/177passes remain
+retained: known-UTC persisted draft timestamps lost their offset on SQLite;
+structured validation tests read the wrong problem field; and a graphics context
+crossing a manual PDF page boundary corrupted the following heading. Corrections
+retain legal dates, error locations, exact document text and lifecycle fences.
+
+The complete web project (including component tests) and E2E TypeScript compile
+pass. Fifteen actual renderer PDFs/23pages were inspected, including all six
+deeds and the eight-page Unicode execution table. PDF acceptance now independently
+decodes actual metadata for the presentation contract: saved internal title and
+legal body caption may differ. Missing/wrong metadata and legacy title controls
+remain strict. Four direct actual-oracle controls pass; these are not Vitest
+acceptance. Vitest worker startup failed before collection on three attempts;
+the cause remains unproven and complete frontend acceptance remains pending.
+Word rendering attempts did not complete and remain unverified.
+
+Evidence: `C:/Users/mishr/.codex/merge161001` (formats-sqlite-01/02, generated
+OpenAPI, typecheck-web-01/02, typecheck-e2e-01, pdf-title controls, rendered-pdfs
+and retained failed Word attempts). PostgreSQL, adjacent modules, configured
+desktop/phone journeys, whole frontend, independent inventories, complete Docker,
+fresh exact-head CI and deployed workflow proof remain pending. **NO-GO**.
+
 The following acceptance stages remain open; the scoped syntax/Ruff results
 above do not satisfy them. Record actual command, source identity, native exit
 status and durable evidence in each explicitly released window.

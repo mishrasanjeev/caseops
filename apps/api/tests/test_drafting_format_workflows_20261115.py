@@ -327,7 +327,7 @@ def test_invalid_new_deed_is_refused_over_http_without_persisted_side_effects(
         "title": "Synthetic deed", "template_type": "conveyancing_deed", "facts": facts,
     })
     assert response.status_code == 422, response.text
-    assert response.json()["detail"][0]["loc"] == ["body", "facts", "instrument_type"]
+    assert response.json()["errors"][0]["loc"] == ["body", "facts", "instrument_type"]
     assert "PRIVATE-FACT-NEVER-REFLECT" not in response.text
     assert calls == []
     assert _counts(matter_id) == before
@@ -352,7 +352,7 @@ def test_invalid_existing_variant_is_refused_before_admission_and_retained_gener
         "title": "Synthetic format choice", "template_type": template, "facts": facts,
     })
     assert refused.status_code == 422, refused.text
-    assert refused.json()["detail"][0]["loc"] == ["body", "facts", field]
+    assert refused.json()["errors"][0]["loc"] == ["body", "facts", field]
     assert "PRIVATE-UNSUPPORTED-FORMAT" not in refused.text
     assert _counts(matter_id) == before and calls == []
     admitted = client.post(f"/api/matters/{matter_id}/drafts", headers=headers, json={
@@ -371,7 +371,7 @@ def test_invalid_existing_variant_is_refused_before_admission_and_retained_gener
         f"/api/matters/{matter_id}/drafts/{draft_id}/generate", headers=headers, json={},
     )
     assert generated.status_code == 422, generated.text
-    assert generated.json()["detail"][0]["loc"] == ["body", "facts", field]
+    assert generated.json()["errors"][0]["loc"] == ["body", "facts", field]
     assert "PRIVATE-UNSUPPORTED-FORMAT" not in generated.text
     assert _counts(matter_id) == before and calls == []
     retained = client.get(f"/api/matters/{matter_id}/drafts/{draft_id}", headers=headers)
@@ -393,7 +393,7 @@ def test_required_governing_law_is_enforced_by_the_http_server_without_echoing_i
             "title": "Synthetic new format", "template_type": template_type, "facts": invalid,
         })
         assert response.status_code == 422, response.text
-        errors = response.json()["detail"]
+        errors = response.json()["errors"]
         assert any(error["loc"] == ["body", "facts", "governing_law"] for error in errors)
         assert all("input" not in error and "ctx" not in error for error in errors)
         assert "PRIVATE-LAW-INPUT" not in response.text

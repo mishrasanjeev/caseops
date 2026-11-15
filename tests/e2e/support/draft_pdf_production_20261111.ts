@@ -7,7 +7,7 @@ import { canonicalApiValidators } from "./canonical-api-validators";
 import { noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 import { allowedProductionDraftRead, assertReportedDraftSource, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
-import { assertDraftPdfRender } from "./draft_pdf_render_proof_20261111";
+import { assertDraftPdfRender, readDraftPdfTitle } from "./draft_pdf_render_proof_20261111";
 import { presentationFamilyFromManifest, type DraftPdfProfile } from "./draft_pdf_oracle_20261111";
 
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
@@ -147,7 +147,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       else await expect(page.getByTestId("court-profile-select").locator(`option[value="${resolvedProfile}"]`)).toHaveCount(1);
       const bytes = await response.body();
       expect(bytes.subarray(0, 5).equals(Buffer.from("%PDF-")), "Real PDF bytes").toBe(true);
-      return { hash: hash(bytes), bytes: bytes.length, profile: resolvedProfile };
+      return { hash: hash(bytes), bytes: bytes.length, profile: resolvedProfile,
+        pdfTitle: source.presentationFamily ? await readDraftPdfTitle(bytes) : undefined };
     };
     const memoryDownload = async (expected: { hash: string; bytes: number }, count: number, profile?: string) => {
       const checked = receipt();
@@ -164,7 +165,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     };
     stage = "auto-profile-parity";
     const auto = await checkedPdf(initial);
-    const autoPages = await assertDraftPdfRender(page, profileFor(auto.profile), source, hasTouch);
+    const autoPages = await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch);
     await memoryDownload(auto, 1);
     stage = "selected-profile-parity";
     await expect(page.getByTestId("court-profile-select").locator('option[value="generic"]')).toHaveCount(1);
@@ -172,7 +173,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await page.getByTestId("court-profile-select").selectOption("generic");
     const selected = await checkedPdf(await selectedPdf, "generic");
     expect(auto.profile === "generic" || selected.hash !== auto.hash, "A different resolved preset changes the exported snapshot").toBe(true);
-    const selectedPages = await assertDraftPdfRender(page, profileFor(selected.profile), source, hasTouch);
+    const selectedPages = await assertDraftPdfRender(page, profileFor(selected.profile), { ...source, pdfTitle: selected.pdfTitle }, hasTouch);
     await memoryDownload(selected, 2, "generic");
     stage = "reload-parity";
     pdfActionAllowed = false;
@@ -186,7 +187,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     pdfActionAllowed = true;
     await page.getByRole("tab", { name: "PDF preview" }).click();
     expect((await checkedPdf(await reloadedPdf)).hash === auto.hash, "Reload preserves automatic-profile bytes").toBe(true);
-    expect(await assertDraftPdfRender(page, profileFor(auto.profile), source, hasTouch)).toBe(autoPages);
+    expect(await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch)).toBe(autoPages);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
     await unchanged();
     await release();

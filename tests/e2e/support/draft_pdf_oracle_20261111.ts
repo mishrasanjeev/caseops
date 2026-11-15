@@ -4,7 +4,7 @@ export type DraftPdfProfile = {
   margin_left_mm: number; margin_right_mm: number; margin_top_mm: number; margin_bottom_mm: number;
   page_number_format: string;
 };
-export type DraftPdfSource = { title: string; body: string; citations: string[]; reviewRequired?: boolean; presentationFamily?: string };
+export type DraftPdfSource = { title: string; body: string; citations: string[]; reviewRequired?: boolean; presentationFamily?: string; pdfTitle?: string };
 export type DraftPdfRun = { text: string; left: number; top: number; right: number; bottom: number; contrast: number; darkPixels: number };
 export type DraftPdfPageProbe = { width: number; height: number; runs: DraftPdfRun[] };
 
@@ -69,7 +69,8 @@ export function assessDraftPdf(probes: DraftPdfPageProbe[], profile: DraftPdfPro
   }
   result.sourceComplete = body.length > 0 && boundary >= 0 && renderedBody.startsWith(body);
   result.titleComplete = Boolean(canonicalDraftText(source.title))
-    && (source.presentationFamily ? renderedBody : actual.slice(0, Math.max(0, boundary))).includes(canonicalDraftText(source.title));
+    && (source.presentationFamily ? source.pdfTitle === source.title
+      : actual.slice(0, Math.max(0, boundary)).includes(canonicalDraftText(source.title)));
   let tail = result.sourceComplete ? renderedBody.slice(body.length) : "";
   const authorities = tail.indexOf(canonicalDraftText("Authorities cited"));
   result.citationsComplete = source.citations.length === 0 || authorities >= 0;

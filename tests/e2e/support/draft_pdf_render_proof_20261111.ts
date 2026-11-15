@@ -2,6 +2,23 @@ import { expect, type Page } from "@playwright/test";
 
 import { assessDraftPdf, collectDraftPdfPage, type DraftPdfPageProbe, type DraftPdfProfile, type DraftPdfSource } from "./draft_pdf_oracle_20261111";
 
+export async function readDraftPdfTitle(bytes: Uint8Array): Promise<string> {
+  // Decode the received bytes, independently of the canvas and saved DTO.
+  // Keep this dependency deferred until an actual PDF has been requested.
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useSystemFonts: false });
+  try {
+    const document = await task.promise;
+    const { info } = await document.getMetadata();
+    if (!info || typeof info !== "object" || !("Title" in info) || typeof info.Title !== "string") {
+      throw new Error("PDF title metadata is absent.");
+    }
+    return info.Title;
+  } finally {
+    await task.destroy();
+  }
+}
+
 export async function assertDraftPdfRender(
   page: Page,
   profile: DraftPdfProfile,
@@ -32,7 +49,7 @@ export async function assertDraftPdfRender(
   const assessment = assessDraftPdf(probes, profile, source);
   // Boolean assertions keep private draft text out of test failure reports.
   expect(assessment.sourceComplete, "All persisted source text appears in order across printable pages").toBe(true);
-  expect(assessment.titleComplete, "Persisted title appears in the PDF").toBe(true);
+  expect(assessment.titleComplete, "Persisted title matches the PDF's presentation contract").toBe(true);
   expect(assessment.citationsComplete, "All recorded citation text appears after the source body").toBe(true);
   expect(assessment.pagination, "Every PDF page has the expected pagination").toBe(true);
   expect(assessment.pageContent, "Every PDF page has meaningful non-footer content").toBe(true);

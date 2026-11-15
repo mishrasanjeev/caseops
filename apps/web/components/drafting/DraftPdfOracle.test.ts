@@ -12,9 +12,20 @@ const probe = (runs: DraftPdfRun[], footer = "Page 1 of 1"): DraftPdfPageProbe =
 const full = () => probe([run(source.title, 0.11), run(notice, 0.16), run(source.body, 0.23), run("Authorities cited", 0.4), run(source.citations[0], 0.45)]);
 
 describe("BUG001 complete source/geometry/contrast oracle", () => {
+  it("keeps a saved internal title in PDF metadata while the legal body uses its own caption", () => {
+    const body = "Gift deed\nRECITALS\nSupplied transaction.\nEXECUTION\n[Signature]";
+    const source = { title: "Client A property transfer review", body, citations: [],
+      presentationFamily: "deed", pdfTitle: "Client A property transfer review" };
+    const page = probe([run("Lawyer review required before signing, registration or service.", 0.11),
+      run(body, 0.2)]);
+    expect(Object.values(assessDraftPdf([page], profile, source)).every(Boolean)).toBe(true);
+    expect(assessDraftPdf([page], profile, { ...source, pdfTitle: "Another saved title" }).titleComplete).toBe(false);
+    expect(assessDraftPdf([page], profile, { ...source, pdfTitle: undefined }).titleComplete).toBe(false);
+  });
+
   it("checks a new deed's own title and complete body after its document review notice", () => {
     const body = "Gift deed\nRECITALS\nSupplied transaction.\nEXECUTION\n[Signature]";
-    const source = { title: "Gift deed", body, citations: ["SYNTHETIC CITATION"], presentationFamily: "deed" };
+    const source = { title: "Gift deed", body, citations: ["SYNTHETIC CITATION"], presentationFamily: "deed", pdfTitle: "Gift deed" };
     const page = probe([run("Lawyer review required before signing, registration or service.", 0.11),
       run(body, 0.2), run("Authorities cited", 0.4), run(source.citations[0], 0.45)]);
     expect(Object.values(assessDraftPdf([page], profile, source)).every(Boolean)).toBe(true);

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DraftStatusLiteral = Literal[
     "draft",
@@ -81,7 +81,16 @@ class DraftEditRequest(BaseModel):
     body: str = Field(min_length=1, max_length=524_288)
 
 
-class DraftVersionRecord(BaseModel):
+class _PersistedDraftRecord(BaseModel):
+    @field_validator("created_at", "updated_at", mode="after", check_fields=False)
+    @classmethod
+    def persisted_utc(cls, value: datetime) -> datetime:
+        # These persistence columns are UTC. SQLite drops their offset on read;
+        # freshly created and reloaded records must have the same wire value.
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+class DraftVersionRecord(_PersistedDraftRecord):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -99,7 +108,7 @@ class DraftVersionRecord(BaseModel):
     created_at: datetime
 
 
-class DraftReviewRecord(BaseModel):
+class DraftReviewRecord(_PersistedDraftRecord):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -112,7 +121,7 @@ class DraftReviewRecord(BaseModel):
     created_at: datetime
 
 
-class DraftRecord(BaseModel):
+class DraftRecord(_PersistedDraftRecord):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
