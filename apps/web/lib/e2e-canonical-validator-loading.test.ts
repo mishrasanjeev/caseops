@@ -10,13 +10,14 @@ import { expect, it, vi } from "vitest";
 import * as draftPolicy from "../../../tests/e2e/support/draft_pdf_production_policy_20261111";
 
 it.each([
-  { file: "support/draft_pdf_production_20261111.ts", validators: ["authContext", "draftSchema"] },
-  { file: "ram-2026-10-22-drafting.prod.spec.ts", validators: ["authContext", "draftSchema"] },
-  { file: "ram-2026-11-11-bugs.spec.ts", validators: ["authContext", "authSession"] },
-])("keeps $file canonical validators on the verified Playwright TypeScript loader path", ({ file, validators }) => {
-  const source = ts.createSourceFile(file, readFileSync(
-    new URL(`../../../tests/e2e/${file}`, import.meta.url), "utf8",
-  ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  { file: "support/draft_pdf_production_20261111.ts", validators: ["authContext", "draftSchema"],
+    url: new URL("../../../tests/e2e/support/draft_pdf_production_20261111.ts", import.meta.url) },
+  { file: "ram-2026-10-22-drafting.prod.spec.ts", validators: ["authContext", "draftSchema"],
+    url: new URL("../../../tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", import.meta.url) },
+  { file: "ram-2026-11-11-bugs.spec.ts", validators: ["authContext", "authSession"],
+    url: new URL("../../../tests/e2e/ram-2026-11-11-bugs.spec.ts", import.meta.url) },
+])("keeps $file canonical validators on the verified Playwright TypeScript loader path", ({ file, validators, url }) => {
+  const source = ts.createSourceFile(file, readFileSync(url, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const nodes: ts.Node[] = [];
   function visit(node: ts.Node) {
     nodes.push(node);
