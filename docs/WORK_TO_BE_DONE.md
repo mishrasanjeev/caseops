@@ -4133,3 +4133,26 @@ actual qualification/promotion evidence. Android14/final15 and all83 IDs remain
 unchanged. Focused22 iOS/23 Android/36 packaging contract tests passed; complete affected
 replay is incomplete because two modules need this clone's uninstalled dependencies.
 Full source/native verification remains required; no new native or store credit. See `docs/mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md`.
+
+
+### 2026-11-15 — native WebDriver constructor isolation and host-tool HOLD
+
+J20/M22, US-MOB-01/02/08: **Partially implemented / Partially fixed; release NO-GO**.
+All six native WebDriver constructors now use the existing shared no-paid marker
+on their own HTTP transport. Exact other option/capability/retry/deadline bytes,
+83 native IDs/roles, Android14 and final15 gates are preserved. A real pinned
+WebdriverIO/owned-loopback reproduction received no marker before the patch;
+the corrected 30-case receive/error/lost-acknowledgement matrix passes, as does
+the complete 469-case tooling module. These are transport/source proofs, not
+new-source native acceptance. Earlier fixture refusals and socket-close evidence
+remain retained; final committed source/full21/CI/native/hardware gates are due.
+
+Separate host bundletool1.18.3 qualification is HOLD: the audit owner confirmed
+Guava32.0.1-jre GHSA-xxph-c9ww-hj94/CVE-2026-102554 and jose4j0.9.5
+GHSA-3677-xxcr-wjqv/CVE-2024-29371; protobuf-java3.22.3
+GHSA-735f-pc8j-v9w8/CVE-2024-7254 is also primary-confirmed (<3.25.5 fixed).
+The selected official3.25.9 input has registry/OSV0; the host-tool repair itself
+has not passed closure/smoke.
+The unshipped private host-tool repair is outside this repo; actual closure/smoke
+are pending, without an app-vulnerability or distribution claim. See
+[dated transport proof and immutable host-tool plan](mobile/NATIVE_WEBDRIVER_ISOLATION_2026-11-15.md).

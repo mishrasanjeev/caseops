@@ -15,7 +15,7 @@ import { authenticate, browserOrigin } from '../../apps/mobile/e2e/browser-hando
 import { IOS_FILE_FACT_RESPONSE_ATTRIBUTES } from '../../apps/mobile/e2e/ios-files.mjs';
 import { find,visible,selector,dispatchNativeClick } from '../../apps/mobile/e2e/native-ui.mjs';
 import { validateFixtureCredentials, validateLocalQAActor, validateLocalQABuildReceipt } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { Journal,binaryHash,localJson,localUrl,reconcileResults,safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { Journal,binaryHash,localJson,localUrl,reconcileResults,safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline,validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { appiumSessionEvent,configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
 import { androidSessionTransport,verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
@@ -179,7 +179,7 @@ export async function runQueuePrivacy(q){
    journal.write({type:'phase_started',id,phase:'setup'});
    try{
     assert.equal(cleanupUncertain,false);assert.deepEqual(sourceSnapshot(ROOT),a.source);assert.equal(qpHarnessFingerprint(),q.expectedHarnessFingerprint);assert.deepEqual(observeLocalQAInstalled(a.fixture,q.platform,q.expectedBinaryHash,process.env),a.actual);
-    const f=a.members[0].fixture;requested=true;driver=await remote({hostname:url.hostname,port:Number(url.port)||4723,protocol:url.protocol.slice(0,-1),path:url.pathname,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:60000,
+    const f=a.members[0].fixture;requested=true;driver=await remote({ headers: { [MARKER_HEADER]: MARKER },hostname:url.hostname,port:Number(url.port)||4723,protocol:url.protocol.slice(0,-1),path:url.pathname,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:60000,
      capabilities:{platformName:q.platform==='ios'?'iOS':'Android','appium:automationName':q.platform==='ios'?'XCUITest':'UiAutomator2','appium:udid':f.udid,'appium:deviceName':f.deviceName,'appium:platformVersion':f.platformVersion,'appium:noReset':true,'appium:newCommandTimeout':60,...transport.capabilities,
       ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000,'appium:shouldUseCompactResponses':false,'appium:elementResponseAttributes':IOS_FILE_FACT_RESPONSE_ATTRIBUTES}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})}});
     sessionId=driver.sessionId;journal.write({...appiumSessionEvent(sessionId,'created'),id});if(q.platform==='android')verifyAndroidSessionTransport(f,q.platform,driver.capabilities);await configureNativeDriver(driver, q.platform, event => journal.write({ ...event, id }));await driver.switchContext('NATIVE_APP');

@@ -17,7 +17,7 @@ import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { appiumSessionEvent, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
-import { binaryHash, Journal, localJson, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, Journal, localJson, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { OBSERVER_IDENTITY, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy } from './android-files-privacy.mjs';
@@ -310,7 +310,7 @@ export async function runAndroidFiles() {
   const filesState = { uploads: {} };
   await executeAndroidFilesCases({ filesState, record: event => journal.write(event),
     beforeCase: async () => { assert.equal(preflight, true, 'ANDROID_FILES_PREFLIGHT_FAILED'); await runtimeFence(); },
-    createDriver: () => remote({ hostname: transport.appiumUrl.hostname, port: Number(transport.appiumUrl.port), path: '/', protocol: 'http',
+    createDriver: () => remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: transport.appiumUrl.hostname, port: Number(transport.appiumUrl.port), path: '/', protocol: 'http',
       logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000, capabilities: { platformName: 'Android',
         'appium:automationName': 'UiAutomator2', 'appium:deviceName': fixture.deviceName, 'appium:platformVersion': fixture.platformVersion,
         'appium:udid': fixture.udid, 'appium:appPackage': fixture.appId, 'appium:noReset': true, 'appium:dontStopAppOnReset': true,

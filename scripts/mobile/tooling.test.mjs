@@ -6619,3 +6619,41 @@ test('Firefox settled gesture releases acknowledged input after outer expiry wit
   assert.equal(fake.records.length,before);
   assert.equal(fake.clicks.includes('connect'),false);
 });
+
+// This is an independent source/option gate. The real pinned-WebdriverIO wire
+// matrix is scripts/mobile/fixtures/native-webdriver-transport.mjs and is executed
+// separately with CASEOPS_MOBILE_TOOLING_HOME; it is never called native credit.
+import { NATIVE_WEBDRIVER_SITES, constructorCalls, nativeConstructorInventory,
+  nativeConstructorOptions } from './fixtures/native-webdriver-constructor.mjs';
+
+test('every native runner constructor is included in the six-site isolation inventory', () => {
+  assert.equal(nativeConstructorInventory().length, 6);
+  assert.equal(NATIVE_WEBDRIVER_SITES.reduce((count, site) => count + site.platforms.length, 0), 10);
+});
+
+test('each actual native WebDriver constructor preserves the marker, capabilities and transport bounds', () => {
+  for (const site of NATIVE_WEBDRIVER_SITES) for (const platform of site.platforms) {
+    const value = nativeConstructorOptions(site, platform, 'http://127.0.0.1:19321/'), { options } = value;
+    assert.deepEqual(JSON.parse(JSON.stringify(options.headers)), { [MARKER_HEADER]: MARKER });
+    assert.equal(options.connectionRetryCount, 0); assert.equal(options.connectionRetryTimeout, site.timeout);
+    assert.equal(options.logLevel, 'silent'); assert.equal(options.capabilities.platformName, platform === 'ios' ? 'iOS' : 'Android');
+    assert.equal(options.capabilities['appium:automationName'], platform === 'ios' ? 'XCUITest' : 'UiAutomator2');
+    assert.equal(options.capabilities['appium:udid'], value.fixture.udid); assert.equal(options.capabilities['appium:noReset'], true);
+    if (['run-native.mjs', 'run-client-extensions.mjs', 'run-v1-workflows.mjs'].includes(site.file)) assert.equal(options.capabilities, value.capabilities);
+    else {
+      assert.equal(options.capabilities['appium:deviceName'], value.fixture.deviceName);
+      assert.equal(options.capabilities['appium:platformVersion'], value.fixture.platformVersion);
+      assert.equal(options.capabilities['appium:newCommandTimeout'], 60);
+      if (site.file !== 'run-ios-files.mjs') for (const [key, fact] of Object.entries(value.transportCapabilities)) assert.equal(options.capabilities[key], fact);
+    }
+    assert.match(value.source, /import\s*\{[^}]*\bMARKER\b[^}]*\}\s*from\s*['"]\.\.\/\.\.\/apps\/mobile\/e2e\/support\.mjs['"]/);
+    assert.match(value.source, /import\s*\{[^}]*\bMARKER_HEADER\b[^}]*\}\s*from\s*['"]\.\.\/\.\.\/apps\/mobile\/e2e\/support\.mjs['"]/);
+  }
+});
+
+test('native constructor extraction refuses ambiguous or non-object calls', () => {
+  assert.equal(constructorCalls('const driver = remote({ capabilities: {} });', 'fixture.mjs').length, 1);
+  assert.throws(() => constructorCalls('remote(options);', 'fixture.mjs'), /ACTUAL_NATIVE_OPTIONS_OBJECT_REQUIRED/);
+  assert.throws(() => constructorCalls('remote({}, {});', 'fixture.mjs'), /EXACT_NATIVE_REMOTE_ARGUMENT_REQUIRED/);
+  assert.throws(() => nativeConstructorOptions(NATIVE_WEBDRIVER_SITES[0], 'android', 'https://example.com/'), /OWNED_LOOPBACK_WEBDRIVER_PEER_REQUIRED/);
+});

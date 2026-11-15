@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { delta, noNotePostRetried, prepareScenario, scenarios, traffic } from '../../apps/mobile/e2e/journeys.mjs';
 import { admitApplication, FixtureUnavailable, loadOwnerControls, prepareOwnerControlsForCase, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { collect, harnessFingerprint, inventory } from '../../apps/mobile/e2e/suite.mjs';
-import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
@@ -168,7 +168,7 @@ if (mode === '--collect') {
         inventory.cases.find((item) => item.id === scenario.id).ownerCapabilities || []);
       if (ownerReadiness) journal.write({ type: 'owner_worker_prepared', id, status: 'passed',
         evidenceSha256: ownerReadiness.evidenceSha256 });
-      driver = await remote({ hostname: appiumUrl.hostname, port: Number(appiumUrl.port) || 4723,
+      driver = await remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: appiumUrl.hostname, port: Number(appiumUrl.port) || 4723,
         protocol: appiumUrl.protocol.slice(0, -1), path: appiumUrl.pathname, capabilities,
         logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000 });
       assert.ok(driver.sessionId, 'NATIVE_SESSION_MISSING');

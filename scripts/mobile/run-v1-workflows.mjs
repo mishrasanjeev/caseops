@@ -14,7 +14,7 @@ import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile
 import { attestAndroidBinary, attestLocalQAAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { validateBuildReceipt, validateNativeFixtureAuthentication, admitApplication, admitLocalQAApplication } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { binaryHash, localJson, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, localJson, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { traffic, delta } from '../../apps/mobile/e2e/journeys.mjs';
@@ -357,7 +357,7 @@ export async function runV1(config) {
           'appium:noReset': true, 'appium:newCommandTimeout': 60, ...transport.capabilities,
           ...(config.platform === 'ios' ? { 'appium:bundleId': fixture.appId, 'appium:includeSafariInWebviews': true, 'appium:webviewConnectTimeout': 20000 }
             : { 'appium:appPackage': fixture.appId, 'appium:app': fixture.appPath, 'appium:dontStopAppOnReset': true, 'appium:ensureWebviewsHavePages': true, 'appium:enableWebviewDetailsCollection': true }) };
-        driver = await remote({ hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1), path: appium.pathname,
+        driver = await remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1), path: appium.pathname,
           logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: V1_BUDGETS.transportMs, capabilities });
         ownedSessions.add(driver);
         journal.write({ ...appiumSessionEvent(driver.sessionId, 'created'), id });

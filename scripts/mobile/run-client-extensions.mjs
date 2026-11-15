@@ -16,7 +16,7 @@ import { requireClientExtensionRequest, validateClientExtensionFixture } from '.
 import { ClientExtensionUnavailable, account, signOut, cameraPrivacy } from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import { readV1Member } from '../../apps/mobile/e2e/v1-workflows-credentials.mjs';
 import { validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
-import { binaryHash, localJson, Journal, reconcileResults } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, localJson, Journal, reconcileResults, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { configureNativeDriver, appiumSessionEvent } from '../../apps/mobile/e2e/run-state.mjs';
 import { authenticate } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { home } from '../../apps/mobile/e2e/native-ui.mjs';
@@ -192,7 +192,7 @@ export async function runClientExtensions(q,dependencies={}) {
       if(q.platform==='android')assert.equal(url.href,transport.appiumUrl.href,'CX_ANDROID_TRANSPORT_BINDING_REQUIRED');
       const capabilities={platformName:q.platform==='ios'?'iOS':'Android','appium:automationName':q.platform==='ios'?'XCUITest':'UiAutomator2','appium:udid':f.udid,'appium:deviceName':f.deviceName,'appium:platformVersion':f.platformVersion,'appium:noReset':true,'appium:autoLaunch':false,'appium:newCommandTimeout':60,...transport.capabilities,
         ...(q.platform==='ios'?{'appium:bundleId':f.appId,'appium:wdaLocalPort':q.wdaPort,'appium:includeSafariInWebviews':true,'appium:webviewConnectTimeout':20000}:{'appium:appPackage':f.appId,'appium:dontStopAppOnReset':true,'appium:ensureWebviewsHavePages':true,'appium:enableWebviewDetailsCollection':true})};
-      sessionUnknown=true;const driver=await remote({hostname:url.hostname,port:Number(url.port),protocol:url.protocol.slice(0,-1),path:url.pathname,capabilities,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:10000});sessionUnknown=false;
+      sessionUnknown=true;const driver=await remote({ headers: { [MARKER_HEADER]: MARKER },hostname:url.hostname,port:Number(url.port),protocol:url.protocol.slice(0,-1),path:url.pathname,capabilities,logLevel:'silent',connectionRetryCount:0,connectionRetryTimeout:10000});sessionUnknown=false;
       active=driver;sessions.push(driver.sessionId);write({...appiumSessionEvent(driver.sessionId,'created'),id:q.platform+':'+scenario.id});
       if(q.platform==='android')verifyAndroidSessionTransport(f,q.platform,driver.capabilities);
       await configureNativeDriver(driver, q.platform, event => write({ ...event, id: q.platform + ':' + scenario.id }));

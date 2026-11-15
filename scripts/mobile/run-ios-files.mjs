@@ -13,7 +13,7 @@ import { restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { FixtureUnavailable, validateBuildReceipt, validateCoreFixture } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { appiumSessionEvent } from '../../apps/mobile/e2e/run-state.mjs';
-import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, Journal, localJson, localUrl, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { attestIosFilesContainers, snapshotIosFilesPrivacy } from './ios-files-privacy.mjs';
@@ -220,7 +220,7 @@ export async function runIosFiles() {
       const installed = execFileSync('xcrun', ['simctl', 'get_app_container', fixture.udid, fixture.appId, 'app'], { encoding: 'utf8', timeout: 10000 }).trim();
       assert.equal(binaryHash(installed), artifactHash, 'INSTALLED_BINARY_CHANGED');
       sessionRequested = true;
-      driver = await remote({ hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1),
+      driver = await remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: appium.hostname, port: Number(appium.port) || 4723, protocol: appium.protocol.slice(0, -1),
         path: appium.pathname, logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000,
         capabilities: { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:deviceName': fixture.deviceName,
           'appium:platformVersion': fixture.platformVersion, 'appium:udid': fixture.udid, 'appium:bundleId': fixture.appId,
