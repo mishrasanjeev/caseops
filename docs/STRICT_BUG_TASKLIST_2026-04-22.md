@@ -14,6 +14,13 @@ The failed2a results remain failed. Do not certify the next source from2a's
 passing sibling jobs or promote a local missing-Expo-dependency refusal to a
 successful native-source test.
 
+C93's full shared105-case Python consumer exposed another exact expected-set
+omission for the older AST input (104P/1F); local positive subsets did not cover
+that consumer. Full21 refused before its canonical driver started, not a Docker
+application failure or pass. Align that finite set and its omission negatives,
+and cover all four admitted builder inputs in the deployment dirty-source fence
+with native-Git regression cases. No test-tree widening or dirty build is allowed.
+
 The completed2a-tree Linux component collected904cases with complete native
 setup/call/teardown and unchanged-source seals. All11 prior failures and the
 new import-isolation guard passed; the whole component still failed five cases.

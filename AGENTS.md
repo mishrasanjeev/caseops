@@ -8,7 +8,9 @@
   fixture; accepting that input type must still reject a nonmatching identity.
 - A colocated unit's source/AST reads are builder dependencies just like imports.
   Add their complete finite closure to web COPY, Docker and Cloud upload filters,
-  and the native upload inventory together. Keep them builder-only and prove the
+  upload inventory, fingerprint/trigger expectations and deployment dirty fence
+  together. Run the complete affected consumer modules before publication, not
+  only a positive subset. Keep them builder-only and prove the
   unchanged context canaries; a pure-unit pass cannot certify its build context.
 - A typed safe receipt must survive the actual runtime producer, native reporter
   before its first disk write, and downstream validator. A mocked annotation

@@ -4651,6 +4651,7 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
 
 _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
+    ("retained-draft-journey", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"),
     ("e2e-env", "tests/e2e/support/env.ts"),
     ("ram-bugs4", "tests/e2e/support/ram-bugs4.ts"),
     ("canonical-api-validators", "tests/e2e/support/canonical-api-validators.ts"),
@@ -4663,6 +4664,9 @@ _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("retained-assistant", "tests/e2e/support/retained-assistant-evidence.ts"),
     ("draft-pdf-oracle", "tests/e2e/support/draft_pdf_oracle_20261111.ts"),
     ("draft-pdf-production-policy", "tests/e2e/support/draft_pdf_production_policy_20261111.ts"),
+    ("draft-pdf-production-journey", "tests/e2e/support/draft_pdf_production_20261111.ts"),
+    ("draft-pdf-render-proof", "tests/e2e/support/draft_pdf_render_proof_20261111.ts"),
+    ("production-diagnostic-test", "tests/e2e/support/prod-diagnostic-test.ts"),
 )
 
 
