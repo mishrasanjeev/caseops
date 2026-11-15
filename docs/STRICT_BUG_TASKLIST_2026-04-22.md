@@ -6530,3 +6530,18 @@ modules ran. Full API Ruff passed. Real runtime-base component build and its
 offline uv/uvx0.13.5, three exact notice hashes and148-root Python CA checks
 also passed. Independent source review found no blocker. These are scoped
 proofs only; new-head hosted/fullDocker and production certification remain owed.
+
+The subsequent700 CI run failed API4's generic deployment-layer ordering test,
+which still searched for RUN pip install. My exact-version-only consumer audit
+missed that assertion. Original API4 retained1671P/265S/1F with native XML/journal
+and exit123; the full20 second admission refused before any canonical Docker
+process/app/PG/browser launch. Its source seal and earlier admission remain
+retained as a refused attempt, not a started or interrupted full regression.
+The ordering consumer now pins the same exact official COPY, asserts one
+bootstrap and its ordering after copy-mode policy but before the inherited API
+stage. Every existing frozen URL/hash/export/model-before-source assertion
+stays. A broader generic-command/stage consumer audit and complete deployment/
+packaging replacement modules are required before accepting the replacement
+candidate. A pending branch/CI publication is not passing verification. No
+runtime Dockerfile, app dependency, model, trust or production change is made
+by this follow-up; the successful700 image is cache preparation only.

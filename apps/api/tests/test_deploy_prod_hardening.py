@@ -1068,7 +1068,14 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     # Installed integrity checks require independent single-link files on Linux
     # as well as macOS, rather than UV's shared-cache hardlink default.
     assert "    UV_LINK_MODE=copy \\" in image
-    assert image.index("UV_LINK_MODE=copy") < image.index("RUN pip install")
+    bootstrap = (
+        "COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:"
+        "32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff "
+        "/uv /uvx /usr/local/bin/"
+    )
+    assert image.count(bootstrap) == 1
+    assert image.index("UV_LINK_MODE=copy") < image.index(bootstrap)
+    assert image.index(bootstrap) < image.index("FROM runtime-base AS api")
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image

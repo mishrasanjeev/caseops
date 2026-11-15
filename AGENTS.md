@@ -4402,3 +4402,8 @@ requirements when using the fallback.
   retaining each channel's own before/after mutation checks. A replacement-race
   test must actually replace the named file while the original descriptor stays
   open; a sharing violation or earlier metadata refusal is not race coverage.
+- An installer command change requires a consumer search for the generic
+  command and Dockerfile stage-order assumptions, not only its exact version
+  pin. Preserve frozen/hash-locked dependency and source-layer ordering tests;
+  run every affected deployment and packaging module together before certifying
+  the release. Publishing a pending branch is not a passing verification claim.
