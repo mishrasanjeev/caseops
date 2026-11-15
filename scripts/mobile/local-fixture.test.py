@@ -17,6 +17,7 @@ import ssl
 import socket
 import tempfile
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import call, patch
@@ -1365,7 +1366,16 @@ class GatewayTests(unittest.TestCase):
             "GET /api/auth/native/sessions",
         ]}))
         self.gateway = gateway_module.Gateway(self.root)
-        self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.handler())
+        completed = self.handler_completed = threading.Event()
+
+        class Server(gateway_module.ThreadingHTTPServer):
+            def finish_request(self, request, client_address):
+                try:
+                    super().finish_request(request, client_address)
+                finally:
+                    completed.set()
+
+        self.server = Server(("127.0.0.1", 0), self.gateway.handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.connection_type = http.client.HTTPConnection
@@ -1378,10 +1388,16 @@ class GatewayTests(unittest.TestCase):
         self.temp.cleanup()
 
     def request(self, method, path, headers=None, body=None):
+        deadline = time.monotonic() + 3
+        self.handler_completed.clear()
         with closing(self.connection_type("127.0.0.1", self.server.server_port, timeout=3)) as client:
             client.request(method, path, body=body, headers=headers or {})
             response = client.getresponse()
-            return response.status, response.read()
+            result = response.status, response.read()
+        # Response bytes can arrive before the handler publishes its final journal entry.
+        self.assertTrue(self.handler_completed.wait(max(0, deadline - time.monotonic())),
+                        "Gateway handler completion deadline exceeded")
+        return result
 
     def test_initial_fixture_route_inventory_adds_only_exact_compatibility_get(self):
         retained = {"GET /api/build", "GET /api/health", "GET /api/auth/me", "GET /api/auth/security",
@@ -1752,6 +1768,96 @@ class GatewayTests(unittest.TestCase):
         record = json.loads(Path(self.gateway.journal.name).read_text())
         self.assertNotIn("synthetic", json.dumps(record))
         self.assertNotIn("q=", json.dumps(record))
+
+    def test_response_waits_for_delayed_close_and_journal_publication_once(self):
+        deadline = time.monotonic() + 3
+        close_entered, release_close = threading.Event(), threading.Event()
+        response_read, wait_entered, finished = threading.Event(), threading.Event(), threading.Event()
+        outcomes, errors = [], []
+        wait = self.handler_completed.wait
+
+        class Client(self.connection_type):
+            def getresponse(self):
+                response = super().getresponse()
+
+                def read():
+                    data = response.read()
+                    response_read.set()
+                    return data
+
+                return SimpleNamespace(status=response.status, read=read)
+
+        def close():
+            close_entered.set()
+            if not release_close.wait(max(0, deadline - time.monotonic())):
+                raise RuntimeError("Synthetic upstream close was not released")
+
+        def wait_for_completion(timeout):
+            wait_entered.set()
+            return wait(timeout)
+
+        def request():
+            try:
+                outcomes.append(self.request("POST", "/api/auth/native/token?q=a%2Fb%26c", {
+                    gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                    "Content-Type": "application/json",
+                }, b'{"code":"synthetic"}'))
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                finished.set()
+
+        with patch.object(self, "connection_type", Client), patch.object(
+            self.handler_completed, "wait", side_effect=wait_for_completion
+        ), patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200
+            response.getheaders.return_value = [("content-type", "application/json")]
+            response.read.return_value = b'{"ok":true}'
+            transport.return_value.close.side_effect = close
+            caller = threading.Thread(target=request)
+            caller.start()
+            try:
+                for event in (close_entered, response_read, wait_entered):
+                    self.assertTrue(event.wait(max(0, deadline - time.monotonic())))
+                self.assertFalse(finished.is_set())
+                self.assertEqual(Path(self.gateway.journal.name).read_text(), "")
+            finally:
+                release_close.set()
+                caller.join(max(0, deadline - time.monotonic()))
+            self.assertFalse(caller.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(outcomes, [(200, b'{"ok":true}')])
+            transport.return_value.request.assert_called_once()
+            self.assertEqual(transport.return_value.request.call_args.args,
+                             ("POST", "/api/auth/native/token?q=a%2Fb%26c"))
+            self.assertEqual(transport.return_value.request.call_args.kwargs["body"], b'{"code":"synthetic"}')
+            self.assertEqual(transport.return_value.request.call_args.kwargs["headers"][gateway_module.MARKER_HEADER],
+                             gateway_module.MARKER)
+            records = [json.loads(line) for line in Path(self.gateway.journal.name).read_text().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertEqual((records[0]["method"], records[0]["route"], records[0]["status"]),
+                             ("POST", "/api/auth/native/token", 200))
+            self.assertNotIn("synthetic", json.dumps(records))
+            self.assertNotIn("q=", json.dumps(records))
+
+    def test_missing_handler_completion_fails_without_additional_transport(self):
+        with patch.object(self.handler_completed, "set"), patch.object(
+            gateway_module.http.client, "HTTPConnection"
+        ) as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200
+            response.getheaders.return_value = [("content-type", "application/json")]
+            response.read.return_value = b'{"ok":true}'
+            with self.assertRaisesRegex(AssertionError, "Gateway handler completion deadline exceeded"):
+                self.request("POST", "/api/auth/native/token", {
+                    gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                }, b'{"code":"synthetic"}')
+            transport.return_value.request.assert_called_once()
+            self.assertFalse(self.handler_completed.is_set())
+            records = [json.loads(line) for line in Path(self.gateway.journal.name).read_text().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertNotIn("synthetic", json.dumps(records))
 
     def test_browser_preflight_is_exact_and_origin_bounded(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:

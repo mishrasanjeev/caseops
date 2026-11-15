@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Receiving a complete HTTP response does not prove the server handler has
+  finished its cleanup or journal publication. Test fixtures that inspect those
+  effects must await actual handler completion within the existing request
+  budget. Regress delayed cleanup and missing completion deterministically;
+  never retry a mutation, read an empty journal as success, or change the
+  production response ordering merely to stabilize a test.
+
 - A proof hash must name its exact input. A complete Draft DTO fingerprint is
   not its UTF-8 body hash. Reconcile the persisted version and independently
   compute the named hash before pinning it; retain a mistaken historical label

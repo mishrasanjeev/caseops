@@ -2,6 +2,16 @@
 
 ## November15: Installer Consumer And Original Draft Proof Follow-up
 
+Complete331 deployment-hardening acceptance passed all397cases/1191phases,
+including the strict finite builder-only closure checks. Its separate shared
+fixture module retained104passes/one journal-read error: response bytes arrived
+before the handler's finally block published the journal. Keep that combined
+run failed. Synchronize only the test fixture with actual handler completion
+inside the existing three-second budget, and regress delayed cleanup plus
+missing completion with one transport attempt. Do not reorder the production
+gateway, retry a mutation, or call this test race a production workflow failure.
+The replacement full module, current CI/Docker and deployed proof remain open.
+
 Candidate2a723774's fresh CI exposed two further integration omissions before
 release: the new guard narrowed canonical Draft.matter_id from nullable to
 non-null in TypeScript, and its VM unit read two helpers omitted from the web
