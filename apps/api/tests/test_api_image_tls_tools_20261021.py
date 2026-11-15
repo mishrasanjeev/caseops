@@ -369,19 +369,26 @@ def test_uv_notice_reader_real_fd_refusals_are_bounded_and_closed(tmp_path, monk
     def opened(path, *args, **kwargs):
         if path == file and fault == "replacement" and sys.platform == "win32":
             import ctypes
+            import ctypes.wintypes
             import msvcrt
-            from ctypes import wintypes
 
             kernel = ctypes.WinDLL("kernel32", use_last_error=True)
             create = kernel.CreateFileW
-            create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                               ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-            create.restype = wintypes.HANDLE
-            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-            kernel.CloseHandle.restype = wintypes.BOOL
+            create.argtypes = [
+                ctypes.wintypes.LPCWSTR,
+                ctypes.wintypes.DWORD,
+                ctypes.wintypes.DWORD,
+                ctypes.c_void_p,
+                ctypes.wintypes.DWORD,
+                ctypes.wintypes.DWORD,
+                ctypes.wintypes.HANDLE,
+            ]
+            create.restype = ctypes.wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [ctypes.wintypes.HANDLE]
+            kernel.CloseHandle.restype = ctypes.wintypes.BOOL
             # Allow a real replacement race without closing the reader's FD.
             handle = create(str(path), 0x80000000, 0x1 | 0x2 | 0x4, None, 3, 0x00200000, None)
-            if handle in (None, wintypes.HANDLE(-1).value):
+            if handle in (None, ctypes.wintypes.HANDLE(-1).value):
                 raise ctypes.WinError(ctypes.get_last_error())
             try:
                 fd = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
