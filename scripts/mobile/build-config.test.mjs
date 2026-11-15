@@ -175,7 +175,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
     'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs',
-    'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs'];
+    'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs', 'scripts/mobile/ios-https-qualification.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -805,6 +805,8 @@ test('native source binds production HTTPS qualification helpers and policy byte
     'scripts/mobile/android-sdk-xml.mjs',
     'scripts/mobile/android-https-qualification.mjs',
     'scripts/mobile/android-https-subject.mjs',
+    'scripts/mobile/https-qualification-lease.mjs',
+    'scripts/mobile/ios-https-qualification.mjs',
     'scripts/mobile/android-qualification-apk.mjs',
     'scripts/mobile/android-qualification-promotion.mjs',
     'scripts/mobile/run-android-qualification.mjs',

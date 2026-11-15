@@ -49,4 +49,4 @@ export const clientExtensionScenarios=Object.freeze([
 ].map(Object.freeze));
 export function collectNativeClientExtensions(platform){return collectClientExtensions(platform,clientExtensionScenarios);}
 assert.deepEqual(clientExtensionScenarios.map(x=>x.id),clientExtensionInventory('ios').cases.map(x=>x.id));
-import { assertQualifiedColdState, terminateQualifiedApp } from '../../../scripts/mobile/android-https-qualification.mjs';
+import { assertQualifiedColdState, terminateQualifiedApp } from '../../../scripts/mobile/https-qualification-lease.mjs';

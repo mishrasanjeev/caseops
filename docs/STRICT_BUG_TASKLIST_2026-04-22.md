@@ -6785,3 +6785,16 @@ The original incomplete subject01 was not replayed. Native authentication and
 rendered QR remain unverified. Final source/security gates, native83/platform
 and store evidence remain due; old14179 native/build proof cannot transfer.
 See [contract and retained proof](mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md).
+
+### 2026-11-15 — iOS HTTPS qualification boundary (isolated candidate)
+
+J20/M22, US-MOB-01/02/08, CX28-LINK-05: **Partially implemented; Inconclusive; NO-GO**.
+A separate iOS/platform-facade candidate implements typed declarations and
+contract-only private-lease/physical-child ownership and finite cleanup interfaces.
+Default real admission still refuses before child creation: actual installed-byte
+attestation, real physical adapter, Orchestrum signing/profile and public AASA
+remain unavailable. Synthetic providers cannot enter the native runner or create
+actual qualification/promotion evidence. Android14/final15 and all83 IDs remain
+unchanged. Focused22 iOS/23 Android/36 packaging contract tests passed; complete affected
+replay is incomplete because two modules need this clone's uninstalled dependencies.
+Full source/native verification remains required; no new native or store credit. See `docs/mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md`.

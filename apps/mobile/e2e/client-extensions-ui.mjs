@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { find, findQuery, visible, selector, dispatchNativeClick, restart, input, backgroundAndResume } from './native-ui.mjs';
 import { CX_BUDGETS } from './client-extensions-inventory.mjs';
-import { dispatchQualifiedHttpsLink } from '../../../scripts/mobile/android-https-qualification.mjs';
+import { dispatchQualifiedHttpsLink } from '../../../scripts/mobile/https-qualification-lease.mjs';
 
 export class ClientExtensionUnavailable extends Error { constructor(code) { super(code); this.name='ClientExtensionUnavailable'; } }
 const operation=c=>{c.checkBudget?.(CX_BUDGETS.nativeReadMs);assert.ok(++c.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');};

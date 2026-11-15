@@ -23,6 +23,7 @@ import { home } from '../../apps/mobile/e2e/native-ui.mjs';
 import { openMatter } from '../../apps/mobile/e2e/journeys.mjs';
 import { observedSegment } from '../../apps/mobile/e2e/client-extensions-ui.mjs';
 import { observeAndroidHttpsQualification, withAndroidHttpsQualification } from './android-https-qualification.mjs';
+import { observeIosHttpsQualification, withIosHttpsQualification, validateIosQualificationDeclaration, iosQualificationDeadlines, iosQualificationFailure } from './ios-https-qualification.mjs';
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 
 const ROOT=path.resolve(fileURLToPath(new URL('../../',import.meta.url)));
@@ -31,7 +32,7 @@ const PUBLIC_FAILURES=new Set(['CX_EARLIER_OUTCOME_UNSAFE','CX_REQUIRED_PRIOR_CA
  'CX_NATIVE_CLEANUP_RESERVE','CX_VERIFIED_DOMAIN_AND_SIGNED_PROFILE_PENDING','CX_CAPTURE_EXCEEDS_FIXED_GATEWAY_POSITIVE_BOUND',
  'CX_ACTUAL_OS_RECIPE_REQUIRED','CX_OBSERVED_OS_BIOMETRIC_SIMULATION_REQUIRED','CX_ACTUAL_VERIFIED_HTTPS_ARTIFACT_REQUIRED',
  'CX_ANDROID_FINGERPRINT_OUTCOME_UNVERIFIED_NO_REPLAY','CX_ANDROID_FINGERPRINT_ADB_EVIDENCE_REQUIRED',
- 'CX_OPERATOR_OUTCOME_UNVERIFIED_NO_REPLAY','CX_OPERATOR_COMPLETION_DEADLINE','CX_SESSION_CREATE_OUTCOME_UNKNOWN','CX_INDEPENDENT_CLEANUP_UNVERIFIED','CX_OWNER_OUTCOME_UNKNOWN_NO_REPLAY']);
+ 'CX_OPERATOR_OUTCOME_UNVERIFIED_NO_REPLAY','CX_OPERATOR_COMPLETION_DEADLINE','CX_SESSION_CREATE_OUTCOME_UNKNOWN','CX_INDEPENDENT_CLEANUP_UNVERIFIED','CX_OWNER_OUTCOME_UNKNOWN_NO_REPLAY','QUAL_IOS_REAL_INSTALLED_ARTIFACT_ATTESTOR_UNAVAILABLE']);
 export const clientFailure=(error,fallback)=>PUBLIC_FAILURES.has(error?.message)?error.message:fallback;
 
 export async function admitClientExtensions(q,dependencies={}) {
@@ -58,6 +59,7 @@ export async function admitClientExtensions(q,dependencies={}) {
     assert.ok(total<=256*1024*1024,'QUAL_TOOL_CLOSURE_BYTE_BOUND');
   }
   const source={sourceSha:q.expectedSourceSha,sourceFingerprint:q.expectedSourceFingerprint,sourceDirty:false,inputFileCount:q.expectedInputFileCount};
+  if(q.iosHttpsQualification){assert.equal(q.platform,'ios','QUAL_IOS_ONLY');validateIosQualificationDeclaration(io.read(q.iosHttpsQualification),source);}
   assert.deepEqual(io.snapshot(ROOT),source);assert.equal(io.harness(ROOT),q.expectedHarnessFingerprint);
   const fixture=io.read(q.fixtureEvidence);validateClientExtensionFixture(fixture,q.platform);
   for(const observed of [fixture.cx.osRecipes,fixture.cx.nativeSelectors]){assert.equal(observed.observed,true);assert.equal(observed.platform,q.platform);assert.equal(observed.udid,fixture.udid);assert.equal(observed.binaryHash,q.expectedBinaryHash);assert.deepEqual(observed.appiumInventoryEvidence,q.appiumInventoryEvidence);}
@@ -210,6 +212,19 @@ export async function runClientExtensions(q,dependencies={}) {
           cleanupCharge:()=>{assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},
           charge:()=>{context.checkBudget(CX_BUDGETS.nativeReadMs);assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},record:context.record,
         }),action);
+      }
+      if(scenario.id==='CX28-LINK-05'&&q.platform==='ios'&&q.iosHttpsQualification){
+        context.withHttpsQualification=async action=>{try{return await withIosHttpsQualification(context,()=>observeIosHttpsQualification(read(q.iosHttpsQualification),{
+          source:{sourceSha:q.expectedSourceSha,sourceFingerprint:q.expectedSourceFingerprint,sourceDirty:false,inputFileCount:q.expectedInputFileCount},
+          now:io.now,...iosQualificationDeadlines(context.startedAt,q.leaseDeadlineMs),
+          charge:()=>{context.checkBudget(CX_BUDGETS.nativeReadMs);assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},
+          cleanupCharge:()=>{assert.ok(++context.nativeOperations<=CX_BUDGETS.nativeControls,'CX_NATIVE_OPERATION_BOUND');},
+        }),action);}catch(error){
+          const failure=iosQualificationFailure(error);
+          if(failure.captureRequiresProcessExit)runtimeRefusal=error;
+          if(failure.unavailable)throw new ClientExtensionUnavailable('QUAL_IOS_REAL_INSTALLED_ARTIFACT_ATTESTOR_UNAVAILABLE');
+          throw error;
+        }};
       }
       context.ensureAuthenticated=async(actor='member')=>{assert.ok(['member','second-company'].includes(actor));const member=admitted.members[actor==='member'?0:1];
         if(state.activeActor&&state.activeActor!==actor){await account(context);await signOut(context);}

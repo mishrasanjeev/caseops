@@ -79,6 +79,7 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
   const paths = ['apps/mobile', 'package.json', 'package-lock.json',
     'scripts/mobile/build-acceptance.mjs', 'scripts/mobile/android-sdk-xml.mjs',
     'scripts/mobile/android-https-qualification.mjs', 'scripts/mobile/android-https-subject.mjs',
+    'scripts/mobile/https-qualification-lease.mjs', 'scripts/mobile/ios-https-qualification.mjs',
     'scripts/mobile/android-qualification-apk.mjs', 'scripts/mobile/android-qualification-promotion.mjs',
     'scripts/mobile/run-android-qualification.mjs',
     'scripts/mobile/store-packaging-execution.mjs', 'scripts/mobile/store-packaging-inputs.mjs',

@@ -196,3 +196,59 @@ partially created account/failed attempt and original14179 APK remain historical
 no native result is transferred to this changed source. Both83-case inventories,
 all fixed deadlines, no-paid/TLS constructors, no-retry behavior and final store
 gates remain unchanged. No dependency or licence changes are introduced.
+
+## Isolated iOS qualification boundary — 2026-11-15
+
+J20/M22 / US-MOB-01/02/08 / unchanged **CX28-LINK-05**. **Partially
+implemented; Inconclusive; NO-GO**. This separate source candidate adds a
+platform dispatcher and a private iOS boundary. Android's existing private
+lease, fourteen qualification gates and fifteen final gates are unchanged.
+The canonical83 IDs remain core23/files17/queue2/client24/V1 17.
+
+The iOS declaration binds the source, production bundle and public HTTPS URL,
+real signing inputs (separate Team and Application Identifier Prefix),
+iphoneos artifact, physical-device identity, public AASA, normal production
+subject and separate child-session request. Declaration validation grants no
+native authority. **The default real observer refuses before creating a child
+until a supported independently measured installed-artifact attestor exists.**
+An installation acknowledgement/version, JSON `observed` flag, certificate
+label or ad-hoc Simulator signature cannot satisfy that prerequisite.
+
+Explicit contract-only unit providers exercise private lease ownership,
+acknowledged child creation, single cold/warm dispatch, deadline/cleanup,
+known404/full-empty session inventory and Simulator-parent restoration. They
+cannot enter the canonical native context or publish actual qualification or
+promotion evidence. Child creation with an unknown outcome requires process
+cleanup and remains incomplete. Both original and cleanup failures are retained,
+including primitive, false and frozen exceptions. No new dependencies are used.
+
+A future real provider must originate each ordinary external HTTPS open without
+a CaseOps bundle argument or `universalLinksOnly`; verify the actual receiver,
+current principal/workspace and exact matter twice. A strict Universal Links
+probe may corroborate association separately. A separate sender can move a warm
+receiver to background; the real provider must positively establish it remains
+alive through that transition. Browser fallback is not a positive result.
+[Apple's UIKit open contract](https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:))
+and [Universal Links diagnostics](https://developer.apple.com/documentation/technotes/tn3155-debugging-universal-links/)
+define these system boundaries. The existing HTTPS authentication guard and
+pinned SDK callback use iOS17.4+, matching
+[Apple's HTTPS callback API](https://developer.apple.com/documentation/authenticationservices/aswebauthenticationsession/callback/https(host:path:)).
+
+Real acceptance still requires Orchestrum's approved membership, actual
+Team/prefix/certificate/device profile, public AASA, connected trusted iPhone,
+supported installed-byte attestation and a real physical child-driver adapter.
+The Team-signed Simulator alternative remains unverified and is not admitted.
+Final App Store archives still need all fifteen final gates and their actual
+App Store distribution profile; no new iOS packaging shortcut is introduced.
+See [Apple's provisioning explanation](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles).
+This code boundary, unit results, Android evidence and historical Simulator app
+receipts earn zero new iOS native cases or store-submission credit. Current
+verification results must be recorded after the exclusive Android window ends.
+
+Focused verification: all22 new iOS contract tests,23 unchanged Android qualification
+tests and36 unchanged store-packaging execution tests actually passed. The complete
+affected five-module attempt remains incomplete: build-config/client-extension
+modules failed to start because this fresh self-contained clone has no installed
+`@expo/config`/`bplist-parser`. The failed report is retained; those modules are
+unexecuted. Canonical own-clone dependency installation and a complete replacement
+source gate remain required. No native/OS/store credit was earned.
