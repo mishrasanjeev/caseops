@@ -139,6 +139,60 @@ class GitFixture(unittest.TestCase):
 class ReviewedPublicVectorTests(GitFixture):
     """Public-vector review remains bound to one exact immutable origin span."""
 
+    def test_public_counsel_step_lookup_review_binds_only_its_immutable_span(self):
+        origin = "60cc453557b7fe0ab1b5dbb106997729e2402273"
+        path = "apps/mobile/e2e/v1-counsel-prerequisite-cases.mjs"
+        origin_path = "apps/mobile/e2e/v1-counsel-prerequisite.test.mjs"
+        fingerprint = f"{origin}:{origin_path}:generic-api-key:199"
+        policy = (ROOT / ".gitleaksignore").read_text().splitlines()
+        self.assertEqual(policy.count(fingerprint), 1)
+        self.assertFalse(any(line.startswith(path + ":") for line in policy))
+        original = scan.git(ROOT, "show", f"{origin}:{origin_path}").splitlines(keepends=True)[198]
+        self.assertEqual(hashlib.sha256(original).hexdigest(),
+                         "750b0f5b573323ce0208d0b132a29c1af8a79d4c3fa33a1af410ffa1bdc40e7c")
+        label = "-".join(("counsel", "assignment", "1"))
+        self.assertEqual(original.decode().strip(),
+                         f"invalid.steps.find(item => item.key === '{label}').body.counsel_id = invalidCounsel;")
+        current = scan.git(ROOT, "show", "HEAD:" + path).splitlines(keepends=True)
+        matches = [i + 1 for i, line in enumerate(current) if line == original]
+        self.assertEqual(len(matches), 1)
+        blame = scan.git(ROOT, "blame", "--line-porcelain", "-L",
+                         f"{matches[0]},{matches[0]}", "HEAD", "--", path)
+        self.assertEqual(blame.splitlines()[0].decode().split()[:3],
+                         [origin, "199", str(matches[0])])
+        self.assertIn(("filename " + origin_path).encode(), blame.splitlines())
+        config = (ROOT / ".gitleaks.toml").read_text()
+        self.assertNotIn(path, config)
+        self.assertNotIn(label, config)
+
+    def test_renamed_public_span_uses_original_path_and_changed_span_still_refuses(self):
+        public = 'fixture_key = ' + json.dumps("-".join(("counsel", "assignment", "1"))) + '\n'
+        self.write("record.txt", public)
+        origin = self.commit("public step label")
+        self.git("mv", "record.txt", "renamed.txt")
+        self.write(".gitleaksignore", f"{origin}:record.txt:generic-api-key:1\n")
+        renamed = self.commit("rename public fixture")
+
+        def check(head, suffix):
+            tree = self.root / (suffix + "-tree")
+            scan.tracked_tree(self.repo, head, tree)
+            output = self.root / (suffix + "-evidence")
+            output.mkdir()
+            finding = self.finding(head)
+            finding["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = "renamed.txt"
+            result = scan.tree_policy_provenance(self.repo, tree, [finding], output, head)
+            proof = json.loads((output / "tree-policy-provenance.json").read_text())
+            self.assertEqual(proof["findings"][0]["existing_fingerprint"],
+                             f"{origin}:record.txt:generic-api-key:1")
+            self.assertEqual(proof["findings"][0]["span_sha256"], hashlib.sha256(public.encode()).hexdigest())
+            return result
+
+        self.assertTrue(check(renamed, "renamed"))
+        self.write("renamed.txt", 'fixture_key = ' + json.dumps("-".join(("changed", "unreviewed", "fixture"))) + '\n')
+        changed = self.commit("changed span cannot inherit rename review")
+        with self.assertRaisesRegex(scan.ScanError, "unreviewed findings"):
+            check(changed, "changed")
+
     def test_repository_public_certifi_digest_review_binds_current_immutable_origin(self):
         path = "scripts/mobile/host-platform-trust.py"
         origins = {

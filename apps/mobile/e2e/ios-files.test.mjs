@@ -48,13 +48,35 @@ function fixture(t) {
   context.provider = { ...provider, evidence: evidence('picker', picker) };
   return { context, source, seed, uploads, evidence, picker };
 }
+// Models the pinned WDA expanded-response protocol, independently from the
+// locator's response validation. Existing scenario doubles still own their
+// exact controls, roles, visibility and geometry.
+function expandedFileResponses(driver) {
+  const controls = new Map();
+  driver.findElements = async (using, query) => {
+    assert.equal(using, '-ios predicate string');
+    const match = /^name == ("[^"\\]*") OR \(type == "XCUIElementTypeScrollView" AND visible == 1\)$/.exec(query);
+    assert.ok(match, 'EXACT_ATOMIC_FACT_QUERY_REQUIRED');
+    const targetId = JSON.parse(match[1]);
+    const found = [...await driver.$$('~' + targetId), ...await driver.$$('-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1')];
+    const result = [];
+    for (const element of found) {
+      controls.set(element.elementId, element);
+      result.push({ 'element-6066-11e4-a52e-4f735466cecf': element.elementId, ELEMENT: element.elementId,
+        'attribute/name': await element.getAttribute('name'), type: await element.getAttribute('type'),
+        displayed: await element.isDisplayed(), rect: await driver.getElementRect(element.elementId) });
+    }
+    return result;
+  };
+  driver.$ = async row => { const element = controls.get(row['element-6066-11e4-a52e-4f735466cecf']); assert.ok(element); return element; };
+}
 function measuredFileDriver(context, frameFor = () => ({ x: 20, y: 200, width: 362, height: 52 })) {
   const driver = context.driver, query = driver.$$.bind(driver), scrollId = 'measured-test-scroll';
   const callbacks = new Map();
   let sequence = 0;
   const scroll = { elementId: scrollId, isDisplayed: async () => true, getAttribute: async () => 'XCUIElementTypeScrollView' };
   driver.$$ = async (value) => {
-    if (value === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [scroll];
+    if ((value === '-ios predicate string:type == "XCUIElementTypeScrollView"' || value === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1')) return [scroll];
     const matches = (await query(value)).map(control => value.startsWith('~files-') ? { ...control, elementId: value.slice(1),
       getAttribute: async (key) => key === 'name' ? value.slice(1) : key === 'type'
         ? value === '~files-selection' ? 'XCUIElementTypeOther' : ['files-choose','files-upload','files-reload','files-selection-clear'].includes(value.slice(1)) ? 'XCUIElementTypeButton' : 'XCUIElementTypeStaticText'
@@ -71,6 +93,7 @@ function measuredFileDriver(context, frameFor = () => ({ x: 20, y: 200, width: 3
   };
   driver.getWindowRect = async () => ({ x: 0, y: 0, width: 402, height: 874 });
   driver.getElementRect = async (id) => id === scrollId ? { x: 0, y: 125, width: 402, height: 638 } : frameFor(id);
+  expandedFileResponses(driver);
 }
 
 test('separate frozen iOS files inventory reconciles all17 literal identities without changing Android or core', () => {
@@ -500,7 +523,7 @@ test('exact Files facts scroll from measured target and viewport geometry while 
     const scroll = { elementId: 'scroll', isDisplayed: async () => true, getAttribute: async () => 'XCUIElementTypeScrollView' };
     const context = { platform: 'ios', driver: {
       $$: async (query) => query === `~${id}` ? duplicate ? [target,target] : [target]
-        : query === '-ios predicate string:type == "XCUIElementTypeScrollView"' ? [scroll] : [],
+        : (query === '-ios predicate string:type == "XCUIElementTypeScrollView"' || query === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1') ? [scroll] : [],
       getWindowRect: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
       getElementRect: async (elementId) => elementId === 'scroll' ? viewport : ({ x: 127, y, width: 149, height: 51 }),
       waitUntil: async (condition, options) => { if (!await condition()) throw new Error(options.timeoutMsg); },
@@ -514,6 +537,7 @@ test('exact Files facts scroll from measured target and viewport geometry while 
         directions.push(direction); y += direction === 'up' ? shift : -shift;
       }, releaseActions: async () => {},
     } };
+    expandedFileResponses(context.driver);
     return { context, id, target, directions };
   };
   for (const [y, expected] of [[-79,['up','up']], [900,['down']]]) {
@@ -754,7 +778,7 @@ function textReaderDouble(t, options = {}) {
   });
   const context = { platform: 'ios', fixture: { gatewayUrl: 'https://127.0.0.1:8443', gatewayRunId: ledger.runId }, record: value => events.push(value), driver: {
     async $$(query) {
-      if (query === '-ios predicate string:type == "XCUIElementTypeScrollView"') return [control('scroll')];
+      if ((query === '-ios predicate string:type == "XCUIElementTypeScrollView"' || query === '-ios predicate string:type == "XCUIElementTypeScrollView" AND visible == 1')) return [control('scroll')];
       const id = query.startsWith('~') ? query.slice(1) : '';
       if (id.startsWith('files-')) return ui === 'files' ? [control(id)] : [];
       if (!id || ui !== 'viewer') return [];
@@ -794,6 +818,7 @@ function textReaderDouble(t, options = {}) {
       else assert.fail('UNEXPECTED_OFFLINE_NATIVE_DISPATCH');
     },
   } };
+  expandedFileResponses(context.driver);
   return { context, anchor, clicks, waits, events, ledger, polls: () => polls, startReader: () => { ui = 'viewer'; } };
 }
 
@@ -835,30 +860,17 @@ test('TXT readiness does not excuse unreadable or wrong content once the native 
 });
 
 
-test('iOS Files fact refuses a late identity read before any follow-up native request', async (t) => {
+test('iOS Files fact refuses a late native snapshot before any follow-up native request', async (t) => {
   let now = 0;
   const reads = [];
   t.mock.method(performance, 'now', () => now);
   const id = 'files-matter-code', type = 'XCUIElementTypeStaticText';
-  const target = {
-    elementId: 'files-fact',
-    async getAttribute(key) {
-      reads.push(key);
-      if (key === 'name') { now = 1506; return id; }
-      return type;
-    },
-    async isDisplayed() { reads.push('displayed'); return true; },
-  };
+  const query = 'name == '+JSON.stringify(id)+' OR (type == "XCUIElementTypeScrollView" AND visible == 1)';
   const context = { platform: 'ios', driver: {
-    $$: async (query) => { reads.push(query); return [target]; },
-    getElementRect: async () => { reads.push('element rect'); return { x: 0, y: 20, width: 200, height: 80 }; },
-    getWindowRect: async () => { reads.push('window rect'); return { x: 0, y: 0, width: 400, height: 800 }; },
-    waitUntil: async (condition, { timeout, interval }) => {
-      assert.equal(timeout, 1500);
-      assert.equal(interval, 150);
-      assert.equal(await condition(), true);
-    },
+    findElements: async (using, value) => { assert.equal(using,'-ios predicate string'); assert.equal(value,query); reads.push('native fact response'); now=1506;return []; },
+    getWindowRect: async () => { reads.push('window rect'); return { x:0,y:0,width:400,height:800 }; },
+    waitUntil: async (condition,{timeout,interval}) => { assert.equal(timeout,1500);assert.equal(interval,150);await condition(); },
   } };
   await assert.rejects(findIosFileFact(context, id, type), /IOS_FILES_FACT_NOT_VISIBLE/);
-  assert.deepEqual(reads, ['~files-matter-code', 'name']);
+  assert.deepEqual(reads, ['native fact response']);
 });

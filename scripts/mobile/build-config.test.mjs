@@ -102,7 +102,10 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
   assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
+  const protection = job.steps.find(step => step.name === 'Protect the exact pinned public npm archive on Windows');
+  assert.ok(protection && typeof protection.run === 'string');
   assert.deepEqual(commands, [
+    protection.run,
     'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund',
     'node ../../scripts/mobile/npm-tooling.mjs ls --all --json --long > installed-dependencies.json',
     'node ../../scripts/mobile/npm-tooling.mjs --cli-health > npm-cli-dependencies.json',
@@ -159,7 +162,7 @@ test('mobile CI selects every tooling module and audits before either platform e
   const expected = ['scripts/mobile/build-config.test.mjs', 'scripts/mobile/tooling.test.mjs',
     'scripts/mobile/local-owner-controls.test.mjs', 'apps/mobile/e2e/files-20261025.test.mjs',
     'apps/mobile/e2e/ios-files.test.mjs', 'apps/mobile/e2e/android-files.test.mjs',
-    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs',
+    'scripts/mobile/ios-browser-context.test.mjs', 'scripts/mobile/ios-native-locators.test.mjs', 'scripts/mobile/ios-files-facts.test.mjs',
     'scripts/mobile/ios-simulator-signing.test.mjs',
     'scripts/mobile/prepare-gateway-routes.test.mjs',
     'scripts/mobile/prepare-ios-local-run.test.mjs', 'scripts/mobile/ios-files-privacy.test.mjs',
@@ -171,7 +174,8 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
     'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
-    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs'];
+    'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs',
+    'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs', 'scripts/mobile/ios-https-qualification.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
@@ -183,6 +187,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     ['Verify QA-only Android observer merged manifest projection', 'python3 scripts/mobile/android-observer-manifest.test.py'],
     ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
     ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
+    ['Verify isolated nonbillable V1 entitlement authority', 'python3 scripts/mobile/local-v1-entitlements.test.py'],
     ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
     ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
     ['Verify independent queue and account-request inventory', 'python3 scripts/mobile/queue-privacy.test.py'],
@@ -372,6 +377,36 @@ test('mobile source CI installs the renderer browser and both locked dependency 
     NEXT_PUBLIC_CASEOPS_LOCAL_ACCEPTANCE: '1',
     NEXT_PUBLIC_APP_URL: 'https://127.0.0.1:3443',
   }, 'BUILT_BROWSER_MOCKS_REQUIRE_EXPLICIT_ISOLATED_POLICY_WITHOUT_PRODUCTION_CONFIG');
+  const mainCI = require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8'));
+  const canonicalRuntime = mainCI.jobs['e2e-projects'].steps.find(step => step.name === 'Verify Playwright Chromium runtime');
+  assert.ok(canonicalRuntime && canonicalRuntime.run.includes('await chromium.launch({ headless: true })'));
+  for (const job of ['source', 'browser-handoff']) {
+    const steps = workflow.jobs[job].steps;
+    const chromium = steps.findIndex(step => step.run === 'node scripts/mobile/npm-tooling.mjs --npx --no-install playwright install chromium');
+    const runtime = steps.findIndex(step => step.name === canonicalRuntime.name);
+    assert.ok(chromium >= 0 && runtime === chromium + 1, 'NATIVE_BROWSER_RUNTIME_REQUIRED_AFTER_DOWNLOAD');
+    assert.deepEqual(steps[runtime], canonicalRuntime, 'EXACT_CANONICAL_BROWSER_RUNTIME_CHECK_REQUIRED');
+    assert.equal(workflow.jobs[job]['runs-on'], mainCI.jobs['e2e-projects']['runs-on']);
+    assert.ok(!steps.some(step => /install-deps|--with-deps|apt-get|apt-mirrors/.test(step.run ?? '')));
+    for (const step of steps) assert.notEqual(step['continue-on-error'], true);
+    assert.ok(!Object.hasOwn(workflow.jobs[job].env, 'PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS'));
+  }
+  const dependencySteps = workflow.jobs['dependency-closure'].steps;
+  const protectedArchive = dependencySteps.findIndex(step => step.name === 'Protect the exact pinned public npm archive on Windows');
+  const dependencyInstall = dependencySteps.findIndex(step => step.run === 'node ../../scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund');
+  assert.ok(protectedArchive >= 0 && protectedArchive < dependencyInstall);
+  const protection = dependencySteps[protectedArchive];
+  assert.equal(protection.if, "runner.os == 'Windows'");
+  assert.equal(protection.shell, 'powershell');
+  assert.ok(protection.run.includes('[IO.FileShare]::Read'));
+  assert.ok(protection.run.includes('$stream.SetAccessControl($acl)'));
+  assert.ok(protection.run.includes('$stream.GetAccessControl().AreAccessRulesProtected'));
+  assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
+  assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
+  assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
+  assert.ok(protection.run.includes("'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'"));
+  assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
+  assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });
 
 const resourceDump = `Package name=ai.caseops.mobile.dev.localacceptance id=7f
@@ -520,7 +555,7 @@ test('Windows native staging is short, outside sources, module-isolated and part
 });
 
 function fixture(t) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-'));
+  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-build-config-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'public-ca.pem');
   writeFileSync(file, certificate);
@@ -765,6 +800,47 @@ const snapshotClosed = control => { assert.ok(control.opened.size > 0); for (con
 test('selected source keeps legacy sorted path-NUL-digest-NUL bytes and the four-field DTO', t => {
   const root = snapshotFixture(t), actual = sourceSnapshot(root);
   assert.deepEqual(actual, { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), sourceFingerprint: '99c6e5b1a2dde7671c37f2c071145645392496402ea072cfa547c154ab64abf2', sourceDirty: false, inputFileCount: 2 });
+});
+test('native source binds production HTTPS qualification helpers and policy bytes', t => {
+  const helpers = [
+    'scripts/mobile/android-sdk-xml.mjs',
+    'scripts/mobile/android-https-qualification.mjs',
+    'scripts/mobile/android-https-subject.mjs',
+    'scripts/mobile/https-qualification-lease.mjs',
+    'scripts/mobile/ios-https-qualification.mjs',
+    'scripts/mobile/android-qualification-apk.mjs',
+    'scripts/mobile/android-qualification-promotion.mjs',
+    'scripts/mobile/run-android-qualification.mjs',
+    'scripts/mobile/store-packaging-execution.mjs',
+    'scripts/mobile/store-packaging-inputs.mjs',
+    'scripts/mobile/store-artifact-postflight.mjs',
+    'apps/web/native-links/production.json',
+  ];
+  const values = Object.fromEntries(['apps/mobile/index.ts', ...helpers].map((name, index) => [name, `synthetic source ${index}\n`]));
+  const root = snapshotFixture(t, values), before = sourceSnapshot(root);
+  const expected = createHash('sha256');
+  for (const name of Object.keys(values).sort()) expected.update(name + '\0' + createHash('sha256').update(values[name]).digest('hex') + '\0');
+  assert.equal(before.inputFileCount, helpers.length + 1);
+  assert.equal(before.sourceFingerprint, expected.digest('hex'));
+  assert.equal(before.sourceDirty, false);
+  for (const name of helpers) {
+    const file = path.join(root, name);
+    writeFileSync(file, values[name] + 'changed\n');
+    const changed = sourceSnapshot(root);
+    assert.equal(changed.sourceSha, before.sourceSha, name);
+    assert.equal(changed.inputFileCount, before.inputFileCount, name);
+    assert.equal(changed.sourceDirty, true, name);
+    assert.notEqual(changed.sourceFingerprint, before.sourceFingerprint, name);
+    writeFileSync(file, values[name]);
+    assert.deepEqual(sourceSnapshot(root), before, name);
+    execFileSync('git', ['rm', '--cached', '--quiet', '--', name], { cwd: root });
+    const untracked = sourceSnapshot(root);
+    assert.equal(untracked.inputFileCount, before.inputFileCount, name);
+    assert.equal(untracked.sourceFingerprint, before.sourceFingerprint, name);
+    assert.equal(untracked.sourceDirty, true, name);
+    execFileSync('git', ['add', '--', name], { cwd: root });
+    assert.deepEqual(sourceSnapshot(root), before, name);
+  }
 });
 test('selected source charges exact paired root-present entries and refuses one less', t => {
   const root = snapshotFixture(t);

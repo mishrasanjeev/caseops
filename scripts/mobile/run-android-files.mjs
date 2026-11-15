@@ -17,10 +17,16 @@ import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs
 import { androidSessionTransport, verifyAndroidSessionTransport } from '../../apps/mobile/e2e/local-run.mjs';
 import { restart } from '../../apps/mobile/e2e/native-ui.mjs';
 import { appiumSessionEvent, configureNativeDriver } from '../../apps/mobile/e2e/run-state.mjs';
-import { binaryHash, Journal, localJson, reconcileResults, safeFailure } from '../../apps/mobile/e2e/support.mjs';
+import { binaryHash, Journal, localJson, reconcileResults, safeFailure, MARKER, MARKER_HEADER } from '../../apps/mobile/e2e/support.mjs';
 import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 import { OBSERVER_IDENTITY, attestAndroidFilesContainers, snapshotAndroidFilesPrivacy } from './android-files-privacy.mjs';
+
+// The original entry fence reserves capacity; it does not guarantee an entire suite fits.
+export function assertFreshAndroidFilesLedger(state) {
+  assert.ok(Number.isSafeInteger(state.lastSequence) && state.lastSequence >= 0 && state.lastSequence < 100,
+    'FRESH_BOUNDED_FILES_LEDGER_REQUIRED');
+}
 
 export function captureAndroidFilesPrivacy(options, phase, snapshot = snapshotAndroidFilesPrivacy) {
   assert.ok(['preflight', 'checkpoint', 'postflight'].includes(phase), 'ANDROID_FILES_PRIVACY_PHASE_REQUIRED');
@@ -254,6 +260,11 @@ export async function executeAndroidFilesCases({ cases = scenarios, createDriver
   return { completed: [...completed], unavailable };
 }
 
+export function publishAndroidFilesResult(journal, publish) {
+  journal.close();
+  return publish();
+}
+
 export async function runAndroidFiles() {
   const collection = collectAndroidFiles(), reportRoot = process.env.CASEOPS_MOBILE_REPORT_ROOT || path.join(os.homedir(), '.cache/caseops-mobile/android-files-reports');
   mkdirSync(reportRoot, { recursive: true, mode: 0o700 });
@@ -289,7 +300,10 @@ export async function runAndroidFiles() {
         const identity = await localJson(url); assert.equal(identity.release_sha, sha, 'ANDROID_FILES_SERVING_SHA_CHANGED'); assert.equal(identity.revision, revision, 'ANDROID_FILES_SERVING_REVISION_CHANGED');
       }
     };
-    await runtimeFence(); baseline = gatewayBaseline(await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`), isolation);
+    await runtimeFence();
+    const status = await localJson(`${fixture.gatewayUrl}/__caseops_e2e/status`);
+    baseline = gatewayBaseline(status, isolation);
+    assertFreshAndroidFilesLedger(status);
     containers = attestAndroidFilesContainers({ udid: fixture.udid, appId: fixture.appId, androidTransportMode: fixture.androidTransport?.transportMode, privacyObserver: fixture.privacyObserverEvidence });
     const before = captureAndroidFilesPrivacy({ containers, stagingEvidence: assets.providerEvidence,
       priorStagingEvidence: assets.priorStagingEvidence, knownSources: androidFilesKnownSources(assets), output: path.join(report, 'preflight-filesystem.json') }, 'preflight');
@@ -305,7 +319,7 @@ export async function runAndroidFiles() {
   const filesState = { uploads: {} };
   await executeAndroidFilesCases({ filesState, record: event => journal.write(event),
     beforeCase: async () => { assert.equal(preflight, true, 'ANDROID_FILES_PREFLIGHT_FAILED'); await runtimeFence(); },
-    createDriver: () => remote({ hostname: transport.appiumUrl.hostname, port: Number(transport.appiumUrl.port), path: '/', protocol: 'http',
+    createDriver: () => remote({ headers: { [MARKER_HEADER]: MARKER }, hostname: transport.appiumUrl.hostname, port: Number(transport.appiumUrl.port), path: '/', protocol: 'http',
       logLevel: 'silent', connectionRetryCount: 0, connectionRetryTimeout: 60000, capabilities: { platformName: 'Android',
         'appium:automationName': 'UiAutomator2', 'appium:deviceName': fixture.deviceName, 'appium:platformVersion': fixture.platformVersion,
         'appium:udid': fixture.udid, 'appium:appPackage': fixture.appId, 'appium:noReset': true, 'appium:dontStopAppOnReset': true,
@@ -369,9 +383,10 @@ export async function runAndroidFiles() {
   }
   journal.write({ type: 'run_completed', platform: 'android', intendedCount: collection.intended.length });
   const result = reconcileResults(journal.events, collection.intended), nativeSessionCount = journal.events.filter(event => event.type === 'appium_session' && event.state === 'created').length;
-  newJson(path.join(report, 'result.json'), { ...collection, ...result,
-    nativeExecution: nativeSessionCount ? 'observed-Appium-sessions' : 'not-run', nativeSessionCount, report });
-  completed = true; clearTimeout(deadline); process.removeListener('exit', interrupted); journal.close();
+  // Publish completion only after the journal's final close acknowledged.
+  publishAndroidFilesResult(journal, () => newJson(path.join(report, 'result.json'), { ...collection, ...result,
+    nativeExecution: nativeSessionCount ? 'observed-Appium-sessions' : 'not-run', nativeSessionCount, report }));
+  completed = true; clearTimeout(deadline); process.removeListener('exit', interrupted);
   return { ...result, report };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

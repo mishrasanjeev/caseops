@@ -873,3 +873,227 @@ test("read and notification failures cannot bypass sign-out's best-effort secure
   assert.equal(current(), null);
   assert.equal(session.identity, null);
 });
+
+test("JSON and byte expiry notify root only after secure cleanup and the single refresh revocation attempt", async () => {
+  for (const kind of ["json", "bytes"] as const) {
+    const { store, current } = memoryStore(),
+      clears = deferred<void>();
+    const order: string[] = [],
+      notifications: unknown[] = [];
+    let now = 0,
+      byteCalls = 0;
+    const clear = store.clear;
+    store.clear = async () => {
+      order.push("clear-start");
+      await clears.promise;
+      await clear();
+      order.push("clear-done");
+    };
+    const session: NativeSession = new NativeSession(
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token")) return Response.json(fixture);
+          if (url.endsWith("/refresh")) {
+            order.push("refresh");
+            return Response.json(
+              { detail: "Native MFA authorization expired." },
+              { status: 403 },
+            );
+          }
+          if (url.endsWith("/logout")) {
+            order.push("logout");
+            return new Response(null, { status: 204 });
+          }
+          byteCalls++;
+          assert.fail("Expired business request must never dispatch");
+        },
+      ),
+      store,
+      () => now,
+      () => order.push("private-retired"),
+      () => {},
+      async (cause) => {
+        assert.equal(current(), null);
+        assert.equal(session.localBinding, null);
+        assert.equal(session.identity, null);
+        assert.ok(
+          cause instanceof MobileApiError &&
+            cause.status === 403 &&
+            cause.outcome === "rejected",
+        );
+        order.push("root-notified");
+        notifications.push(cause);
+      },
+    );
+    await session.exchange(exchange);
+    now = 300_001;
+    const failed = assert.rejects(
+      kind === "json"
+        ? session.request("/api/account/deletion-requests")
+        : session.requestBytes(privatePath, { maxBytes: 100 }),
+    );
+    for (let i = 0; i < 10 && !order.includes("clear-start"); i++)
+      await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(order.includes("clear-start"));
+    assert.equal(notifications.length, 0);
+    assert.notEqual(current(), null);
+    clears.resolve();
+    await failed;
+    for (let i = 0; i < 10 && !notifications.length; i++)
+      await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(notifications.length, 1);
+    assert.equal(byteCalls, 0);
+    assert.deepEqual(order, [
+      "refresh",
+      "private-retired",
+      "clear-start",
+      "clear-done",
+      "logout",
+      "root-notified",
+    ]);
+  }
+});
+
+test("failed secure cleanup never notifies root of a completed foreground rejection", async () => {
+  for (const kind of ["json", "bytes"] as const) {
+    const { store, current } = memoryStore();
+    let now = 0,
+      notified = 0,
+      revoked = 0;
+    const session: NativeSession = new NativeSession(
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token")) return Response.json(fixture);
+          if (url.endsWith("/refresh"))
+            return Response.json({ detail: "Expired MFA." }, { status: 403 });
+          assert.ok(url.endsWith("/logout"));
+          revoked++;
+          return new Response(null, { status: 204 });
+        },
+      ),
+      store,
+      () => now,
+      () => {},
+      () => {},
+      async () => {
+        notified++;
+      },
+    );
+    await session.exchange(exchange);
+    now = 300_001;
+    store.clear = async () => {
+      throw new Error("Synthetic clear failure");
+    };
+    await assert.rejects(
+      kind === "json"
+        ? session.request("/api/account/deletion-requests")
+        : session.requestBytes(privatePath, { maxBytes: 100 }),
+    );
+    for (let i = 0; i < 10 && !revoked; i++)
+      await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(revoked, 1);
+    assert.equal(notified, 0);
+    assert.notEqual(current(), null);
+    assert.equal(session.localBinding, null);
+  }
+});
+
+test("ordinary JSON and private-byte 401 cleanup both notify root once without replay", async () => {
+  for (const kind of ["json", "bytes"] as const) {
+    const { store, current } = memoryStore();
+    let reads = 0,
+      notified = 0;
+    const session: NativeSession = new NativeSession(
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token")) return Response.json(fixture);
+          reads++;
+          return Response.json({ detail: "Expired access." }, { status: 401 });
+        },
+      ),
+      store,
+      () => 0,
+      () => {},
+      () => {},
+      async (cause) => {
+        assert.equal(current(), null);
+        assert.equal(session.localBinding, null);
+        assert.ok(cause instanceof MobileApiError && cause.status === 401);
+        notified++;
+      },
+    );
+    await session.exchange(exchange);
+    await assert.rejects(
+      kind === "json"
+        ? session.request("/api/account/deletion-requests")
+        : session.requestBytes(privatePath, { maxBytes: 100 }),
+    );
+    assert.equal(reads, 1);
+    assert.equal(notified, 1);
+    assert.equal(current(), null);
+  }
+});
+
+test("a stale rejection cannot notify root or clear a newer sign-in, and an ordinary 403 retains its session", async () => {
+  for (const stale of [false, true]) {
+    const { store, current } = memoryStore(),
+      response = deferred<Response>();
+    let notified = 0,
+      exchanges = 0;
+    const session: NativeSession = new NativeSession(
+      new JsonTransport(
+        "https://caseops.ai",
+        false,
+        true,
+        { platform: "ios", version: "0.1.0" },
+        async (url) => {
+          if (url.endsWith("/token"))
+            return Response.json({
+              ...fixture,
+              refresh_token: "synthetic-" + ++exchanges,
+            });
+          return response.promise;
+        },
+      ),
+      store,
+      () => 0,
+      () => {},
+      () => {},
+      async () => {
+        notified++;
+      },
+    );
+    await session.exchange(exchange);
+    const failure = assert.rejects(
+      session.request("/api/account/deletion-requests"),
+    );
+    if (stale) await session.exchange(exchange);
+    const key = session.sessionKey;
+    response.resolve(
+      Response.json(
+        { detail: "Synthetic refusal." },
+        { status: stale ? 401 : 403 },
+      ),
+    );
+    await failure;
+    assert.equal(notified, 0);
+    assert.equal(session.sessionKey, key);
+    assert.notEqual(session.localBinding, null);
+    assert.equal(
+      current()?.refreshToken,
+      stale ? "synthetic-2" : "synthetic-1",
+    );
+  }
+});

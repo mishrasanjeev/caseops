@@ -8,7 +8,7 @@ import { OWNER_OPERATIONS, SEARCH_KINDS, validateBuildReceipt } from '../../apps
 import { validateAndroidNativeProof } from '../../apps/mobile/e2e/android-native-proof.mjs';
 import { validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
 import { validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
-import { gatewayBaseline, validateTraffic } from '../../apps/mobile/e2e/traffic.mjs';
+import { gatewayBaseline, validateTraffic, withoutPublicCompatibilityReads } from '../../apps/mobile/e2e/traffic.mjs';
 import { binaryHash } from '../../apps/mobile/e2e/support.mjs';
 import { validateSessionDeletePolicy } from '../../apps/mobile/e2e/session-admission.mjs';
 import { androidLocalProfile, validateUsbReverseOrigins } from '../../apps/mobile/e2e/android-local-profile.mjs';
@@ -111,7 +111,7 @@ export function validateObservedAndroidAuthTraffic(requests, auth) {
     assert.ok(index < loginIndex && row.status === 401 && row.browserHandoff === true && row.nativeMarker === true,
       'REJECTED_PRELOGIN_BROWSER_REFRESH_REQUIRED');
     assert.ok(preceding.some((item) => unauthorizedIdentity.includes(item)), 'PRECEDING_LOGGED_OUT_BROWSER_IDENTITY_REQUIRED');
-    assert.ok(!preceding.some(({ method, route, status }) => method !== 'OPTIONS' && route.startsWith('/api/auth/')
+    assert.ok(!withoutPublicCompatibilityReads(preceding).some(({ method, route, status }) => method !== 'OPTIONS' && route.startsWith('/api/auth/')
       && status >= 200 && status < 400), 'NO_AUTH_SUCCESS_BEFORE_REJECTED_REFRESH');
   }
   const mutations = new Set(['/api/auth/login', '/api/auth/mfa/step-up', '/api/auth/native/authorize', '/api/auth/native/token', '/api/auth/native/logout']);

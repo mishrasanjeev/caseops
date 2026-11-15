@@ -623,3 +623,65 @@ test command-slice failure; both were corrected and the full replacement
 inventory is reconciled above. This is not a Mac, Xcode or native acceptance
 receipt. No shared gateway/harness, app/API/web source, checked-in Compose,
 images, services, device state or commit was changed by this bounded task.
+
+### Production HTTPS qualification (CX28-LINK-05, 2026-11-15)
+
+See `docs/mobile/NATIVE_HTTPS_QUALIFICATION_2026-11-15.md`. All83 IDs and original
+budgets remain mandatory. Keep the local QA fixture/app/CA independent of the
+production-ID qualification app and public TLS. Do not install a QA CA into a
+normal personal phone or use a package-forced intent as OS resolver proof.
+
+1. Freeze clean source and all actual build/harness input fingerprints. Obtain
+   current exact14 shared gates and all existing privacy/source/signing/tool/
+   history evidence. Prepare the normal store recipe plus a distinct execution
+   request `kind: caseops-android-qualification-request`. Use only the reviewed
+   pinned tool/runtime/licence inventory, including aapt2, bundletool and JDK.
+2. With the exclusive native build/resource window, arm
+   `CASEOPS_ANDROID_QUALIFICATION_BUILD_GO=EXPLICIT_NON_SUBMITTABLE_ANDROID_QUALIFICATION`
+   and run pinned Node24 `scripts/mobile/run-android-qualification.mjs --execute
+   <absolute-request.json> <sha256>`. This creates a non-submittable signed AAB
+   and exact derived universal APK, not a store release. Preserve any failure.
+3. Prepare a descriptor-bound request for `android-https-subject.mjs` with
+   `schemaVersion:1`, kind `caseops-fresh-https-qualification-subject-request`,
+   exact public `api:{origin,sourceSha,revision}`, `workEmailDomain:orchestrum.in`
+   and a fresh private absolute output directory outside the repository. Arm
+   `CASEOPS_HTTPS_SUBJECT_CREATE_GO=EXPLICIT_FRESH_DISPOSABLE_NORMAL_API_SUBJECT`
+   and run pinned Node24 `scripts/mobile/android-https-subject.mjs --execute
+   <request> <sha256>`. The normal API producer makes one bootstrap attempt,
+   verifies actual capabilities and MFA, creates/reads one exact test matter,
+   and keeps credentials/MFA/recovery data in mode600 private files. No secrets
+   belong in the repository, public evidence or logs. A lost acknowledgement
+   must not be retried or adopted by guessed slug; retain the incomplete run.
+4. Install the exact qualification APK on the owned device under the reviewed
+   resource/transport plan. Use the generated private account for ordinary
+   production sign-in, actual HTTPS callback/PKCE/MFA/consent. No custom-scheme
+   QA browser helper or token injection substitutes for this authentication.
+   This setup remains a prerequisite until its actual native observations pass.
+5. Supply the client runner's `httpsQualification` descriptor: Android case05
+   only, current source/owned UDID, exact APK and qualification-result refs,
+   committed production-links ref, actual signer, exact normal-API subject and
+   its public receipt, public serving identities, reviewed SDK executable/
+   runtime closure and fresh direct report child `https-qualification`. The
+   observer verifies installed bytes/signature/version/manifest, public DAL,
+   serving identities, actual OS verified host/default resolver and native
+   Account identity before granting its in-memory dispatch lease. Cold and warm
+   intents are single, unforced dispatches. Cleanup restores QA under the
+   original finite reserve; uncertainty fails, never replays.
+6. Complete the exact83 platform cases and independent physical-device review.
+   To promote unchanged candidate bytes, prepare kind
+   `caseops-android-qualification-promotion` with all15 fresh current-source
+   gates, exact candidate/history/qualification refs and all five native report
+   groups. Each group requires its actual events file, artifact and canonical
+   final summary (`result.json` for Files). V1 additionally requires its
+   `browser-events.jsonl` and the complete canonical manifest/session-absence
+   evidence in `summary.json`. Arm
+   `CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO=EXPLICIT_REVIEWED_ALL15_GATE_PROMOTION`
+   and run `scripts/mobile/run-android-qualification.mjs --promote <request>
+   <sha256>`. Promotion performs no rebuild/sign/upload, and cannot transfer QA
+   passes to production binaries or certify Google's separately signed delivery.
+
+The Google-generated APK installation/signing-key boundary and store submission
+remain separate actual checks. iOS still refuses LINK05 without an independently
+implemented/observed Apple qualification lease; Orchestrum's own Team,
+provisioning and AASA are prerequisites. Apple documentation is currently in
+review. No old source receipt or Android proof earns iOS credit.

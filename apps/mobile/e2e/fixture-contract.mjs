@@ -13,13 +13,21 @@ export const SEARCH_KINDS = ['matter_code', 'case_number', 'filing_number', 'cnr
 export const OWNER_OPERATIONS = ['disposeMatter', 'readMatterState', 'revokeMatterAccess', 'readNoteState'];
 export class FixtureUnavailable extends Error {}
 
-export function admitApplication(fixture, platform) {
+function localQAAppId(platform) {
   assert.ok(['android', 'ios'].includes(platform), 'NATIVE_PLATFORM_REQUIRED');
-  const qaId = platform === 'android' ? 'ai.caseops.mobile.dev.localacceptance' : 'ai.caseops.mobile.dev.simulatoracceptance';
+  return platform === 'android' ? 'ai.caseops.mobile.dev.localacceptance' : 'ai.caseops.mobile.dev.simulatoracceptance';
+}
+
+function requireLocalQAEnvironment(fixture) {
+  assert.equal(fixture.environment, 'docker-integration', 'LOCAL_QA_REQUIRES_ISOLATED_DOCKER');
+  assert.equal(fixture.syntheticDataOnly, true, 'LOCAL_QA_REQUIRES_SYNTHETIC_FIXTURE');
+}
+
+export function admitApplication(fixture, platform) {
+  const qaId = localQAAppId(platform);
   assert.ok(['ai.caseops.mobile.dev', qaId].includes(fixture.appId), 'DEDICATED_DEV_OR_LOCAL_QA_APP_REQUIRED');
   if (fixture.appId === qaId) {
-    assert.equal(fixture.environment, 'docker-integration', 'LOCAL_QA_REQUIRES_ISOLATED_DOCKER');
-    assert.equal(fixture.syntheticDataOnly, true, 'LOCAL_QA_REQUIRES_SYNTHETIC_FIXTURE');
+    requireLocalQAEnvironment(fixture);
     assert.equal(fixture.coreInventory, 'native-core-2026-10-25', 'DATED_CORE_FIXTURE_REQUIRED');
   }
   return fixture.appId;
@@ -51,6 +59,20 @@ export function validateIosSigningReceipt(signing, appId, actualHash) {
 export function validateBuildReceipt(fixture, platform, actualHash) {
   admitApplication(fixture, platform);
   if (fixture.appId === 'ai.caseops.mobile.dev') return;
+  validateAdmittedQABuildReceipt(fixture, platform, actualHash);
+}
+
+export function admitLocalQAApplication(fixture, platform) {
+  assert.equal(fixture.appId, localQAAppId(platform), 'DEDICATED_LOCAL_QA_APP_REQUIRED');
+  requireLocalQAEnvironment(fixture);
+}
+
+export function validateLocalQABuildReceipt(fixture, platform, actualHash) {
+  admitLocalQAApplication(fixture, platform);
+  validateAdmittedQABuildReceipt(fixture, platform, actualHash);
+}
+
+function validateAdmittedQABuildReceipt(fixture, platform, actualHash) {
   const receipt = JSON.parse(verifiedFile(fixture.buildReceipt?.path, fixture.buildReceipt?.sha256));
   assert.equal(receipt.platform, platform, 'QA_BINARY_PLATFORM_MISMATCH');
   assert.equal(receipt.profile, platform === 'android' ? 'android-local-acceptance' : 'ios-simulator-acceptance', 'QA_BINARY_PROFILE_MISMATCH');
@@ -80,19 +102,24 @@ function matter(value) {
   nonempty(value.identityLabel);
   nonempty(value.title);
 }
-export function validateCoreFixture(fixture, environment = process.env) {
-  assert.equal(fixture.environment, 'docker-integration', 'REAL_DOCKER_CORE_FIXTURE_REQUIRED');
-  assert.equal(fixture.syntheticDataOnly, true, 'NO_PRIVATE_FIXTURES');
-  assert.equal(fixture.coreInventory, 'native-core-2026-10-25', 'DATED_CORE_FIXTURE_REQUIRED');
+function validateFixtureServingOrigin(fixture) {
   for (const key of ['backendSha', 'webSha']) assert.match(fixture[key] || '', /^[0-9a-f]{40}$/, 'EXACT_SERVING_SHA_REQUIRED');
   browserOrigin(fixture.auth?.webOrigin);
-  loginCredentials(fixture.auth, environment);
-  mfaStage(fixture.auth);
-  if (fixture.auth.mfaRequired) fixtureMfaCode(fixture.auth, environment);
+}
+
+function validateFixtureBrowserPolicy(fixture) {
   assert.ok(['web-context', 'native-firefox'].includes(fixture.auth.mode), 'EXPLICIT_BROWSER_AUTOMATION_MODE_REQUIRED');
   if (fixture.auth.mode === 'native-firefox') validateFirefoxRecipe(fixture.auth);
   assert.equal(fixture.browserApiMarkerVerified, true, 'BROWSER_API_MARKER_RECEIPT_REQUIRED');
-  const evidence = JSON.parse(verifiedFile(fixture.isolationEvidence?.path, fixture.isolationEvidence?.sha256));
+}
+
+export function validateFixtureCredentials(fixture, environment = process.env) {
+  loginCredentials(fixture.auth, environment);
+  mfaStage(fixture.auth);
+  if (fixture.auth.mfaRequired) fixtureMfaCode(fixture.auth, environment);
+}
+
+function validateFixtureIsolation(fixture, evidence) {
   assert.equal(evidence.environment, 'docker-integration', 'REAL_DOCKER_FIXTURE_RECEIPT_REQUIRED');
   for (const key of ['backendSha', 'backendRevision', 'gatewayRunId']) {
     assert.equal(evidence[key], fixture[key], 'ISOLATED_FIXTURE_RELEASE_MISMATCH');
@@ -115,6 +142,30 @@ export function validateCoreFixture(fixture, environment = process.env) {
     assert.equal(evidence.containers.filter((container) => new RegExp(`-${service}-[0-9]+$`).test(container.name)).length, 1, 'DOCKER_SERVICE_INVENTORY_MISMATCH');
   }
   assert.equal(evidence.syntheticDataOnly, true, 'NO_PRIVATE_FIXTURES');
+}
+
+export function validateLocalQAActor(fixture, evidence) {
+  requireLocalQAEnvironment(fixture);
+  validateFixtureServingOrigin(fixture);
+  mfaStage(fixture.auth);
+  validateFixtureBrowserPolicy(fixture);
+  validateFixtureIsolation(fixture, evidence);
+}
+
+export function validateNativeFixtureAuthentication(fixture, environment = process.env) {
+  assert.equal(fixture.environment, 'docker-integration', 'REAL_DOCKER_CORE_FIXTURE_REQUIRED');
+  assert.equal(fixture.syntheticDataOnly, true, 'NO_PRIVATE_FIXTURES');
+  assert.equal(fixture.coreInventory, 'native-core-2026-10-25', 'DATED_CORE_FIXTURE_REQUIRED');
+  validateFixtureServingOrigin(fixture);
+  validateFixtureCredentials(fixture, environment);
+  validateFixtureBrowserPolicy(fixture);
+  const evidence = JSON.parse(verifiedFile(fixture.isolationEvidence?.path, fixture.isolationEvidence?.sha256));
+  validateFixtureIsolation(fixture, evidence);
+  return fixture;
+}
+
+export function validateCoreFixture(fixture, environment = process.env) {
+  validateNativeFixtureAuthentication(fixture, environment);
   if (fixture.seedEvidence) {
     const seed = JSON.parse(verifiedFile(fixture.seedEvidence.path, fixture.seedEvidence.sha256));
     assert.equal(seed.environment, 'docker-integration', 'REAL_SEED_RECEIPT_REQUIRED');

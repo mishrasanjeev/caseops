@@ -298,19 +298,32 @@ def policy_provenance(
             first = attributed[0]
             origin = first["commit"]
             origin_start = first["original_line"]
-            fingerprint = f"{origin}:{path}:{rule}:{origin_start}"
+            origin_path = first["path"]
+            relative_origin = PurePosixPath(origin_path or "")
+            if (
+                not origin_path
+                or len(origin_path) > 1024
+                or str(relative_origin) != origin_path
+                or relative_origin.is_absolute()
+                or any(part in {"..", ".git"} for part in relative_origin.parts)
+                or "\\" in origin_path
+                or ":" in origin_path
+                or any(ord(char) < 32 for char in origin_path)
+            ):
+                raise ScanError("Finding has invalid immutable origin path")
+            fingerprint = f"{origin}:{origin_path}:{rule}:{origin_start}"
             consecutive = all(
                 row
                 == {
                     "commit": origin,
                     "original_line": origin_start + index,
                     "candidate_line": start + index,
-                    "path": path,
+                    "path": origin_path,
                 }
                 for index, row in enumerate(attributed)
             )
             if consecutive and fingerprint in reviewed:
-                original = blob(origin, path)[
+                original = blob(origin, origin_path)[
                     origin_start - 1 : origin_start + end - start
                 ]
                 captured = data[start - 1 : end]

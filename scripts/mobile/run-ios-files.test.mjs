@@ -1,3 +1,5 @@
+import * as filesFreshnessRunner from './run-ios-files.mjs';
+import { gatewayBaseline as actualGatewayBaseline } from '../../apps/mobile/e2e/traffic.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -193,4 +195,75 @@ test('a real failed-preflight invocation retains every setup/call/teardown outco
   assert.equal(events.at(-1).type, 'run_completed');
   const reconciled = reconcileResults(events, EXPECTED);
   assert.equal(reconciled.status, summary.status); assert.equal(reconciled.nativeCallsPassed, 0);
+});
+
+function freshLedgerState(lastSequence, changes = {}) {
+  return { runId: 'unit-files-gateway-run', implementationSha256: 'a'.repeat(64), lastSequence,
+    requests: Array.from({ length: lastSequence }, (_, index) => ({ sequence: index + 1, method: 'GET', route: '/api/build', status: 200, nativeMarker: true, browserHandoff: false })),
+    markerRejected: 0, routeRejected: 0, overflow: false, ...changes };
+}
+function executeActualFreshnessBoundary(status, calls) {
+  const runner = fileURLToPath(new URL('./run-ios-files.mjs', import.meta.url));
+  const source = readFileSync(runner, 'utf8'), functionStart = source.indexOf('export async function runIosFiles()');
+  assert.ok(functionStart >= 0);
+  const run = source.slice(functionStart);
+  const baselineAt = run.indexOf('baseline = gatewayBaseline(');
+  const privateAt = run.indexOf('const preflightPrivacy = captureIosFilesPrivacy(');
+  const privateEnd = run.indexOf("}, 'preflight');", privateAt) + "}, 'preflight');".length;
+  const baselineEnd = run.indexOf(';', baselineAt) + 1;
+  const fenceAt = run.indexOf('assertFreshIosFilesLedger(', baselineAt);
+  const fenceEnd = fenceAt < 0 ? 0 : run.indexOf(';', fenceAt) + 1;
+  const start = run.indexOf('const staged = readRef(assets.providerEvidence);');
+  const end = Math.max(privateEnd, baselineEnd, fenceEnd);
+  assert.ok(start >= 0 && privateAt >= 0 && baselineAt >= 0 && privateEnd > privateAt);
+  assert.ok(run.indexOf('remote = createRequire(') > end, 'FRESHNESS_BEFORE_WDIO_IMPORT_REQUIRED');
+  const execute = new (Object.getPrototypeOf(async function () {}).constructor)(
+    'localJson', 'fixture', 'isolation', 'gatewayBaseline', 'assertFreshIosFilesLedger',
+    'attestIosFilesContainers', 'captureIosFilesPrivacy', 'assets', 'report', 'path',
+    'knownFileSources', 'readRef', 'assert', 'containers',
+    'let baseline;\n' + run.slice(start, end) + '\nreturn baseline;');
+  const assets = { manifestEvidence: { path: '/synthetic/manifest', sha256: 'b'.repeat(64) },
+    providerEvidence: { path: '/synthetic/provider', sha256: 'c'.repeat(64) }, provider: { folderName: 'owned-unit-folder' }, priorStagingEvidence: [] };
+  return execute(async () => { calls.push('status'); return status; },
+    { gatewayUrl: 'https://127.0.0.1:9743', udid: 'unit-device', appId: 'unit.app' },
+    { gatewayRunId: status.runId === 'foreign-run' ? 'unit-files-gateway-run' : status.runId, gatewayImplementationSha256: 'a'.repeat(64) },
+    (state, receipt) => { calls.push('ledger'); return actualGatewayBaseline(state, receipt); },
+    state => { calls.push('freshness'); return filesFreshnessRunner.assertFreshIosFilesLedger(state); },
+    () => { calls.push('device'); return {}; },
+    () => { calls.push('privacy'); return { snapshot: { complete: true, providerMetadataPreserved: true, counts: { privateAssetMatchCount: 0, ownedStagingFiles: 0 } } }; },
+    assets, '/synthetic/report', path, () => [],
+    () => ({ folderName: assets.provider.folderName, manifestEvidence: assets.manifestEvidence }), assert, {});
+}
+test('iOS Files preflight validates a fresh request ledger before private work', async () => {
+  for (const count of [32, 99]) {
+    const status = freshLedgerState(count), original = structuredClone(status), calls = [];
+    const baseline = await executeActualFreshnessBoundary(status, calls);
+    assert.equal(baseline.lastSequence, count);
+    assert.deepEqual(calls, ['status', 'ledger', 'freshness', 'privacy']);
+    assert.deepEqual(status, original, 'FRESHNESS_MUST_NOT_RESET_OR_CHANGE_OLD_EVIDENCE');
+  }
+});
+test('iOS Files preflight refuses a stale request ledger before device or session work', async () => {
+  for (const count of [100, 369]) {
+    const calls = [];
+    await assert.rejects(executeActualFreshnessBoundary(freshLedgerState(count), calls), /FRESH_BOUNDED_FILES_LEDGER_REQUIRED/);
+    assert.deepEqual(calls, ['status', 'ledger', 'freshness']);
+  }
+});
+test('iOS Files preflight preserves existing ledger integrity denials', async () => {
+  const cases = [
+    [freshLedgerState(500, { overflow: true }), /GATEWAY_EVIDENCE_OVERFLOW/],
+    [freshLedgerState(32, { markerRejected: 1 }), /UNRECONCILED_PREEXISTING_GATEWAY_REJECTION/],
+    [freshLedgerState(32, { routeRejected: 1 }), /UNRECONCILED_PREEXISTING_GATEWAY_REJECTION/],
+    [freshLedgerState(32, { runId: 'foreign-run' }), /WRONG_GATEWAY_RUN/],
+    [freshLedgerState(32, { implementationSha256: 'd'.repeat(64) }), /GATEWAY_IMPLEMENTATION_MISMATCH/],
+    [freshLedgerState(32, { requests: [] }), /REQUEST_LEDGER_INCOMPLETE/],
+  ];
+  const unsettled = freshLedgerState(32); unsettled.requests[0].status = null; cases.push([unsettled, /UNSETTLED_GATEWAY_BASELINE/]);
+  const sequence = freshLedgerState(32); sequence.requests[0].sequence = 2; cases.push([sequence, /REQUEST_LEDGER_SEQUENCE_MISMATCH/]);
+  for (const [state, reason] of cases) {
+    const calls = [];
+    await assert.rejects(executeActualFreshnessBoundary(state, calls), reason);
+    assert.deepEqual(calls, ['status', 'ledger']);
+  }
 });

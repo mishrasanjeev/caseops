@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { admitApplication } from './fixture-contract.mjs';
+import { admitApplication, admitLocalQAApplication } from './fixture-contract.mjs';
 
 // noReset preserves the session data but also bypasses UiAutomator2's install
 // path. Replace missing/stale bytes explicitly; an already identical APK needs
 // no reinstall. Every boundary still verifies actual device bytes.
 export function attestAndroidBinary(fixture, expectedHash, { install = false, command = execFileSync } = {}) {
   admitApplication(fixture, 'android');
+  return attestAdmittedAndroidBinary(fixture, expectedHash, { install, command });
+}
+
+export function attestLocalQAAndroidBinary(fixture, expectedHash, { command = execFileSync } = {}) {
+  admitLocalQAApplication(fixture, 'android');
+  return attestAdmittedAndroidBinary(fixture, expectedHash, { install: false, command });
+}
+
+function attestAdmittedAndroidBinary(fixture, expectedHash, { install, command }) {
   assert.match(fixture.udid || '', /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/, 'EXACT_ANDROID_DEVICE_REQUIRED');
   assert.ok(path.isAbsolute(fixture.appPath || '') && fixture.appPath.endsWith('.apk'), 'ABSOLUTE_ANDROID_APK_REQUIRED');
   assert.match(expectedHash || '', /^[a-f0-9]{64}$/, 'EXPECTED_INSTALLED_APK_HASH_REQUIRED');

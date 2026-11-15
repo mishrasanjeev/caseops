@@ -19,7 +19,7 @@ import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.util import CommandError
-from sqlalchemy import ColumnDefault, MetaData, Table, create_engine, event, select, text
+from sqlalchemy import ColumnDefault, MetaData, Table, event, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, registry
 
@@ -63,6 +63,7 @@ from tests.fixtures_historical_attachments import (
     NATIVE_ATTACHMENT_COLUMN,
     historical_attachment_sessions,
 )
+from tests.fixtures_postgres_client import temporary_http_database
 from tests.test_compliance_participant_fence_20261010_postgres import _mutate, _seed, _UploadPhase
 from tests.test_document_execution_protocol_20261010_postgres import (
     _historical_identity_columns,
@@ -174,77 +175,78 @@ def test_captured_head_accepts_future_descendant_and_rejects_invalid_graph(tmp_p
 
 
 @pytest.fixture
-def tail_database(pg_engine, monkeypatch):
+def tail_database(pg_engine, monkeypatch, compliance_tail_template):
     cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     cfg.set_main_option("script_location", str(Path(__file__).resolve().parents[1] / "alembic"))
     current_head = _capture_current_head(cfg)
-    name = "compliance_tail_" + uuid4().hex
-    url = pg_engine.url.set(database=name)
-    with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
-        admin.execute(text(f'CREATE DATABASE "{name}"'))
-    engine, mapper = create_engine(url), registry()
-    monkeypatch.setenv("CASEOPS_DATABASE_URL", url.render_as_string(hide_password=False))
-    monkeypatch.setenv("CASEOPS_ENV", "local")
-    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
-    monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "mock")
-    monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "")
-    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
-    get_settings.cache_clear()
-    database = None
-    try:
-        command.upgrade(cfg, "20261010_0002")
-        table = Table("matter_compliance_extraction_runs", MetaData(), autoload_with=engine)
-        assert "persistence_protocol" not in table.c
-        table.c.id.default = ColumnDefault(lambda: str(uuid4()))
-        table.c.created_at.default = ColumnDefault(utcnow)
-        table.c.updated_at.default = ColumnDefault(utcnow)
-        table.c.updated_at.onupdate = ColumnDefault(utcnow)
-
-        class LegacyRun:
-            pass
-
-        mapper.map_imperatively(LegacyRun, table)
-        fixture = _fixture(engine, active=False, historical_attachment=True)
-        with Session(engine) as session:
-            attachment = session.get(
-                MatterAttachment, fixture.attachment, options=(HISTORICAL_ATTACHMENT_LOAD,),
-            )
-            attachment.document_type = "order_judgment"
-            attachment.processing_status = "indexed"
-            attachment.extracted_text = _TEXT
-            attachment.extracted_char_count = len(_TEXT)
-            order = MatterCourtOrder(
-                matter_id=fixture.matter,
-                order_date=date(2026, 10, 10),
-                title="Frozen source",
-                summary="Native tail proof",
-                source="manual",
-                order_text=_TEXT,
-            )
-            session.add(order)
-            session.flush()
-            fixture.order = order.id
-            session.commit()
-        database = SimpleNamespace(
-            engine=engine, cfg=cfg, fixture=fixture, legacy_run=LegacyRun,
-            current_head=current_head,
-        )
-        with _historical_identity_columns(engine):
-            yield database
-    finally:
+    with temporary_http_database(pg_engine.url, template=compliance_tail_template) as engine:
+        name, url, mapper = engine.url.database, engine.url, registry()
+        cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
+        monkeypatch.setenv("CASEOPS_DATABASE_URL", url.render_as_string(hide_password=False))
+        monkeypatch.setenv("CASEOPS_ENV", "local")
+        monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
+        monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "mock")
+        monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "")
+        monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+        get_settings.cache_clear()
+        database = None
         try:
-            if database is not None:
-                _snapshot(database)
-        finally:
-            mapper.dispose()
-            engine.dispose()
-            get_settings.cache_clear()
-            with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as admin:
-                admin.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
-                assert not admin.scalar(
-                    text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:name)"),
-                    {"name": name},
+            with engine.connect() as connection:
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == "20261010_0002"
                 )
+            table = Table("matter_compliance_extraction_runs", MetaData(), autoload_with=engine)
+            assert "persistence_protocol" not in table.c
+            table.c.id.default = ColumnDefault(lambda: str(uuid4()))
+            table.c.created_at.default = ColumnDefault(utcnow)
+            table.c.updated_at.default = ColumnDefault(utcnow)
+            table.c.updated_at.onupdate = ColumnDefault(utcnow)
+
+            class LegacyRun:
+                pass
+
+            mapper.map_imperatively(LegacyRun, table)
+            fixture = _fixture(engine, active=False, historical_attachment=True)
+            with Session(engine) as session:
+                attachment = session.get(
+                    MatterAttachment, fixture.attachment, options=(HISTORICAL_ATTACHMENT_LOAD,),
+                )
+                attachment.document_type = "order_judgment"
+                attachment.processing_status = "indexed"
+                attachment.extracted_text = _TEXT
+                attachment.extracted_char_count = len(_TEXT)
+                order = MatterCourtOrder(
+                    matter_id=fixture.matter,
+                    order_date=date(2026, 10, 10),
+                    title="Frozen source",
+                    summary="Native tail proof",
+                    source="manual",
+                    order_text=_TEXT,
+                )
+                session.add(order)
+                session.flush()
+                fixture.order = order.id
+                session.commit()
+            database = SimpleNamespace(
+                engine=engine, cfg=cfg, fixture=fixture, legacy_run=LegacyRun,
+                current_head=current_head,
+            )
+            with _historical_identity_columns(engine):
+                yield database
+        finally:
+            try:
+                if database is not None:
+                    _snapshot(database)
+            finally:
+                mapper.dispose()
+                engine.dispose()
+                get_settings.cache_clear()
+    with pg_engine.connect() as admin:
+        assert not admin.scalar(
+            text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname=:name)"),
+            {"name": name},
+        )
 
 
 def _load_frozen(name, digest):

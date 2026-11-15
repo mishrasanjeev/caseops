@@ -257,6 +257,11 @@ b86141ba2cf30ea8ab877721e8132c5d6280d1ae:apps/api/tests/test_bug016_invoice_pdf_
 440278e2b86d5b994da960e44c30f5b35da5fcb7:tests/e2e/support/ram-bugs4.ts:generic-api-key:142
 # End 2026-11-01 review.
 
+# 2026-11-11: exact immutable lookup of a public synthetic Calendar step label.
+# This line selects a fixture step by its public key; it is not authentication.
+# Retain the source-span hash and negative-canary proof in the secret-scan tests.
+60cc453557b7fe0ab1b5dbb106997729e2402273:apps/mobile/e2e/v1-counsel-prerequisite.test.mjs:generic-api-key:199
+
 # 2026-11-11 PR614: exact independently reviewed synthetic Matter-code origin.
 # The value is written to matter_code, not authentication. Immutable blob/span
 # hashes are retained in docs/security/history-finding-review-2026-11-11.json.

@@ -31,6 +31,29 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Verify Windows PowerShell runtime before scoped trust
+      if: ${{ runner.os == 'Windows' }}
+      shell: bash
+      run: |
+        node <<'CASEOPS_WINDOWS_RUNTIME'
+        'use strict';
+        const assert = require('node:assert/strict');
+        const path = require('node:path');
+        const { spawnSync } = require('node:child_process');
+        assert.equal(process.platform, 'win32', 'CI_WINDOWS_RUNTIME_PLATFORM');
+        assert.equal(process.env.GITHUB_ACTIONS, 'true', 'CI_WINDOWS_RUNTIME_CONTEXT');
+        assert.equal(process.env.CI, 'true', 'CI_WINDOWS_RUNTIME_CONTEXT');
+        const root = process.env.SystemRoot;
+        assert.ok(typeof root === 'string' && path.win32.isAbsolute(root), 'CI_WINDOWS_RUNTIME_SYSTEM_ROOT');
+        // This fixed SDK probe never opens the runner command file, changes an
+        // ACL, reads repository input, makes a request or retries trust setup.
+        const code = "$ErrorActionPreference='Stop';if($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1){throw 'version'};$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput('$caseops = 6 * 7',[ref]$tokens,[ref]$errors);if($errors.Count -ne 0 -or $null -eq $ast){throw 'parser'};$sections=[Security.AccessControl.AccessControlSections]'Access,Owner';$identity=[Security.Principal.WindowsIdentity]::GetCurrent();if($null -eq $identity.User){throw 'identity'};$assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsRuntimeReady'),[Reflection.Emit.AssemblyBuilderAccess]::Run);if($null -eq $assembly){throw 'reflection'};[Console]::Out.Write('CASEOPS_WINDOWS_POWERSHELL_5_1_READY')";
+        const result = spawnSync(path.win32.join(root, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', code], {
+          env: { SystemRoot: root, WINDIR: root }, encoding: 'utf8', timeout: 10000, maxBuffer: 4096, windowsHide: true,
+        });
+        assert.ok(!result.error && result.signal == null && result.status === 0 && result.stderr === '' && result.stdout === 'CASEOPS_WINDOWS_POWERSHELL_5_1_READY', 'CI_WINDOWS_RUNTIME_NOT_READY');
+        console.log(JSON.stringify({ sdk: 'WindowsPowerShell', version: '5.1', ready: true }));
+        CASEOPS_WINDOWS_RUNTIME
     - name: Prepare the scoped Node trust environment
       id: prepare
       shell: bash
