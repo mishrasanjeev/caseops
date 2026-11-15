@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { expectStatus } from "./support/iplf058b";
 import {
   assistantCitationButton,
@@ -30,8 +30,8 @@ function pythonExecutable(): string {
       : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"));
 }
 
-function runPrivateFixture(script: string, values: Record<string, string>): string {
-  const result = spawnSync(pythonExecutable(), ["-c", script], {
+async function runPrivateFixture(script: string, values: Record<string, string>): Promise<string> {
+  const result = await runLocalPythonFixture(pythonExecutable(), ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -107,7 +107,7 @@ test("IPLF-066B an access change and its restore keep a saved assistant answer l
   const matterRecord = await matter.json();
   const filename = "066B access evidence.txt";
   const secret = `Cobalt-${runId}`;
-  runPrivateFixture(
+  await runPrivateFixture(
     [
       "import hashlib,os",
       "from sqlalchemy import select",

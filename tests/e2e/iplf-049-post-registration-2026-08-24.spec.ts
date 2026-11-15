@@ -1,6 +1,5 @@
 /** IPLF-049B / UJ-38: rectification, cancellation, and non-use proceedings. */
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import {
@@ -12,10 +11,11 @@ import {
 } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 
 const PASSWORD = "PostRegistration2026!";
 
-function grantIpEntitlement(companyId: string): void {
+async function grantIpEntitlement(companyId: string): Promise<void> {
   const python =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
@@ -29,7 +29,7 @@ function grantIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -62,7 +62,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   return { ...body, slug, email };
 }
 

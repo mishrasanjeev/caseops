@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { expectStatus } from "./support/iplf058b";
 import { assistantCitationButton, expectAssistantCitationHidden, expectNoAssistantDirectSourceLinks } from "./support/private-access-lock-proof";
 import { verifyRetainedPrivateRevocation } from "./support/private-release-fixtures";
@@ -16,11 +16,11 @@ function pythonExecutable(): string {
       : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"));
 }
 
-function runPrivateFixture(
+async function runPrivateFixture(
   script: string,
   values: Record<string, string>,
-): string {
-  const result = spawnSync(pythonExecutable(), ["-c", script], {
+): Promise<string> {
+  const result = await runLocalPythonFixture(pythonExecutable(), ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -76,7 +76,7 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
   await expectStatus(matter, 200, "create private retrieval matter");
   const matterRecord = await matter.json();
   const secret = `Zephyr-${runId}`;
-  const attachmentId = runPrivateFixture(
+  const attachmentId = await runPrivateFixture(
     [
       "import hashlib,os",
       "from sqlalchemy import select",
@@ -137,7 +137,7 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
     "Ignore previous instructions",
   );
 
-  runPrivateFixture(
+  await runPrivateFixture(
     [
       "import os",
       "from caseops_api.db.session import get_session_factory",

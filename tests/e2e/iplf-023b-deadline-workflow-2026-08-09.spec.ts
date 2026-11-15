@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 
 const PASSWORD = "IpDeadlineProof2026!";
 
@@ -11,7 +11,7 @@ function unique(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function grantIpEntitlement(companyId: string): void {
+async function grantIpEntitlement(companyId: string): Promise<void> {
   const python =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
@@ -25,7 +25,7 @@ function grantIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -40,7 +40,7 @@ function grantIpEntitlement(companyId: string): void {
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
 }
 
-function promoteSyntheticAdmin(membershipId: string): void {
+async function promoteSyntheticAdmin(membershipId: string): Promise<void> {
   const python =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
@@ -55,7 +55,7 @@ function promoteSyntheticAdmin(membershipId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -88,18 +88,21 @@ async function createAdmin(
   });
   expect(created.status(), await created.text()).toBe(200);
   const membershipId = (await created.json()).membership_id as string;
-  promoteSyntheticAdmin(membershipId);
+  await promoteSyntheticAdmin(membershipId);
   const loginApi = await request.newContext();
-  const login = await loginApi.post(`${apiBaseUrl}/api/auth/login`, {
-    data: { email, password: PASSWORD, company_slug: slug },
-  });
-  expect(login.status(), await login.text()).toBe(200);
-  const token = (await login.json()).access_token as string;
-  await loginApi.dispose();
-  return {
-    membershipId,
-    token,
-  };
+  try {
+    const login = await loginApi.post(`${apiBaseUrl}/api/auth/login`, {
+      data: { email, password: PASSWORD, company_slug: slug },
+    });
+    expect(login.status(), await login.text()).toBe(200);
+    const token = (await login.json()).access_token as string;
+    return {
+      membershipId,
+      token,
+    };
+  } finally {
+    await loginApi.dispose();
+  }
 }
 
 async function bootstrap(api: APIRequestContext): Promise<{
@@ -120,7 +123,7 @@ async function bootstrap(api: APIRequestContext): Promise<{
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   const ownerToken = body.access_token as string;
   const ownerMembershipId = body.membership.id as string;
   const headers = { Authorization: `Bearer ${ownerToken}` };
@@ -163,190 +166,193 @@ async function seedDeadlineWorkflow(
   const legal = await createAdmin(api, ownerToken, slug, "legal");
   const reviewer = await createAdmin(api, ownerToken, slug, "reviewer");
   const legalApi = await request.newContext();
-  const legalHeaders = { Authorization: `Bearer ${legal.token}` };
+  try {
+    const legalHeaders = { Authorization: `Bearer ${legal.token}` };
 
-  const matterResponse = await api.post(`${apiBaseUrl}/api/matters/`, {
-    headers: ownerHeaders,
-    data: {
-      title: "IPLF-023B legal deadline Matter",
-      matter_code: unique("IP-DL").toUpperCase(),
-      practice_area: "intellectual_property",
-      forum_level: "tribunal",
-      status: "intake",
-    },
-  });
-  expect(matterResponse.status(), await matterResponse.text()).toBe(200);
-  const matter = await matterResponse.json();
-  const conflict = await api.post(`${apiBaseUrl}/api/matters/${matter.id}/conflict-checks`, {
-    headers: ownerHeaders,
-    data: { opposing_party_name: "Unrelated Deadline Fixture Co", related_party_names: [] },
-  });
-  expect(conflict.status(), await conflict.text()).toBe(200);
-  const activatedMatter = await api.patch(`${apiBaseUrl}/api/matters/${matter.id}`, {
-    headers: ownerHeaders,
-    data: { status: "active", expected_updated_at: matter.updated_at },
-  });
-  expect(activatedMatter.status(), await activatedMatter.text()).toBe(200);
-
-  const docketResponse = await api.post(`${apiBaseUrl}/api/ip/dockets`, {
-    headers: ownerHeaders,
-    data: {
-      title: "DEADLINE FLOW mark",
-      matter_id: matter.id,
-      primary_identifier: unique("TM-DEADLINE"),
-      particulars: {
-        form_key: "TM-A",
-        form_version: "2026.1",
-        mark_kind: "word",
-        representation: {
-          text: "DEADLINE FLOW",
-          evidence_reference: "attachment:deadline-flow-mark",
-        },
-        classes: [{ class_number: 42, specification: "Legal deadline software" }],
-        use_priority: null,
-        parties: [{ role: "applicant", name: "Deadline Flow LLP" }],
-        agent: null,
-        filing_manifest: [{
-          key: "representation",
-          label: "Mark representation",
-          required: true,
-          evidence_reference: "attachment:deadline-flow-mark",
-        }],
-      },
-    },
-  });
-  expect(docketResponse.status(), await docketResponse.text()).toBe(201);
-  const docketId = (await docketResponse.json()).id as string;
-
-  const calendarResponse = await api.post(`${apiBaseUrl}/api/ip/working-calendars`, {
-    headers: ownerHeaders,
-    data: {
-      key: unique("ip-india-calendar"),
-      name: "IP India verified calendar",
-      jurisdiction: "IN",
-      office: "IP India",
-      timezone: "Asia/Kolkata",
-      weekend_days: [5, 6],
-      holidays: ["2026-08-17"],
-      exceptional_working_days: [],
-      source_priority: ["official_gazette"],
-      source_reference: "https://official.example/ip-india/calendar/2026",
-      source_hash: "a".repeat(64),
-      effective_from: "2026-01-01",
-      effective_until: "2026-12-31",
-    },
-  });
-  expect(calendarResponse.status(), await calendarResponse.text()).toBe(201);
-  const calendar = await calendarResponse.json();
-  const calendarActivation = await legalApi.post(
-    `${apiBaseUrl}/api/ip/working-calendars/${calendar.id}/activate`,
-    {
-      headers: legalHeaders,
-      data: { reason: "Independent review of the official calendar source." },
-    },
-  );
-  expect(calendarActivation.status(), await calendarActivation.text()).toBe(200);
-
-  const ruleCalculation = {
-    deadline_kind: "legal_deadline",
-    trigger_kind: "examination_report_received",
-    base_date: "2026-08-14",
-    base_date_certainty: "certain",
-    duration_value: 1,
-    duration_unit: "days",
-    calendar_method: "business_days",
-    direction: "after",
-    include_base_date: false,
-    next_working_day: true,
-    extension_days: 0,
-    rule_version_id: "fixture-rule",
-    rule_citation: "Trade Marks Rules, verified test citation",
-    source_version: "fixture-source",
-    engine_version: "caseops-ip-deadline-v1",
-    calendar: {
-      calendar_version_id: calendar.id,
-      timezone: "Asia/Kolkata",
-      weekend_days: [5, 6],
-      holidays: ["2026-08-17"],
-      exceptional_working_days: [],
-      source_reference: calendar.source_reference,
-      source_hash: calendar.source_hash,
-    },
-  };
-  const ruleResponse = await api.post(`${apiBaseUrl}/api/ip/deadline-rules`, {
-    headers: ownerHeaders,
-    data: {
-      key: unique("in-tm-response"),
-      rule_kind: "deadline",
-      jurisdiction: "IN",
-      office: "IP India",
-      right_kind: "trademark",
-      proceeding_kind: "application",
-      role: "applicant",
-      stage: "examination",
-      source_record_id: "official-tm-rules-2026-08-09",
-      source_hash: "b".repeat(64),
-      source_reference: "https://official.example/ip-india/tm-rules",
-      effective_from: "2026-01-01",
-      effective_until: null,
-      engine_compatibility: "caseops-ip-deadline-v1",
-      definition: {
-        deadline_kind: "legal_deadline",
-        trigger_kind: "examination_report_received",
-        duration_value: 1,
-        duration_unit: "days",
-        calendar_method: "business_days",
-        direction: "after",
-        include_base_date: false,
-        next_working_day: true,
-        extension_days: 0,
-        rule_citation: "Trade Marks Rules, verified test citation",
-      },
-      fixtures: [{
-        id: "weekend-holiday-boundary",
-        fixture_kind: "boundary",
-        calculation: ruleCalculation,
-        expected_state: "candidate",
-        expected_result_on: "2026-08-18",
-        evidence_reference: "fixture:official-calendar",
-      }],
-    },
-  });
-  expect(ruleResponse.status(), await ruleResponse.text()).toBe(201);
-  const rule = await ruleResponse.json();
-  const ruleActivation = await legalApi.post(
-    `${apiBaseUrl}/api/ip/deadline-rules/${rule.id}/activate`,
-    {
-      headers: legalHeaders,
+    const matterResponse = await api.post(`${apiBaseUrl}/api/matters/`, {
+      headers: ownerHeaders,
       data: {
-        reviewer_membership_id: reviewer.membershipId,
-        select_for_company: true,
-        auto_confirm_eligible: false,
+        title: "IPLF-023B legal deadline Matter",
+        matter_code: unique("IP-DL").toUpperCase(),
+        practice_area: "intellectual_property",
+        forum_level: "tribunal",
+        status: "intake",
       },
-    },
-  );
-  expect(ruleActivation.status(), await ruleActivation.text()).toBe(200);
+    });
+    expect(matterResponse.status(), await matterResponse.text()).toBe(200);
+    const matter = await matterResponse.json();
+    const conflict = await api.post(`${apiBaseUrl}/api/matters/${matter.id}/conflict-checks`, {
+      headers: ownerHeaders,
+      data: { opposing_party_name: "Unrelated Deadline Fixture Co", related_party_names: [] },
+    });
+    expect(conflict.status(), await conflict.text()).toBe(200);
+    const activatedMatter = await api.patch(`${apiBaseUrl}/api/matters/${matter.id}`, {
+      headers: ownerHeaders,
+      data: { status: "active", expected_updated_at: matter.updated_at },
+    });
+    expect(activatedMatter.status(), await activatedMatter.text()).toBe(200);
 
-  const proposal = await legalApi.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/deadlines`, {
-    headers: legalHeaders,
-    data: {
-      title: "Respond to examination report",
-      rule_version_id: rule.id,
-      calendar_version_id: calendar.id,
+    const docketResponse = await api.post(`${apiBaseUrl}/api/ip/dockets`, {
+      headers: ownerHeaders,
+      data: {
+        title: "DEADLINE FLOW mark",
+        matter_id: matter.id,
+        primary_identifier: unique("TM-DEADLINE"),
+        particulars: {
+          form_key: "TM-A",
+          form_version: "2026.1",
+          mark_kind: "word",
+          representation: {
+            text: "DEADLINE FLOW",
+            evidence_reference: "attachment:deadline-flow-mark",
+          },
+          classes: [{ class_number: 42, specification: "Legal deadline software" }],
+          use_priority: null,
+          parties: [{ role: "applicant", name: "Deadline Flow LLP" }],
+          agent: null,
+          filing_manifest: [{
+            key: "representation",
+            label: "Mark representation",
+            required: true,
+            evidence_reference: "attachment:deadline-flow-mark",
+          }],
+        },
+      },
+    });
+    expect(docketResponse.status(), await docketResponse.text()).toBe(201);
+    const docketId = (await docketResponse.json()).id as string;
+
+    const calendarResponse = await api.post(`${apiBaseUrl}/api/ip/working-calendars`, {
+      headers: ownerHeaders,
+      data: {
+        key: unique("ip-india-calendar"),
+        name: "IP India verified calendar",
+        jurisdiction: "IN",
+        office: "IP India",
+        timezone: "Asia/Kolkata",
+        weekend_days: [5, 6],
+        holidays: ["2026-08-17"],
+        exceptional_working_days: [],
+        source_priority: ["official_gazette"],
+        source_reference: "https://official.example/ip-india/calendar/2026",
+        source_hash: "a".repeat(64),
+        effective_from: "2026-01-01",
+        effective_until: "2026-12-31",
+      },
+    });
+    expect(calendarResponse.status(), await calendarResponse.text()).toBe(201);
+    const calendar = await calendarResponse.json();
+    const calendarActivation = await legalApi.post(
+      `${apiBaseUrl}/api/ip/working-calendars/${calendar.id}/activate`,
+      {
+        headers: legalHeaders,
+        data: { reason: "Independent review of the official calendar source." },
+      },
+    );
+    expect(calendarActivation.status(), await calendarActivation.text()).toBe(200);
+
+    const ruleCalculation = {
+      deadline_kind: "legal_deadline",
+      trigger_kind: "examination_report_received",
       base_date: "2026-08-14",
       base_date_certainty: "certain",
-      is_critical: true,
-    },
-  });
-  expect(proposal.status(), await proposal.text()).toBe(201);
-  const deadlineId = (await proposal.json()).id as string;
-  await legalApi.dispose();
-  return {
-    docketId,
-    deadlineId,
-    backupMembershipId: reviewer.membershipId,
-    matterId: matter.id as string,
-  };
+      duration_value: 1,
+      duration_unit: "days",
+      calendar_method: "business_days",
+      direction: "after",
+      include_base_date: false,
+      next_working_day: true,
+      extension_days: 0,
+      rule_version_id: "fixture-rule",
+      rule_citation: "Trade Marks Rules, verified test citation",
+      source_version: "fixture-source",
+      engine_version: "caseops-ip-deadline-v1",
+      calendar: {
+        calendar_version_id: calendar.id,
+        timezone: "Asia/Kolkata",
+        weekend_days: [5, 6],
+        holidays: ["2026-08-17"],
+        exceptional_working_days: [],
+        source_reference: calendar.source_reference,
+        source_hash: calendar.source_hash,
+      },
+    };
+    const ruleResponse = await api.post(`${apiBaseUrl}/api/ip/deadline-rules`, {
+      headers: ownerHeaders,
+      data: {
+        key: unique("in-tm-response"),
+        rule_kind: "deadline",
+        jurisdiction: "IN",
+        office: "IP India",
+        right_kind: "trademark",
+        proceeding_kind: "application",
+        role: "applicant",
+        stage: "examination",
+        source_record_id: "official-tm-rules-2026-08-09",
+        source_hash: "b".repeat(64),
+        source_reference: "https://official.example/ip-india/tm-rules",
+        effective_from: "2026-01-01",
+        effective_until: null,
+        engine_compatibility: "caseops-ip-deadline-v1",
+        definition: {
+          deadline_kind: "legal_deadline",
+          trigger_kind: "examination_report_received",
+          duration_value: 1,
+          duration_unit: "days",
+          calendar_method: "business_days",
+          direction: "after",
+          include_base_date: false,
+          next_working_day: true,
+          extension_days: 0,
+          rule_citation: "Trade Marks Rules, verified test citation",
+        },
+        fixtures: [{
+          id: "weekend-holiday-boundary",
+          fixture_kind: "boundary",
+          calculation: ruleCalculation,
+          expected_state: "candidate",
+          expected_result_on: "2026-08-18",
+          evidence_reference: "fixture:official-calendar",
+        }],
+      },
+    });
+    expect(ruleResponse.status(), await ruleResponse.text()).toBe(201);
+    const rule = await ruleResponse.json();
+    const ruleActivation = await legalApi.post(
+      `${apiBaseUrl}/api/ip/deadline-rules/${rule.id}/activate`,
+      {
+        headers: legalHeaders,
+        data: {
+          reviewer_membership_id: reviewer.membershipId,
+          select_for_company: true,
+          auto_confirm_eligible: false,
+        },
+      },
+    );
+    expect(ruleActivation.status(), await ruleActivation.text()).toBe(200);
+
+    const proposal = await legalApi.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/deadlines`, {
+      headers: legalHeaders,
+      data: {
+        title: "Respond to examination report",
+        rule_version_id: rule.id,
+        calendar_version_id: calendar.id,
+        base_date: "2026-08-14",
+        base_date_certainty: "certain",
+        is_critical: true,
+      },
+    });
+    expect(proposal.status(), await proposal.text()).toBe(201);
+    const deadlineId = (await proposal.json()).id as string;
+    return {
+      docketId,
+      deadlineId,
+      backupMembershipId: reviewer.membershipId,
+      matterId: matter.id as string,
+    };
+  } finally {
+    await legalApi.dispose();
+  }
 }
 
 async function installSession(page: Page, slug: string): Promise<void> {
@@ -374,131 +380,145 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
 }) => {
   test.setTimeout(180_000);
   const api = await request.newContext();
-  const { slug, ownerToken, ownerMembershipId } = await bootstrap(api);
-  const seeded = await seedDeadlineWorkflow(api, ownerToken, ownerMembershipId, slug);
-  await installSession(page, slug);
-  await page.setViewportSize({ width: 360, height: 900 });
-  await page.goto("/app/ip");
+  try {
+    const { slug, ownerToken, ownerMembershipId } = await bootstrap(api);
+    const seeded = await seedDeadlineWorkflow(api, ownerToken, ownerMembershipId, slug);
+    await installSession(page, slug);
+    await page.setViewportSize({ width: 360, height: 900 });
+    await page.goto("/app/ip");
 
-  await expect(page.getByRole("heading", { name: "DEADLINE FLOW mark" })).toBeVisible();
-  await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
-  const deadlineWorkspace = page.getByTestId("ip-deadline-workspace");
-  await expect(deadlineWorkspace).toContainText("Calculations are proposals");
-  await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/No responsible lawyer/)).toBeVisible();
-  await expect(deadlineWorkspace.getByText("2026-08-18 · candidate · v1")).toBeVisible();
-  await expect(
-    deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
-  ).toHaveAttribute("href", "https://official.example/ip-india/tm-rules");
-  await deadlineWorkspace.getByRole("button", { name: "View calculation provenance" }).click();
-  const provenance = deadlineWorkspace.getByTestId(
-    `ip-deadline-provenance-${seeded.deadlineId}`,
-  );
-  await expect(provenance).toContainText("Manual base date");
-  await expect(provenance).toContainText("No approved extension is included");
-  await expect(provenance).toContainText("calendar v1");
-  await deadlineWorkspace.getByLabel("Backup").selectOption(seeded.backupMembershipId);
-  await deadlineWorkspace.getByLabel("Internal target").fill("2026-08-16");
+    await expect(page.getByRole("heading", { name: "DEADLINE FLOW mark" })).toBeVisible();
+    await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
+    const deadlineWorkspace = page.getByTestId("ip-deadline-workspace");
+    await expect(deadlineWorkspace).toContainText("Calculations are proposals");
+    await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
+    await expect(deadlineWorkspace.getByText(/No responsible lawyer/)).toBeVisible();
+    await expect(deadlineWorkspace.getByText("2026-08-18 · candidate · v1")).toBeVisible();
+    await expect(
+      deadlineWorkspace.getByRole("link", { name: /Open verified rule source/ }),
+    ).toHaveAttribute("href", "https://official.example/ip-india/tm-rules");
+    await deadlineWorkspace.getByRole("button", { name: "View calculation provenance" }).click();
+    const provenance = deadlineWorkspace.getByTestId(
+      `ip-deadline-provenance-${seeded.deadlineId}`,
+    );
+    await expect(provenance).toContainText("Manual base date");
+    await expect(provenance).toContainText("No approved extension is included");
+    await expect(provenance).toContainText("calendar v1");
+    await deadlineWorkspace.getByLabel("Backup").selectOption(seeded.backupMembershipId);
+    await deadlineWorkspace.getByLabel("Internal target").fill("2026-08-16");
 
-  for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
-    const control = deadlineWorkspace.getByRole("button", { name });
-    await expect(control).toBeVisible();
-    const box = await control.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    for (const name of ["Calculate deadline proposal", "Confirm legal deadline"]) {
+      const control = deadlineWorkspace.getByRole("button", { name });
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
+
+    await deadlineWorkspace.getByRole("button", { name: "Confirm legal deadline" }).click();
+    await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
+    await expect(deadlineWorkspace.getByText(/confirmed · v2/)).toBeVisible();
+
+    const confirmedWorkspace = await api.get(
+      `${apiBaseUrl}/api/ip/dockets/${seeded.docketId}/deadline-workspace`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    expect(confirmedWorkspace.status(), await confirmedWorkspace.text()).toBe(200);
+    const confirmedDeadline = (await confirmedWorkspace.json()).deadlines.find(
+      (row: { id: string }) => row.id === seeded.deadlineId,
+    );
+    const calendarResponse = await api.get(
+      `${apiBaseUrl}/api/calendar/events?from=2026-08-16&to=2026-08-18`,
+      { headers: { Authorization: `Bearer ${ownerToken}` } },
+    );
+    expect(calendarResponse.status(), await calendarResponse.text()).toBe(200);
+    const calendarEvents = (await calendarResponse.json()).events as Array<{
+      id: string;
+      display_type: string;
+      ip_docket_id: string | null;
+    }>;
+    const filingEvent = calendarEvents.find(
+      (event) => event.display_type === "filing_deadline",
+    );
+    const targetEvent = calendarEvents.find(
+      (event) => event.display_type === "internal_target",
+    );
+    expect(filingEvent).toMatchObject({ ip_docket_id: seeded.docketId });
+    expect(targetEvent).toMatchObject({ ip_docket_id: seeded.docketId });
+
+    await page.goto("/app/calendar?view=day&date=2026-08-18");
+    await expect(page).toHaveURL(/\/app\/calendar\?view=day&date=2026-08-18$/);
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/calendar\?view=day&date=2026-08-18$/);
+    await expect(page.getByTestId("calendar-view-day")).toHaveAttribute("aria-selected", "true");
+    const filingPane = page.getByTestId("calendar-day-pane-2026-08-18");
+    await expect(filingPane).toBeVisible();
+    const filingLink = filingPane.getByTestId(`calendar-event-${filingEvent!.id}`);
+    await expect(filingLink).toContainText("Legal filing deadline");
+    await expect(filingLink).toContainText("Respond to examination report");
+    await expect(
+      filingLink,
+    ).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
+    await page.getByTestId("calendar-prev-month").click();
+    await expect(page.getByTestId("calendar-day-pane-2026-08-17")).toBeVisible();
+    await page.getByTestId("calendar-next-month").click();
+    await expect(filingPane).toBeVisible();
+    await expect(filingLink).toBeVisible();
+    await page.goto("/app/calendar?view=day&date=2026-08-16");
+    await expect(page).toHaveURL(/\/app\/calendar\?view=day&date=2026-08-16$/);
+    const targetPane = page.getByTestId("calendar-day-pane-2026-08-16");
+    await expect(targetPane).toBeVisible();
+    const targetLink = targetPane.getByTestId(`calendar-event-${targetEvent!.id}`);
+    await expect(targetLink).toContainText("Internal target");
+    await expect(targetLink).toContainText("Respond to examination report");
+    await expect(targetLink).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
+    const operationalBypass = await api.patch(
+      `${apiBaseUrl}/api/matters/${seeded.matterId}/deadlines/${confirmedDeadline.matter_deadline_id}`,
+      {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+        data: { status: "done" },
+      },
+    );
+    const operationalBypassBody = await operationalBypass.json();
+    expect(operationalBypass.status(), JSON.stringify(operationalBypassBody)).toBe(409);
+    expect(operationalBypassBody.code).toBe("ip_deadline_workflow_required");
+    await targetLink.click();
+    await expect(page).toHaveURL(new RegExp(`/app/ip\\?docket=${seeded.docketId}$`));
+    await expect(page.getByRole("heading", { name: "DEADLINE FLOW mark" })).toBeVisible();
+    await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
+    await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
+      "confirmed",
+    );
+
+    const refreshed = page.getByTestId("ip-deadline-workspace");
+    await refreshed.getByLabel("Evidence reference").fill("receipt:official-response-filing");
+    await refreshed
+      .getByLabel("Completion attestation")
+      .fill("Verified the official filing receipt and legal completion evidence.");
+    await refreshed.getByRole("button", { name: "Complete with legal evidence" }).click();
+    await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
+    await expect(refreshed.getByText(/completed · v3/)).toBeVisible();
+
+    const governance = page.getByTestId("ip-deadline-governance");
+    for (const name of [
+      "Propose calendar version",
+      "Propose rule and fixture",
+      "Preview impact",
+    ]) {
+      const control = governance.getByRole("button", { name });
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
+    await page.reload();
+    await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
+    await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
+      "completed",
+    );
+  } finally {
+    await api.dispose();
   }
-
-  await deadlineWorkspace.getByRole("button", { name: "Confirm legal deadline" }).click();
-  await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(deadlineWorkspace.getByText(/confirmed · v2/)).toBeVisible();
-
-  const confirmedWorkspace = await api.get(
-    `${apiBaseUrl}/api/ip/dockets/${seeded.docketId}/deadline-workspace`,
-    { headers: { Authorization: `Bearer ${ownerToken}` } },
-  );
-  expect(confirmedWorkspace.status(), await confirmedWorkspace.text()).toBe(200);
-  const confirmedDeadline = (await confirmedWorkspace.json()).deadlines.find(
-    (row: { id: string }) => row.id === seeded.deadlineId,
-  );
-  const calendarResponse = await api.get(
-    `${apiBaseUrl}/api/calendar/events?from=2026-08-16&to=2026-08-18`,
-    { headers: { Authorization: `Bearer ${ownerToken}` } },
-  );
-  expect(calendarResponse.status(), await calendarResponse.text()).toBe(200);
-  const calendarEvents = (await calendarResponse.json()).events as Array<{
-    id: string;
-    display_type: string;
-    ip_docket_id: string | null;
-  }>;
-  const filingEvent = calendarEvents.find(
-    (event) => event.display_type === "filing_deadline",
-  );
-  const targetEvent = calendarEvents.find(
-    (event) => event.display_type === "internal_target",
-  );
-  expect(filingEvent).toMatchObject({ ip_docket_id: seeded.docketId });
-  expect(targetEvent).toMatchObject({ ip_docket_id: seeded.docketId });
-
-  await page.goto("/app/calendar");
-  await page.getByTestId("calendar-view-day").click();
-  const now = new Date();
-  const currentDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const filingDay = Date.UTC(2026, 7, 18);
-  const filingOffset = Math.round((filingDay - currentDay) / 86_400_000);
-  const direction = filingOffset < 0 ? "calendar-prev-month" : "calendar-next-month";
-  for (let index = 0; index < Math.abs(filingOffset); index += 1) {
-    await page.getByTestId(direction).click();
-  }
-  const filingLink = page.getByTestId(`calendar-event-${filingEvent!.id}`);
-  await expect(filingLink).toContainText("Legal filing deadline");
-  await expect(filingLink).toContainText("Respond to examination report");
-  await expect(
-    filingLink,
-  ).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
-  await page.getByTestId("calendar-prev-month").click();
-  await page.getByTestId("calendar-prev-month").click();
-  const targetLink = page.getByTestId(`calendar-event-${targetEvent!.id}`);
-  await expect(targetLink).toContainText("Internal target");
-  await expect(targetLink).toContainText("Respond to examination report");
-  await expect(targetLink).toHaveAttribute("href", `/app/ip?docket=${seeded.docketId}`);
-  const operationalBypass = await api.patch(
-    `${apiBaseUrl}/api/matters/${seeded.matterId}/deadlines/${confirmedDeadline.matter_deadline_id}`,
-    {
-      headers: { Authorization: `Bearer ${ownerToken}` },
-      data: { status: "done" },
-    },
-  );
-  const operationalBypassBody = await operationalBypass.json();
-  expect(operationalBypass.status(), JSON.stringify(operationalBypassBody)).toBe(409);
-  expect(operationalBypassBody.code).toBe("ip_deadline_workflow_required");
-  await page.goto(`/app/ip?docket=${seeded.docketId}`);
-  await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
-  await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
-    "confirmed",
-  );
-
-  const refreshed = page.getByTestId("ip-deadline-workspace");
-  await refreshed.getByLabel("Evidence reference").fill("receipt:official-response-filing");
-  await refreshed
-    .getByLabel("Completion attestation")
-    .fill("Verified the official filing receipt and legal completion evidence.");
-  await refreshed.getByRole("button", { name: "Complete with legal evidence" }).click();
-  await expect(page.getByText("Legal deadline workspace updated")).toBeVisible();
-  await expect(refreshed.getByText(/completed · v3/)).toBeVisible();
-
-  const governance = page.getByTestId("ip-deadline-governance");
-  for (const name of [
-    "Propose calendar version",
-    "Propose rule and fixture",
-    "Preview impact",
-  ]) {
-    const control = governance.getByRole("button", { name });
-    await expect(control).toBeVisible();
-    const box = await control.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(360);
-  }
-  await api.dispose();
 });
