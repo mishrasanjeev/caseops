@@ -683,7 +683,7 @@ test("synthetic read-only draft receipt", async ({}, testInfo) => {
     workers: 1, retries: 0, reporter: [[${JSON.stringify(path.join(root, "scripts/prod_playwright_reporter.cjs"))}]],
     use: { trace: "off", screenshot: "off", video: "off" }, projects: [{ name: "offline" }] };`, { flag: "wx" });
   const env = Object.fromEntries(Object.entries(process.env)
-    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
+    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|TMPDIR|HOME|USERPROFILE)$/i.test(key)));
   Object.assign(env, { CASEOPS_EXPECTED_RELEASE_SHA: sha, CASEOPS_PW_EVIDENCE_INVOCATION: invocation,
     CASEOPS_PW_EVIDENCE_PHASE: "execution", CASEOPS_PW_EVIDENCE_JSON_FILE: path.join(directory, "native-results.json"),
     CASEOPS_PW_EVIDENCE_JUNIT_FILE: path.join(directory, "native-results.xml") });
@@ -792,7 +792,7 @@ for (const status of [503, 200]) {
     workers: 1, retries: 0, reporter: [[${JSON.stringify(path.join(root, "scripts/prod_playwright_reporter.cjs"))}]],
     use: { trace: "off", screenshot: "off", video: "off" }, projects: [{ name: "offline" }] };`, { flag: "wx" });
   const env = Object.fromEntries(Object.entries(process.env)
-    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
+    .filter(([key]) => /^(?:PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|TMPDIR|HOME|USERPROFILE)$/i.test(key)));
   Object.assign(env, { CASEOPS_EXPECTED_RELEASE_SHA: sha, CASEOPS_PW_EVIDENCE_INVOCATION: invocation,
     CASEOPS_PW_EVIDENCE_PHASE: "execution", CASEOPS_PW_EVIDENCE_JSON_FILE: path.join(directory, "native-results.json"),
     CASEOPS_PW_EVIDENCE_JUNIT_FILE: path.join(directory, "native-results.xml") });
