@@ -21,6 +21,11 @@ def _load_local_transport():
     import stat as _stat
     _path = Path(__file__).absolute().with_name("local-transport.py")
     _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    # Windows pathname ctime is creation time; descriptor ctime is change time.
+    # Compare their shared creation identity and retain each channel's
+    # complete before/after frame, including its own ctime.
+    if _os.name == "nt":
+        _keys += ("st_birthtime_ns",)
     _frame = lambda value: tuple(getattr(value, key) for key in _keys)
     assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
     def _namespace():
@@ -36,7 +41,9 @@ def _load_local_transport():
     try:
         _first = _os.fstat(_fd)
         assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
-        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        if _os.name == "nt":
+            assert _first.st_birthtime_ns > 0, "Windows transport creation identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and (key == "st_ctime_ns" or (key == "st_dev" and _named.st_dev == 0)))), "Local transport named descriptor mismatch"
         _data = bytearray()
         while len(_data) <= _first.st_size:
             _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))

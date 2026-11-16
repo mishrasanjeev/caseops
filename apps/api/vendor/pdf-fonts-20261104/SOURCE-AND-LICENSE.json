@@ -16,7 +16,7 @@
       "bytes": 4377,
       "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
       "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/LICENSE",
-      "git_blob": null,
+      "git_blob": "c82d72e422e2d08c5ab439b6bac7c2177ea0c565",
       "external_preobserved_SHA256": null
     },
     {
@@ -36,6 +36,38 @@
       "external_preobserved_SHA256": null
     },
     {
+      "path": "NotoSans-Regular.ttf",
+      "bytes": 569208,
+      "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+      "git_blob": "d55220958aa51eeeb85048d746eabe43d2cd9f14",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSans-Bold.ttf",
+      "bytes": 575740,
+      "sha256": "c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Bold.ttf",
+      "git_blob": "27131f8f479947ef1b6c1d0bc9ad5ab3d30bd831",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSans-Italic.ttf",
+      "bytes": 552776,
+      "sha256": "36cff144df01309dab648bea71baff9bb074026914afe63aeacc8bc90b67a28b",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Italic.ttf",
+      "git_blob": "c7c67b281b9c6134c4be186cdd4639688e08855e",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSans-BoldItalic.ttf",
+      "bytes": 555292,
+      "sha256": "6edf4227ef0fa846aca70e86a307804ca4401741830f5b3af0f2554abe2b8466",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-BoldItalic.ttf",
+      "git_blob": "1c06d9a8c3ef7067446f8a24a501b8648b549404",
+      "external_preobserved_SHA256": null
+    },
+    {
       "path": "NotoSansDevanagari-Regular.ttf",
       "bytes": 219212,
       "sha256": "385e78e6359a9d88a0f243d53b1209d7548361ba2194e2b9ec779bcaa7e8949d",
@@ -52,7 +84,86 @@
       "external_preobserved_SHA256": null
     }
   ],
+  "noto_sans_acquisition_20261114": {
+    "source": "Official notofonts/noto-fonts GitHub contents API at the existing pinned commit; decoded original Git blobs, not a mirror or generated font.",
+    "checks_before_asset_write": "All four complete font buffers and the shared LICENSE verified before exclusive creation: Git blob SHA1/size, static 00010000 TrueType header, actual U+2011 cmap and nonzero glyph ID, genuine head.macStyle, fsType=0, family/PostScript names and OFL name record.",
+    "license": "Repository LICENSE at the same commit is byte-identical to existing OFL-Noto.txt; its exact Git blob is recorded above.",
+    "native_shaping_rendering_extraction_tests_executed": false,
+    "status": "UNTESTED candidate; metadata inspection is not renderer, image, production or original-draft acceptance."
+  },
   "font_metadata": {
+    "NotoSans-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 64,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 2840,
+      "nonbreaking_hyphen": {"codepoint": "U+2011", "glyph": "uni2011", "glyph_id": 2406},
+      "names": {
+        "0": "Copyright 2015-2021 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans",
+        "2": "Regular",
+        "4": "Noto Sans Regular",
+        "5": "Version 2.008; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D latn -f none -a qsq -X \"\"",
+        "6": "NotoSans-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSans-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 32,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 2840,
+      "nonbreaking_hyphen": {"codepoint": "U+2011", "glyph": "uni2011", "glyph_id": 2406},
+      "names": {
+        "0": "Copyright 2015-2021 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans",
+        "2": "Bold",
+        "4": "Noto Sans Bold",
+        "5": "Version 2.008; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D latn -f none -a qsq -X \"\"",
+        "6": "NotoSans-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSans-Italic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 2,
+      "os2_fsSelection": 257,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 2840,
+      "nonbreaking_hyphen": {"codepoint": "U+2011", "glyph": "uni2011", "glyph_id": 2759},
+      "names": {
+        "0": "Copyright 2015-2022 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans",
+        "2": "Italic",
+        "4": "Noto Sans Italic",
+        "5": "Version 2.008; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D latn -f none -a qsq -X \"\"",
+        "6": "NotoSans-Italic",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSans-BoldItalic.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 3,
+      "os2_fsSelection": 289,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 2840,
+      "nonbreaking_hyphen": {"codepoint": "U+2011", "glyph": "uni2011", "glyph_id": 2759},
+      "names": {
+        "0": "Copyright 2015-2022 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans",
+        "2": "Bold Italic",
+        "4": "Noto Sans Bold Italic",
+        "5": "Version 2.008; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D latn -f none -a qsq -X \"\"",
+        "6": "NotoSans-BoldItalic",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
     "LiberationSerif-BoldItalic.ttf": {
       "embedding_fsType": 0,
       "head_macStyle": 3,
@@ -330,7 +441,7 @@
   "binary_source_limit": "Official publisher-linked release archive; first observed SHA256 retained. Not a claim of deterministic SFD-to-TTF reconstruction.",
   "glyph_shaping_raster_or_positive_tests_executed": false,
   "runtime_manifest_pin": {
-    "bytes": 3773,
-    "sha256": "a42bb856e26770f31de0d47c46dc038a4e946bea61fcf1079a9c2a22dafc7670"
+    "bytes": 4604,
+    "sha256": "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4"
   }
 }

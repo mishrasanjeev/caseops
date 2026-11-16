@@ -1,4 +1,4 @@
-import AxeBuilder from "@axe-core/playwright";
+import { loadAxeBuilder } from "./support/external-journey-loaders";
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
@@ -40,7 +40,7 @@ async function signIn(page: Page, slug: string): Promise<void> {
 }
 
 async function expectNoSeriousViolations(page: Page, label: string) {
-  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+  const results = await new (loadAxeBuilder())({ page }).withTags(AXE_TAGS).analyze();
   const blocking = results.violations.filter(
     (v) => v.impact === "critical" || v.impact === "serious",
   );

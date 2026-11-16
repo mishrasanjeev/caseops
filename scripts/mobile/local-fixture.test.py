@@ -17,6 +17,7 @@ import ssl
 import socket
 import tempfile
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import call, patch
@@ -165,7 +166,7 @@ class PrivateMetadataContractTests(unittest.TestCase):
     def test_nonzero_named_device_mismatch_is_not_a_windows_portability_exception(self):
         fields = {"st_dev": 31, "st_ino": 42, "st_uid": 501, "st_gid": 20,
                   "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1, "st_size": 73,
-                  "st_mtime_ns": 101, "st_ctime_ns": 102}
+                  "st_mtime_ns": 101, "st_ctime_ns": 102, "st_birthtime_ns": 90}
         opened = SimpleNamespace(**fields)
         for module in (fixture_module, bootstrap_module):
             with self.subTest(module=module.__name__):
@@ -180,18 +181,51 @@ class PrivateMetadataContractTests(unittest.TestCase):
         # or ACL acceptance and does not patch process-global os.name/pathlib.
         fields = {"st_dev": 31, "st_ino": 42, "st_uid": 501, "st_gid": 20,
                   "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1, "st_size": 73,
-                  "st_mtime_ns": 101, "st_ctime_ns": 102}
+                  "st_mtime_ns": 101, "st_ctime_ns": 102, "st_birthtime_ns": 90}
         opened, named = SimpleNamespace(**fields), SimpleNamespace(**{**fields, "st_dev": 0})
         for module in (fixture_module, bootstrap_module):
             self.assertTrue(module.private_metadata_equal(opened, named, windows=True, named_path=True))
             self.assertFalse(module.private_metadata_equal(opened, named, windows=False, named_path=True))
             self.assertFalse(module.private_metadata_equal(opened, named, windows=True, named_path=False))
-            for key in fields.keys() - {"st_dev"}:
+            for key in fields.keys() - {"st_dev", "st_ctime_ns"}:
                 drift = SimpleNamespace(**{**vars(named), key: fields[key] + 1})
                 self.assertFalse(module.private_metadata_equal(opened, drift, windows=True, named_path=True), key)
             self.assertTrue(module.private_metadata_equal(opened, opened, windows=False, named_path=False))
             with self.assertRaises(AssertionError):
                 module.private_metadata_equal(opened, named, windows="nt", named_path=True)
+
+    def test_windows_cross_channel_ctime_keeps_creation_and_same_channel_changes_strict(self):
+        fields = {"st_dev": 31, "st_ino": 42, "st_uid": 501, "st_gid": 20,
+                  "st_mode": stat.S_IFREG | 0o600, "st_nlink": 1, "st_size": 73,
+                  "st_mtime_ns": 101, "st_ctime_ns": 102, "st_birthtime_ns": 90}
+        opened = SimpleNamespace(**fields)
+        named = SimpleNamespace(**{**fields, "st_ctime_ns": 90})
+        for module in (fixture_module, bootstrap_module):
+            with self.subTest(module=module.__name__):
+                self.assertTrue(module.private_metadata_equal(opened, named, windows=True, named_path=True))
+                self.assertFalse(module.private_metadata_equal(opened, named, windows=True, named_path=False))
+                self.assertFalse(module.private_metadata_equal(opened, named, windows=False, named_path=True))
+                for birth in (0, 89, None):
+                    changed = SimpleNamespace(**{**vars(named), "st_birthtime_ns": birth})
+                    self.assertFalse(module.private_metadata_equal(opened, changed, windows=True, named_path=True))
+
+    def test_actual_file_identity_survives_readback_on_the_current_native_filesystem(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic-private.json"
+            path.write_bytes(b'{"synthetic":true}')
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            try:
+                opened, named = os.fstat(descriptor), path.lstat()
+                for module in (fixture_module, bootstrap_module):
+                    self.assertTrue(module.private_metadata_equal(
+                        opened, named, windows=os.name == "nt", named_path=True))
+                    self.assertTrue(module.private_metadata_equal(opened, os.fstat(descriptor)))
+                    self.assertTrue(module.private_metadata_equal(named, path.lstat()))
+                if os.name == "nt":
+                    self.assertGreater(opened.st_birthtime_ns, 0)
+                    self.assertEqual(opened.st_birthtime_ns, named.st_birthtime_ns)
+            finally:
+                os.close(descriptor)
 
 
 @unittest.skipUnless(os.name == "posix", "POSIX descriptor/mode controls do not certify Windows cache ACLs")
@@ -479,6 +513,7 @@ class BootstrapTests(unittest.TestCase):
                 missing[image] = omitted
         self.assertEqual(missing, {}, f"Fingerprint inputs missing by image: {missing}")
         for omitted in ("tests/e2e/ram-2026-11-11-bugs.spec.ts",
+                        "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
                         "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
                         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
                         "apps/api/pyproject.toml", "apps/api/uv.lock",
@@ -492,6 +527,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_web_source_fingerprint_reports_all_missing_inputs(self):
         omitted = {"tests/e2e/ram-2026-11-11-bugs.spec.ts",
+                   "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
                    "scripts/mobile/npm-tooling.mjs", "apps/api/pyproject.toml"}
         required = omitted | {"apps/web/app/page.tsx"}
         scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
@@ -504,6 +540,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(paths), len(set(paths)))
         self.assertEqual({value for value in paths if Path(value).parts[0] == "tests"}, {
             "tests/e2e/support", "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+            "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
             "tests/fixtures/statutes/structured-schedule-api.json",
             "tests/fixtures/node-default-tls-probe.cjs",
         })
@@ -1355,6 +1392,10 @@ class TlsPolicyTests(unittest.TestCase):
         self.assertIn("AssertionError", output)
 
 
+class _GatewayCompletionSet(set):
+    """Keep real set membership while allowing one missing-acknowledgement control."""
+
+
 class GatewayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -1365,7 +1406,7 @@ class GatewayTests(unittest.TestCase):
         ]}))
         self.gateway = gateway_module.Gateway(self.root)
         self.handler_completion = threading.Condition()
-        self.completed_handlers = set()
+        self.completed_handlers = _GatewayCompletionSet()
         self.server = gateway_module.ThreadingHTTPServer(("127.0.0.1", 0), self.tracked_handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -1840,11 +1881,17 @@ class GatewayTests(unittest.TestCase):
 
     def test_runtime_named_device_exception_never_weakens_descriptor_identity(self):
         values = {key: 7 for key in gateway_module._SOURCE_METADATA}
+        values["st_birthtime_ns"] = 7
         descriptor = SimpleNamespace(**values)
         named = SimpleNamespace(**{**values, "st_dev": 0})
         self.assertTrue(gateway_module.source_named_identity_equal(descriptor, named, "nt"))
         self.assertFalse(gateway_module.source_named_identity_equal(descriptor, named, "posix"))
         self.assertFalse(gateway_module.source_named_identity_equal(descriptor, SimpleNamespace(**{**vars(named), "st_ino": 8}), "nt"))
+        self.assertTrue(gateway_module.source_named_identity_equal(
+            descriptor, SimpleNamespace(**{**vars(named), "st_ctime_ns": 8}), "nt"))
+        for birth in (None, 0, 8):
+            self.assertFalse(gateway_module.source_named_identity_equal(
+                descriptor, SimpleNamespace(**{**vars(named), "st_birthtime_ns": birth}), "nt"))
         source = self.root.resolve() / "descriptor.py"
         source.write_bytes(b"# synthetic public source\n")
         original = gateway_module.os.fstat
@@ -2131,6 +2178,96 @@ class GatewayTests(unittest.TestCase):
         record = json.loads(Path(self.gateway.journal.name).read_text())
         self.assertNotIn("synthetic", json.dumps(record))
         self.assertNotIn("q=", json.dumps(record))
+
+    def test_response_waits_for_delayed_close_and_journal_publication_once(self):
+        deadline = time.monotonic() + 3
+        close_entered, release_close = threading.Event(), threading.Event()
+        response_read, wait_entered, finished = threading.Event(), threading.Event(), threading.Event()
+        outcomes, errors = [], []
+        wait = self.handler_completion.wait_for
+
+        class Client(self.connection_type):
+            def getresponse(self):
+                response = super().getresponse()
+
+                def read():
+                    data = response.read()
+                    response_read.set()
+                    return data
+
+                return SimpleNamespace(status=response.status, read=read)
+
+        def close():
+            close_entered.set()
+            if not release_close.wait(max(0, deadline - time.monotonic())):
+                raise RuntimeError("Synthetic upstream close was not released")
+
+        def wait_for_completion(*args, **kwargs):
+            wait_entered.set()
+            return wait(*args, **kwargs)
+
+        def request():
+            try:
+                outcomes.append(self.request("POST", "/api/auth/native/token?q=a%2Fb%26c", {
+                    gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                    "Content-Type": "application/json",
+                }, b'{"code":"synthetic"}'))
+            except Exception as error:
+                errors.append(error)
+            finally:
+                finished.set()
+
+        with patch.object(self, "connection_type", Client), patch.object(
+            self.handler_completion, "wait_for", side_effect=wait_for_completion
+        ), patch.object(gateway_module.http.client, "HTTPConnection") as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200
+            response.getheaders.return_value = [("content-type", "application/json")]
+            response.read.return_value = b'{"ok":true}'
+            transport.return_value.close.side_effect = close
+            caller = threading.Thread(target=request)
+            caller.start()
+            try:
+                for event in (close_entered, response_read, wait_entered):
+                    self.assertTrue(event.wait(max(0, deadline - time.monotonic())))
+                self.assertFalse(finished.is_set())
+                self.assertEqual(Path(self.gateway.journal.name).read_text(), "")
+            finally:
+                release_close.set()
+                caller.join(max(0, deadline - time.monotonic()))
+            self.assertFalse(caller.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(outcomes, [(200, b'{"ok":true}')])
+            transport.return_value.request.assert_called_once()
+            self.assertEqual(transport.return_value.request.call_args.args,
+                             ("POST", "/api/auth/native/token?q=a%2Fb%26c"))
+            self.assertEqual(transport.return_value.request.call_args.kwargs["body"], b'{"code":"synthetic"}')
+            self.assertEqual(transport.return_value.request.call_args.kwargs["headers"][gateway_module.MARKER_HEADER],
+                             gateway_module.MARKER)
+            records = [json.loads(line) for line in Path(self.gateway.journal.name).read_text().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertEqual((records[0]["method"], records[0]["route"], records[0]["status"]),
+                             ("POST", "/api/auth/native/token", 200))
+            self.assertNotIn("synthetic", json.dumps(records))
+            self.assertNotIn("q=", json.dumps(records))
+
+    def test_missing_handler_completion_fails_without_additional_transport(self):
+        with patch.object(self.completed_handlers, "add"), patch.object(
+            gateway_module.http.client, "HTTPConnection"
+        ) as transport:
+            response = transport.return_value.getresponse.return_value
+            response.status = 200
+            response.getheaders.return_value = [("content-type", "application/json")]
+            response.read.return_value = b'{"ok":true}'
+            with self.assertRaisesRegex(TimeoutError, "OWNED_GATEWAY_HANDLER_COMPLETION_REQUIRED"):
+                self.request("POST", "/api/auth/native/token", {
+                    gateway_module.MARKER_HEADER: gateway_module.MARKER,
+                }, b'{"code":"synthetic"}')
+            transport.return_value.request.assert_called_once()
+            self.assertEqual(self.completed_handlers, set())
+            records = [json.loads(line) for line in Path(self.gateway.journal.name).read_text().splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertNotIn("synthetic", json.dumps(records))
 
     def test_browser_preflight_is_exact_and_origin_bounded(self):
         with patch.object(gateway_module.http.client, "HTTPConnection") as transport:
@@ -2520,6 +2657,65 @@ class UsbReverseOriginTests(unittest.TestCase):
                 producer.write_bytes(Path(producer_module.__file__).read_bytes()); helper.write_bytes(original)
                 spec = importlib.util.spec_from_file_location('usb_source_control', producer)
                 loaded = importlib.util.module_from_spec(spec); spec.loader.exec_module(loaded)
+                # Replace the actual named file while the admitted descriptor
+                # remains open. On Windows explicitly allow delete sharing in
+                # this test's opener so a sharing violation cannot pass as a
+                # successfully exercised identity fence.
+                actual_open, actual_read = os.open, os.read
+                admitted, replaced = [], []
+                execution = unittest.mock.Mock()
+
+                def open_replaceable(path, flags, *args, **kwargs):
+                    if Path(path) != helper or os.name != 'nt':
+                        descriptor = actual_open(path, flags, *args, **kwargs)
+                    else:
+                        import ctypes, msvcrt
+                        from ctypes import wintypes
+                        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                        create = kernel.CreateFileW
+                        create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                           wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+                        create.restype = wintypes.HANDLE
+                        handle = create(str(path), 0x80000000, 7, None, 3, 0x00200000, None)
+                        if handle in (None, ctypes.c_void_p(-1).value):
+                            raise ctypes.WinError(ctypes.get_last_error())
+                        descriptor = None
+                        try:
+                            descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+                        finally:
+                            if descriptor is None:
+                                close = kernel.CloseHandle
+                                close.argtypes = [wintypes.HANDLE]
+                                close.restype = wintypes.BOOL
+                                close(handle)
+                    if Path(path) == helper:
+                        admitted.append(descriptor)
+                    return descriptor
+
+                def replace_during_read(descriptor, count):
+                    data = actual_read(descriptor, count)
+                    if descriptor in admitted and data and not replaced:
+                        replacement = root / 'same-bytes-replacement.py'
+                        replacement.write_bytes(original)
+                        if os.name == 'nt':
+                            # MoveFileEx cannot overwrite an open target on
+                            # Windows. Move that still-open identity aside, then
+                            # install the same bytes at the admitted pathname.
+                            helper.rename(root / 'retained-open-original.py')
+                        os.replace(replacement, helper)
+                        replaced.append(True)
+                    return data
+
+                with patch.dict(loaded.__dict__, {'exec': execution}), \
+                        patch.object(os, 'open', side_effect=open_replaceable), \
+                        patch.object(os, 'read', side_effect=replace_during_read):
+                    with self.assertRaisesRegex(AssertionError, 'Local transport source changed'):
+                        loaded._load_local_transport()
+                self.assertEqual(replaced, [True])
+                self.assertEqual(len(admitted), 1)
+                execution.assert_not_called()
+                with self.assertRaises(OSError):
+                    os.fstat(admitted[0])
                 helper.write_bytes(original + b'\n# replacement must be refused\n')
                 with self.assertRaisesRegex(AssertionError, 'Local transport source changed'):
                     loaded._load_local_transport()

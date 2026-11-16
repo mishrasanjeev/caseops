@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "font_domain": "Latin/Greek/Cyrillic coverage of approved Liberation faces plus Devanagari fallback; actual cmap governs, never all Unicode.",
+  "font_domain": "Latin/Greek/Cyrillic coverage of approved Liberation faces plus genuine styled Noto Sans Latin and upright Devanagari fallbacks; actual cmap governs, never all Unicode.",
   "engine": "fpdf2",
   "engine_version": "2.8.9",
   "shaper": "uharfbuzz",
@@ -41,6 +41,15 @@
       "B": "NotoSansDevanagari-Bold.ttf"
     },
     "italic_policy": "No genuine Devanagari italic face supplied: preserve bold where requested; use actual upright regular/bold without relabelling an italic font."
+  },
+  "latin_fallback": {
+    "family": "CaseOpsLatin",
+    "files": {
+      "": "NotoSans-Regular.ttf",
+      "B": "NotoSans-Bold.ttf",
+      "I": "NotoSans-Italic.ttf",
+      "BI": "NotoSans-BoldItalic.ttf"
+    }
   },
   "assets": {
     "LiberationMono-Bold.ttf": {
@@ -90,6 +99,22 @@
     "LiberationSerif-Regular.ttf": {
       "bytes": 393576,
       "sha256": "058ea80864aef09a23f45cbec2bb5400bc3dfbdea01c3f10538a21fcb497fb74"
+    },
+    "NotoSans-Bold.ttf": {
+      "bytes": 575740,
+      "sha256": "c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a"
+    },
+    "NotoSans-BoldItalic.ttf": {
+      "bytes": 555292,
+      "sha256": "6edf4227ef0fa846aca70e86a307804ca4401741830f5b3af0f2554abe2b8466"
+    },
+    "NotoSans-Italic.ttf": {
+      "bytes": 552776,
+      "sha256": "36cff144df01309dab648bea71baff9bb074026914afe63aeacc8bc90b67a28b"
+    },
+    "NotoSans-Regular.ttf": {
+      "bytes": 569208,
+      "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5"
     },
     "NotoSansDevanagari-Bold.ttf": {
       "bytes": 225748,

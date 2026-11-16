@@ -1,5 +1,5 @@
 /** Batch 2 BUG-001..007: local governed fixtures; persistent test-legal only in production. */
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { request as playwrightRequest, type APIRequestContext, type APIResponse, type Locator, type Page } from "@playwright/test";
@@ -51,7 +51,7 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
     "from sqlalchemy.engine import make_url",
     "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
     "assert not url.query",
-    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "assert ((url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(os.environ['CASEOPS_DATABASE_URL']))",
     "from caseops_api.db.models import Company,CompanyMembership",
     "from caseops_api.db.session import get_session_factory",
     "with get_session_factory()() as session:",
@@ -63,7 +63,7 @@ async function prepare(page: Page, api: APIRequestContext, baseURL: string | und
     "        member.role='admin'",
     "    session.commit()",
   ].join("\n");
-  const promoted = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+  const promoted = await runLocalPythonFixture(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: process.env.CASEOPS_E2E_DATABASE_URL?.trim() || e2eEnv.CASEOPS_DATABASE_URL,
       IP15_COMPANY_ID: workspace.actor.company.id, IP15_SLUG: workspace.actor.company.slug,
       IP15_MEMBERS: JSON.stringify(members.map(member => member.id)), PYTHONPATH: path.join(repoRoot, "apps/api/src") } });

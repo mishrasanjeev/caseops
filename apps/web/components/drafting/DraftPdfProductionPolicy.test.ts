@@ -62,6 +62,17 @@ describe("BUG001 production-only read boundary", () => {
     expect(productionDraftRequestPolicy(`${settings.api}${workspace}`, "PATCH", "no-paid-providers", settings)).toBe("blocked");
     expect(productionDraftRequestPolicy(`${settings.api}${workspace}`, "POST", "no-paid-providers", settings)).toBe("blocked");
   });
+  it("admits the Draft list's exact read dependency without admitting drafting-data mutations or other Matters", () => {
+    const reviewQueue = `/api/matters/${reportedDraftTarget.matterId}/drafting-data`;
+    expect(allowedProductionDraftRead(reviewQueue)).toBe(true);
+    expect(productionDraftRequestPolicy(`${settings.api}${reviewQueue}`, "GET", "no-paid-providers", settings)).toBe("read");
+    expect(productionDraftRequestPolicy(`${settings.api}${reviewQueue}`, "GET", undefined, settings)).toBe("blocked");
+    for (const method of ["POST", "PATCH", "DELETE"]) {
+      expect(productionDraftRequestPolicy(`${settings.api}${reviewQueue}`, method, "no-paid-providers", settings)).toBe("blocked");
+    }
+    expect(allowedProductionDraftRead("/api/matters/another-matter/drafting-data")).toBe(false);
+    expect(allowedProductionDraftRead(`${reviewQueue}/another-record`)).toBe(false);
+  });
 });
 
 describe("BUG001 memory-only download proof", () => {

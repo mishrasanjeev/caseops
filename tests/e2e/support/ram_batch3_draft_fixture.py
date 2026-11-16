@@ -32,10 +32,13 @@ def validate_database(value: str) -> None:
         if not database.database or Path(database.database).resolve() != expected:
             raise ValueError("Only this checkout's isolated e2e SQLite file is allowed")
     elif database.drivername == "postgresql+psycopg":
-        if (database.host not in {"localhost", "127.0.0.1", "::1"}
-                or database.port is None or not 20000 <= database.port <= 49999
-                or database.database != "caseops" or database.username != "caseops"
-                or database.password != "caseops"):
+        predicate = globals().get("__caseops_is_owned_fixture_database__")
+        owned_docker = (database.host == "postgres" and database.port == 5432
+                        and callable(predicate) and predicate(value) is True)
+        local = (database.host in {"localhost", "127.0.0.1", "::1"}
+                 and database.port is not None and 20000 <= database.port <= 49999)
+        if (database.database != "caseops" or database.username != "caseops"
+                or database.password != "caseops" or not (local or owned_docker)):
             raise ValueError("Only the isolated local Docker acceptance database is allowed")
     else:
         raise ValueError("Unsupported local fixture database")

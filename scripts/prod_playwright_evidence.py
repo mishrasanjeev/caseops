@@ -44,13 +44,47 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 724, "app-mobile": 60}
+APP_PROJECT_COUNTS = {"app-chromium": 727, "app-mobile": 63}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+NOV14_REFERENCE_FILE = "ram-2026-11-14-prod.spec.ts"
+NOV14_DRAFT_FILE = "draft-quality20261114.spec.ts"
+NOV14_APP_CASES = (
+    ("app-chromium", NOV14_REFERENCE_FILE,
+     "IP India content and form references /app/ip/registry desktop"),
+    ("app-chromium", NOV14_REFERENCE_FILE,
+     "IP India content and form references /app/ip/patents desktop"),
+    ("app-chromium", NOV14_DRAFT_FILE,
+     "Draft quality 2026-11-14 desktop: generated findings survive correction and reload"),
+    ("app-mobile", NOV14_REFERENCE_FILE,
+     "[mobile] IP India content and form references /app/ip/registry phone"),
+    ("app-mobile", NOV14_REFERENCE_FILE,
+     "[mobile] IP India content and form references /app/ip/patents phone"),
+    ("app-mobile", NOV14_DRAFT_FILE,
+     "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"),
+)
 BATCH5_CONTRACT_VERSION = 1
 BATCH5_FILES = tuple(
     f"ram-2026-11-11-{name}.spec.ts" for name in ("statutes", "drafting", "contracts", "bugs")
 )
 BATCH5_PROJECTS = {"batch5-desktop": "batch5-prod-chromium", "batch5-mobile": "batch5-prod-mobile"}
+BATCH5_PROOF_HELPERS = (
+    "tests/e2e/support/draft_pdf_production_policy_20261111.ts",
+    "tests/e2e/support/draft_pdf_production_20261111.ts",
+    "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+    "tests/e2e/support/draft_pdf_oracle_20261111.ts",
+    "tests/e2e/support/bugs5_contract_reported_20261111.ts",
+)
+REPORTED_DRAFT_ANNOTATION = "caseops-b5-reported-draft"
+REPORTED_DRAFT_PROOF = {
+    "schema_version": 1,
+    "status": "READ_ONLY_PARITY_VERIFIED",
+    "matter_id": "7771c86f-a6d6-442f-a675-4be40622dc05",
+    "draft_id": "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+    "version_id": "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+    "body_sha256": "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
+    "unchanged": True,
+    "attempted_mutations": 0,
+}
 BATCH5_MOVED_CASES = (
     ("ram-2026-11-07-contracts.spec.ts", "AI-CON-01 table-cell tracked changes retain source bytes and survive workspace reload"),
     ("ram-2026-11-07-teams.spec.ts", "AI-TEAM-01 membership and audited lead changes persist after reload"),
@@ -146,7 +180,7 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 97, "tester-catalog": 18, "tester-index": 6,
+    "tester": 101, "tester-catalog": 18, "tester-index": 6,
     "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
@@ -331,10 +365,38 @@ def _app_project_partition(binding):
     return invocation
 
 
+def _nov14_rows(rows, *, production=False, execution=False):
+    files = {NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE}
+    selected = [row for row in rows if row["file"] in files]
+    expected = Counter(
+        ("tester-prod-chromium" if production else project, file, (file, title))
+        for project, file, title in NOV14_APP_CASES
+        if not production or file == NOV14_REFERENCE_FILE
+    )
+    if (Counter((row["project_name"], row["file"], tuple(row["title_path"]))
+                for row in selected) != expected
+            or len({row["id"] for row in selected}) != len(selected)
+            or any(row["project_id"] != row["project_name"]
+                   or type(row["retries"]) is not int or row["retries"] != 0
+                   or type(row["repeat_each_index"]) is not int or row["repeat_each_index"] != 0
+                   or row["expected_status"] != "passed" for row in selected)):
+        raise EvidenceError("nov14_required_case_identity_mismatch")
+    if execution and any(
+        row["status"] != "expected" or len(row["results"]) != 1
+        or row["results"][0]["status"] != "passed"
+        or type(row["results"][0]["retry"]) is not int or row["results"][0]["retry"] != 0
+        for row in selected
+    ):
+        raise EvidenceError("nov14_required_case_not_passed")
+    return selected
+
+
 def _app_inventory(canonical):
     rows = canonical["tests"]
     batch5 = [row for row in rows if row["file"] in BATCH5_FILES]
-    legacy = [row for row in rows if row["file"] not in BATCH5_FILES]
+    _nov14_rows(rows)
+    legacy = [row for row in rows
+              if row["file"] not in (*BATCH5_FILES, NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE)]
     if batch5 or BATCH5_CASE_COUNTS:
         _batch5_rows(batch5, {"app-chromium": 0, "app-mobile": 1}, include_moved=False)
     if (Counter(row["project_name"] for row in rows) != APP_PROJECT_COUNTS
@@ -471,13 +533,25 @@ def _batch5_proofs(document):
             expected = "legacy-workflow-outcome" if moved else BATCH5_PROOF_SCOPES[row["file"]]
         if (not moved and declared != {expected}) or (moved and declared and declared != {expected}):
             raise EvidenceError("batch5_proof_scope_mismatch")
+        receipts = [item for item in annotations if item["type"] == REPORTED_DRAFT_ANNOTATION]
+        if row["file"] == "ram-2026-11-11-drafting.spec.ts":
+            if not receipts:
+                raise EvidenceError("missing_reported_draft_proof")
+            for item in receipts:
+                _reported_draft_description(item.get("description"))
+            if any(sum(item["type"] == REPORTED_DRAFT_ANNOTATION for item in channel) > 1
+                   for channel in (row["annotations"], row["results"][0]["annotations"])):
+                raise EvidenceError("duplicate_reported_draft_proof")
+        elif receipts:
+            raise EvidenceError("reported_draft_proof_scope_mismatch")
         scopes.append({"id": row["id"], "file": row["file"], "scope": expected})
     return scopes
 
 
 def _batch5_source_hashes(root):
     files = ("playwright.app.config.ts", "playwright.prod-ram.config.ts",
-             "scripts/prod_playwright_evidence.py", REPORTER,
+             "scripts/prod_playwright_evidence.py", REPORTER, *BATCH5_PROOF_HELPERS,
+             f"tests/e2e/{NOV14_REFERENCE_FILE}",
              *(f"tests/e2e/{file}" for file in (*BATCH5_FILES, *(file for file, _ in BATCH5_MOVED_CASES))))
     if any(not (root / file).is_file() or (root / file).is_symlink() for file in files):
         raise EvidenceError("missing_or_linked_batch5_source")
@@ -508,6 +582,9 @@ def _check_app_selection(binding, selected, canonical, *, execution=False):
             raise EvidenceError("app_project_discovery_executed_tests")
         return
     allowed_skips = {row for row in APP_EXPECTED_SKIPS if row[0] == project}
+    # A selected App project owns one half of the six-case reviewed cohort.
+    _nov14_rows([row for row in canonical["tests"] if row["project_name"] != project]
+                + selected["tests"], execution=False)
     actual_skips = set()
     for row in selected["tests"]:
         attempts = row["results"]
@@ -539,6 +616,9 @@ def _tester_partition(binding):
 def _tester_inventory(canonical):
     projects = set(TESTER_PARTITIONS.values())
     rows = [row for row in canonical["tests"] if row["project_name"] in projects]
+    if any(row["file"] == NOV14_DRAFT_FILE for row in canonical["tests"]):
+        raise EvidenceError("local_draft_quality_in_production_inventory")
+    _nov14_rows(rows, production=True)
     if not rows or len({row["id"] for row in rows}) != len(rows):
         raise EvidenceError("empty_or_duplicate_tester_canonical_inventory")
     expected_counts = Counter()
@@ -594,7 +674,7 @@ def _tester_file_filters(binding):
     return [catalog if invocation == "tester-catalog" else rf"^(?!.*{catalog}).*$"]
 
 
-def _check_tester_selection(binding, discovery, canonical):
+def _check_tester_selection(binding, discovery, canonical, *, execution=False):
     invocation = _tester_partition(binding)
     if invocation is None:
         raise EvidenceError("unreviewed_tester_partition_binding")
@@ -603,6 +683,8 @@ def _check_tester_selection(binding, discovery, canonical):
     ]
     if [_tester_case_identity(row) for row in discovery["tests"]] != expected:
         raise EvidenceError("tester_partition_selection_mismatch")
+    if binding["invocation"] == "tester":
+        _nov14_rows(discovery["tests"], production=True, execution=execution)
 
 
 def _tester_case_identity(row):
@@ -760,11 +842,36 @@ def _safe(value, env) -> str:
     return result
 
 
+def _reported_draft_description(description):
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = value
+        return result
+
+    try:
+        if type(description) is not str or len(description.encode("utf-8")) > 1024:
+            raise ValueError
+        proof = json.loads(description, object_pairs_hook=unique_object)
+        if (type(proof) is not dict or proof.keys() != REPORTED_DRAFT_PROOF.keys()
+                or any(type(proof[key]) is not type(value) or proof[key] != value
+                       for key, value in REPORTED_DRAFT_PROOF.items())):
+            raise ValueError
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        raise EvidenceError("invalid_reported_draft_proof") from None
+    # Emit only reviewed constants, never arbitrary structured annotation data.
+    return json.dumps(REPORTED_DRAFT_PROOF, sort_keys=True, separators=(",", ":"))
+
+
 def _annotations(items, env):
     return [
         {
             "type": _safe(item.get("type", ""), env),
-            "description": _safe(item.get("description", ""), env),
+            "description": (_reported_draft_description(item.get("description"))
+                            if item.get("type") == REPORTED_DRAFT_ANNOTATION
+                            else _safe(item.get("description", ""), env)),
         }
         for item in items
     ]
@@ -1075,6 +1182,7 @@ def _junit(raw: Path, output: Path | None, env, result):
     ):
         raise EvidenceError("junit_failed_mismatch")
     actual = []
+    by_identity = {_identity(row): row for row in result["tests"]}
     root = tree.getroot()
     if root.tag != "testsuites" or any(s.tag != "testsuite" for s in root):
         raise EvidenceError("junit_structure_mismatch")
@@ -1121,6 +1229,18 @@ def _junit(raw: Path, output: Path | None, env, result):
             or outcome not in {"expected", "skipped", "unexpected", "flaky"}
         ):
             raise EvidenceError("junit_case_outcome_or_display_mismatch")
+        properties = case.findall("properties/property")
+        if any(set(item.attrib) != {"name", "value"} or list(item) or (item.text or "").strip()
+               for item in properties if item.get("name") == REPORTED_DRAFT_ANNOTATION):
+            raise EvidenceError("invalid_reported_draft_proof")
+        proof_values = [_reported_draft_description(item.get("value")) for item in properties
+                        if item.get("name") == REPORTED_DRAFT_ANNOTATION]
+        if identity in by_identity:
+            expected_proofs = [_reported_draft_description(item.get("description"))
+                               for item in by_identity[identity]["annotations"]
+                               if item["type"] == REPORTED_DRAFT_ANNOTATION]
+            if Counter(proof_values) != Counter(expected_proofs):
+                raise EvidenceError("junit_reported_draft_proof_mismatch")
         actual.append((identity, outcome))
     # Multiplicity is part of the proof: never deduplicate or match joined titles.
     if Counter(actual) != Counter(
@@ -1131,10 +1251,13 @@ def _junit(raw: Path, output: Path | None, env, result):
         return
     # Native XML structure/outcomes survive; body/error/output/attachment data do not.
     for element in tree.iter():
+        proof_property = (element.tag == "property"
+                          and element.get("name") == REPORTED_DRAFT_ANNOTATION)
         element.attrib = {
             key: value
             if element.tag == "testcase" and key == "caseops-title-path"
-            else _safe(value, env)
+            else (_reported_draft_description(value) if proof_property and key == "value"
+                  else _safe(value, env))
             for key, value in element.attrib.items()
             if key
             in {
@@ -1182,20 +1305,38 @@ def _junit(raw: Path, output: Path | None, env, result):
         tree.write(stream, encoding="utf-8", xml_declaration=True)
 
 
+def _check_checkout(root, expected, *, completion=False):
+    command = ["git", "-c", "core.fsmonitor=false", "-c", f"core.hooksPath={os.devnull}"]
+    head = subprocess.run(
+        [*command, "rev-parse", "HEAD"], cwd=root, check=True,
+        capture_output=True, text=True, timeout=15,
+    ).stdout.strip()
+    if head != expected:
+        raise EvidenceError("checkout_changed_during_execution" if completion else "checkout_sha_mismatch")
+    # Native reports and process-only secrets are ignored/untracked, not source.
+    dirty = subprocess.run(
+        [*command, "diff", "--no-ext-diff", "--no-textconv", "--quiet", expected, "--"],
+        cwd=root, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+    )
+    if dirty.returncode:
+        if dirty.returncode != 1:
+            raise EvidenceError("source_checkout_verification_failed")
+        raise EvidenceError("tracked_source_changed_during_execution" if completion else "tracked_source_dirty")
+    final_head = subprocess.run(
+        [*command, "rev-parse", "HEAD"], cwd=root, check=True,
+        capture_output=True, text=True, timeout=15,
+    ).stdout.strip()
+    if final_head != expected:
+        raise EvidenceError("checkout_changed_during_execution" if completion else "checkout_sha_mismatch")
+    return head
+
+
 def _binding(root, invocation, args, env):
     expected = env.get("CASEOPS_EXPECTED_RELEASE_SHA", "")
     if not SHA.fullmatch(expected) or not INVOCATION.fullmatch(invocation):
         raise EvidenceError("invalid_release_or_invocation")
     _require_current_oct13_namespace(invocation)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if head != expected:
-        raise EvidenceError("checkout_sha_mismatch")
+    head = _check_checkout(root, expected)
     options = {}
     for argument in args:
         if not re.fullmatch(
@@ -1380,6 +1521,8 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         result["binding"] = public_binding
         _write(destination / "results.json", result)
         _reconcile(discovery, result)
+        if partition is not None:
+            _check_tester_selection(binding, result, canonical, execution=True)
         if app_partition is not None:
             _check_app_selection(binding, result, canonical, execution=True)
         if batch5_partition is not None:
@@ -1424,15 +1567,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         )
         if _hash(root / binding["config"]) != binding["config_sha256"]:
             raise EvidenceError("config_changed_during_execution")
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        if head != binding["checkout_sha"]:
-            raise EvidenceError("checkout_changed_during_execution")
+        _check_checkout(root, binding["checkout_sha"], completion=True)
         if batch5_sources is not None and _batch5_source_hashes(root) != batch5_sources:
             raise EvidenceError("batch5_source_changed_during_execution")
         marker["phase"] = "complete"
@@ -1557,7 +1692,10 @@ def _app_native_fields(document):
             fields(value, strings="type description", objects="location", required="type")
             for key in ("type", "description"):
                 if key in value:
-                    safe_string(value[key])
+                    if key == "description" and value["type"] == REPORTED_DRAFT_ANNOTATION:
+                        _reported_draft_description(value[key])
+                    else:
+                        safe_string(value[key])
             if "location" in value:
                 location(value["location"])
 
@@ -1781,6 +1919,7 @@ def validate(root: Path, required, expected: str) -> None:
                 raise EvidenceError("canonical_tester_binding_mismatch")
             if partition is not None:
                 _check_tester_selection(binding, discovery, canonical)
+                _check_tester_selection(binding, result, canonical, execution=True)
             elif batch5_partition is not None:
                 _validate_app_native(root, directory, binding, discovery, result, canonical)
                 _check_batch5_selection(binding, discovery, canonical)
@@ -1886,10 +2025,14 @@ def validate_batch5_release_union(root: Path, required, expected: str):
         selected.extend(_tester_case_identity(row) for row in result["tests"])
     if len(selected) != len(set(selected)) or Counter(selected) != Counter(canonical_identity):
         raise EvidenceError("batch5_release_union_mismatch")
-    original = sum(TESTER_PARTITION_COUNTS.values()) + 2 * len(BATCH5_MOVED_CASES)
+    new_references = len(_nov14_rows(retained, production=True))
+    original = (
+        sum(TESTER_PARTITION_COUNTS.values()) - new_references + 2 * len(BATCH5_MOVED_CASES)
+    )
     if original != 176:
         raise EvidenceError("batch5_original_inventory_mismatch")
     return {"tester_release_union": TESTER_PARTITION_CONTRACT, "original_case_count": original,
+            "new_reference_case_count": new_references,
             "new_batch5_case_count": sum(sum(pair) for pair in BATCH5_CASE_COUNTS.values()),
             "test_count": len(selected), "release_sha": expected}
 

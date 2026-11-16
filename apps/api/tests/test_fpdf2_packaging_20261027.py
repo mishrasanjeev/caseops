@@ -185,12 +185,16 @@ class Fpdf2Packaging(unittest.TestCase):
     def test_final_namespace_change_refuses_with_unchanged_bytes(self):
         file = self.root / "fixed.txt"
         file.write_bytes(b"original")
+        # Make the metadata mutation independent of same-tick directory writes.
+        os.utime(self.root, ns=(self.root.stat().st_atime_ns, 946684800000000000))
+        namespace_before = verify._metadata(self.root.lstat())
         original_read = os.read
 
         def read(descriptor, count):
             data = original_read(descriptor, count)
             if data:
                 (self.root / "new-sibling").write_bytes(b"public")
+                self.assertNotEqual(verify._metadata(self.root.lstat()), namespace_before)
             return data
 
         with mock.patch.object(verify.os, "read", side_effect=read):

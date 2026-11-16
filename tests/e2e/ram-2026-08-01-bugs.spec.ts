@@ -1,9 +1,9 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 
 const PASSWORD = "IpDocketProof2026!";
 
@@ -11,7 +11,7 @@ function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function grantSyntheticIpEntitlement(companyId: string): void {
+async function grantSyntheticIpEntitlement(companyId: string): Promise<void> {
   const python =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
@@ -25,7 +25,7 @@ function grantSyntheticIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -91,7 +91,7 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<{ token:
   });
   expect(response.status()).toBe(200);
   const body = await response.json();
-  grantSyntheticIpEntitlement(body.company.id as string);
+  await grantSyntheticIpEntitlement(body.company.id as string);
   const token = body.access_token as string;
   const membershipId = body.membership.id as string;
   await configureSyntheticIpWorkspace(api, token, membershipId);

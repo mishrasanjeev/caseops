@@ -18,7 +18,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
   const api = await request.newContext();
   const tenant = await bootstrapIntelligentReviewTenant(api);
   await enableIntelligentReviewIpWorkspace(api, tenant);
-  const fixture = createIntelligentReviewAuthorityFixture();
+  const fixture = await createIntelligentReviewAuthorityFixture();
   const session = await signInIntelligentReviewTenant(page, tenant);
   const headers = { Authorization: `Bearer ${session.access_token}` };
   const run = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

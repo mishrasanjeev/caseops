@@ -81,6 +81,13 @@ COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/
 COPY tests/e2e/ram-2026-11-11-bugs.spec.ts /app/tests/e2e/ram-2026-11-11-bugs.spec.ts
 COPY tests/e2e/support/env.ts /app/tests/e2e/support/env.ts
 COPY tests/e2e/support/ram-bugs4.ts /app/tests/e2e/support/ram-bugs4.ts
+COPY tests/e2e/support/canonical-api-validators.ts /app/tests/e2e/support/canonical-api-validators.ts
+COPY tests/e2e/support/local-python-fixture.ts /app/tests/e2e/support/local-python-fixture.ts
+COPY tests/e2e/support/local-python-file-fixture.ts /app/tests/e2e/support/local-python-file-fixture.ts
+COPY tests/e2e/support/draft_pdf_fixture_20261111.py /app/tests/e2e/support/draft_pdf_fixture_20261111.py
+COPY tests/e2e/support/ram_batch3_draft_fixture.py /app/tests/e2e/support/ram_batch3_draft_fixture.py
+COPY tests/e2e/support/assistant_history_fixture.py /app/tests/e2e/support/assistant_history_fixture.py
+COPY tests/e2e/support/seed_iplf037b.py /app/tests/e2e/support/seed_iplf037b.py
 # Colocated licence units read this finite API attribution/declaration closure.
 # These inputs are builder-only; no API code, fonts or vendor archives enter runner.
 COPY apps/api/pyproject.toml apps/api/uv.lock /app/apps/api/
@@ -91,6 +98,10 @@ COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 COPY tests/e2e/support/retained-assistant-evidence.ts /app/tests/e2e/support/retained-assistant-evidence.ts
 COPY tests/e2e/support/draft_pdf_oracle_20261111.ts /app/tests/e2e/support/draft_pdf_oracle_20261111.ts
 COPY tests/e2e/support/draft_pdf_production_policy_20261111.ts /app/tests/e2e/support/draft_pdf_production_policy_20261111.ts
+COPY tests/e2e/support/draft_pdf_production_20261111.ts /app/tests/e2e/support/draft_pdf_production_20261111.ts
+COPY tests/e2e/support/draft_pdf_render_proof_20261111.ts /app/tests/e2e/support/draft_pdf_render_proof_20261111.ts
+COPY tests/e2e/ram-2026-10-22-drafting.prod.spec.ts /app/tests/e2e/ram-2026-10-22-drafting.prod.spec.ts
+COPY tests/e2e/support/prod-diagnostic-test.ts /app/tests/e2e/support/prod-diagnostic-test.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 

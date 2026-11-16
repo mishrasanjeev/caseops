@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import jsQR from "jsqr";
+import { loadJsQR } from "./external-journey-loaders";
 
 export const AUTHENTICATOR_QR_LABEL = "Authenticator setup QR code";
 
@@ -26,7 +26,7 @@ export async function renderedTotpSecret(page: Page,
     } finally { URL.revokeObjectURL(source); }
   });
   // Decode only rasterized pixels; never read a DOM otpauth value or retain media.
-  const decoded = jsQR(Uint8ClampedArray.from(pixels), 256, 256)?.data;
+  const decoded = loadJsQR()(Uint8ClampedArray.from(pixels), 256, 256)?.data;
   expect(Boolean(decoded && decoded === enrollment.otpauth_url),
     "Rendered QR must decode to the exact canonical enrollment URL; private values omitted.").toBe(true);
   let url: URL;

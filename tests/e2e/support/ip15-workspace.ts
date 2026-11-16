@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./local-python-fixture";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { expect, type APIRequestContext, type APIResponse, type Page } from "@playwright/test";
@@ -62,7 +62,7 @@ function localRuntime() {
   return { database, python };
 }
 
-function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: string) {
+async function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: string) {
   if (![web, api].every(loopback) || !slug.startsWith("ip15-") || !RUN_ID.test(slug.slice(5))
     || actor.company.slug !== slug || !uuid.test(actor.company.id) || !uuid.test(actor.membership.id)) {
     throw new Error("IP15 entitlement requires the exact newly bootstrapped loopback tenant.");
@@ -74,7 +74,7 @@ function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: st
     "from sqlalchemy.engine import make_url",
     "url=make_url(os.environ['CASEOPS_DATABASE_URL'])",
     "assert not url.query",
-    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "assert ((url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(os.environ['CASEOPS_DATABASE_URL']))",
     "from caseops_api.db.models import Company,CompanyMembership,BillingSubscription",
     "from caseops_api.db.session import get_session_factory",
     "with get_session_factory()() as session:",
@@ -85,7 +85,7 @@ function grantFreshLocalWorkspace(web: URL, api: URL, actor: Ip15Actor, slug: st
     "    session.add(BillingSubscription(company_id=company.id,status='manual_active',segment='law_firm',source='ip15_local_fixture',externally_billable=False,entitlement_overrides_json={'ip_workspace':True,'ip_rule_governance':True}))",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+  const result = await runLocalPythonFixture(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: database, CASEOPS_LLM_PROVIDER: "mock",
       CASEOPS_EMBEDDING_PROVIDER: "mock", IP15_COMPANY_ID: actor.company.id, IP15_SLUG: slug,
       IP15_OWNER_ID: actor.membership.id, PYTHONPATH: path.join(repoRoot, "apps/api/src") } });
@@ -134,7 +134,7 @@ export async function prepareIp15Workspace(
   }
   const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${actor.access_token}` };
   if (local) {
-    grantFreshLocalWorkspace(web, api, actor, credentials.slug);
+    await grantFreshLocalWorkspace(web, api, actor, credentials.slug);
     const configured = await body(await request.put(`${api.origin}/api/ip/workspace/configuration`, { headers, data: {
       expected_version: null, enabled_asset_types: ["trademark"], jurisdictions: ["IN"], offices: ["IP India"],
       timezone: "Asia/Kolkata", holiday_calendar_key: "ip15", working_day_policy: { working_weekdays: [0, 1, 2, 3, 4] },

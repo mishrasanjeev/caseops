@@ -5,6 +5,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowUpRight,
+  BookOpen,
   Check,
   FileClock,
   Link2,
@@ -22,6 +23,7 @@ import type { FormEvent } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { IpIndiaSources } from "@/components/ip/IpIndiaSources";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -265,19 +267,28 @@ export default function IpRegistryPage() {
         title="Registry reconciliation"
         description="Match registry identities, preserve source snapshots, review changes, and reference court tracking."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refreshAll()}
-            disabled={workspaces.isFetching}
-          >
-            <RefreshCw className={workspaces.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-            Refresh
-          </Button>
+          <>
+            <a
+              href="#registry-ipindia-sources"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"
+              aria-label="IP India official references" title="IP India official references"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden />
+            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refreshAll()}
+              disabled={workspaces.isFetching}
+            >
+              <RefreshCw className={workspaces.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              Refresh
+            </Button>
+          </>
         }
       />
 
-      <Card>
+      <Card id="registry-controls" tabIndex={-1} className="scroll-mt-24">
         <CardHeader>
           <CardTitle as="h2">Docket scope</CardTitle>
           <p className="mt-1 text-sm text-[var(--color-mute)]">
@@ -436,6 +447,7 @@ export default function IpRegistryPage() {
           onChanged={refreshAll}
         />
       ) : null}
+      <IpIndiaSources summaryId="registry-ipindia-sources" returnTo="#registry-controls" returnLabel="Return to Registry" />
     </div>
   );
 }

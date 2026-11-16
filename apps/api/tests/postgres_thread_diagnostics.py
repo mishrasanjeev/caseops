@@ -67,7 +67,8 @@ def _write(root: Path, case_hash: str, value: dict) -> None:
     raw = (json.dumps(value, separators=(",", ":")) + "\n").encode()
     assert len(raw) <= MAX_BYTES, "Thread diagnostic byte bound exceeded"
     target = root / ("python-threads-" + case_hash + ".jsonl")
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+                 | getattr(os, "O_BINARY", 0), 0o600)
     try:
         offset = 0
         while offset < len(raw):

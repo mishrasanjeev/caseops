@@ -6,17 +6,16 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { authContext, authSession, type AuthContext, type AuthSession } from "../../apps/web/lib/api/schemas";
+import type { AuthContext, AuthSession } from "../../apps/web/lib/api/schemas";
+import { canonicalApiValidators } from "./support/canonical-api-validators";
 import type { AuthoritySearchMode, TenantAIPolicy, searchAuthorities } from "../../apps/web/lib/api/endpoints";
 import type { AssistantAskResponse, AssistantScopeOption, AssistantSessionRecord } from "../../apps/web/lib/api/workspace-assistant";
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 import { json, signIn, type TesterCredentials } from "./support/ram-bugs4";
-
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
-
 const loopback = (url: URL) => ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
@@ -27,6 +26,7 @@ function required(name: string): string {
 }
 
 function sessionFrom(value: unknown, credentials: TesterCredentials): AuthSession {
+  const { authSession } = canonicalApiValidators();
   const parsed = authSession.safeParse(value);
   if (!parsed.success) throw new Error("Reporter login did not match the canonical auth contract.");
   const actor = parsed.data;
@@ -39,6 +39,7 @@ function sessionFrom(value: unknown, credentials: TesterCredentials): AuthSessio
 }
 
 function sameActor(value: unknown, actor: AuthSession): AuthContext {
+  const { authContext } = canonicalApiValidators();
   const parsed = authContext.safeParse(value);
   if (!parsed.success) throw new Error("Reporter self-auth did not match the canonical auth contract.");
   const current = parsed.data;
@@ -50,7 +51,6 @@ function sameActor(value: unknown, actor: AuthSession): AuthContext {
   expect(["communications:write", "email_templates:manage"].every((cap) => current.capabilities?.includes(cap)), "Reporter retains communications authority").toBe(true);
   return current;
 }
-
 type CreatedMatter = { id: string; matter_code: string; status: string; updated_at: string; next_hearing_on: string | null };
 type CreatedTemplate = { id: string; company_id: string; name: string; created_by_membership_id: string; is_active: boolean };
 

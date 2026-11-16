@@ -9,12 +9,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { makeUploadFixture } from "./support/helpers";
 
 const PASSWORD = "HariJul02Bugs!";
@@ -41,7 +41,7 @@ function apiPython(): { command: string; args: string[] } {
   };
 }
 
-function seedScreenshotGarbledAuthority(): { authorityId: string; courtName: string } {
+async function seedScreenshotGarbledAuthority(): Promise<{ authorityId: string; courtName: string }> {
   const python = apiPython();
   const code = String.raw`
 import json
@@ -95,7 +95,7 @@ with get_session_factory()() as session:
     print(json.dumps({"authorityId": document.id, "courtName": court_name}))
     session.commit()
 `;
-  const result = spawnSync(python.command, [...python.args, "-c", code], {
+  const result = await runLocalPythonFixture(python.command, [...python.args, "-c", code], {
     cwd: repoRoot,
     env: { ...process.env, ...e2eEnv },
     encoding: "utf8",
@@ -158,13 +158,17 @@ test.describe("Hari 2026-07-02 bugs", () => {
   test("BUG-001: Context Research omits corrupted authority content from real API results", async ({
     page,
   }) => {
-    const fixture = seedScreenshotGarbledAuthority();
+    const fixture = await seedScreenshotGarbledAuthority();
     expect(fixture.authorityId).toBeTruthy();
 
     const api = await request.newContext();
     const slug = unique("h70201");
-    const { ownerEmail } = await bootstrap(api, slug);
-    await api.dispose();
+    let ownerEmail: string;
+    try {
+      ({ ownerEmail } = await bootstrap(api, slug));
+    } finally {
+      await api.dispose();
+    }
 
     await signIn(page, slug, ownerEmail);
     await page.goto("/app/research");

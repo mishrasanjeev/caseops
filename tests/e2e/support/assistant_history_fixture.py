@@ -46,7 +46,8 @@ def main() -> None:
     from sqlalchemy import func, select
     from sqlalchemy.engine import make_url
 
-    database = make_url(os.environ["CASEOPS_DATABASE_URL"])
+    database_value = os.environ["CASEOPS_DATABASE_URL"]
+    database = make_url(database_value)
     require(not database.query)
     if database.drivername == "sqlite+pysqlite":
         expected = repo / "caseops-e2e.db"
@@ -55,12 +56,16 @@ def main() -> None:
                 and expected.is_file() and expected.resolve() == expected
                 and not expected.is_symlink())
     else:
+        predicate = globals().get("__caseops_is_owned_fixture_database__")
+        owned_docker = (database.host == "postgres" and database.port == 5432
+                        and callable(predicate) and predicate(database_value) is True)
+        local = (database.host in {"127.0.0.1", "localhost", "::1"}
+                 and database.port is not None and 20000 <= database.port <= 49999
+                 and bool(os.environ.get("CASEOPS_E2E_DOCKER_PROJECT")))
         require(database.drivername == "postgresql+psycopg"
-                and database.host in {"127.0.0.1", "localhost", "::1"}
-                and database.port is not None and 20000 <= database.port <= 49999
+                and (local or owned_docker)
                 and database.database == "caseops" and database.username == "caseops"
-                and database.password == "caseops"
-                and bool(os.environ.get("CASEOPS_E2E_DOCKER_PROJECT")))
+                and database.password == "caseops")
 
     from caseops_api.db.models import (
         AssistantCitation, AssistantSession, AssistantSessionScope, AssistantTurn,

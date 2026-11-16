@@ -1,6 +1,6 @@
 /** IPLF-046B: deterministic pleading validation and append-only filing lifecycle. */
 
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import path from "node:path";
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
@@ -14,11 +14,11 @@ const PASSWORD = "PleadingValidation2026!";
 
 test.use({ extraHTTPHeaders: localTransportHeaders(apiBaseUrl) });
 
-function runPython(lines: string[], environment: Record<string, string>): void {
+async function runPython(lines: string[], environment: Record<string, string>): Promise<void> {
   const python = process.env.CASEOPS_E2E_PYTHON?.trim() || (process.platform === "win32"
     ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
     : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"));
-  const result = spawnSync(python, ["-c", lines.join("; ")], {
+  const result = await runLocalPythonFixture(python, ["-c", lines.join("; ")], {
     cwd: repoRoot,
     encoding: "utf8",
     timeout: 30_000,
@@ -34,8 +34,8 @@ function runPython(lines: string[], environment: Record<string, string>): void {
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
 }
 
-function grantIpEntitlement(companyId: string): void {
-  runPython([
+async function grantIpEntitlement(companyId: string): Promise<void> {
+  await runPython([
     "import os",
     "from caseops_api.db.models import BillingSubscription",
     "from caseops_api.db.session import get_session_factory",
@@ -46,8 +46,8 @@ function grantIpEntitlement(companyId: string): void {
   ], { COMPANY_ID: companyId });
 }
 
-function seedAuthority(citation: string, title: string): void {
-  runPython([
+async function seedAuthority(citation: string, title: string): Promise<void> {
+  await runPython([
     "import os, uuid",
     "from datetime import UTC, date, datetime",
     "from caseops_api.db.models import AuthorityDocument, AuthorityDocumentType, MatterForumLevel",
@@ -74,7 +74,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const tenant = await response.json();
-  grantIpEntitlement(tenant.company.id as string);
+  await grantIpEntitlement(tenant.company.id as string);
   return { ...tenant, slug, email };
 }
 
@@ -214,7 +214,7 @@ test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async
   expect(proceedingResponse.status(), await proceedingResponse.text()).toBe(201);
   const proceeding = await proceedingResponse.json();
   const citation = `2026 SCC OnLine Del ${Date.now().toString().slice(-6)}`;
-  seedAuthority(citation, title);
+  await seedAuthority(citation, title);
   const base = `${apiBaseUrl}/api/ip/dockets/${docket.id}/proceedings/${proceeding.id}`;
   const created = await api.post(`${base}/drafts`, {
     headers,

@@ -52,12 +52,28 @@ class TypeValidationResult:
 # ---------------------------------------------------------------
 
 
+def _has_statute_section(body: str, statute: str, number: int) -> bool:
+    normalized = " ".join(body.split())
+    names = {
+        "bnss": r"(?:bnss|bharatiya\s+nagarik\s+suraksha\s+sanhita)",
+        "crpc": r"(?:crpc|cr\.?\s*p\.?\s*c|code\s+of\s+criminal\s+procedure)",
+    }
+    name = rf"\b{names[statute]}\b\.?"
+    section = rf"\b(?:sections?|sec|s)\.?\s*{number}\b"
+    year = "2023" if statute == "bnss" else "1973"
+    # Keep the Act and section adjacent: a different intervening statute must
+    # not turn a genuine missing/wrong-law finding into an accepted citation.
+    return bool(re.search(
+        rf"{name}\s*(?:,?\s*{year})?\s*[,;:]?\s*{section}"
+        rf"|{section}\s*,?\s*(?:of\s+)?(?:the\s+)?{name}",
+        normalized, re.I,
+    ))
+
+
 def _validate_bail(body: str) -> list[TypeValidationFinding]:
     out: list[TypeValidationFinding] = []
     low = body.lower()
-    if not re.search(r"\bbnss\s*(?:sec(?:tion)?\.?|s\.?)\s*483\b", low) and not re.search(
-        r"\bcrpc\s*(?:sec(?:tion)?\.?|s\.?)\s*439\b", low
-    ):
+    if not _has_statute_section(body, "bnss", 483) and not _has_statute_section(body, "crpc", 439):
         out.append(TypeValidationFinding(
             severity="error",
             rule="bail_missing_statute",
@@ -95,9 +111,7 @@ def _validate_bail(body: str) -> list[TypeValidationFinding]:
 def _validate_anticipatory_bail(body: str) -> list[TypeValidationFinding]:
     out: list[TypeValidationFinding] = []
     low = body.lower()
-    if not re.search(r"\bbnss\s*(?:sec(?:tion)?\.?|s\.?)\s*482\b", low) and not re.search(
-        r"\bcrpc\s*(?:sec(?:tion)?\.?|s\.?)\s*438\b", low
-    ):
+    if not _has_statute_section(body, "bnss", 482) and not _has_statute_section(body, "crpc", 438):
         out.append(TypeValidationFinding(
             severity="error",
             rule="anticipatory_bail_missing_statute",
@@ -192,9 +206,7 @@ def _validate_civil_suit(body: str) -> list[TypeValidationFinding]:
 def _validate_criminal_complaint(body: str) -> list[TypeValidationFinding]:
     out: list[TypeValidationFinding] = []
     low = body.lower()
-    if not re.search(r"\bbnss\s*(?:sec(?:tion)?\.?|s\.?)\s*223\b", low) and not re.search(
-        r"\bcrpc\s*(?:sec(?:tion)?\.?|s\.?)\s*200\b", low
-    ):
+    if not _has_statute_section(body, "bnss", 223) and not _has_statute_section(body, "crpc", 200):
         out.append(TypeValidationFinding(
             severity="error",
             rule="criminal_complaint_missing_statute",

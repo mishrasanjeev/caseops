@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     Company,
     CompanyMembership,
+    EthicalWall,
     IpDocketRecord,
     Matter,
+    MatterAccessGrant,
     Team,
     TeamKind,
     TeamMembership,
@@ -155,6 +157,30 @@ def _team_membership_snapshot(
     )
 
 
+def _team_has_access_dependencies(
+    session: Session,
+    *,
+    company_id: str,
+    team_id: str,
+) -> bool:
+    # Historical and scheduled ACL rows deliberately retain the strict fence.
+    dependencies = [
+        session.scalar(
+            select(
+                select(model.id)
+                .where(model.company_id == company_id, team_column == team_id)
+                .exists()
+            )
+        )
+        for model, team_column in (
+            (Matter, Matter.team_id),
+            (MatterAccessGrant, MatterAccessGrant.team_id),
+            (EthicalWall, EthicalWall.excluded_team_id),
+        )
+    ]
+    return any(dependencies)
+
+
 def _operational_ip_role_fence_snapshot(
     session: Session,
     *,
@@ -162,7 +188,12 @@ def _operational_ip_role_fence_snapshot(
     membership_scope: set[str] | None,
     include_empty: bool = False,
     linked_only: bool = False,
+    team_id: str | None = None,
 ) -> dict[str, _IpRoleFenceEntry]:
+    if team_id is not None and not _team_has_access_dependencies(
+        session, company_id=company_id, team_id=team_id,
+    ):
+        return {}
     statement = select(IpDocketRecord).where(
         IpDocketRecord.company_id == company_id,
         IpDocketRecord.is_active.is_(True),
@@ -197,6 +228,7 @@ def _lock_ip_role_fence_parents(
     membership_scope: set[str] | None,
     include_empty: bool = False,
     linked_only: bool = False,
+    team_id: str | None = None,
 ) -> tuple[list[Matter], list[IpDocketRecord]]:
     matter_ids = sorted(
         {
@@ -252,6 +284,7 @@ def _lock_ip_role_fence_parents(
         membership_scope=membership_scope,
         include_empty=include_empty,
         linked_only=linked_only,
+        team_id=team_id,
     )
     if current != expected:
         raise HTTPException(
@@ -322,6 +355,7 @@ def _assert_fence_unchanged_before_parent_locks(
     membership_scope: set[str] | None,
     include_empty: bool = False,
     linked_only: bool = False,
+    team_id: str | None = None,
 ) -> None:
     if _operational_ip_role_fence_snapshot(
         session,
@@ -329,6 +363,7 @@ def _assert_fence_unchanged_before_parent_locks(
         membership_scope=membership_scope,
         include_empty=include_empty,
         linked_only=linked_only,
+        team_id=team_id,
     ) == expected:
         return
     raise HTTPException(
@@ -360,6 +395,7 @@ def _lock_whole_team_access_fence(
         session,
         company_id=context.company.id,
         membership_scope=membership_scope,
+        team_id=team_id,
     )
     _lock_team_company(session, company_id=context.company.id)
     memberships = lock_company_memberships_for_assignment(
@@ -393,12 +429,14 @@ def _lock_whole_team_access_fence(
         company_id=context.company.id,
         expected=expected,
         membership_scope=membership_scope,
+        team_id=team_id,
     )
     matters, dockets = _lock_ip_role_fence_parents(
         session,
         company_id=context.company.id,
         expected=expected,
         membership_scope=membership_scope,
+        team_id=team_id,
     )
     return team, memberships, expected, matters, dockets
 
@@ -443,6 +481,7 @@ def _lock_single_team_member_access_fence(
             session,
             company_id=context.company.id,
             membership_scope=membership_scope,
+            team_id=team_id,
         )
         if advisory_row is not None
         else {}
@@ -489,12 +528,14 @@ def _lock_single_team_member_access_fence(
         company_id=context.company.id,
         expected=expected,
         membership_scope=membership_scope,
+        team_id=team_id,
     )
     matters, dockets = _lock_ip_role_fence_parents(
         session,
         company_id=context.company.id,
         expected=expected,
         membership_scope=membership_scope,
+        team_id=team_id,
     )
     return team, row, memberships, expected, matters, dockets
 

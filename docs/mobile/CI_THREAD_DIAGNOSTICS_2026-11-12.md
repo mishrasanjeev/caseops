@@ -111,3 +111,47 @@ replayed with its real Homebrew GNU binary. This is host control evidence, not
 new PostgreSQL or Android/iOS acceptance. Fresh hosted analysis and independent
 alert verdicts remain required; the original native crash root cause remains
 Inconclusive without a core backtrace.
+
+## 2026-11-16 — PR621 integration and Windows controls
+
+Main `736c15d3fa742411207633b05517645348cca78c` (PR612) is integrated
+locally into PR621. Both branches' tests, the safe timed observer, fatal
+faulthandler, all32 PostgreSQL shards and original bounds remain. The original
+hosted crash remains **Inconclusive**; fresh complete CI is required.
+
+The complete Windows diagnostic/launcher selection collected140 cases:
+137passed/3failed. Windows text-mode `os.open` translated the JSONL newline;
+the noncanonical-root fixture required unavailable symlink privileges.
+Explicit binary output now has an independent literal LF-byte assertion.
+Windows exercises a real directory junction for the same root refusal; POSIX
+retains a real symlink. The complete replacement passed140cases with zero
+failures/skips in335.30seconds, native exit0 (`b5-diagnostics-sharding-02.xml`).
+
+Actual Windows helper admission reproduced different pathname/descriptor ctime
+values with identical positive creation times. Shared helper loaders, private
+metadata comparisons and the gateway constructor now compare their shared
+creation identity while retaining each channel's complete before/after checks.
+Six native Windows controls pass, including actual same-byte pathname replacement
+while the original descriptor stays open, zero execution on rejection, changed
+creation identity refusal and descriptor closure.
+
+The complete mobile helper module is declared for Ubuntu in CI. The retained
+Windows whole-module attempt has49failures/7errors/5declared skips across126
+cases, including POSIX mode/symlink assumptions. It is not Linux acceptance.
+Complete Linux, hosted CI, browser, canonical Docker and deployed workflow proof
+remain pending. Evidence: `C:/Users/mishr/.codex/merge161001`. **NO-GO**.
+
+The complete offline Linux helper attempt executed126methods and retained three
+subcase errors in the unchanged five-second Node readiness constructor probe.
+All gateway, private-file, TLS and replacement methods passed in that attempt;
+the whole module remains unsuccessful. The Windows gateway-consumer attempt
+passed60/61 cases; its real symlink negative fixture requires the CI Linux
+platform and is not replaced by a fake or permission waiver.
+
+Fresh hosted source0d87d2c9 then reported six gateway-adapter failures:
+1889passes/6failures/3declared skips in its1898-case harness inventory. The
+adapter correctly refused the changed gateway's previous reviewed fingerprint.
+Reconcile only its reviewed constant to the exact gateway bytes; keep the
+implementation/tamper/snapshot binding and all six original negative controls.
+Complete source gates must be repeated for that corrected candidate; the prior
+failed run and unreached Python/browser boundaries remain retained.

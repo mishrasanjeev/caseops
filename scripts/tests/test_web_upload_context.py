@@ -1,6 +1,7 @@
 """Native gcloud upload discovery; no credentials, uploads or provider calls."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -38,6 +39,7 @@ PDF_ATTRIBUTION_INPUTS = {
 PDF_PUBLIC_NOTICES = {
     "apps/web/public/third-party-notices/liberation-fonts-2.1.5-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/noto-sans-devanagari-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-2.008-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/uharfbuzz-0.57.0-APACHE-LICENSE.txt",
     "apps/web/public/third-party-notices/harfbuzz-15.0.0-OldMIT-COPYING.txt",
 }
@@ -47,6 +49,7 @@ BUILDER_INPUTS = {
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+    "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
@@ -54,7 +57,14 @@ BUILDER_INPUTS = {
         "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
-        "env", "ram-bugs4",
+        "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",
+        "prod-diagnostic-test",
+        "env", "ram-bugs4", "canonical-api-validators",
+        "local-python-fixture", "local-python-file-fixture",
+    )),
+    *(f"tests/e2e/support/{name}.py" for name in (
+        "draft_pdf_fixture_20261111", "ram_batch3_draft_fixture",
+        "assistant_history_fixture", "seed_iplf037b",
     )),
     *NPM_TOOLING_INPUTS,
     *PDF_ATTRIBUTION_INPUTS,
@@ -111,7 +121,7 @@ class NativeUploadTests(unittest.TestCase):
         self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *PDF_PUBLIC_NOTICES, *(
             value["path"] for entry in record["packages"] for value in entry["materials"]
         )}
-        self.assertEqual(len(self.required), 71)
+        self.assertEqual(len(self.required), 72)
 
     def files(self, paths):
         for relative in paths:
@@ -171,6 +181,25 @@ class NativeUploadTests(unittest.TestCase):
         missing = sources - BUILDER_INPUTS - self.required
         self.assertFalse(missing, f"Dockerfile COPY inputs not declared: {sorted(missing)}")
 
+    def test_bounded_python_fixture_inputs_remain_finite_and_builder_only(self):
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8",
+        ).split("FROM trusted-base AS runner", 1)
+        for name in (
+            "local-python-fixture.ts", "local-python-file-fixture.ts",
+            "draft_pdf_fixture_20261111.py", "ram_batch3_draft_fixture.py",
+            "assistant_history_fixture.py", "seed_iplf037b.py",
+        ):
+            with self.subTest(name=name):
+                source = f"tests/e2e/support/{name}"
+                self.assertIn(source, BUILDER_INPUTS)
+                self.assertIn(f"COPY {source} /app/{source}", builder.splitlines())
+                self.assertNotIn(source, runner)
+                for ignore in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(f"!{source}", (ROOT / ignore).read_text(
+                        encoding="utf-8",
+                    ).splitlines())
+
     def test_colocated_retained_evidence_helper_has_explicit_builder_admission(self):
         helper = "tests/e2e/support/retained-assistant-evidence.ts"
         test_source = (ROOT / "apps/web/lib/retained-assistant-evidence.test.ts").read_text(encoding="utf-8")
@@ -203,6 +232,54 @@ class NativeUploadTests(unittest.TestCase):
                         f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines()
                     )
 
+    def test_original_draft_proof_unit_inputs_have_explicit_builder_admission(self):
+        unit = (ROOT / "apps/web/lib/e2e-canonical-validator-loading.test.ts").read_text(
+            encoding="utf-8"
+        )
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8"
+        ).split("FROM trusted-base AS runner", 1)
+        self.assertIn("draft_pdf_production_20261111.ts", unit)
+        journey = (ROOT / "tests/e2e/support/draft_pdf_production_20261111.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('from "./draft_pdf_render_proof_20261111"', journey)
+        older = "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"
+        self.assertIn("ram-2026-10-22-drafting.prod.spec.ts", unit)
+        self.assertIn(
+            'from "./support/prod-diagnostic-test"', (ROOT / older).read_text(encoding="utf-8")
+        )
+        for source in (
+            "tests/e2e/support/draft_pdf_production_20261111.ts",
+            "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+            older, "tests/e2e/support/prod-diagnostic-test.ts",
+        ):
+            with self.subTest(helper=source):
+                self.assertIn(source, BUILDER_INPUTS)
+                self.assertIn(f"COPY {source} /app/{source}", builder.splitlines())
+                self.assertNotIn(source, runner)
+                for ignore in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(
+                        f"!{source}", (ROOT / ignore).read_text(encoding="utf-8").splitlines()
+                    )
+
+    def test_draft_proof_inputs_remain_in_the_finite_native_web_fingerprint(self):
+        tree = ast.parse((ROOT / "scripts/mobile/local-bootstrap.py").read_text(encoding="utf-8"))
+        declarations = [node for node in tree.body if isinstance(node, ast.Assign)
+                        and any(isinstance(target, ast.Name) and target.id == "WEB_PATHS"
+                                for target in node.targets)]
+        self.assertEqual(len(declarations), 1)
+        scopes = ast.literal_eval(declarations[0].value)
+        for source in (
+            "tests/e2e/support/draft_pdf_production_20261111.ts",
+            "tests/e2e/support/draft_pdf_render_proof_20261111.ts",
+            "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+            "tests/e2e/support/prod-diagnostic-test.ts",
+        ):
+            self.assertTrue(any(source == scope or source.startswith(scope + "/") for scope in scopes))
+        canary = "tests/e2e/unlisted.spec.ts"
+        self.assertFalse(any(canary == scope or canary.startswith(scope + "/") for scope in scopes))
+
     def test_colocated_communications_ast_read_has_explicit_builder_admission(self):
         source = (ROOT / "apps/web/lib/communications-journey.test.ts").read_text(
             encoding="utf-8"
@@ -227,6 +304,19 @@ class NativeUploadTests(unittest.TestCase):
                     self.assertIn(
                         f"!{dependency}", (ROOT / name).read_text(encoding="utf-8").splitlines()
                     )
+
+    def test_canonical_validator_loader_remains_builder_only_with_finite_admission(self):
+        helper = "tests/e2e/support/canonical-api-validators.ts"
+        consumer = (ROOT / "tests/e2e/ram-2026-11-11-bugs.spec.ts").read_text(encoding="utf-8")
+        self.assertIn('from "./support/canonical-api-validators"', consumer)
+        self.assertIn(helper, BUILDER_INPUTS)
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(
+            encoding="utf-8"
+        ).split("FROM trusted-base AS runner", 1)
+        self.assertIn(f"COPY {helper} /app/{helper}", builder.splitlines())
+        self.assertNotIn(helper, runner)
+        for name in (".dockerignore", ".gcloudignore"):
+            self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

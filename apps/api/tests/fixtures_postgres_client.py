@@ -31,7 +31,9 @@ _JOURNAL_META = (
     "st_ino",
     "st_size",
     "st_mtime_ns",
-    "st_ctime_ns",
+    # Windows lstat exposes legacy creation-time ctime while fstat can expose
+    # change time after an append. Birth time is the common creation identity.
+    "st_birthtime_ns" if os.name == "nt" else "st_ctime_ns",
     "st_mode",
     "st_uid",
     "st_gid",

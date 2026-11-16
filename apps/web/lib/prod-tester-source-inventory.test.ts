@@ -8,13 +8,13 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 
 type NativeAnnotation = { type: string; description?: string };
-type NativeTest = { projectId: string; projectName: string; repeatEachIndex?: number; retries?: number; results: unknown[]; annotations?: NativeAnnotation[] };
+type NativeTest = { projectId: string; projectName: string; repeatEachIndex?: number; retries?: number; results: unknown[]; annotations?: NativeAnnotation[]; expectedStatus?: string };
 type NativeSuite = { title: string; specs?: { id: string; file: string; title: string; tests: NativeTest[] }[]; suites?: NativeSuite[] };
-type Case = { id: string; file: string; titles: string[]; project: string; repeat: number; retries: number; results: unknown[]; annotations?: NativeAnnotation[] };
+type Case = { id: string; file: string; titles: string[]; project: string; repeat: number; retries: number; results: unknown[]; annotations?: NativeAnnotation[]; expectedStatus?: string };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 115,
+  "tester-prod-chromium": 119,
   "tester-index-prod-chromium": 6,
   "test-legal-write-prod-chromium": 51,
 };
@@ -123,7 +123,7 @@ function flatten(suites: NativeSuite[], projectRetries: Record<string, number>, 
         file: spec.file.replaceAll("\\", "/").split("/").at(-1)!,
         titles: [...titles, spec.title], project: test.projectName,
         repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? projectRetries[test.projectId], results: test.results,
-        annotations: test.annotations ?? [],
+        annotations: test.annotations ?? [], expectedStatus: test.expectedStatus,
       }))),
       ...flatten(suite.suites ?? [], projectRetries, titles),
     ];
@@ -176,6 +176,23 @@ type MetadataConstructor = (command: string, args: string[], options: SpawnSyncO
 const appSourceProjects = { "app-chromium": 719, "app-mobile": 55 };
 const batch5Files = ["statutes", "drafting", "contracts", "bugs"].map(name => `ram-2026-11-11-${name}.spec.ts`);
 const isBatch5 = (row: Case) => batch5Files.includes(row.file.split("/").at(-1)!);
+const nov14Cases = [
+  ["app-chromium", "ram-2026-11-14-prod.spec.ts", "IP India content and form references /app/ip/registry desktop"],
+  ["app-chromium", "ram-2026-11-14-prod.spec.ts", "IP India content and form references /app/ip/patents desktop"],
+  ["app-chromium", "draft-quality20261114.spec.ts", "Draft quality 2026-11-14 desktop: generated findings survive correction and reload"],
+  ["app-mobile", "ram-2026-11-14-prod.spec.ts", "[mobile] IP India content and form references /app/ip/registry phone"],
+  ["app-mobile", "ram-2026-11-14-prod.spec.ts", "[mobile] IP India content and form references /app/ip/patents phone"],
+  ["app-mobile", "draft-quality20261114.spec.ts", "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"],
+] as const;
+const isNov14 = (row: Case) => ["ram-2026-11-14-prod.spec.ts", "draft-quality20261114.spec.ts"].includes(row.file);
+function expectNov14(rows: Case[], production = false) {
+  const selected = rows.filter(isNov14);
+  const expected = nov14Cases.filter(([, file]) => !production || file === "ram-2026-11-14-prod.spec.ts")
+    .map(([project, file, title]) => JSON.stringify([production ? "tester-prod-chromium" : project, file, [file, title]])).sort();
+  expect(selected.map(row => JSON.stringify([row.project, row.file, row.titles])).sort()).toEqual(expected);
+  expect(new Set(selected.map(row => row.id)).size).toBe(selected.length);
+  expect(selected.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+}
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -205,7 +222,7 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
         id: `${spec.id}:${test.projectId}:${ordinal}`, file: spec.file.replaceAll("\\", "/"),
         titles: [...titles, spec.title], project: test.projectName,
         repeat: test.repeatEachIndex ?? 0, retries: test.retries ?? retries[test.projectId], results: test.results,
-        annotations: test.annotations ?? [],
+        annotations: test.annotations ?? [], expectedStatus: test.expectedStatus,
       }))),
       ...flattenApp(suite.suites ?? [], retries, titles),
     ];
@@ -274,12 +291,14 @@ function canonicalAppProject(canonical: Case[], project: keyof typeof appSourceP
 describe("complete independent App CI project inventory", () => {
   let canonical: Case[];
   let batch5: Case[];
+  let nov14: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
     const all = collectAppProject();
     batch5 = all.filter(isBatch5);
-    canonical = all.filter(row => !isBatch5(row));
+    nov14 = all.filter(isNov14);
+    canonical = all.filter(row => !isBatch5(row) && !isNov14(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -310,7 +329,7 @@ describe("complete independent App CI project inventory", () => {
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
     const count = appSourceProjects[project];
     it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
-      const selected = collectAppProject(project).filter(row => !isBatch5(row));
+      const selected = collectAppProject(project).filter(row => !isBatch5(row) && !isNov14(row));
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
     }, 20_000);
@@ -325,6 +344,12 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(wholeByDeclaration.map(row => row.id))).toEqual(new Set(canonical.map(row => row.id)));
     const desktopIds = new Set(chromium.map(row => row.id));
     expect(mobile.every(row => !desktopIds.has(row.id))).toBe(true);
+  });
+
+  it("requires all six Nov14 identities outside the unchanged774 and ten B5 cases", () => {
+    expectNov14(nov14);
+    expect(canonical.length + batch5.length + nov14.length).toBe(790);
+    expect(counts(nov14.map(row => row.project))).toEqual({ "app-chromium": 3, "app-mobile": 3 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {
@@ -367,6 +392,23 @@ describe("complete independent App CI project inventory", () => {
 });
 
 describe("App metadata constructor and source-order controls", () => {
+  it.each(["title", "missing", "duplicate", "project", "repeat", "retry", "executed", "foreign", "expected-skip"])(
+    "Nov14 exact identities reject %s", damage => {
+      const rows: Case[] = nov14Cases.map(([project, file, title], index) => ({
+        id: `nov14-${index}`, project, file, titles: [file, title], repeat: 0, retries: 0, results: [], expectedStatus: "passed",
+      }));
+      if (damage === "title") rows[0].titles[1] += " changed";
+      else if (damage === "missing") rows.pop();
+      else if (damage === "duplicate") rows[1] = rows[0];
+      else if (damage === "project") rows[0].project = "app-mobile";
+      else if (damage === "repeat") rows[0].repeat = 1;
+      else if (damage === "retry") rows[0].retries = 1;
+      else if (damage === "executed") rows[0].results = [{ status: "passed" }];
+      else if (damage === "expected-skip") rows[0].expectedStatus = "skipped";
+      else rows[0].file = `other/${rows[0].file}`;
+      expect(() => expectNov14(rows)).toThrow();
+    },
+  );
   it.each(["renamed", "duplicate-comms", "swapped-scope", "both-scopes", "missing-scope"])(
     "rejects %s in the four exact mixed-file proof identities", damage => {
       const rows: Case[] = batch5BugsProofCases.map(([title, scope]) => ({
@@ -450,9 +492,10 @@ describe("reviewed production tester source inventory", () => {
 
   beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects the reviewed115+6+51 QA roles before the four moved workspace cases", () => {
+  it("collects reviewed119+6+51 QA roles with four reference cases but no local draft generation", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
-    expect(cases).toHaveLength(172);
+    expect(cases).toHaveLength(176);
+    expectNov14(cases, true);
     expect(cases.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
     expect(cases.filter(row => row.file === "ram-2026-10-22-prod.spec.ts")
       .map(row => ({ project: row.project, title: row.titles.at(-1) }))).toEqual([{
@@ -472,8 +515,8 @@ describe("reviewed production tester source inventory", () => {
     ]);
     expect(moved.map(row => [row.project, row.file, row.titles.at(-1)]).sort()).toEqual(expected.sort());
     expect(moved.every(row => row.results.length === 0 && row.retries === 0 && row.repeat === 0)).toBe(true);
-    expect(cases).toHaveLength(172);
-    expect(cases.length + moved.length).toBe(176);
+    expect(cases).toHaveLength(176);
+    expect(cases.filter(row => !isNov14(row)).length + moved.length).toBe(176);
     expect(cases.some(row => /ram-2026-11-07-(?:contracts|teams)\.spec\.ts$/.test(row.file))).toBe(false);
   });
 

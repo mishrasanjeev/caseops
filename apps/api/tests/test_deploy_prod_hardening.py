@@ -1068,7 +1068,14 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     # Installed integrity checks require independent single-link files on Linux
     # as well as macOS, rather than UV's shared-cache hardlink default.
     assert "    UV_LINK_MODE=copy \\" in image
-    assert image.index("UV_LINK_MODE=copy") < image.index("RUN pip install")
+    bootstrap = (
+        "COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:"
+        "32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff "
+        "/uv /uvx /usr/local/bin/"
+    )
+    assert image.count(bootstrap) == 1
+    assert image.index("UV_LINK_MODE=copy") < image.index(bootstrap)
+    assert image.index(bootstrap) < image.index("FROM runtime-base AS api")
     assert "uv export \\" in image
     assert "--frozen" in image
     assert "--no-emit-project" in image
@@ -4644,11 +4651,22 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
 
 _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
+    ("retained-draft-journey", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"),
     ("e2e-env", "tests/e2e/support/env.ts"),
     ("ram-bugs4", "tests/e2e/support/ram-bugs4.ts"),
+    ("canonical-api-validators", "tests/e2e/support/canonical-api-validators.ts"),
+    ("local-python-fixture", "tests/e2e/support/local-python-fixture.ts"),
+    ("local-python-file-fixture", "tests/e2e/support/local-python-file-fixture.ts"),
+    ("draft-pdf-fixture", "tests/e2e/support/draft_pdf_fixture_20261111.py"),
+    ("ram-draft-fixture", "tests/e2e/support/ram_batch3_draft_fixture.py"),
+    ("assistant-history-fixture", "tests/e2e/support/assistant_history_fixture.py"),
+    ("renewal-fixture", "tests/e2e/support/seed_iplf037b.py"),
     ("retained-assistant", "tests/e2e/support/retained-assistant-evidence.ts"),
     ("draft-pdf-oracle", "tests/e2e/support/draft_pdf_oracle_20261111.ts"),
     ("draft-pdf-production-policy", "tests/e2e/support/draft_pdf_production_policy_20261111.ts"),
+    ("draft-pdf-production-journey", "tests/e2e/support/draft_pdf_production_20261111.ts"),
+    ("draft-pdf-render-proof", "tests/e2e/support/draft_pdf_render_proof_20261111.ts"),
+    ("production-diagnostic-test", "tests/e2e/support/prod-diagnostic-test.ts"),
 )
 
 

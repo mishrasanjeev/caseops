@@ -1,9 +1,9 @@
 /** B3-001: actual local mock-provider recovery, never a paid production call. */
-import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { expect, request, test, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 import { localTransportHeaders } from "./support/cost-controls";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 
@@ -69,7 +69,7 @@ async function journey(page: Page, baseURL: string | undefined, info: TestInfo, 
     });
     const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot, "apps", "api", ".venv",
       process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-    const fixture = spawnSync(python, [path.join(repoRoot, "tests/e2e/support/ram_batch3_draft_fixture.py")], {
+    const fixture = await runLocalPythonFileFixture(python, path.join(repoRoot, "tests/e2e/support/ram_batch3_draft_fixture.py"), {
       cwd: repoRoot, encoding: "utf8", timeout: 30_000,
       input: JSON.stringify({ web: web.origin, api: api.origin, run, company_id: tenant.company.id,
         membership_id: tenant.membership.id, matter_id: matter.id, draft_id: created.id }),

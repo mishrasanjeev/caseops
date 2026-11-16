@@ -1,7 +1,8 @@
 /** J07/M06: retained control-state reads only, not generation or approval acceptance. */
 import { createHash } from "node:crypto";
 import type { APIResponse, Page, Response } from "@playwright/test";
-import { authContext, draft as draftSchema, type Draft } from "../../apps/web/lib/api/schemas";
+import type { Draft } from "../../apps/web/lib/api/schemas";
+import { canonicalApiValidators } from "./support/canonical-api-validators";
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
@@ -42,6 +43,7 @@ async function json(response: Pick<APIResponse, "status" | "json">, label: strin
 }
 
 function parseDraft(value: unknown): Draft {
+  const { draft: draftSchema } = canonicalApiValidators();
   const parsed = draftSchema.safeParse(value);
   if (!parsed.success) throw new Error("Retained draft does not match the current frontend contract; private response omitted.");
   return parsed.data;
@@ -158,6 +160,7 @@ test("B3-DRAFT-PROD read-only retained finalized and mutable Appeal controls per
     expect(login.status(), "Normal browser QA login").toBe(200);
     expect(await login.finished(), "Normal browser login response completes").toBeNull();
     await page.waitForURL(/\/app(?:[/?]|$)/);
+    const { authContext } = canonicalApiValidators();
     const parsed = authContext.safeParse(await read("/api/auth/me"));
     if (!parsed.success) throw new Error("Browser QA context does not match the current contract; private response omitted.");
     const actor = parsed.data;

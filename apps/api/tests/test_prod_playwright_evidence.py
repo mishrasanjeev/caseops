@@ -20,6 +20,16 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 BASE = "99297e17b00dd51178e21baf596ba2ebfd92c5f7"
+REPORTED_DRAFT_PROOF = {
+    "schema_version": 1,
+    "status": "READ_ONLY_PARITY_VERIFIED",
+    "matter_id": "7771c86f-a6d6-442f-a675-4be40622dc05",
+    "draft_id": "3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5",
+    "version_id": "cc114a40-7bb5-422d-9499-988b69c0f4d4",
+    "body_sha256": "71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074",
+    "unchanged": True,
+    "attempted_mutations": 0,
+}
 # Pinned from the exact base's native workflow, not from the changed manifest.
 # Ordinary CI shards are shallow checkouts; regressions must not fetch history.
 BASE_COMMANDS = {
@@ -77,8 +87,11 @@ def capture(tmp_path, monkeypatch):
     reporter.parent.mkdir()
     reporter.touch()
     node = shutil.which("node")
+    real_run = subprocess.run
     monkeypatch.setattr(evidence.shutil, "which", lambda _: "offline-node")
-    monkeypatch.setattr(evidence.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=BASE))
+    monkeypatch.setattr(
+        evidence.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=BASE, returncode=0)
+    )
     env = {
         "CASEOPS_EXPECTED_RELEASE_SHA": BASE,
         "CASEOPS_QA_PASSWORD": "private-test-password",
@@ -173,6 +186,7 @@ def capture(tmp_path, monkeypatch):
         junit_count=1,
         mutate_xml=None,
         node=node,
+        real_run=real_run,
     )
 
     def launch(command, **kwargs):
@@ -1162,6 +1176,144 @@ def test_privacy_minimization_removes_raw_detail_and_redacts_annotation_secrets(
     assert "redacted" in archived
 
 
+def test_reported_draft_annotation_retains_only_the_exact_reviewed_scalar_schema():
+    assert evidence.REPORTED_DRAFT_PROOF == REPORTED_DRAFT_PROOF
+    annotation = {
+        "type": "caseops-b5-reported-draft", "description": json.dumps(REPORTED_DRAFT_PROOF),
+    }
+    retained = evidence._annotations([annotation], {})
+    assert json.loads(retained[0]["description"]) == REPORTED_DRAFT_PROOF
+    assert evidence._annotations(retained, {}) == retained
+    assert evidence._annotations([
+        {"type": "skip", "description": annotation["description"]}
+    ], {})[0]["description"] == "[redacted structured annotation]"
+
+
+@pytest.mark.parametrize("damage", [
+    "missing", "object", "oversized", "duplicate_key", "extra_private", "missing_field",
+    "wrong_status", "wrong_matter", "wrong_draft", "wrong_version", "wrong_hash",
+    "aggregate_fingerprint",
+    "schema_bool", "schema_float", "schema_string", "changed", "changed_int",
+    "mutated", "mutations_bool", "mutations_float", "mutations_string",
+])
+def test_reported_draft_annotation_rejects_wrong_or_private_values_without_echo(damage):
+    proof = copy.deepcopy(REPORTED_DRAFT_PROOF)
+    if damage == "extra_private":
+        proof["body"] = "SYNTHETIC_PRIVATE_LEGAL_BODY"
+    elif damage == "missing_field":
+        del proof["version_id"]
+    elif damage.startswith("wrong_"):
+        key = {"wrong_status": "status", "wrong_matter": "matter_id", "wrong_draft": "draft_id",
+               "wrong_version": "version_id", "wrong_hash": "body_sha256"}[damage]
+        proof[key] = "wrong"
+    elif damage.startswith("schema_"):
+        proof["schema_version"] = {
+            "schema_bool": True, "schema_float": 1.0, "schema_string": "1",
+        }[damage]
+    elif damage == "aggregate_fingerprint":
+        proof["body_sha256"] = "7e83f20a36d662d4b6748542ebf2460daf141f86b9dc3a006baede20d0848504"
+    elif damage in {"changed", "changed_int"}:
+        proof["unchanged"] = False if damage == "changed" else 1
+    elif damage in {"mutated", "mutations_bool", "mutations_float", "mutations_string"}:
+        proof["attempted_mutations"] = {
+            "mutated": 1, "mutations_bool": False, "mutations_float": 0.0, "mutations_string": "0",
+        }[damage]
+    description = json.dumps(proof)
+    if damage == "missing":
+        description = None
+    elif damage == "object":
+        description = proof
+    elif damage == "oversized":
+        description = " " * 1025 + description
+    elif damage == "duplicate_key":
+        description = description[:-1] + ', "schema_version": 1}'
+    with pytest.raises(evidence.EvidenceError, match="^invalid_reported_draft_proof$") as error:
+        evidence._annotations([
+            {"type": "caseops-b5-reported-draft", "description": description},
+        ], {})
+    assert "SYNTHETIC_PRIVATE_LEGAL_BODY" not in str(error.value)
+
+
+def test_actual_reporter_and_python_preserve_only_the_reviewed_draft_receipt(capture):
+    assert capture.node, "The native reporter bridge requires Node.js."
+    shutil.copyfile(ROOT / "scripts/prod_playwright_reporter.cjs", capture.root / evidence.REPORTER)
+    capture.path.mkdir(parents=True)
+    runtime = copy.deepcopy(capture.runtime)
+    runtime["suites"][0]["specs"][0]["tests"][0]["annotations"] = [{
+        "type": "caseops-b5-reported-draft", "description": json.dumps(REPORTED_DRAFT_PROOF),
+    }]
+    script = (
+        'const path = require("node:path"); '
+        'const Reporter = require("./scripts/prod_playwright_reporter.cjs"); '
+        f"const doc = {json.dumps(runtime)}; "
+        "const spec = doc.suites[0].specs[0]; const native = spec.tests[0]; "
+        'const result = { status: "passed", retry: 0, duration: 1, workerIndex: 0, '
+        'parallelIndex: 0, startTime: new Date("2026-10-09T00:00:00Z"), '
+        'annotations: [], errors: [], attachments: [{name: "bug001-production-parity", '
+        'contentType: "application/json", body: Buffer.from("SYNTHETIC_PRIVATE_LEGAL_BODY")}] }; '
+        "const testcase = { ...spec, ...native, results: [result], "
+        "parent: { project: () => doc.config.projects[0] }, "
+        "location: { file: path.join(doc.config.rootDir, spec.file), "
+        "line: spec.line, column: spec.column }, "
+        'titlePath: () => ["", "offline", "offline.spec.ts", spec.title], '
+        'outcome: () => "expected", ok: () => true }; '
+        "const reporter = new Reporter(); reporter.configure(doc.config); "
+        "reporter.onBegin(doc.config, {allTests: () => [testcase]}); "
+        "reporter.onTestEnd(testcase, result); "
+        'Promise.resolve(reporter.onEnd({status: "passed", '
+        'startTime: new Date("2026-10-09T00:00:00Z"), duration: 1}))'
+        ".catch(() => { process.exitCode = 1; });"
+    )
+    env = {**os.environ, **capture.env, "CASEOPS_PW_EVIDENCE_INVOCATION": "offline",
+           "CASEOPS_PW_EVIDENCE_PHASE": "execution",
+           "CASEOPS_PW_EVIDENCE_JSON_FILE": str(capture.path / "native-results.json"),
+           "CASEOPS_PW_EVIDENCE_JUNIT_FILE": str(capture.path / "native-results.xml")}
+    child = capture.real_run([capture.node, "-e", script], cwd=capture.root, env=env,
+                             capture_output=True, text=True, timeout=15, check=False)
+    assert child.returncode == 0, child.stderr
+    raw = json.loads((capture.path / "native-results.json").read_text())
+    normalized = evidence._inventory(raw, capture.env)
+    annotation = normalized[0]["annotations"][0]
+    assert annotation["type"] == "caseops-b5-reported-draft"
+    assert json.loads(annotation["description"]) == REPORTED_DRAFT_PROOF
+    evidence._app_native_fields(raw)
+    evidence._junit(capture.path / "native-results.xml", capture.path / "results.xml",
+                    capture.env, {"tests": normalized, "stats": raw["stats"]})
+    for path in capture.path.iterdir():
+        text = path.read_text(encoding="utf-8")
+        assert "SYNTHETIC_PRIVATE_LEGAL_BODY" not in text and "private-test-password" not in text
+
+
+@pytest.mark.parametrize("completion", [False, True])
+@pytest.mark.parametrize("damage", ["dirty", "git_error", "changed_head"])
+def test_checkout_guard_is_bounded_and_rechecks_head_after_the_tracked_diff(
+    capture, monkeypatch, completion, damage,
+):
+    calls = []
+    heads = iter([BASE, "f" * 40 if damage == "changed_head" else BASE])
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        assert kwargs["timeout"] == 15
+        assert "core.fsmonitor=false" in command and f"core.hooksPath={os.devnull}" in command
+        if "rev-parse" in command:
+            return SimpleNamespace(stdout=next(heads), returncode=0)
+        assert command[-6:] == ["diff", "--no-ext-diff", "--no-textconv", "--quiet", BASE, "--"]
+        assert kwargs["stdout"] == kwargs["stderr"] == subprocess.DEVNULL
+        return SimpleNamespace(returncode={"dirty": 1, "git_error": 128, "changed_head": 0}[damage])
+
+    monkeypatch.setattr(evidence.subprocess, "run", run)
+    if damage == "git_error":
+        reason = "source_checkout_verification_failed"
+    elif damage == "changed_head":
+        reason = "checkout_changed_during_execution" if completion else "checkout_sha_mismatch"
+    else:
+        reason = "tracked_source_changed_during_execution" if completion else "tracked_source_dirty"
+    with pytest.raises(evidence.EvidenceError, match="^" + reason + "$"):
+        evidence._check_checkout(capture.root, BASE, completion=completion)
+    assert len(calls) == (3 if damage == "changed_head" else 2)
+
+
 @pytest.mark.parametrize("problem", ["discovery", "json", "junit", "progress"])
 def test_missing_native_files_never_create_completion(capture, problem):
     capture.missing = problem
@@ -1606,16 +1758,17 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
     path = tmp_path / "native-reporter.tap"
     path.write_text(result.stdout + result.stderr, encoding="utf-8")
     record_property("native_reporter_inventory", str(path))
-    record_property("native_reporter_test_count", "35")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (
-        "# tests 35" in result.stdout
-        and "# pass 35" in result.stdout
-        and "# fail 0" in result.stdout
-        and "# skipped 0" in result.stdout
-        and "# cancelled 0" in result.stdout
-        and "# todo 0" in result.stdout
-    )
+    counts = {name: int(count) for name, count in re.findall(
+        r"^# (tests|pass|fail|skipped|cancelled|todo) (\d+)$", result.stdout, re.MULTILINE
+    )}
+    assert counts.keys() == {"tests", "pass", "fail", "skipped", "cancelled", "todo"}
+    assert counts["tests"] > 0 and counts["pass"] == counts["tests"]
+    assert all(counts[key] == 0 for key in ("fail", "skipped", "cancelled", "todo"))
+    native_ids = [int(value) for value in re.findall(r"^ok (\d+) - ", result.stdout, re.MULTILINE)]
+    assert native_ids == list(range(1, counts["tests"] + 1))
+    assert f"1..{counts['tests']}" in result.stdout.splitlines()
+    record_property("native_reporter_test_count", str(counts["tests"]))
 
 
 def test_bug015_operational_fixture_read_contracts(tmp_path, record_property):
@@ -1759,6 +1912,95 @@ def test_new_native_capture_cli_parses_invocation_and_original_options(capture, 
     assert seen == [(capture.root, "offline", capture.args)]
 
 
+NOV14_REVIEWED_CASES = (
+    ("app-chromium", "ram-2026-11-14-prod.spec.ts",
+     "IP India content and form references /app/ip/registry desktop"),
+    ("app-chromium", "ram-2026-11-14-prod.spec.ts",
+     "IP India content and form references /app/ip/patents desktop"),
+    ("app-chromium", "draft-quality20261114.spec.ts",
+     "Draft quality 2026-11-14 desktop: generated findings survive correction and reload"),
+    ("app-mobile", "ram-2026-11-14-prod.spec.ts",
+     "[mobile] IP India content and form references /app/ip/registry phone"),
+    ("app-mobile", "ram-2026-11-14-prod.spec.ts",
+     "[mobile] IP India content and form references /app/ip/patents phone"),
+    ("app-mobile", "draft-quality20261114.spec.ts",
+     "Draft quality 2026-11-14 [mobile] phone: generated findings survive correction and reload"),
+)
+
+
+def _nov14_fixture_rows(production=False):
+    rows = []
+    for ordinal, (project, file, title) in enumerate(NOV14_REVIEWED_CASES):
+        if production and file == "draft-quality20261114.spec.ts":
+            continue
+        owner = "tester-prod-chromium" if production else project
+        rows.append({"id": f"nov14-{ordinal}:{owner}:0", "native_spec_id": f"nov14-{ordinal}",
+                     "file": file, "title_path": [file, title], "project_id": owner,
+                     "project_name": owner, "expected_status": "passed", "status": "expected",
+                     "retries": 0, "repeat_each_index": 0,
+                     "results": [{"status": "passed", "retry": 0}]})
+    return rows
+
+
+@pytest.mark.parametrize("production", [False, True])
+def test_nov14_requires_independent_six_app_or_four_reference_only_prod_identities(production):
+    assert tuple(evidence.NOV14_APP_CASES) == NOV14_REVIEWED_CASES
+    rows = _nov14_fixture_rows(production)
+    assert len(evidence._nov14_rows(rows, production=production, execution=True)) == (
+        4 if production else 6
+    )
+
+
+@pytest.mark.parametrize("ordinal", range(6))
+@pytest.mark.parametrize("damage", [
+    "title", "file", "missing", "duplicate", "project", "retry", "repeat", "expected_skip",
+    "skipped", "failed", "no_result", "second_attempt",
+])
+def test_nov14_each_reviewed_identity_rejects_replacement_or_nonpassing_execution(ordinal, damage):
+    rows = _nov14_fixture_rows()
+    row = rows[ordinal]
+    if damage == "title":
+        row["title_path"][-1] += " changed"
+    elif damage == "file":
+        row["file"] = "other.spec.ts"
+    elif damage == "missing":
+        rows.pop(ordinal)
+    elif damage == "duplicate":
+        rows.append(copy.deepcopy(row))
+    elif damage == "project":
+        row["project_name"] = row["project_id"] = "other-project"
+    elif damage == "retry":
+        row["retries"] = 1
+    elif damage == "repeat":
+        row["repeat_each_index"] = 1
+    elif damage == "expected_skip":
+        row["expected_status"] = "skipped"
+    elif damage in {"skipped", "failed"}:
+        row["results"][0]["status"] = damage
+    elif damage == "no_result":
+        row["results"] = []
+    else:
+        row["results"].append({"status": "passed", "retry": 1})
+    with pytest.raises(evidence.EvidenceError, match="nov14_required_case"):
+        evidence._nov14_rows(rows, execution=True)
+
+
+def test_nov14_local_generation_can_never_enter_production_even_with_same_counts():
+    canonical = {"tests": _tester_canonical_rows()}
+    canonical["tests"][0]["file"] = "draft-quality20261114.spec.ts"
+    with pytest.raises(evidence.EvidenceError, match="local_draft_quality_in_production_inventory"):
+        evidence._tester_inventory(canonical)
+
+
+def test_nov14_reference_runtime_cannot_be_a_successful_skipped_tester_case():
+    rows = _nov14_fixture_rows(production=True)
+    for row in rows:
+        skipped = copy.deepcopy(rows)
+        skipped[rows.index(row)]["results"][0]["status"] = "skipped"
+        with pytest.raises(evidence.EvidenceError, match="nov14_required_case_not_passed"):
+            evidence._nov14_rows(skipped, production=True, execution=True)
+
+
 def _tester_canonical_rows():
     rows = []
     partitions = {
@@ -1785,12 +2027,20 @@ def _tester_canonical_rows():
                     "expected_status": "passed",
                     "results": [{"status": "passed", "retry": 0}],
                 })
+    for ordinal, (_width, file, title) in enumerate(NOV14_REVIEWED_CASES):
+        if file != "ram-2026-11-14-prod.spec.ts":
+            continue
+        row = copy.deepcopy(rows[0])
+        row.update(id=f"nov14-{ordinal}:tester-prod-chromium:0",
+                   native_spec_id=f"nov14-{ordinal}", file=file,
+                   title_path=[file, title], line=ordinal + 1)
+        rows.append(row)
     return rows
 
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.OCT13_FILES == {
@@ -1803,12 +2053,12 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
         "ram-2026-10-22-prod.spec.ts": 1,
     }
-    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 172
+    assert len(evidence._tester_inventory({"tests": _tester_canonical_rows()})) == 176
 
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 97, "tester-catalog": 18,
+        "tester": 101, "tester-catalog": 18,
         "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
@@ -2561,7 +2811,7 @@ def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
         assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
     assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
     assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
-    assert len(evidence._tester_inventory(canonical)) == 172
+    assert len(evidence._tester_inventory(canonical)) == 176
 
 
 @pytest.mark.parametrize("part", ["test-legal-write-oct13-a", "test-legal-write-oct13-b"])
@@ -2759,7 +3009,7 @@ BATCH5_BUGS_CASES = (
 
 
 def _app_reviewed_counts():
-    return {project: count + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
+    return {project: count + 3 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -2904,6 +3154,7 @@ def app_capture(capture):
                   f"{'[mobile] ' if width else ''}B5 {file} case {number}")
                  for file, pair in evidence.BATCH5_CASE_COUNTS.items()
                  for number in range(pair[width])]
+        added += [(file, title) for owner, file, title in NOV14_REVIEWED_CASES if owner == project]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]

@@ -28,6 +28,7 @@ CORE_SCREEN_READS = frozenset({"GET /api/auth/native/sessions", "GET /api/accoun
 API_PATHS = ["apps/api"]
 WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support",
              "tests/e2e/ram-2026-11-11-bugs.spec.ts",
+             "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
              "apps/api/pyproject.toml", "apps/api/uv.lock",
              "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
              "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",
@@ -46,6 +47,11 @@ def _load_local_transport():
     import stat as _stat
     _path = Path(__file__).absolute().with_name("local-transport.py")
     _keys = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    # Windows pathname ctime is creation time; descriptor ctime is change time.
+    # Compare their shared creation identity and retain each channel's
+    # complete before/after frame, including its own ctime.
+    if _os.name == "nt":
+        _keys += ("st_birthtime_ns",)
     _frame = lambda value: tuple(getattr(value, key) for key in _keys)
     assert _path.resolve(strict=True) == _path, "Canonical local transport source required"
     def _namespace():
@@ -61,7 +67,9 @@ def _load_local_transport():
     try:
         _first = _os.fstat(_fd)
         assert _stat.S_ISREG(_first.st_mode) and not _stat.S_ISLNK(_named.st_mode) and _first.st_nlink == 1 and _first.st_uid == Path(__file__).lstat().st_uid, "Local transport source identity required"
-        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and key == "st_dev" and _named.st_dev == 0)), "Local transport named descriptor mismatch"
+        if _os.name == "nt":
+            assert _first.st_birthtime_ns > 0, "Windows transport creation identity required"
+        assert 0 < _first.st_size <= 16384 and all(getattr(_first, key) == getattr(_named, key) for key in _keys if not (_os.name == "nt" and (key == "st_ctime_ns" or (key == "st_dev" and _named.st_dev == 0)))), "Local transport named descriptor mismatch"
         _data = bytearray()
         while len(_data) <= _first.st_size:
             _part = _os.read(_fd, min(65536, _first.st_size + 1 - len(_data)))
@@ -205,8 +213,15 @@ def observe_device_locale(platform, udid, *, android_transport_mode=None):
 def private_metadata_equal(first, second, *, named_path=False, windows=False):
     assert type(named_path) is bool and type(windows) is bool, "Explicit private metadata comparison mode required"
     fields = ("st_dev", "st_ino", "st_uid", "st_gid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if windows:
+        first_birth = getattr(first, "st_birthtime_ns", None)
+        second_birth = getattr(second, "st_birthtime_ns", None)
+        if (type(first_birth) is not int or type(second_birth) is not int
+                or first_birth <= 0 or first_birth != second_birth):
+            return False
     return all(getattr(first, key) == getattr(second, key) for key in fields
-               if not (windows and named_path and key == "st_dev" and second.st_dev == 0))
+               if not (windows and named_path and (
+                   key == "st_ctime_ns" or (key == "st_dev" and second.st_dev == 0))))
 
 
 def write_new(path, value):

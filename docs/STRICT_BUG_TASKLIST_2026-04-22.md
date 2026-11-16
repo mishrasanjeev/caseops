@@ -280,6 +280,341 @@ no release AAB, review submission or publication is established by these fixes.
 
 # Strict Bug Task List - 2026-04-22
 
+## November15: Installer Consumer And Original Draft Proof Follow-up
+
+Complete331 deployment-hardening acceptance passed all397cases/1191phases,
+including the strict finite builder-only closure checks. Its separate shared
+fixture module retained104passes/one journal-read error: response bytes arrived
+before the handler's finally block published the journal. Keep that combined
+run failed. Synchronize only the test fixture with actual handler completion
+inside the existing three-second budget, and regress delayed cleanup plus
+missing completion with one transport attempt. Do not reorder the production
+gateway, retry a mutation, or call this test race a production workflow failure.
+The replacement full module, current CI/Docker and deployed proof remain open.
+
+Candidate2a723774's fresh CI exposed two further integration omissions before
+release: the new guard narrowed canonical Draft.matter_id from nullable to
+non-null in TypeScript, and its VM unit read two helpers omitted from the web
+builder COPY/upload closure. Web typecheck failed before Vitest/build, while
+the Mobile source harness independently rejected both missing COPY inputs.
+These are our verification-code defects, not new application/provider failures.
+Accept the canonical input type while retaining the exact runtime identity
+rejection; add both builder-only paths and their finite upload regression.
+The failed2a results remain failed. Do not certify the next source from2a's
+passing sibling jobs or promote a local missing-Expo-dependency refusal to a
+successful native-source test.
+
+C93's full shared105-case Python consumer exposed another exact expected-set
+omission for the older AST input (104P/1F); local positive subsets did not cover
+that consumer. Full21 refused before its canonical driver started, not a Docker
+application failure or pass. Align that finite set and its omission negatives,
+and cover all four admitted builder inputs in the deployment dirty-source fence
+with native-Git regression cases. No test-tree widening or dirty build is allowed.
+
+The completed2a-tree Linux component collected904cases with complete native
+setup/call/teardown and unchanged-source seals. All11 prior failures and the
+new import-isolation guard passed; the whole component still failed five cases.
+One actual JS-to-Python bridge showed generic pre-disk JSON redaction dropping
+the new receipt; four native privacy/config checks lacked the real Playwright
+CLI in the isolated tools closure. These were separately diagnosed, not assumed
+to share a cause. The strict reporter repair now passes42/42 native JS cases
+and a real Playwright1.60 runtime receipt through both annotation channels,
+JSON, JUnit, progress and Python validation. The actual three-package tool
+closure is staged separately; no fake CLI, browser download or provider call.
+Nullable repair:18pureunits/29existingDOMunits pass; Web/E2eTSC both exit0.
+Parent's three finite COPY/upload regressions pass, including the older computed
+AST input and its diagnostic dependency. Full native SDK working-tree check
+retains two60-second SDK timeouts and one corrected bad direct-read assertion;
+it is not a whole upload pass. Full final CI/Docker and deployed proof remain open.
+
+PR621 remains unshipped. The complete offline seven-module consumer run on the
+held test snapshot executed 537 cases: 526 passed and 11 failed, with no skips.
+Seven failures lacked real Node in that test-only image; two namespace-negative
+fixtures did not establish a distinguishable directory metadata change; two
+native ASGI cases exceeded the original 45-second startup/10-second shutdown
+budgets after a helper import pulled in application construction. Preserve all
+structured failures and reconcile the corrected replay, not just progress text.
+The successor tools image adds official pinned Node22.23.4; source repairs are
+test-only and keep those budgets and the production verifier unchanged.
+
+Fresh marked read-only production observations at12:57 and12:59UTC retain Draft
+3e81e0ec-e193-4be1-9f3f-b5fee1dcb4f5, current version
+cc114a40-7bb5-422d-9499-988b69c0f4d4, on API34ce599d. Independent Node and
+WebCrypto UTF-8 body hashing agree at
+71cf6b959c63e107c46d84b93e736ed8f98418e95fbbf892dd6614490bf1f074.
+The earlier7e83 value was labelled source_fingerprint, not body_sha256. Its
+derivation must be reconciled before original-record proof admission. No source
+body, credential, PDF export, or original-record mutation was retained/performed.
+Pending fixes also retain a typed safe original-Draft receipt and tracked-source
+cleanliness checks; none of this is a production PDF or whole-release pass.
+
+## November15: Async Fixture Consumer Verification Miss
+
+This was our integration defect, not a product/provider outage or a reason to
+raise a timeout. Candidate64432's full hosted frontend executed all310files:
+3134actual=3099passed/35failed plus one unhandled asynchronous rejection.
+The new142helper units passed while three existing declaration-extracting VM
+harnesses still injected spawnSync. Their extracted source now needed
+runLocalPythonFixture; IP13 also retained synchronous throw assertions and a
+void return type. TypeScript and the new helper-only tests could not catch the
+missing free binding inside transpiled VM strings. This regression entered
+November15; it does not explain every earlier day of the release delay.
+
+Repair all three harnesses under their actual async contract, preserve every
+original boundary/role/identity/cleanup assertion, and cover deferred success,
+rejection and nonzero runner outcomes. Independent adjacent audit inventories
+seven AST/extraction files/four VM consumers/seven execution sites and finds
+no additional concrete affected consumer. Agent red replay reproduced all35
+failures; replacement83cases include all74originals and9new regressions,
+all passed. These are component results, not full-frontend or production proof.
+Complete frontend coverage/typecheck/build must run before the replacement
+long Docker gate; fresh hosted/current-main/deployed acceptance remain required.
+
+Local full18 completed naturally, exit1/source_unchanged/evidence_complete,
+before application builds or PG/browser execution. Its separate blocker was
+actual Docker free space61347078144bytes below68719476736required. Complete
+790-case collection was not execution. A guarded attempt to stop an obsolete
+installer refused after its phase advanced; no process was stopped. Keep the
+storage refusal, all35CI failures and the unhandled rejection separately.
+Owner-authorized cleanup removes only freshly reference-checked historical
+local CaseOps web images; no containers, volumes, databases, shared build
+caches, other projects or native/MacBook work may be removed.
+
+## November14: Secondary IP References Regressed Primary Desktop Visibility
+
+PR621 candidatecb2fb4b1's hosted desktop job132473139959 completed727cases:
+705P/20explicitS/2F/0retry. The two full native errorcontexts establish Registry
+layout regressions: BUG012's Madrid pointer has viewport ratio0.1875 after the
+notice is scrolled, and B4ADJ12's IdentifierType has ratio0 after selecting its
+legal record. Phone passes do not disprove this: that adjacent phone journey
+explicitly scrolls its control. This is our placement/integration miss, not a
+provider outage, authorization defect, collection615 failure or download613.
+
+The new optional reference panel was placed above Docket scope, adding height
+before the established operational controls. Move it below the entire Registry
+workflow and below the patent index's primary content; retain compact header
+access, internal return navigation, unsaved search/selection state, source
+content/format/hash, referrer protection and read guards. Preserve the original
+desktop viewport assertions, replay both complete dated files/phone counterparts,
+and add boundary-width/navigation coverage. Test official external links and
+internal returns as distinct contracts. No Madrid notice rewrite or viewport
+threshold/timeout relaxation is the repair.
+
+Parent preserved completed519PG cases and the incomplete next group, stopped
+only its exact-owned full15 tree/containers, retained all evidence/data and
+recorded full15 as INCOMPLETE. New source must receive fresh built browser
+acceptance including the original failing files, complete CI/fullDocker and
+production replay. Source edits or the earlier focused20/phone62P do not close
+these failures or certify a production release. Verification is pending.
+
+## November14: Native Harness Found A Missing Shared Builder Input
+
+At b3af, hosted Mobile source43587483399/job132424989570 retains1569native
+cases=1564P/3explicitS/2F. Both failures are the shared root-build closure:
+canonical-api-validators.ts was transitively imported by the colocated web
+assurance but absent from explicit Docker COPY. This is our propagation miss,
+not a native-device defect. Add exactly that helper to builder COPY, both
+finite ignore admissions and native upload inputs; keep it out of the runner.
+Existing source-trigger/fingerprint scopes already cover tests/e2e/support;
+no mobile/MacBook code or approval/broad allowlist change is needed. Add a
+direct regression and rerun actual native upload/canaries and shared harness.
+The original short CLI log lookup only returned 'run still in progress'; the
+actual complete job log was subsequently retained through its exact API endpoint.
+No full CI/Docker/production success is inferred from this repair.
+
+Actual replacement component: all10native SDK upload/positive-negative canary
+cases pass in49.348s, including the new builder-only helper check; required
+operator/licence paths remain72 (this builder input is not a new licence).
+Direct local shared-native module initialization stops before cases because
+@expo/config is absent; that setup failure is not a product reproduction or
+permission to edit/install into MacBook code. Hosted full harness is required.
+
+The same b3af CI Web job132425062786 retains2991frontend cases=2990P/1F in
+436.16s. The new real external-library worker failed, but its native JSON stayed
+in ephemeral /tmp so the exact inner errors are unavailable here. The web job
+also omitted browser provisioning needed by that new browser test. Add the
+existing pinned Playwright Chromium install before coverage under unchanged
+trust settings and retain complete synthetic native JSON/stderr as an exact
+artifact; do not declare the missing browser to be an independently reproduced
+inner error. Local final13loader assertions/three modules pass with four actual
+native worker cases, and two new API workflow/retention checks pass. All
+15/20second child/test limits and full coverage thresholds remain unchanged.
+
+## November14: Integrated Collection615 Failure Retained
+
+Worker-safe canonical/external loaders have real native validation, ZIP, QR and
+axe-worker proof, but integrated App790cold collection still times out at the
+unchanged15s budget. Selected production176passes its8s budget at7.519s. Source
+ab9c remains unshipped. The later45s-profiled App completion is diagnostic only;
+an experimental source-read/heap adjustment also fails and is not retained.
+No static inventory, filtered tests, warmed-cache pass or raised deadline is
+used as closure. Keep615open. Urgent production acceptance uses the complete
+exact-source CI/frontend gates, fresh built20workflows and unchanged full
+canonical Docker/production inventories, not a false Windows-preflight pass.
+
+## November14: Independent Review Found Two Additional Drafting Defects
+
+Static review of49c identified false type findings for valid section-first/
+full-name citations and repeated generic findings hiding a distinct template
+blocker. Actual new red41cases reproduce17failures/24passes, including HTTP
+manual edit/reload; evidence draft621-review-red-execute-01 remains retained.
+The bounded repair recognizes equivalent citations for all three affected
+templates while retaining wrong-law/number negatives. Group repeated diagnoses
+with occurrence counts and allocate bounded message space without slicing away
+distinct finding codes; impossible future code inventories refuse persistence.
+No legal mapping, approval, source, citation or provider fence is relaxed.
+Expanded61case component passed before final strict-zip/lint formatting. Final
+eight-module replacement now passes336cases/all1008phases,0fail/skip, in333.58s;
+whole-API Ruff passes. Evidence draft621-final-collect/execute-01 binds exact
+runtime/test bytes. The expanded existing two browser journeys remain unexecuted.
+The prior274case API pass predates this review repair and is not later-source
+certification. Full CI/Docker/main/deployed replay still gate PR621.
+
+## November14: Draft Quality And Official IP Source Acceptance
+
+The owner's resumed immediate-patch request is under active PR621 ownership.
+Candidate drafting defects are concrete: first-line-only authority summaries
+drop later reasoning (whitespace-only summaries can raise IndexError), existing
+document-type validators were not passed the actual template on generation or
+manual edit, and a full model summary can conceal deterministic findings at the
+1200-character limit. Preserve the original budgets, actual validators, stable
+finding codes and citation/review/ACL/source/lifecycle fences. Local deterministic
+tests are component proof, not a real-model legal-quality benchmark.
+
+Official IP India references are a bounded, dated addition under existing IP
+ownership: actual Form 2 fields and Rule 13 guidance, exact official URLs and
+reviewed PDF hash. Seven references do not constitute a live register adapter,
+complete source corpus or completed filing. Production register CAPTCHA/OTP and
+provider/licensing gates remain untouched. Both additions require discovered
+desktop/phone journeys and exact-serving acceptance before a fixed claim.
+
+Cold collection615 remains open: a worker-safe canonical schema loader removed
+unnecessary eager work and preserved784App/172selected-production identities,
+but its final fresh-cache15second App run still timed out. The earlier passing
+quiet measurements do not erase that failure. Broader measured work reduction,
+actual worker proof and unchanged15/8second constructors remain required.
+
+## November14: PR621 Lint And Governance Consumer Repairs
+
+The owner's immediate-patch request resumes621 and adds AI drafting-quality
+and official IP India search/source-format acceptance. These do not authorize
+invented legal material, paid automated probes, native/MacBook edits or waived
+release gates. Draft quality is not established by font rendering alone.
+
+At fec37f677, CI43578433184 fails15Ruff diagnostics in the new Teams PG module
+and one backend shard10case: governance still asserts14reviewed fonts although
+the manifest now has18. Fix fixture registration via an explicit source-module
+binding (same decorated fixture), format that new module, and update the exact
+governance count/name to18. All original positive/negative governance controls
+remain. Whole API Ruff now passes;94focused cases pass with282phases/0F/0S;
+all four intended modules were collected/executed. PG discovery remains44cases,
+not execution of the reformatted file. Evidence: primary outputs/bugs5-20261111/
+ci621-components-*. Prior failed hosted/local results remain retained. Fresh
+complete CI and full local/release/production acceptance remain required.
+
+## November14: Follow-Up Upload Inventory Count Reconciled
+
+Draft PR621/3e9c15efb first failed its Native Cloud Build web-upload gate. Local
+unchanged reproduction confirms all9cases stopped in setUp at72required paths
+versus stale71, before traversal. The new Noto Sans public notice was already
+admitted by both upload contexts; this was a missed exact-count consumer, not
+a missing asset or reason to broaden either allowlist. Correct only71to72.
+All9native gcloud discovery tests then pass locally, including every positive
+input and secret/sibling/parent-pruning negative canary. Evidence:
+outputs/bugs5-20261111/upload-context-followup-01/before.log and after.log.
+Keep the hosted failed run43578082898 and require fresh green CI; no claim
+that these9checks are whole release or new production acceptance.
+
+## November14: B5-001 U+2011 Candidate, Focused Native147 Passed
+
+**Inconclusive for the original production fix; unshipped candidate.** J07/M06,
+US-017/018/021, FT-025..032, MOD-TS-008/012 own the draft-export defect;
+J06/M05 are upstream bench-intelligence context, not the export owner.
+The parent-provided exact34ce Linux-image diagnostic
+`outputs/bugs5-20261111/prod-draft-linux-render-07.json` records U+2011 with
+no fallback and422 at draft_pdf_export.py:292. Original private bytes were not
+retained and this worker did not access the original draft or production.
+
+Isolated `codex/bugs5-pdf-punctuation-20261114` adds four unmodified Noto Sans
+2.008 faces from the existing official ffebf8c1 commit. Git blobs, SHA256,
+static TrueType headers, U+2011 nonzero glyphs, genuine R/B/I/BI flags and
+fsType=0 were inspected before asset creation. The same upstream LICENSE is
+byte-identical to the retained OFL. Existing14assets remain unchanged;18total
+assets and the revised manifest/NOTICE are pinned. Exact Latin style fallback
+precedes only the existing Indic upright-italic exception; unsupported text
+still fails closed without rewriting. Focused native/extraction/style/tamper
+and synthetic finalized-two-citation draft regressions are retained.
+
+The initial independent asset review was UNTESTED. Parent then completed a
+fresh Windows native run on the exact candidate buffers:147cases/all441phases
+passed,0skip/fail. Collection/execution IDs, completion and source hashes agree
+in outputs/bugs5-20261111/pdf-punctuation-source-native-01. This selects four
+pure modules plus named pure Draft cases, not the unexecuted HTTP Draft case,
+fresh built-image proof, full Docker or production acceptance. No original
+private draft bytes were retained or modified.
+
+Parent reconciled the public NotoSans2.008 attribution with the existing exact
+OFL bytes,18font metadata entries,11components/14notices, finite web upload
+inventory and public Playwright assertions. The production-only Draft helper
+also now admits its exact Matter drafting-data GET dependency, while blocking
+all writes, missing markers and other-record reads. Both intended frontend
+modules executed51/51cases,0fail/skip; web and E2E typechecks passed in the
+isolated web-only install. Separate offline Linux source-overlay proof15/15
+passes all core styles, two synthetic Draft profiles and unsupported emoji
+refusal. Those component results are not a fresh image or browser journey.
+Original-record desktop/phone replay, full required gates and a new protected
+release remain open. No main advance or deployment.
+Review sidecar: `outputs/bugs5-20261111/B5-PDF-FONT-REPAIR-2026-11-14.md`.
+
+## November14: Teams Focused Proof Passed, Production Closure Still Open
+
+The isolated candidate now has51pure/SQLite cases passed with153retained
+setup/call/teardown phases and44PostgreSQL cases passed with132phases, no skips
+or failures. The complete collected IDs match execution and native XML.
+The PostgreSQL run retains45paired database create-intent/ack records; each
+HTTP template starts from template0, never the application database. Six
+10,000-docket unused-team mutations stay within40SQL statements, with no role
+table reads or docket hydration. Historical/future grants and walls, all three
+snapshot checkpoints, concurrent dependency writers and unfiltered global
+scoping controls pass. Nonempty-team scale remains open.
+
+Attempt06 stopped all44cases in setup at the Windows ownership-journal guard.
+Its failure is preserved. Legacy named-path ctime and descriptor change time
+disagreed after append; the repair compares Windows birth time while retaining
+inode/size/mtime/ownership/namespace checks and POSIX ctime. Repeated durable
+appends and existing hardlink/oversize/short-write/zero-write/parent-swap/lost-ACK
+controls pass. Earlier owned launcher preparation failures01-05 remain retained,
+not product reproductions. Evidence is in teams-native-execute-02 and
+teams-postgres-focused-07 under the primary Workbook5 evidence root.
+
+Verdict remains **Inconclusive** for the unshipped repair. Exact34ce production
+removal504 remains a failed result. Fresh image/full Docker/browser/CI/protected
+release and exact-production replay are still required; no timeout, retry,
+provider, ACL or lifecycle fence was weakened. MacBook work is untouched.
+
+## November14: Teams Zero-Dependency Candidate, UNTESTED
+
+J14/M13/US-040, FT-059/061, NFT-001, SEC-002/003/004. Exact34ce API00525-x6m
+had a 120-second removal504 and later recovered without restart; the supplied
+10,195 visible TM count is not an operational-role count. In b5-team only,
+add three tenant-qualified EXISTS probes over Matter.team_id, grant.team_id
+and wall.excluded_team_id. Every historical/future row counts. Only zero
+dependencies bypass the tenant IP scan; all three snapshot checkpoints
+recheck, any dependency retains the original full role/parent/ACL fence,
+and global scoping remains unfiltered. Eight sync-DB Teams routes now use def.
+
+Verdict: **Inconclusive / UNTESTED**. Source-declared candidates are24 unit/
+in-process HTTP, one real-app SQLite/TestClient HTTP and44 PostgreSQL cases,
+including the retained15. The added SQLite case uses the same lifespan portal,
+real auth/team/removal and a1-second build GET before its bounded gate releases.
+No collection,
+tests, DB, Docker, build, install, network, commit, push or deploy ran. New
+negative-EXISTS plan assertions retain actual EXPLAIN/buffer evidence only when
+executed; no zero-I/O or production latency result exists. Nonempty-team N+1,
+raw role/coverage-history bounds and bulk durable ACL work remain explicitly
+open, as do global-scoping scale and exact-release browser acceptance. The
+frozen parent's fullDocker11 and operational evidence are not modified.
+
 ## November14: Workflow Consumer Missed; Current CI Failed
 
 CI43527128891 at e2e0 has17512API cases:13385P/4126S/1F. The sole failure
@@ -6394,6 +6729,194 @@ The complete tooling inventory passed422 unique cases with zero failures/errors/
 Actual pinned Node, javac and Groovy execution passed20 guard cases, including the real locator feeding the current guard, the historical guard's refusal, ownership/namespace/settings/symlink/override negatives and zero private-settings payload opens. Receipt `android-empty-maven-public-repair-01/targeted-guard02-acceptance.json`, SHA25639564799e1f4c582703daad603953bce35573312fdbd6f1c2a176bb8e573ddcc. Its source/runtime/output pairs and process closure passed; its separate footer does not establish a combined outer clock. The earlier fixture-parent source-pair failure remains retained.
 
 These are build-tool components. Actual current APK/Simulator artifacts, all83 cases/249 phases independently per platform, hardware checks and signed store artifacts remain unverified.
+# PR621 November 14 CI Follow-Up: Still Not Production Acceptance
+
+Exact candidate291c5363f0fe30f16274bbb0c6f56674bb6c3d5b completed a fresh
+build and all20 intended local Playwright workflows:20P/0F/0S/0retry,
+10desktop/10phone. Evidence: outputs/bugs5-20261111/built-preflight-26.
+This is the explicitly bounded UI component, not the full Docker gate,
+Windows615 cold inventory acceptance, or production certification.
+
+Its hosted CI43588886529 failed before the web coverage gate because the
+pinned Playwright binary registry rejects ubuntu26.04-x64. The web job is
+now pinned to ubuntu-24.04, matching the existing E2E jobs; a regression
+asserts this runner and the unchanged15-minute job/coverage contract. No
+browser-version override, dependency update, timeout or coverage waiver.
+The shared source harness43588886526 failed one assertion because the new
+trusted browser-install command makes201 Node commands, not200. Every
+command must still carry all nine trust outputs and conditional admission.
+The semantic API job also correctly rejected the unreviewed builder-map
+change. The map now records the finite test-only helper input and synthetic
+evidence boundary; canonical generated map/projection are regenerated.
+Failed logs remain under ci621-291c-failures-01, not erased by later success.
+
+All replacement hosted gates, unchanged full Docker inventory, protected
+merge, guarded exact-main deployment and complete exact-production replay
+remain required. Production still independently observed at34ce; no PR621
+fix is claimed deployed from these local checks.
+
+Candidate667f50cc6 repeats the fresh built20 workflows successfully with
+0failures/skips/retries. Exact Security43590740545 and shared source43590740598
+passed; Web43590740471 also passed, including full coverage, unchanged native
+inventory budgets, fresh Next build and web Docker builder. Other API/PG and
+later browser gates remain incomplete. These passes are source-bound, not
+production or replacement-head certification.
+
+The preceding291c API shard4 completed before workflow cancellation and retained
+seven deploy-guard failures (1580P/776S), all explicitly naming the same missing
+canonical validator helper. This was a real omission in the builder dependency
+propagation, not a product API reproduction or an authorized deployment.
+The repair adds that one literal helper to the actual dirty-input path array
+and its shared omission/native-Git regression matrix. No whole test-tree
+allowlist or dirty-source waiver is introduced. Failed evidence remains in
+outputs/bugs5-20261111/ci621-291c-failures-01/api-shard4.log.
+
+November14 follow-up226482: API shard7 retained38 failures,1350P/546S. Complete
+structured results separate37 stale browser-job inventory assertions from one
+release-owned CLI count mismatch97vs101. The new web browser worker is now an
+explicit member of the reviewed job inventory and all three unsupported-label
+negative cases. The CLI assertion includes four dated IP India tester cases.
+Complete workflow plus new-worker modules:266P/0F/0S, not a changed production
+test filter or weaker version guard. Earlier38failures are retained unchanged.
+
+PG shard12 retained a nativeSIGSEGV139, not a failed SQL assertion:68fully-phased
+passes, one setup-only case, no session completion/XML,129intended identities.
+The active case is retained-width/date/category projection[analyzed]. Actual
+merge-source60f1e609 has treec43d302d, identical to PR226482; runtime was Linux
+CPython3.13.18. A partial60s faulthandler trace is inside SQLAlchemy child
+traversal. The shared read-only test observer used a tree traversal over shared
+CTE DAGs, which has separately reproduced bounded exponential expansion on
+compiled PG and SQLite statements. Its repair retains object identities and
+bounds unique nodes20000/rawedges100000/frontier, preserving opaque/DML,
+cycle and overbound rejection. Pure file82P/246phases with all26other consumers
+audited; original PG replay/fullCI remain required. No SQL rewrite, physical
+query/latency-budget change, interpreter pin or disabled faulthandler.
+
+Docker12/13 stopped before app tests on public-wheel download timeouts. Host
+hash-verified Pillow succeeds0.49s; default container fullbody stalls while
+headers succeed. The already-configured Docker Desktop proxy succeeds with
+the exact wheel hash1.18s. One isolated unchanged-source API-target cache build
+with predefined proxy build arguments completed315.9s/137packages and unchanged
+CA/hash/license/model checks, with no runtime proxy ENV/history leakage, no
+global config change and original container/volume inventories preserved.
+This is acquisition/cache preparation only. Canonical fresh builds/fullDocker
+and current-head hosted CI remain mandatory; no SkipBuild or timeout waiver.
+
+The first original-case replay is deliberately retained red:84cases=82pureP/
+2PGF,469.37s, complete native phase/XML evidence and unchanged source378255c6.
+Both fresh/analyzed variants hit a too-narrow ClauseElement check, not a SQL
+result/budget assertion. A minimal real ORM with_only_columns projection proves
+SQLAlchemy retains _MemoizedSelectEntities: it is traversable/Visitable but
+not ClauseElement. Six new compiledPG/SQLite plain/opaque/writable cases first
+reproduced6TypeErrors. The classifier now validates the actual traversable
+SQLAlchemy protocol, still rejects arbitrary objects and all DML/opaque/cycle/
+overbound controls. Complete pure file88P/264phases after wholeAPI Ruff passed;
+the second physical PG replay and complete hosted/fullDocker gates remain owed.
+No previous red is relabelled fixed, no original elapsed/work bound changed.
+
+### November 15: Browser Fixture Isolation And Dated Calendar Acceptance
+
+PR621 full-docker-17 executed all4152 PostgreSQL cases successfully, with
+12456 passed setup/call/teardown phases, eight reconciled groups and zero
+skips/retries. Its later browser run is FAILED/INCOMPLETE, not release proof:
+five actual timeouts and one worker-interruption result remain retained in
+outputs/bugs5-20261111/owned-interruption-full17-04. Only157of790 browser
+identities ended;150passed/1explicit skip/6nonpassing,633without terminal
+results, including the interrupted in-flight workflow.
+Independent full traces distinguish a209.460s pre-UI seed, a192.230s document
+fixture and deadline setup plus89calendar clicks. Post-timeout assertions
+cannot rehabilitate failed cases or establish sibling causes.
+
+The test-only repair replaces all32 unbounded inline Python calls across
+30dated specs with an awaited bounded helper. Local Docker fixtures use the
+inspected owned API container's installed interpreter; local daemon, exact
+release, loopback ports, fixture environment, output and independent child
+deadline remain machine-enforced. There is no retry or silent host fallback
+after Docker refusal. The adjacent audit also migrates fourteen already-bounded
+inline launches and four finite file-program callers; it does not admit
+arbitrary Python files. Independent review caught a renewal file being passed
+to the inline-only runner and missing renewal/grace fields; the file adapter
+and exact forwarding regressions address both. The
+deadline journey uses the existing durable date route, verifies the event
+destination and reload, and retains one adjacent-day round trip. All original
+case identities, legal assertions and workflow deadlines remain unchanged.
+Builder/cloud allowlists and the deploy dirty-input regression include the
+new test helper; it is not admitted into the web runtime. No API application,
+PG case, migration, provider policy, native/MacBook or customer data changes.
+
+The initial helper74-case mock pass was followed by134 and142 integrated mock
+cases on installed Vitest4.1.12. The latter predates the final quoted-field
+renewal correction and is not final-source acceptance. Full web and E2E
+TypeScript checks passed before the file-program extension; both are rerun.
+A rejected/aborted fixture may leave its physical interpreter alive until its
+independent30-second deadline; launcher kill is not claimed as immediate
+physical-child termination. No such refusal is successful setup. These mocks
+do not prove real Docker execution.
+The deploy-closure component then exposed an integration defect in the new
+unit's directory-only URL:16failed/7passed, all sixteen native failures name
+that unresolved import. Replace it with four exact fixture file URLs, preserving
+the existing fail-closed closure validator and finite COPY/ignore admission.
+The failed XML remains retained. No missing-import assertion is waived.
+Complete replacement790browser
+acceptance, fresh exact-head CI, protected merge, exact-main deployment and
+whole production replay remain required. The completed PG evidence is bound
+to executed8f5, not restamped onto a changed candidate; any component reuse
+requires independent source/dependency/native-evidence admission and fresh
+new-head hosted PG proof where dynamic inputs are unresolved. All current
+production bug verdicts remain unupgraded until their deployed journeys pass.
+
+### November 15: Immutable API Installer Bootstrap
+
+J14/M14 release verification remains Inconclusive. Full-docker-19 on724786
+failed before API application installation, PostgreSQL or browser execution.
+The fresh Python/OCR/CA layers completed; pip's initial uv0.13.5 no-candidate
+message was not a reliable missing-version diagnosis. The unchanged installer
+reproduction found that exact official version and then failed after six
+interrupted wheel downloads. Both complete native failures remain retained.
+
+The candidate copies the same approved uv0.13.5 binaries from the official
+multi-architecture producer index pinned by SHA256, records the producer and
+source commit in existing provenance, and checks the installed executable's
+version before either runtime image. Exact upstream licenses, the compromised
+CA removal, certificate verification and application frozen/hash-locked
+installation remain unchanged. Two added contracts first failed against the
+old bootstrap. That Windows red also exposed three preexisting notice-reader
+fixture/platform failures; they are distinct from those two expected failures,
+not discarded or relabelled as a successful red run. Component build/test
+acceptance, fresh current-head CI/full Docker and deployed workflows remain
+required. An upstream image/version probe is not whole-release certification.
+
+The Windows test-reader diagnosis distinguishes named creation-time ctime from
+descriptor change-time ctime. Shared identity uses the platform's real birth
+time while each original before/after mutation comparison stays strict. The
+replacement fixture opens a real delete-sharing Windows descriptor and proves
+the old/new inode distinction before rejection, rather than accepting a sharing
+exception. The original failed fixtures remain retained. No production reader,
+runtime ACL, application schema or legal-source admission policy is changed.
+
+Focused replacement on dirty724base completed54/54 cases with162 passed
+setup/call/teardown reports, exact collected identities, native exit0 and
+unchanged four source inputs. Both complete TLS/bootstrap and Teams-fence
+modules ran. Full API Ruff passed. Real runtime-base component build and its
+offline uv/uvx0.13.5, three exact notice hashes and148-root Python CA checks
+also passed. Independent source review found no blocker. These are scoped
+proofs only; new-head hosted/fullDocker and production certification remain owed.
+
+The subsequent700 CI run failed API4's generic deployment-layer ordering test,
+which still searched for RUN pip install. My exact-version-only consumer audit
+missed that assertion. Original API4 retained1671P/265S/1F with native XML/journal
+and exit123; the full20 second admission refused before any canonical Docker
+process/app/PG/browser launch. Its source seal and earlier admission remain
+retained as a refused attempt, not a started or interrupted full regression.
+The ordering consumer now pins the same exact official COPY, asserts one
+bootstrap and its ordering after copy-mode policy but before the inherited API
+stage. Every existing frozen URL/hash/export/model-before-source assertion
+stays. A broader generic-command/stage consumer audit and complete deployment/
+packaging replacement modules are required before accepting the replacement
+candidate. A pending branch/CI publication is not passing verification. No
+runtime Dockerfile, app dependency, model, trust or production change is made
+by this follow-up; the successful700 image is cache preparation only.
+
 
 ## QA30 — Canonical macOS native-gate fixture roots (November 11, 2026)
 

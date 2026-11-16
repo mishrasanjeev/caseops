@@ -19,7 +19,6 @@
  *                 and only the rendered page can prove which one appears.
  */
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import {
@@ -31,6 +30,7 @@ import {
 } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 
 const PASSWORD = "CostEvidence2026!";
 
@@ -42,7 +42,7 @@ test.beforeAll(() => {
   ).toContain(apiHost);
 });
 
-function grantIpEntitlement(companyId: string): void {
+async function grantIpEntitlement(companyId: string): Promise<void> {
   const python = process.platform === "win32"
     ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
     : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
@@ -55,7 +55,7 @@ function grantIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -79,7 +79,7 @@ type BillingEffectSnapshot = {
 };
 
 /** Read the existing Matter billing/payment owners without going through IP. */
-function billingEffectSnapshot(companyId: string): BillingEffectSnapshot {
+async function billingEffectSnapshot(companyId: string): Promise<BillingEffectSnapshot> {
   const python = process.platform === "win32"
     ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
     : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
@@ -98,7 +98,7 @@ function billingEffectSnapshot(companyId: string): BillingEffectSnapshot {
     "session.close()",
     "print(json.dumps({'invoice_count':invoice_count,'invoice_line_count':invoice_line_count,'payment_attempt_count':payment_attempt_count,'invoice_total_minor':invoice_total_minor,'amount_received_minor':amount_received_minor}))",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -129,7 +129,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   return { ...body, slug, email };
 }
 
@@ -219,7 +219,7 @@ test("IPLF-039F records a nonbillable cost on a record with no billing Matter", 
   const tenant = await bootstrap(api);
   const headers = await enableWorkspace(api, tenant);
   await createMatterlessDocket(api, headers);
-  const billingBefore = billingEffectSnapshot(tenant.company.id as string);
+  const billingBefore = await billingEffectSnapshot(tenant.company.id as string);
 
   await signIn(page, tenant.slug, tenant.email);
   await page.goto("/app/ip");
@@ -277,7 +277,7 @@ test("IPLF-039F records a nonbillable cost on a record with no billing Matter", 
   await expect(recordedCost.getByText("Evidence: receipt:registry-fee-unbilled-2026", {
     exact: true,
   })).toBeVisible();
-  expect(billingEffectSnapshot(tenant.company.id as string)).toEqual(billingBefore);
+  expect(await billingEffectSnapshot(tenant.company.id as string)).toEqual(billingBefore);
 
   await api.dispose();
 });

@@ -1,4 +1,4 @@
-import AxeBuilder from "@axe-core/playwright";
+import { loadAxeBuilder } from "./support/external-journey-loaders";
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
@@ -465,8 +465,8 @@ test.describe("Public landing page and user guide", () => {
       await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
       await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
-      await expect(page.locator("article h2")).toHaveCount(10);
-      await expect(page.locator("article details")).toHaveCount(13);
+      await expect(page.locator("article h2")).toHaveCount(11);
+      await expect(page.locator("article details")).toHaveCount(14);
       for (const component of thirdPartyNotices.components) {
         const section = page.getByRole("region", { name: component.name, exact: true });
         await expect(section).toContainText(component.packageName);
@@ -722,7 +722,7 @@ test.describe("Public landing page and user guide", () => {
           `${pathname} overflows at ${viewport.width}px: ${JSON.stringify(widths)}`,
         ).toBeLessThanOrEqual(Math.max(widths.bodyClient, widths.documentClient) + 1);
 
-        const results = await new AxeBuilder({ page })
+        const results = await new (loadAxeBuilder())({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
           .analyze();
         const blockers = results.violations

@@ -1,15 +1,15 @@
 /** IPLF-052 / UJ-21 / UJ-33: journal watch, review, corrections, and handoffs. */
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 
 const PASSWORD = "JournalWatch2026!";
 
-function grantIpEntitlement(companyId: string): void {
+async function grantIpEntitlement(companyId: string): Promise<void> {
   const python = process.platform === "win32"
     ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
     : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
@@ -22,7 +22,7 @@ function grantIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -52,7 +52,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   return { ...body, slug, email };
 }
 

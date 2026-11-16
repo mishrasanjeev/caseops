@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 
@@ -11,7 +11,7 @@ import { expectStatus } from "./support/iplf058b";
 const hiddenNotice =
   "This answer is hidden because access to one or more cited workspace records changed.";
 
-function rebuildLocal(companyId: string, bootstrap = false) {
+async function rebuildLocal(companyId: string, bootstrap = false): Promise<ReturnType<typeof JSON.parse>> {
   const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(
     repoRoot, "apps", "api", ".venv", process.platform === "win32" ? "Scripts" : "bin",
     process.platform === "win32" ? "python.exe" : "python",
@@ -27,7 +27,7 @@ from caseops_api.services.private_retrieval_jobs import rebuild_private_index, i
 settings = get_settings()
 url = make_url(settings.database_url)
 assert os.environ['CASEOPS_ENV'] == 'e2e'
-assert url.get_backend_name() == 'sqlite' or url.host in ('127.0.0.1', 'localhost', '::1')
+assert (url.get_backend_name() == 'sqlite' or url.host in ('127.0.0.1', 'localhost', '::1')) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(settings.database_url))
 assert settings.llm_provider == 'mock' and settings.embedding_provider == 'mock'
 company = os.environ['CASEOPS_E2E_WHITESPACE_COMPANY']
 if os.environ['CASEOPS_E2E_WHITESPACE_BOOTSTRAP'] == 'true':
@@ -45,7 +45,7 @@ with get_session_factory()() as session:
     assert report.state == 'ready' and not report.blockers
     print(json.dumps({'generation_id': summary.generation_id, 'projection_count': summary.projection_count, 'provider_text_count': summary.provider_text_count, 'stale_source_count': report.stale_source_count, 'blockers': report.blockers}))
 `;
-  const result = spawnSync(python, ["-B", "-c", script], {
+  const result = await runLocalPythonFixture(python, ["-B", "-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     timeout: 90_000,
@@ -99,7 +99,7 @@ test("IPLF-UJ-66 multiline sources survive rebuild and reload without reviving i
   await expectStatus(created, 200, "create multiline source");
   const matter = await created.json();
   expect(matter.description).toBe(description);
-  const first = rebuildLocal(identity.company.id, true);
+  const first = await rebuildLocal(identity.company.id, true);
   expect(first.stale_source_count).toBe(0);
   expect(first.provider_text_count).toBe(0);
 
@@ -144,7 +144,7 @@ test("IPLF-UJ-66 multiline sources survive rebuild and reload without reviving i
   expect(original.render_status).toBe("visible");
   expect(original.citations).toHaveLength(1);
   const citationId = original.citations[0].id;
-  const second = rebuildLocal(identity.company.id);
+  const second = await rebuildLocal(identity.company.id);
   expect(second.generation_id).not.toBe(first.generation_id);
   for (const width of [1280, 360]) {
     await page.setViewportSize({ width, height: 850 });
@@ -176,7 +176,7 @@ test("IPLF-UJ-66 multiline sources survive rebuild and reload without reviving i
   });
   await expectStatus(reopened, 200, "controlled reopening");
   expect(await search()).toEqual([]);
-  rebuildLocal(identity.company.id);
+  await rebuildLocal(identity.company.id);
   expect(await search()).toHaveLength(1);
   const hidden = await readAnswer();
   expect(hidden.id).toBe(original.id);

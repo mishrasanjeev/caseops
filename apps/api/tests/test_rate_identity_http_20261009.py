@@ -17,10 +17,10 @@ from starlette.routing import Route
 from caseops_api.api.routes.health import rate_identity_readiness
 from caseops_api.core.canonical_redirects import CanonicalSlashRedirectMiddleware
 from caseops_api.core.rate_identity import RateIdentityMiddleware, request_rate_identity
-from tests import test_rate_identity_edge_20261009 as edge_tests
-from tests.test_rate_identity_edge_20261009 import edge_headers, forward_headers
+from tests import fixtures_rate_identity
+from tests.fixtures_rate_identity import edge_headers, forward_headers
 
-purpose_key = edge_tests.edge_key
+purpose_key = fixtures_rate_identity.edge_key
 
 
 async def inspect_scheme(request):

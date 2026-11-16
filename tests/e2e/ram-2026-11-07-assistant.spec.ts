@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,6 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { AssistantCitation, AssistantSessionRecord, AssistantTurnPage } from "../../apps/web/lib/api/workspace-assistant";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 import { requireFixtureDatabaseUrl } from "./support/fixture-database";
 import { readRetainedAssistantEvidence } from "./support/retained-assistant-evidence";
 import { runId } from "./support/run-id";
@@ -166,7 +166,7 @@ async function signIn(page: Page, baseURL: string | undefined) {
     for (const key of ["SystemRoot", "WINDIR", "PATH", "TEMP", "TMP"]) {
       if (process.env[key] !== undefined) env[key] = process.env[key];
     }
-    const seeded = spawnSync(runtime.python, ["-I", "-B", "-u", path.join(repoRoot, "tests/e2e/support/assistant_history_fixture.py")], {
+    const seeded = await runLocalPythonFileFixture(runtime.python, path.join(repoRoot, "tests/e2e/support/assistant_history_fixture.py"), {
       cwd: repoRoot, env, encoding: "utf8", timeout: 60000, maxBuffer: 131072, windowsHide: true,
       input: JSON.stringify({ web: web.origin, api, run_id: run, company_id: identity.company.id,
         membership_id: identity.membership.id, user_id: identity.user.id, matter_id: matter.id,

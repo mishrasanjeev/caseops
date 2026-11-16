@@ -1,11 +1,12 @@
 /** IPLF-037B: renewal instructions, reminders, filing, acceptance and grace. */
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
+import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
 
 const PASSWORD = "RenewalWorkflow2026!";
 
@@ -15,8 +16,8 @@ function pythonPath(): string {
     : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
 }
 
-function runPython(args: string[], env: Record<string, string>): string {
-  const result = spawnSync(pythonPath(), args, {
+async function runPython(args: string[], env: Record<string, string>): Promise<string> {
+  const result = await runLocalPythonFixture(pythonPath(), args, {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -32,8 +33,8 @@ function runPython(args: string[], env: Record<string, string>): string {
   return result.stdout.trim();
 }
 
-function grantIpEntitlement(companyId: string): void {
-  runPython(
+async function grantIpEntitlement(companyId: string): Promise<void> {
+  await runPython(
     [
       "-c",
       [
@@ -65,7 +66,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   return { ...body, slug, email };
 }
 
@@ -107,16 +108,23 @@ async function enableWorkspace(
   return headers;
 }
 
-function seedRenewal(companyId: string, membershipId: string) {
-  return JSON.parse(
-    runPython(
-      [path.join(repoRoot, "tests", "e2e", "support", "seed_iplf037b.py")],
-      {
+async function seedRenewal(companyId: string, membershipId: string): Promise<Record<string, string>> {
+  const result = await runLocalPythonFileFixture(pythonPath(),
+    path.join(repoRoot, "tests", "e2e", "support", "seed_iplf037b.py"), {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ...e2eEnv,
         CASEOPS_E2E_COMPANY_ID: companyId,
         CASEOPS_E2E_MEMBERSHIP_ID: membershipId,
+        PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH]
+          .filter(Boolean)
+          .join(path.delimiter),
       },
-    ),
-  ) as Record<string, string>;
+    });
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  return JSON.parse(result.stdout.trim()) as Record<string, string>;
 }
 
 async function createTerm(
@@ -154,7 +162,7 @@ test("IPLF-037B completes UJ-26 and renewal exception paths", async ({ page }) =
   const api = await request.newContext();
   const tenant = await bootstrap(api);
   const headers = await enableWorkspace(api, tenant);
-  const ids = seedRenewal(tenant.company.id, tenant.membership.id);
+  const ids = await seedRenewal(tenant.company.id, tenant.membership.id);
   const originalTerm = await createTerm(api, headers, ids);
 
   await signIn(page, tenant.slug, tenant.email);
@@ -225,9 +233,9 @@ test("IPLF-037B completes UJ-26 and renewal exception paths", async ({ page }) =
     next_term_deadline_id: ids.next_term,
   });
 
-  const graceIds = seedRenewal(tenant.company.id, tenant.membership.id);
+  const graceIds = await seedRenewal(tenant.company.id, tenant.membership.id);
   await createTerm(api, headers, graceIds);
-  runPython(
+  await runPython(
     [
       "-c",
       [

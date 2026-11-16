@@ -1,5 +1,5 @@
 /** IP15-004/017: real persisted hearing policy and recipient-owned retained alerts. */
-import { spawnSync } from "node:child_process";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import path from "node:path";
 import type { APIRequestContext, APIResponse, Locator, Page } from "@playwright/test";
 
@@ -48,7 +48,7 @@ async function assertSavedPolicy(card: Locator, policy: { offsets_hours: number[
     .getByText(recipientLabel, { exact: true })).toBeVisible();
 }
 
-function deliverOwnLocalReceipt(workspace: Ip15Workspace, docketId: string, sourceId: string, intentId: string) {
+async function deliverOwnLocalReceipt(workspace: Ip15Workspace, docketId: string, sourceId: string, intentId: string) {
   if (!workspace.local || ![workspace.web, workspace.api].every(url => ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
     || !workspace.actor.company.slug.startsWith("ip15-") || !RUN_ID.test(workspace.actor.company.slug.slice(5))
     || ![docketId, sourceId, intentId].every(id => /^[a-f0-9-]{36}$/.test(id))) throw new Error("Local delivery fixture identity rejected.");
@@ -58,7 +58,7 @@ function deliverOwnLocalReceipt(workspace: Ip15Workspace, docketId: string, sour
   const script = [
     "import os", "from pathlib import Path", "from datetime import UTC,datetime", "from sqlalchemy.engine import make_url",
     "url=make_url(os.environ['CASEOPS_DATABASE_URL'])", "assert not url.query",
-    "assert (url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))",
+    "assert ((url.drivername=='postgresql+psycopg' and url.host in {'localhost','127.0.0.1','::1'} and url.database) or (url.drivername=='sqlite+pysqlite' and Path(url.database).is_absolute() and Path(url.database).resolve().is_relative_to(Path.cwd().resolve()))) or (callable(globals().get('__caseops_is_owned_fixture_database__')) and __caseops_is_owned_fixture_database__(os.environ['CASEOPS_DATABASE_URL']))",
     "from caseops_api.db.models import Company,CompanyMembership,NotificationDeliveryIntent,InAppNotification",
     "from caseops_api.db.session import get_session_factory", "from caseops_api.services.notification_delivery import process_notification_delivery_intent",
     "with get_session_factory()() as session:",
@@ -76,7 +76,7 @@ function deliverOwnLocalReceipt(workspace: Ip15Workspace, docketId: string, sour
     "    assert note and note.recipient_membership_id==member.id and note.source_id==intent.source_id and note.body==intent.body",
     "    session.commit()",
   ].join("\n");
-  const result = spawnSync(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
+  const result = await runLocalPythonFixture(python, ["-c", script], { cwd: repoRoot, encoding: "utf8", timeout: 60_000,
     env: { ...process.env, ...e2eEnv, CASEOPS_DATABASE_URL: process.env.CASEOPS_E2E_DATABASE_URL?.trim() || e2eEnv.CASEOPS_DATABASE_URL,
       IP17_COMPANY: workspace.actor.company.id, IP17_SLUG: workspace.actor.company.slug, IP17_MEMBER: workspace.actor.membership.id,
       IP17_DOCKET: docketId, IP17_SOURCE: sourceId, IP17_INTENT: intentId, PYTHONPATH: path.join(repoRoot, "apps/api/src") } });
@@ -172,7 +172,7 @@ for (const width of [1280, 393]) {
     const admin = await json(await request.get(`${workspace.api.origin}/api/admin/notifications`, { headers: workspace.headers, params: { limit: 200 } }));
     const matches = admin.intents.filter((row: { source_id: string; event_type: string }) => row.source_id === sourceId && row.event_type === "renewal_source_date_1month");
     expect(matches).toHaveLength(1);
-    if (workspace.local) deliverOwnLocalReceipt(workspace, alertDocketId, sourceId, matches[0].id);
+    if (workspace.local) await deliverOwnLocalReceipt(workspace, alertDocketId, sourceId, matches[0].id);
     const list = async (dismissed = false) => json(await request.get(`${workspace.api.origin}/api/in-app-notifications`, {
       headers: workspace.headers, params: { docket_id: alertDocketId, dismissed: String(dismissed) },
     }));

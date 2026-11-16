@@ -163,6 +163,15 @@ no release AAB, review submission or publication is established by these fixes.
 
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+November14 J07/M06 draft-quality and existing J08/M08 IP acceptance are extended
+in the PRD. Candidate bounded multiline authority context, document-type review
+findings and seven dated official IP India references are not deployed proof.
+The reference search is separate from live patent/trademark/design registers;
+Form 2 content/format guidance does not establish a completed filing. Native
+desktop/phone discovery, actual current-source Docker and exact-serving replay
+must precede a completed-coverage claim. Real-model legal quality remains a
+separate reviewed benchmark, never inferred from deterministic fixtures.
+
 ## November 12 Native sign-in continuation
 
 J20/M22, US-MOB-01/02 and MOB-01/02 remain **Partially implemented**.

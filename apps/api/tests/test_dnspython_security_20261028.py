@@ -323,6 +323,11 @@ def test_integrity_reader_refuses_changed_inputs_and_closes_its_descriptor(
 ):
     file = tmp_path / "public.txt"
     file.write_bytes(b"original")
+    namespace_before = None
+    if change == "namespace":
+        # Make the metadata mutation independent of same-tick directory writes.
+        os.utime(tmp_path, ns=(tmp_path.stat().st_atime_ns, 946684800000000000))
+        namespace_before = _metadata(tmp_path.lstat())
     descriptors = []
     opened, read = os.open, os.read
 
@@ -346,6 +351,7 @@ def test_integrity_reader_refuses_changed_inputs_and_closes_its_descriptor(
                 replacement.replace(file)
             elif change == "namespace":
                 (tmp_path / "new-sibling.txt").write_bytes(b"public")
+                assert _metadata(tmp_path.lstat()) != namespace_before
             else:
                 raise OSError("Synthetic read failure")
         return read(descriptor, count)

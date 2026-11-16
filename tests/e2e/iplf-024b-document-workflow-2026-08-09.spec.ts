@@ -1,14 +1,14 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
+import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { expectProvisionedDocumentTaxonomy } from "./support/ip-document-taxonomy";
 
 const PASSWORD = "IpDocumentWorkflow2026!";
 
-function grantIpEntitlement(companyId: string): void {
+async function grantIpEntitlement(companyId: string): Promise<void> {
   const python =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
@@ -22,7 +22,7 @@ function grantIpEntitlement(companyId: string): void {
     "session.commit()",
     "session.close()",
   ].join("; ");
-  const result = spawnSync(python, ["-c", script], {
+  const result = await runLocalPythonFixture(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -89,7 +89,7 @@ async function bootstrap(api: APIRequestContext) {
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
-  grantIpEntitlement(body.company.id as string);
+  await grantIpEntitlement(body.company.id as string);
   const headers = { Authorization: `Bearer ${body.access_token as string}` };
   const configuration = await api.put(`${apiBaseUrl}/api/ip/workspace/configuration`, {
     headers,
@@ -167,134 +167,137 @@ async function upload(
 test("IPLF-024B completes the controlled document journey without silent legal use", async () => {
   test.setTimeout(120_000);
   const api = await request.newContext();
-  const tenant = await bootstrap(api);
-  const headers = { Authorization: `Bearer ${tenant.access_token as string}` };
-  const dockets = await createDockets(api, headers);
-  expect(dockets).toHaveLength(2);
+  try {
+    const tenant = await bootstrap(api);
+    const headers = { Authorization: `Bearer ${tenant.access_token as string}` };
+    const dockets = await createDockets(api, headers);
+    expect(dockets).toHaveLength(2);
 
-  await expectProvisionedDocumentTaxonomy(api, apiBaseUrl, headers);
+    await expectProvisionedDocumentTaxonomy(api, apiBaseUrl, headers);
 
-  const aliasPreview = await api.post(
-    `${apiBaseUrl}/api/ip/document-taxonomy/import-aliases`,
-    {
-      headers,
-      data: {
-        dry_run: true,
-        entries: [{ taxonomy_key: "evidence", aliases: ["Affidavit Evidence"] }],
-      },
-    },
-  );
-  expect(aliasPreview.status(), await aliasPreview.text()).toBe(200);
-  expect((await aliasPreview.json()).imported_count).toBe(1);
-
-  const bytes = Buffer.from("Evidence affidavit with searchable particulars. ".repeat(30));
-  const createdResponse = await upload(api, headers, {
-    filename: "=original unsafe evidence.txt",
-    content: bytes,
-    docketId: dockets[0],
-  });
-  expect(createdResponse.status(), await createdResponse.text()).toBe(200);
-  const created = await createdResponse.json();
-  expect(created.outcome).toBe("created");
-  expect(created.document.versions[0].original_filename).toBe("=original unsafe evidence.txt");
-  expect(created.document.versions[0].display_name).not.toBe("=original unsafe evidence.txt");
-  const documentId = created.document.id as string;
-
-  await expect.poll(async () => {
-    const response = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
-    expect(response.status(), await response.text()).toBe(200);
-    return (await response.json()).versions[0].processing_status as string;
-  }, { timeout: 30_000 }).toBe("indexed");
-  const loadedResponse = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
-  expect(loadedResponse.status(), await loadedResponse.text()).toBe(200);
-  const loaded = await loadedResponse.json();
-  expect(loaded.versions[0]).toMatchObject({
-    processing_status: "indexed",
-    low_ocr_quality: false,
-    ai_eligible: true,
-    state: "draft",
-  });
-  expect(loaded.versions[0].ocr_quality_score).toBeGreaterThanOrEqual(0.65);
-
-  const downloaded = await api.get(
-    `${apiBaseUrl}/api/ip/documents/${documentId}/versions/1/download`,
-    { headers },
-  );
-  expect(downloaded.status(), await downloaded.text()).toBe(200);
-  expect(Buffer.from(await downloaded.body())).toEqual(bytes);
-
-  const duplicateResponse = await upload(api, headers, {
-    filename: "different-name.txt",
-    content: bytes,
-    docketId: dockets[1],
-  });
-  expect(duplicateResponse.status(), await duplicateResponse.text()).toBe(200);
-  const duplicate = await duplicateResponse.json();
-  expect(duplicate.outcome).toBe("duplicate_found");
-  expect(duplicate.duplicate_candidates[0]).toMatchObject({
-    document_id: documentId,
-    reuse_action: "link_existing_document",
-  });
-
-  const linked = await api.post(`${apiBaseUrl}/api/ip/documents/${documentId}/links`, {
-    headers,
-    data: {
-      expected_current_version: 1,
-      links: [{ target_type: "docket", target_id: dockets[1] }],
-    },
-  });
-  expect(linked.status(), await linked.text()).toBe(200);
-  expect((await linked.json()).links).toHaveLength(2);
-
-  for (const [expectedState, targetState] of [
-    ["draft", "review"],
-    ["review", "approved"],
-    ["approved", "filed"],
-  ] as const) {
-    const transition = await api.post(
-      `${apiBaseUrl}/api/ip/documents/${documentId}/versions/1/transition`,
+    const aliasPreview = await api.post(
+      `${apiBaseUrl}/api/ip/document-taxonomy/import-aliases`,
       {
         headers,
         data: {
-          expected_current_version: 1,
-          expected_state: expectedState,
-          target_state: targetState,
+          dry_run: true,
+          entries: [{ taxonomy_key: "evidence", aliases: ["Affidavit Evidence"] }],
         },
       },
     );
-    expect(transition.status(), await transition.text()).toBe(200);
+    expect(aliasPreview.status(), await aliasPreview.text()).toBe(200);
+    expect((await aliasPreview.json()).imported_count).toBe(1);
+
+    const bytes = Buffer.from("Evidence affidavit with searchable particulars. ".repeat(30));
+    const createdResponse = await upload(api, headers, {
+      filename: "=original unsafe evidence.txt",
+      content: bytes,
+      docketId: dockets[0],
+    });
+    expect(createdResponse.status(), await createdResponse.text()).toBe(200);
+    const created = await createdResponse.json();
+    expect(created.outcome).toBe("created");
+    expect(created.document.versions[0].original_filename).toBe("=original unsafe evidence.txt");
+    expect(created.document.versions[0].display_name).not.toBe("=original unsafe evidence.txt");
+    const documentId = created.document.id as string;
+
+    await expect.poll(async () => {
+      const response = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
+      expect(response.status(), await response.text()).toBe(200);
+      return (await response.json()).versions[0].processing_status as string;
+    }, { timeout: 30_000 }).toBe("indexed");
+    const loadedResponse = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
+    expect(loadedResponse.status(), await loadedResponse.text()).toBe(200);
+    const loaded = await loadedResponse.json();
+    expect(loaded.versions[0]).toMatchObject({
+      processing_status: "indexed",
+      low_ocr_quality: false,
+      ai_eligible: true,
+      state: "draft",
+    });
+    expect(loaded.versions[0].ocr_quality_score).toBeGreaterThanOrEqual(0.65);
+
+    const downloaded = await api.get(
+      `${apiBaseUrl}/api/ip/documents/${documentId}/versions/1/download`,
+      { headers },
+    );
+    expect(downloaded.status(), await downloaded.text()).toBe(200);
+    expect(Buffer.from(await downloaded.body())).toEqual(bytes);
+
+    const duplicateResponse = await upload(api, headers, {
+      filename: "different-name.txt",
+      content: bytes,
+      docketId: dockets[1],
+    });
+    expect(duplicateResponse.status(), await duplicateResponse.text()).toBe(200);
+    const duplicate = await duplicateResponse.json();
+    expect(duplicate.outcome).toBe("duplicate_found");
+    expect(duplicate.duplicate_candidates[0]).toMatchObject({
+      document_id: documentId,
+      reuse_action: "link_existing_document",
+    });
+
+    const linked = await api.post(`${apiBaseUrl}/api/ip/documents/${documentId}/links`, {
+      headers,
+      data: {
+        expected_current_version: 1,
+        links: [{ target_type: "docket", target_id: dockets[1] }],
+      },
+    });
+    expect(linked.status(), await linked.text()).toBe(200);
+    expect((await linked.json()).links).toHaveLength(2);
+
+    for (const [expectedState, targetState] of [
+      ["draft", "review"],
+      ["review", "approved"],
+      ["approved", "filed"],
+    ] as const) {
+      const transition = await api.post(
+        `${apiBaseUrl}/api/ip/documents/${documentId}/versions/1/transition`,
+        {
+          headers,
+          data: {
+            expected_current_version: 1,
+            expected_state: expectedState,
+            target_state: targetState,
+          },
+        },
+      );
+      expect(transition.status(), await transition.text()).toBe(200);
+    }
+    const filed = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
+    expect((await filed.json()).versions[0]).toMatchObject({
+      state: "filed",
+      locked_by_membership_id: tenant.membership.id,
+    });
+
+    const privilegedResponse = await upload(api, headers, {
+      filename: "privileged.txt",
+      content: Buffer.from("Privileged advice. ".repeat(30)),
+      docketId: dockets[0],
+      privileged: true,
+    });
+    const privileged = await privilegedResponse.json();
+    const policy = await api.get(
+      `${apiBaseUrl}/api/ip/documents/${privileged.document.id}/policy`,
+      { headers },
+    );
+    expect(policy.status(), await policy.text()).toBe(200);
+    expect(await policy.json()).toMatchObject({
+      ai_retrieval_allowed: false,
+      portal_share_allowed: false,
+      export_allowed: false,
+      notification_content_allowed: false,
+    });
+    const denied = await api.post(
+      `${apiBaseUrl}/api/ip/documents/${privileged.document.id}/authorize-action`,
+      { headers, data: { action: "portal_share" } },
+    );
+    expect(denied.status()).toBe(403);
+
+  } finally {
+    await api.dispose();
   }
-  const filed = await api.get(`${apiBaseUrl}/api/ip/documents/${documentId}`, { headers });
-  expect((await filed.json()).versions[0]).toMatchObject({
-    state: "filed",
-    locked_by_membership_id: tenant.membership.id,
-  });
-
-  const privilegedResponse = await upload(api, headers, {
-    filename: "privileged.txt",
-    content: Buffer.from("Privileged advice. ".repeat(30)),
-    docketId: dockets[0],
-    privileged: true,
-  });
-  const privileged = await privilegedResponse.json();
-  const policy = await api.get(
-    `${apiBaseUrl}/api/ip/documents/${privileged.document.id}/policy`,
-    { headers },
-  );
-  expect(policy.status(), await policy.text()).toBe(200);
-  expect(await policy.json()).toMatchObject({
-    ai_retrieval_allowed: false,
-    portal_share_allowed: false,
-    export_allowed: false,
-    notification_content_allowed: false,
-  });
-  const denied = await api.post(
-    `${apiBaseUrl}/api/ip/documents/${privileged.document.id}/authorize-action`,
-    { headers, data: { action: "portal_share" } },
-  );
-  expect(denied.status()).toBe(403);
-
-  await api.dispose();
 });
 
 test("IPLF-024B keeps every document action visible and usable at 360px", async ({ page }) => {

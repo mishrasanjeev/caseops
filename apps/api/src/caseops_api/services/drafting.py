@@ -810,9 +810,19 @@ def _build_messages(
             parts.append(f"- CITATION: {ident}")
             if doc.title:
                 parts.append(f"  TITLE: {doc.title[:200]}")
-            if doc.summary:
-                excerpt = doc.summary.strip().splitlines()[0][:300]
-                parts.append(f"  EXCERPT: {excerpt}")
+            # A summary often starts with a heading; retain reasoning on later
+            # lines within the original excerpt budget, never just the heading.
+            summary = " ".join((doc.summary or "").split())
+            if summary:
+                parts.append(f"  EXCERPT: {summary[:300]}")
+                if len(summary) > 300:
+                    parts.append(
+                        "  [Summary excerpt truncated; do not infer omitted reasoning.]"
+                    )
+            else:
+                parts.append(
+                    "  EXCERPT: [No authority summary supplied; do not infer its holding.]"
+                )
         if uncitable:
             parts.append(
                 f"(Additional {len(uncitable)} retrieved document(s) lack a "
@@ -1219,14 +1229,54 @@ def _retrieve_for_draft(
 def _augment_summary_with_findings(base: str | None, findings: list[DraftFinding]) -> str | None:
     if not findings:
         return base
-    lines = [f"[{f.severity.upper()}] {f.code}: {f.message}" for f in findings]
-    suffix = "Review findings:\n" + "\n".join(lines)
+    # Group repeated diagnoses, retaining occurrence counts and every distinct
+    # severity/code. Repetition must not crowd a different blocker off the UI.
+    ordered = sorted(findings, key=lambda finding: finding.severity != "blocker")
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for finding in ordered:
+        grouped.setdefault((finding.severity, finding.code), []).append(finding.message)
+    prefixes, messages = [], []
+    for (severity, code), occurrences in grouped.items():
+        prefixes.append(f"[{severity.upper()}] {code}: ")
+        distinct = dict.fromkeys(" ".join(message.split()) for message in occurrences)
+        text = "; ".join(distinct)
+        messages.append(f"{len(occurrences)} occurrences. {text}" if len(occurrences) > 1 else text)
+    header = "Review findings:\n"
+    fixed = len(header) + sum(map(len, prefixes)) + len(prefixes) - 1
+    if fixed + 4 * len(prefixes) > _SUMMARY_MAX_LEN:
+        # Codes are server-owned and the current validator inventory fits. A
+        # future unrepresentable inventory must fail before version persistence.
+        raise ValueError("Draft finding codes exceed the bounded review summary capacity.")
+    message_budget = _SUMMARY_MAX_LEN - fixed
+    if sum(map(len, messages)) > message_budget:
+        budgets = [0] * len(messages)
+        pending = list(range(len(messages)))
+        while pending:
+            share = message_budget // len(pending)
+            short = [index for index in pending if len(messages[index]) <= share]
+            if not short:
+                for ordinal, index in enumerate(pending):
+                    budgets[index] = share + (ordinal < message_budget % len(pending))
+                break
+            for index in short:
+                budgets[index] = len(messages[index])
+                message_budget -= budgets[index]
+                pending.remove(index)
+        messages = [message if len(message) <= budget
+                    else message[:budget - 3].rstrip() + "..."
+                    for message, budget in zip(messages, budgets, strict=True)]
+    suffix = header + "\n".join(
+        prefix + message for prefix, message in zip(prefixes, messages, strict=True)
+    )
+    # Model prose can fill the entire field; reserve space for deterministic
+    # findings first while retaining the UI's trailing-findings wire format.
+    if base and len(base) + 2 + len(suffix) > _SUMMARY_MAX_LEN:
+        prose_budget = max(0, _SUMMARY_MAX_LEN - len(suffix) - 2)
+        base = (base[:prose_budget - 3].rstrip() + "...") if prose_budget >= 4 else None
     if not base:
         combined = suffix
     else:
         combined = f"{base}\n\n{suffix}"
-    if len(combined) > _SUMMARY_MAX_LEN:
-        combined = combined[: _SUMMARY_MAX_LEN - 3].rstrip() + "..."
     return combined
 
 
@@ -1512,7 +1562,7 @@ def generate_ip_draft_version(
         ),
     )
     surviving, verified_count = _verify_version_citations(session, response.citations)
-    findings = run_validators(response.body, surviving)
+    findings = run_validators(response.body, surviving, template_type=draft.template_type)
     findings.extend(check_adverse_treatment(session, surviving))
     generated_at = datetime.now(UTC).isoformat()
     template_manifest = {
@@ -1741,7 +1791,7 @@ def generate_draft_version(
             len(response.citations),
         )
 
-    findings = run_validators(response.body, surviving)
+    findings = run_validators(response.body, surviving, template_type=draft.template_type)
     # PG-006 Phase 1B — add the adverse-treatment finding (DB-backed,
     # so it's a separate call from the pure-function validator suite).
     findings.extend(check_adverse_treatment(session, surviving))
@@ -1941,7 +1991,7 @@ def _edit_loaded_draft_version(
         previous_citations = []
     candidate_citations = _citations_still_present(edited_body, previous_citations)
     surviving, verified_count = _verify_version_citations(session, candidate_citations)
-    findings = run_validators(edited_body, surviving)
+    findings = run_validators(edited_body, surviving, template_type=draft.template_type)
     findings.extend(check_adverse_treatment(session, surviving))
     summary = _augment_summary_with_findings(
         "Manual edit saved as a new revision. Prior approval, if any, was "
