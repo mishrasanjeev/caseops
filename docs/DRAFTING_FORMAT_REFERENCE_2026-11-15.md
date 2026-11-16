@@ -355,6 +355,38 @@ claim supersedes the failed setup or authorizes a replacement gate.
 
 ## Acceptance requirements
 
+### November16 verification follow-up
+
+All14 retained Word samples now have real LibreOffice26.2.5.2 output:21pages
+were rendered and inspected, including six deeds, Unicode court text, three
+execution-number styles and the eight-page execution continuation. Independent
+PDF decoding confirms all120 ordered entries,120 literal ₹0.50 and Devanagari
+values, page fields and prayer/verification after the last entry. Earlier
+renderer setup/timeouts remain retained. No live legal-generation claim follows.
+
+The complete independent Python source-inventory/font-closure run collected808
+cases:807passed/1failed. Its actual native reporter bridge decoded Node's UTF-8
+JSON with the Windows default code page, corrupting the title before comparing
+it with UTF-8 JUnit. Production decoding was already strict UTF-8. Correct only
+that fixture read and assert the literal Unicode title independently in both
+real outputs; the original failure and complete identity/privacy checks remain.
+The corrected native case passes; complete808-case replacement remains pending.
+
+Fresh OpenAPI generation on source85ad115b using the owned pinned7.13.0 generator
+produces the exact committed client. Parent2481e2b4 has fully green hosted API,
+PostgreSQL, desktop/phone, security and source gates; this does not certify the
+feature's still-pending full frontend, PostgreSQL, Docker or deployed workflows.
+
+Linux frontend preparation preserves two refusals: a Windows archive with
+converted line endings (replaced by exact stored Git bytes), then a30-second
+installer preparation failure on overlay storage. A fresh executable tmpfs
+keeps that deadline unchanged and permits the frozen309-package installation.
+Subsequent browser acquisition failed DNS and ended after the workstation's long
+clock interruption; it is incomplete preparation, never test acceptance. Prefer
+the matching official digest-pinned Playwright producer for retained browser
+bytes, then prove runtime and complete inventory with installation stopped.
+All raw receipts remain under `C:/Users/mishr/.codex/merge161001`. **NO-GO**.
+
 1. Inventory every active generation caller, including generic and untitled
    template paths, preview, regeneration, IP and any separate notice/deed flow.
 2. Maintain one versioned, source-attributed format definition rather than

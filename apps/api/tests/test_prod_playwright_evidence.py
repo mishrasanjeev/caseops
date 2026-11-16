@@ -1271,7 +1271,12 @@ def test_actual_reporter_and_python_preserve_only_the_reviewed_draft_receipt(cap
     child = capture.real_run([capture.node, "-e", script], cwd=capture.root, env=env,
                              capture_output=True, text=True, timeout=15, check=False)
     assert child.returncode == 0, child.stderr
-    raw = json.loads((capture.path / "native-results.json").read_text())
+    # The real Node reporter emits UTF-8. Windows' legacy default code page
+    # otherwise corrupts the title before it is compared with UTF-8 JUnit.
+    raw = json.loads((capture.path / "native-results.json").read_text(encoding="utf-8"))
+    assert raw["suites"][0]["specs"][0]["title"] == "Unicode § हिंदी"
+    native_case = ET.parse(capture.path / "native-results.xml").find("./testsuite/testcase")
+    assert native_case is not None and native_case.get("name") == "Unicode § हिंदी"
     normalized = evidence._inventory(raw, capture.env)
     annotation = normalized[0]["annotations"][0]
     assert annotation["type"] == "caseops-b5-reported-draft"
