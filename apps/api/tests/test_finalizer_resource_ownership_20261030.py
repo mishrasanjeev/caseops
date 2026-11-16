@@ -210,6 +210,51 @@ def test_session_registry_does_not_retain_completed_session():
         engine.dispose()
 
 
+@pytest.mark.parametrize("body_error", [False, True])
+def test_minimal_tail_audit_owns_upload_listeners_without_finalizer_sql(body_error):
+    from tests.test_compliance_participant_fence_20261010_postgres import _UploadPhase
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=NullPool)
+    listeners = overlap._OwnedSessionListeners()
+    journal = overlap._FinalizerJournal(StringIO(), Path("minimal-tail-only.jsonl"), "minimal")
+    journal_ref = ref(journal)
+    audit = SimpleNamespace(pids={}, record=journal.record, listen_session=listeners.listen)
+    upload = _UploadPhase(audit)
+    upload_ref = ref(upload)
+    session = overlap.Session(engine)
+    upload.observe(session)
+    unrelated_calls = []
+
+    def unrelated(_session):
+        unrelated_calls.append("committed")
+
+    event.listen(session, "after_commit", unrelated)
+    del audit, upload, journal
+    try:
+        assert upload_ref() is not None and journal_ref() is not None
+        assert len(listeners.hooks) == 3
+        if body_error:
+            with pytest.raises(ValueError, match="^Controlled minimal tail failure$"):
+                try:
+                    raise ValueError("Controlled minimal tail failure")
+                finally:
+                    session.close()
+                    listeners.detach()
+        else:
+            session.close()
+            listeners.detach()
+        assert listeners.hooks == []
+        assert upload_ref() is None and journal_ref() is None
+        assert event.contains(session, "after_commit", unrelated)
+        session.commit()
+        assert unrelated_calls == ["committed"]
+    finally:
+        listeners.detach()
+        event.remove(session, "after_commit", unrelated)
+        session.close()
+        engine.dispose()
+
+
 @pytest.mark.parametrize("active", ["callback", "workers"])
 def test_hook_detach_keeps_all_ownership_during_active_capture_or_pool(active):
     engine, hooks, audit_ref, journal_ref = _registered_audit()

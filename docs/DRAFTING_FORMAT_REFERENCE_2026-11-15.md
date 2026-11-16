@@ -589,3 +589,43 @@ The original two-case negative failure and a separate 15-error database-setup
 attempt remain retained; neither is passing native PostgreSQL evidence. Actual
 database-backed reruns and full fresh CI are still required. The original clean
 `777abbeffa52` local Docker gate remains source-frozen in its separate checkout.
+
+### November 16 minimal caller and bounded CI correction
+
+The next complete run on `b7ce4c6a9` exposed a missed direct consumer of the
+upload observer: the compliance-tail acceptance uses a minimal audit with an
+ordinary Session. It lacked the newly required listener-registration method.
+Retain shard 22's one failed call, 130 passed calls and complete phase inventory.
+Share the exact owned-listener registry between both audit shapes; preserve
+the minimal caller's Session, SQL, no-paid marker and all persisted workflow
+assertions. Detach its callbacks after the serial session context ends, including
+errors, and preserve unrelated listeners. Do not substitute the full finalizer
+audit, which would add SQL and lock settings to the original acceptance.
+
+Shard 19 completed all 132 tests and 396 phases with native exit 0, but its job
+still crossed the original twelve-minute limit. The paired shard 3 used 188.42
+phase seconds while shard 19 used 633.54. Exchange the measured 108.81-second
+backfill with a 0.017-second guard within that same sixteen-shard parent. The
+complete 4,202-case inventory proves every child count and parent membership is
+preserved, exactly two identities exchange children, and the other 30 children
+remain identical. Missing, same-child and already balanced pair layouts retain
+the default split. The calculated phase totals are projections, not new runtime
+acceptance. Job deadlines, assertions, test bodies, workloads, retries and skips
+remain unchanged.
+
+The complete sharding and ownership selection passes all 189 tests. The expanded
+nine-module PostgreSQL and ownership run also passes all 270 tests / 810 phases,
+zero skips or failures, with native exit 0 and natural EOF. It includes the entire
+missed compliance-tail module and its actual upload, worker, historical migration
+and rollback paths. Source admission records the five reviewed modified test
+paths over `b7ce4c6a9`; copied native journals and complete identity reconciliation
+are retained. All earlier failures remain failed at their original scope.
+
+The known rejected `b7ce4c6a9` local Docker run was superseded before completing
+its first native child. Every owned native process was independently stopped,
+its cleanup parent retained the failure evidence, and container, network and
+volume absence were separately confirmed. Its complete collection and earlier
+build/startup gates do not certify the unreached native or browser inventory.
+Fresh complete CI, local release and exact deployed workflows remain required.
+These dated checkpoints preserve history; final serving-release outcomes belong
+to the PR description and the immutable release evidence.

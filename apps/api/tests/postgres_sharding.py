@@ -36,6 +36,20 @@ _MEASURED_SIXTEEN_SHARD_DESTINATIONS = {
     ): 16,
 }
 
+# CI43916301900 measured132 complete cases in both children of parent3:
+# child3 used188.42 phase seconds, child19 used633.54 and crossed its unchanged
+# twelve-minute job bound after native exit0. Exchange the108.81-second backfill
+# with the0.017-second guard only when both retain opposite reviewed children.
+# This preserves every parent, child count, test body and timeout.
+_PARENT_THREE_HEAVY = (
+    "tests/test_matter_readthrough_page_migration_20261028.py::"
+    "test_named_0007_to_0008_backfill_old_column_crud_and_restart_preserve_every_source[postgres]"
+)
+_PARENT_THREE_LIGHT = (
+    "tests/test_ip_upload_admission_postgres.py::"
+    "test_ip_upload_sqlite_guard_uses_actual_legacy_transaction_state[explicit-begin-True]"
+)
+
 
 def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
     if type(shard) is not int or type(total) is not int or not 1 <= shard <= total <= 32:
@@ -52,10 +66,15 @@ def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
         parent = (shard - 1) % 16 + 1
         parent_nodes = partition(nodeids, parent, 16)
         child = int(shard > 16)
-        # Balanced ABBA prefixes split each frozen parent without new case routes.
+        # ABBA remains the default split of each frozen sixteen-shard parent.
+        children = {node: (index + 1) // 2 % 2
+                    for index, node in enumerate(parent_nodes)}
+        if (parent == 3 and children.get(_PARENT_THREE_HEAVY) == 1
+                and children.get(_PARENT_THREE_LIGHT) == 0):
+            children[_PARENT_THREE_HEAVY] = 0
+            children[_PARENT_THREE_LIGHT] = 1
         selected = [
-            node for index, node in enumerate(parent_nodes)
-            if (index + 1) // 2 % 2 == child
+            node for node in parent_nodes if children[node] == child
         ]
     elif total == 16:
         selected = [
