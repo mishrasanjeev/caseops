@@ -537,3 +537,28 @@ Python and frontend equality contracts already use 728 / 64. Preserve the
 original 1-failed / 1424-passed shard report and replay this complete affected
 module plus fresh CI; no count inference, test omission or threshold waiver
 is introduced. The complete Docker and deployed workflows remain pending.
+
+### November 16 PR-merge CodeQL review
+
+The branch-only open-alert query returned no rows, but that did not inspect
+the PR's actual merge ref. The separate `refs/pull/623/merge` analysis reports
+ten `py/implicit-string-concatenation-in-list` quality warnings in the shared
+presentation instructions. These joins are deliberate; make each continuation
+explicit with `+`, as the [CodeQL query documentation](https://codeql.github.com/codeql-query-help/python/py-implicit-string-concatenation-in-list/)
+recommends. Preserve the
+exact emitted instruction text across all 98 template/registry combinations.
+No alert is dismissed or suppressed, and no list item or legal safety instruction
+is removed. Fresh actual PR-merge analysis and its separate open-alert verdict
+must pass before the next frozen release candidate.
+
+Earlier candidate `64a31566` passed hosted API coverage, all 4,202 PostgreSQL
+cases and the complete phone inventory (63 passed, one existing production-only
+invoice skip). The new phone drafting journey passed once with zero retries.
+Its pending desktop run remains separate. The third local release attempt built
+both images, then failed before stack startup because Docker's default address
+pools were exhausted. The fourth uses the existing explicit-subnet parameters;
+it was intentionally interrupted at stack startup to supersede this source after
+the merge-ref warnings were found. Its cleanup parent remained running, and its
+partial startup, capture and cleanup evidence remain retained as incomplete.
+Neither attempt proves complete local PostgreSQL or browser acceptance, and
+no production verification is transferred from these results.

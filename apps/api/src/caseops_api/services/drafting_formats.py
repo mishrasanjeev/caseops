@@ -493,31 +493,31 @@ def format_instructions(template_type: str | None, *, registry: bool = False) ->
     lines = [
         "=== DOCUMENT PRESENTATION REFERENCE ===",
         f"Format reference: {FORMAT_VERSION}. This reference supplies structure only, "
-        "not legal authority or facts.",
+        + "not legal authority or facts.",
         "Preserve the selected document's specific statutory form, required declarations and "
-        "current court or registry rules; they take precedence over these presentation "
-        "conventions.",
+        + "current court or registry rules; they take precedence over these presentation "
+        + "conventions.",
         "Preserve explicit authorized workspace-template requirements; use this reference to fill "
-        "presentation gaps rather than overwrite them.",
+        + "presentation gaps rather than overwrite them.",
         "Use only the actual proceeding, court or registry, parties and facts supplied in the "
-        "authorized context. Never adopt a sample venue, year, amount, interest rate, identity or "
-        "allegation from a model form.",
+        + "authorized context. Never adopt a sample venue, year, amount, interest rate, identity "
+        + "or allegation from a model form.",
         "Use clear headings, short numbered paragraphs and consistent party designations. Keep "
-        "material facts, legal grounds and requested relief distinct where appropriate.",
+        + "material facts, legal grounds and requested relief distinct where appropriate.",
         "Write document headings as plain text, without Markdown heading markers, emphasis "
-        "markup or HTML layout code. The saved body is the actual document text, not a "
-        "formatting program.",
+        + "markup or HTML layout code. The saved body is the actual document text, not a "
+        + "formatting program.",
         "Missing particulars require explicit square-bracket placeholders. Do not assert a "
-        "completed signature, oath, service, registration or attestation without evidence.",
+        + "completed signature, oath, service, registration or attestation without evidence.",
         "Where verification is required, distinguish personal knowledge from information and "
-        "identify the correct paragraph ranges when available; leave unknown ranges as "
-        "placeholders.",
+        + "identify the correct paragraph ranges when available; leave unknown ranges as "
+        + "placeholders.",
         "Preserve actual annexure identifiers and their supplied descriptions. Do not fabricate "
-        "annexures, page numbers, source references or witness details.",
+        + "annexures, page numbers, source references or witness details.",
         "Keep product labels, revision/status metadata and instructional notes out of the legal "
-        "document body.",
+        + "document body.",
         "For a partial preview, render only the requested step or supplied portion in its proper "
-        "position; do not invent the remaining document.",
+        + "position; do not invent the remaining document.",
     ]
     if registry:
         lines.append(
