@@ -465,13 +465,13 @@ def test_batch3_full_envelope_requires_one_actual_pass_for_each_owned_case(captu
     state = _batch3_capture(capture, invocation)
     assert state.run() == 0
     evidence.validate(state.root, [invocation], BASE)
-    completion = json.loads((state.path / "completion.json").read_text())
+    completion = json.loads((state.path / "completion.json").read_text(encoding="utf-8"))
     assert completion["completed"] is True and completion["test_count"] == 1
     assert set(completion["sha256"]) == evidence.REPORT_FILES
     assert len(state.calls) == 2
     assert len(list(ET.parse(state.path / "results.xml").iter("testcase"))) == 1
     assert not list(ET.parse(state.path / "results.xml").iter("skipped"))
-    result = json.loads((state.path / "results.json").read_text())["tests"][0]
+    result = json.loads((state.path / "results.json").read_text(encoding="utf-8"))["tests"][0]
     project, file, title = BATCH3_EXPECTED_CASES[invocation]
     assert (result["project_name"], result["file"], result["title_path"]) == (
         project, file, [file, title],
@@ -505,7 +505,7 @@ def test_batch3_full_envelope_rejects_nonpositive_or_substituted_evidence(
         _damage_batch3_capture(state, damage)
         assert state.run() == 1
         assert not (state.path / "completion.json").exists()
-        exit_marker = json.loads((state.path / "exit.json").read_text())
+        exit_marker = json.loads((state.path / "exit.json").read_text(encoding="utf-8"))
         assert exit_marker["completed"] is False
         assert exit_marker["incomplete_reason"] == reason
         if damage not in {"expected_failure", "skipped"}:
@@ -521,10 +521,10 @@ def test_batch3_full_envelope_rejects_nonpositive_or_substituted_evidence(
         assert state.run() == 0
     if damage == "missing":
         for name in ("discovery.json", "results.json"):
-            document = json.loads((state.path / name).read_text())
+            document = json.loads((state.path / name).read_text(encoding="utf-8"))
             document["tests"] = []
             (state.path / name).write_text(json.dumps(document), encoding="utf-8")
-        completion = json.loads((state.path / "completion.json").read_text())
+        completion = json.loads((state.path / "completion.json").read_text(encoding="utf-8"))
         completion["test_count"] = 0
         for name in ("discovery.json", "results.json"):
             completion["sha256"][name] = evidence._hash(state.path / name)
@@ -591,7 +591,9 @@ def _batch4_source_cases():
             assert block is not None
             routes = re.findall(r'"([^"]+)"', block.group(1))
             reported = json.loads(
-                (ROOT / "tests/e2e/fixtures/control-crawl-reported-routes.json").read_text()
+                (ROOT / "tests/e2e/fixtures/control-crawl-reported-routes.json").read_text(
+                    encoding="utf-8"
+                )
             )
             assert len(reported) == 2
             assert all(set(row) == {"path", "label"} for row in reported)
@@ -749,11 +751,11 @@ def test_batch4_full_envelope_requires_every_owned_case_to_actually_pass(capture
     project, cases = evidence.BATCH4_MANDATORY_CASES[invocation]
     assert state.run() == 0
     evidence.validate(state.root, [invocation], BASE)
-    completion = json.loads((state.path / "completion.json").read_text())
+    completion = json.loads((state.path / "completion.json").read_text(encoding="utf-8"))
     assert completion["completed"] is True and completion["test_count"] == len(cases)
     assert len(list(ET.parse(state.path / "results.xml").iter("testcase"))) == len(cases)
     assert not list(ET.parse(state.path / "results.xml").iter("skipped"))
-    rows = json.loads((state.path / "results.json").read_text())["tests"]
+    rows = json.loads((state.path / "results.json").read_text(encoding="utf-8"))["tests"]
     assert Counter((row["file"], row["title_path"][-1]) for row in rows) == Counter(
         (file, evidence._safe(title, {})) for file, title in cases
     )
@@ -802,7 +804,7 @@ def test_batch4_full_envelope_rejects_nonpositive_partial_or_substituted_evidenc
     if phase == "run":
         assert state.run() == 1
         assert not (state.path / "completion.json").exists()
-        exit_marker = json.loads((state.path / "exit.json").read_text())
+        exit_marker = json.loads((state.path / "exit.json").read_text(encoding="utf-8"))
         assert exit_marker["completed"] is False
         assert exit_marker["incomplete_reason"] == reason
         if damage not in {"expected_failure", "skipped"}:
@@ -868,8 +870,8 @@ def test_mandatory_case_checker_pins_row_and_execution_rules_of_stored_evidence(
     batch = "batch3" if invocation.startswith("batch3-") else "batch4"
     state = (_batch3_capture if batch == "batch3" else _batch4_capture)(capture, invocation)
     assert state.run() == 0
-    binding = json.loads((state.path / "completion.json").read_text())["binding"]
-    document = json.loads((state.path / "results.json").read_text())
+    binding = json.loads((state.path / "completion.json").read_text(encoding="utf-8"))["binding"]
+    document = json.loads((state.path / "results.json").read_text(encoding="utf-8"))
     checker = getattr(evidence, f"_check_{batch}_evidence")
     checker(binding, copy.deepcopy(document), execution=True)
     _damage_stored_mandatory_rows(document, damage)
@@ -1324,7 +1326,8 @@ def test_missing_native_files_never_create_completion(capture, problem):
     capture.missing = problem
     assert capture.run() != 0
     assert not (capture.path / "completion.json").exists()
-    assert json.loads((capture.path / "exit.json").read_text())["completed"] is False
+    marker = json.loads((capture.path / "exit.json").read_text(encoding="utf-8"))
+    assert marker["completed"] is False
     with pytest.raises(evidence.EvidenceError):
         evidence.validate(capture.root, ["offline"], BASE)
 
@@ -1412,7 +1415,8 @@ def test_failed_native_results_are_complete_but_never_successful(capture, native
     capture.runtime["stats"].update(expected=0, unexpected=1)
     capture.execution_exit = native_exit
     assert capture.run() != 0
-    assert json.loads((capture.path / "completion.json").read_text())["completed"] is True
+    marker = json.loads((capture.path / "completion.json").read_text(encoding="utf-8"))
+    assert marker["completed"] is True
     assert len(list(ET.parse(capture.path / "results.xml").iter("failure"))) == 1
     with pytest.raises(evidence.EvidenceError, match="failed_invocation"):
         evidence.validate(capture.root, ["offline"], BASE)
@@ -1430,7 +1434,7 @@ def test_required_invocation_receipts_fail_closed(capture, problem):
         (capture.path / "results.xml").write_text("changed")
     elif problem == "binding":
         path = capture.path / "exit.json"
-        report = json.loads(path.read_text())
+        report = json.loads(path.read_text(encoding="utf-8"))
         report["binding"]["project"] = "wrong"
         path.write_text(json.dumps(report))
     else:
@@ -1697,7 +1701,8 @@ def test_every_original_config_project_binding_has_exact_json_xml_identity(captu
 def test_failed_full_native_status_cannot_be_hidden_by_green_case_or_exit(capture, status):
     capture.runtime["status"] = status
     assert capture.run() != 0
-    assert json.loads((capture.path / "completion.json").read_text())["completed"] is True
+    marker = json.loads((capture.path / "completion.json").read_text(encoding="utf-8"))
+    assert marker["completed"] is True
     with pytest.raises(evidence.EvidenceError, match="failed_invocation"):
         evidence.validate(capture.root, ["offline"], BASE)
 
@@ -2409,7 +2414,9 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
             path.unlink()
         if "--list" not in command:
             progress = state.path / "progress.jsonl"
-            packets = [json.loads(line) for line in progress.read_text().splitlines()]
+            packets = [
+                json.loads(line) for line in progress.read_text(encoding="utf-8").splitlines()
+            ]
             for packet in packets:
                 if "invocation" in packet:
                     packet["invocation"] = invocation
@@ -2432,10 +2439,10 @@ def test_native_tester_capture_retains_unfiltered_inventory_before_execution(
         selected_calls = [command for command, kw in state.calls
                           if not kw["env"]["CASEOPS_PW_EVIDENCE_INVOCATION"].endswith("-canonical")]
         assert all(all(value in command for value in filters) for command in selected_calls)
-        receipt = json.loads((state.path / "invocation.json").read_text())
+        receipt = json.loads((state.path / "invocation.json").read_text(encoding="utf-8"))
         assert receipt["source_owned_file_filters"] == filters
         evidence.validate(state.root, [invocation], BASE)
-        completion = json.loads((state.path / "completion.json").read_text())
+        completion = json.loads((state.path / "completion.json").read_text(encoding="utf-8"))
         assert set(completion["sha256"]) == evidence.REPORT_FILES | evidence.TESTER_CANONICAL_FILES
         assert not (state.root / evidence.EVIDENCE / f"{invocation}-canonical").exists()
 
@@ -2539,9 +2546,11 @@ def test_verified_union_rejects_missing_or_overlapping_core_catalog_envelope(
     state = verified_tester_union
     other = "tester-catalog" if invocation == "tester" else "tester"
     directory = state.directories[invocation]
-    other_result = json.loads((state.directories[other] / "results.json").read_text())
+    other_result = json.loads(
+        (state.directories[other] / "results.json").read_text(encoding="utf-8")
+    )
     result_path = directory / "results.json"
-    result = json.loads(result_path.read_text())
+    result = json.loads(result_path.read_text(encoding="utf-8"))
     result["tests"][0] = other_result["tests"][0]
     result_path.write_text(json.dumps(result))
     with pytest.raises(evidence.EvidenceError, match="tester_partition_union_mismatch"):
@@ -2806,7 +2815,9 @@ def test_workflow_prepare_uses_only_release_owned_capture_or_proven_older_ancest
             "-m",
             "release-owned capture fixture",
         )
-    workflow = yaml.safe_load((ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
+    )
     scripts = [
         next(s["run"] for s in workflow["jobs"][job]["steps"] if s.get("id") == "native-evidence")
         for job in ("prod-playwright-shards", "scheduled-statute-verification")
@@ -2839,10 +2850,13 @@ def test_workflow_prepare_uses_only_release_owned_capture_or_proven_older_ancest
         assert not (runner / "caseops-prod-playwright").exists()
     else:
         assert result.returncode == 0, result.stdout + result.stderr
-        assert output.read_text().strip() == ("mode=legacy" if mode == "older" else "mode=native")
+        expected = "mode=legacy" if mode == "older" else "mode=native"
+        assert output.read_text(encoding="utf-8").strip() == expected
         assert (runner / "caseops-prod-playwright").is_file()
         if mode == "older":
-            marker = json.loads((tmp_path / evidence.EVIDENCE / "legacy.json").read_text())
+            marker = json.loads(
+                (tmp_path / evidence.EVIDENCE / "legacy.json").read_text(encoding="utf-8")
+            )
             assert marker["completed"] is False
             assert marker["release_sha"] == boundary
 
@@ -2990,9 +3004,11 @@ def test_five_envelope_union_independently_rejects_damaged_oct13_parts(
 ):
     state = verified_tester_union
     path = state.directories[part] / "results.json"
-    result = json.loads(path.read_text())
+    result = json.loads(path.read_text(encoding="utf-8"))
     other = "test-legal-write-oct13-b" if part.endswith("-a") else "test-legal-write-oct13-a"
-    foreign = json.loads((state.directories[other] / "results.json").read_text())["tests"][0]
+    foreign = json.loads(
+        (state.directories[other] / "results.json").read_text(encoding="utf-8")
+    )["tests"][0]
     if damage == "reordered":
         result["tests"].reverse()
     elif damage == "duplicate":

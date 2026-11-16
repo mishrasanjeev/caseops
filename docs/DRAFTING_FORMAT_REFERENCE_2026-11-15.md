@@ -461,3 +461,51 @@ status and durable evidence in each explicitly released window.
 | Browser workflow | Execute both new desktop/phone journeys and affected existing drafting journeys, including real marked requests, retained history, explicit instrument choice, actual Word attachment and full PDF canvas/download assertions. |
 | Complete release | Close all source writers, enumerate every tracked/untracked input, reconcile exact hashes/sidecars, read the latest CI/security handoff and required checks, then run a fresh complete canonical gate in the released window. Preserve failures and all unreached boundaries. |
 | Separate PR | The owner explicitly requested draft creation before the test-window handoff. Publish a separate draft stacked on PR621, then rebase/retarget only this feature to actual main after the parent merges. Complete and record the required tests before readiness or merge. Deployment and real-model legal accuracy remain separate claims. |
+
+
+### November 16 CI reconciliation after PR621 merged
+
+PR621 merged as `2d31f6b9cc305de137f8c8b7cc13ddfccb168964`.
+PR623 is now based on main. The first reopened CI run retained the obsolete
+merge `4abc2cdfff84ece1d199d4ca71635490f667b2db`, whose first parent is
+`2481e2b4a2714bfb675ca9892645398eca02899d`, rather than the new main merge.
+The secret scan refused the missing base ancestry before inventory or scanning;
+this is incomplete security evidence, not a clean scan or a secret finding.
+A fresh pushed candidate must receive the actual current-main merge and pass.
+
+The same hosted Linux frontend run collected all 311 files / 3179 cases:
+3178 passed and the single failure was the new loopback UUID fixture journey's
+missing declaration in the existing explicit exception inventory. The journey
+uses the same UUID-fenced local Python fixture as the older declared journey.
+Declare that exact file and reason; production journeys remain covered by the
+unchanged prohibition. The governance check also correctly refused the web
+builder change without a map review; the map and generated projection now
+record the builder-only synthetic closure and unchanged data boundaries.
+
+The complete Windows frontend attempt failed: 2957 passed, 7 failed, 19 declared
+skips and five worker-start timeouts; only 306 of 311 files collected. Two native
+child deadlines, source-scan and Select deadlines, a recordal loading assertion
+and a second recordal deadline remain failed Windows evidence. The hosted Linux
+run passed these exact files; that is separate platform evidence, not a rewrite
+of the Windows outcome. No deadline, loading assertion, inventory or worker
+startup bound is relaxed. A complete replacement frontend run is required.
+
+Actual Word output is now rendered and inspected: 14 documents / 21 pages,
+including all six deeds and the eight-page Unicode table. The table separately
+retains all 120 ordered entries, 120 literal sub-rupee amounts and Hindi labels,
+page fields, prayer and verification after the final entry. Earlier incomplete
+Word attempts remain retained. The complete 808-case independent inventory
+attempt had 807 passes and one Windows default-codepage read failure on real
+UTF-8 Node reporter output; explicit UTF-8 reads preserve strict JSON/XML literal
+identity, and its focused replacement passed. Adjacent fixture reads now use
+the same explicit encoding; the full replacement inventory remains required.
+
+Evidence: `C:/Users/mishr/.codex/merge161001`, including the original native
+reports, CI artifacts, rendered Word/PDF pages and independent content checks.
+No combined-release or production GO is claimed by this review.
+
+The focused Windows UUID-guard replacement collected two cases: the run-id
+generator passed, but the unchanged whole-source scan exceeded its original
+15-second limit (16.47 seconds). It remains failed evidence; no allowance or
+source-scan deadline was changed. Fresh Linux CI must prove the corrected
+inventory under the original full frontend contract.
