@@ -509,3 +509,31 @@ generator passed, but the unchanged whole-source scan exceeded its original
 15-second limit (16.47 seconds). It remains failed evidence; no allowance or
 source-scan deadline was changed. Fresh Linux CI must prove the corrected
 inventory under the original full frontend contract.
+
+### November 16 complete inventory and adjacent CI count reconciliation
+
+On candidate `51b90c6c70bdda0c61b89b6c10412d0ca4c17ccd`, the fresh hosted
+frontend passed all 311 files / 3179 cases under the original coverage, worker
+and deadline contract; web/component and browser TypeScript, production build
+and Docker builder also passed. Fresh security, mobile source, API lint and
+governance checks passed. These do not turn the earlier Windows frontend
+timeouts into passing evidence.
+
+The complete Windows independent inventory replacement passed all 808 cases,
+zero failures/errors/skips, in 2312.27 seconds with native exit 0 and completed
+EOF. Its admission sidecar records the known untracked `apps/api/C` zero-case
+XML from the earlier malformed launch; that file was inspected, hash-recorded
+and moved to retained evidence. It was not application or test source, and no
+tracked test/build input changed while this replacement ran. This artifact
+reconciliation must remain explicit; it is not a clean-admission claim.
+
+Hosted API shard9 then exposed one additional independent consumer of the
+current browser role counts: `test_batch5_release_wiring.py` still expected
+727 desktop / 63 phone cases. The two exact newly reviewed format journeys
+make the current whole counts 728 / 64. Update only that literal equality;
+the 719 / 55 historical base, expected skips, all Batch5 identities and proof
+scopes remain unchanged. An adjacent source audit found the other current
+Python and frontend equality contracts already use 728 / 64. Preserve the
+original 1-failed / 1424-passed shard report and replay this complete affected
+module plus fresh CI; no count inference, test omission or threshold waiver
+is introduced. The complete Docker and deployed workflows remain pending.
