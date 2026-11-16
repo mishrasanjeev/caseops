@@ -562,3 +562,30 @@ the merge-ref warnings were found. Its cleanup parent remained running, and its
 partial startup, capture and cleanup evidence remain retained as incomplete.
 Neither attempt proves complete local PostgreSQL or browser acceptance, and
 no production verification is transferred from these results.
+
+### November 16 notification-race harness ownership review
+
+Candidate `777abbeffa52` completed hosted Web and security checks, but its
+PostgreSQL shard 11 failed a two-second Company lock wait in the external-claim
+winner case. All 131 selected cases and 393 setup/call/teardown phases reconcile:
+130 passed, one call failed, no skips or native crash. The journal records a
+2.120-second process-wide generation-2 GC interval while the worker transaction
+remained open, after the worker had already resumed. This is overlap evidence,
+not actor attribution or a proven historical latency cause. The dependent
+browser workflow did not execute on this candidate.
+
+An independent negative regression proves that retained closed sessions still
+own the audit and its journal after engine-hook removal. Register the exact
+owned transaction listeners with weak session references and remove them only
+after workers stop. Keep both ownership lists rooted if any removal fails;
+leave unrelated listeners intact. The sibling compliance upload observer uses
+the same ownership registration. This does not change provider behavior, SQL,
+GC policy, workloads, assertions, deadlines, retries or canonical inventories.
+
+The complete affected offline ownership inventory now passes 56 cases, including
+normal/error cleanup, partial session-listener removal, active-worker refusal,
+unrelated listeners, retained upload observers and dead session references.
+The original two-case negative failure and a separate 15-error database-setup
+attempt remain retained; neither is passing native PostgreSQL evidence. Actual
+database-backed reruns and full fresh CI are still required. The original clean
+`777abbeffa52` local Docker gate remains source-frozen in its separate checkout.

@@ -27,6 +27,7 @@ from threading import Event, Lock, Thread
 from time import monotonic, monotonic_ns, sleep, time_ns
 from types import SimpleNamespace
 from uuid import uuid4
+from weakref import ref
 
 import httpx
 import pytest
@@ -425,6 +426,7 @@ class _FinalizerAudit:
         self.factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
         self.hooks = [("before_cursor_execute", self.before),
                       ("after_cursor_execute", self.after), ("handle_error", self.error)]
+        self.session_hooks = []
 
     def detach_hooks(self):
         timing = self.passive
@@ -436,8 +438,19 @@ class _FinalizerAudit:
         for name, callback in self.hooks:
             if event.contains(self.engine, name, callback):
                 event.remove(self.engine, name, callback)
+        for owner, name, callback in self.session_hooks:
+            session = owner()
+            if session is not None and event.contains(session, name, callback):
+                event.remove(session, name, callback)
         # Drop bound-self ownership only after every owned listener is removed.
         self.hooks.clear()
+        self.session_hooks.clear()
+
+    def listen_session(self, session, name, callback):
+        # Weak session ownership avoids retaining every completed worker session.
+        # Exact callbacks remain rooted until all workers stop and detach succeeds.
+        event.listen(session, name, callback)
+        self.session_hooks.append((ref(session), name, callback))
 
     def flush_passive_evidence(self):
         timing = self.passive
@@ -474,9 +487,9 @@ class _FinalizerAudit:
                 self.record("transaction_ended", role=role, pid=self.pids.get(role),
                             transaction=_session.info.pop("finalizer_transaction", None))
 
-        event.listen(session, "after_begin", label)
-        event.listen(session, "after_transaction_end", ended)
-        event.listen(session, "after_commit", lambda _session: self.record(
+        self.listen_session(session, "after_begin", label)
+        self.listen_session(session, "after_transaction_end", ended)
+        self.listen_session(session, "after_commit", lambda _session: self.record(
             "transaction_committed", role=role, pid=self.pids.get(role)))
         return session
 
