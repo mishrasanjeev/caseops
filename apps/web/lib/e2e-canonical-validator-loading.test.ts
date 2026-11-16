@@ -16,6 +16,8 @@ it.each([
     url: new URL("../../../tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", import.meta.url) },
   { file: "ram-2026-11-11-bugs.spec.ts", validators: ["authContext", "authSession"],
     url: new URL("../../../tests/e2e/ram-2026-11-11-bugs.spec.ts", import.meta.url) },
+  { file: "drafting-formats20261115.spec.ts", validators: ["draftSchema"],
+    url: new URL("../../../tests/e2e/drafting-formats20261115.spec.ts", import.meta.url) },
 ])("keeps $file canonical validators on the verified Playwright TypeScript loader path", ({ file, validators, url }) => {
   const source = ts.createSourceFile(file, readFileSync(url, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const nodes: ts.Node[] = [];

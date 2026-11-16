@@ -86,6 +86,7 @@ export default defineConfig({
     /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/,
     /ram-2026-11-14-prod\.spec\.ts$/,
     /draft-quality20261114\.spec\.ts$/,
+    /drafting-formats20261115\.spec\.ts$/,
     /watch-acl-query-states\.spec\.ts$/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
@@ -172,6 +173,7 @@ export default defineConfig({
         /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/,
         /ram-2026-11-14-prod\.spec\.ts$/,
         /draft-quality20261114\.spec\.ts$/,
+        /drafting-formats20261115\.spec\.ts$/,
       ],
       use: {
         ...devices["Pixel 5"],

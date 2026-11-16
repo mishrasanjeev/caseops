@@ -743,7 +743,66 @@ def _independent_child_assignments(nodes):
         # Independent literal ABBA oracle; no partition() call or imported routing map.
         for index, node in enumerate(members):
             assignment[node] = number + (16 if index % 4 in (1, 2) else 0)
+    heavy = (
+        "tests/test_matter_readthrough_page_migration_20261028.py::"
+        "test_named_0007_to_0008_backfill_old_column_crud_and_restart_preserve_every_source[postgres]"
+    )
+    light = (
+        "tests/test_ip_upload_admission_postgres.py::"
+        "test_ip_upload_sqlite_guard_uses_actual_legacy_transaction_state[explicit-begin-True]"
+    )
+    if assignment.get(heavy) == 19 and assignment.get(light) == 3:
+        assignment[heavy], assignment[light] = 3, 19
     return assignment
+
+
+@pytest.mark.parametrize(
+    ("leading", "between", "omitted", "expected_exchange"),
+    [(2, 15, None, True), (2, 47, None, False), (18, 31, None, False),
+     (2, 15, "heavy", False), (2, 15, "light", False)],
+    ids=["measured-opposite", "same-child", "already-balanced", "missing-heavy", "missing-light"],
+)
+def test_measured_parent_three_exchange_preserves_every_case_and_child_count(
+    leading, between, omitted, expected_exchange,
+):
+    heavy = (
+        "tests/test_matter_readthrough_page_migration_20261028.py::"
+        "test_named_0007_to_0008_backfill_old_column_crud_and_restart_preserve_every_source[postgres]"
+    )
+    light = (
+        "tests/test_ip_upload_admission_postgres.py::"
+        "test_ip_upload_sqlite_guard_uses_actual_legacy_transaction_state[explicit-begin-True]"
+    )
+    nodes = ([f"tests/test_aa.py::test_case[{i:03}]" for i in range(leading)]
+             + [light]
+             + [f"tests/test_ja.py::test_case[{i:03}]" for i in range(between)]
+             + [heavy]
+             + [f"tests/test_zz.py::test_case[{i:03}]" for i in range(64)])
+    if omitted is not None:
+        nodes.remove(heavy if omitted == "heavy" else light)
+    ordered = sorted(nodes)
+    baseline = {}
+    for parent in range(1, 17):
+        members = ordered[parent-1::16]
+        for index, node in enumerate(members):
+            baseline[node] = parent + (16 if index % 4 in (1, 2) else 0)
+    expected = dict(baseline)
+    if expected_exchange:
+        assert baseline[heavy] == 19 and baseline[light] == 3
+        expected[heavy], expected[light] = 3, 19
+    actual = {}
+    for child in range(1, 33):
+        selected = partition(nodes, child, 32)
+        assert len(selected) == sum(value == child for value in baseline.values())
+        assert selected == [node for node in ordered if expected[node] == child]
+        for node in selected:
+            assert node not in actual
+            actual[node] = child
+    assert actual == expected and set(actual) == set(nodes)
+    assert {node for node in actual if actual[node] != baseline[node]} == (
+        {heavy, light} if expected_exchange else set()
+    )
+    assert all((actual[node]-1) % 16 == (baseline[node]-1) % 16 for node in nodes)
 
 
 @pytest.mark.parametrize("size", [32, 33, 64, 65, 3005])

@@ -458,6 +458,46 @@ describe("MatterDraftDetailPage", () => {
     );
   });
 
+  it.each([
+    ["conveyancing_deed", "deed"],
+    ["government_suit_notice", "notice"],
+    ["legal_notice_reply", "correspondence_reply"],
+    ["cheque_bounce_notice", "notice"],
+    ["property_dispute_notice", "notice"],
+  ])("uses document downloads without court actions for a new %s version", async (templateType, family) => {
+    fetchDraftMock.mockResolvedValue({
+      ...BASE_DRAFT, template_type: templateType,
+      versions: [{ ...BASE_DRAFT.versions[0], template_manifest: {
+        presentation_reference: { family },
+      } }],
+    });
+    render(withClient(<DraftDetailPage />));
+    await screen.findByTestId("draft-body-readonly");
+    expect(screen.getByTestId("draft-download-docx")).toBeVisible();
+    expect(screen.queryByTestId("court-profile-select")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("filing-checklist")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("draft-download-filing-bundle")).not.toBeInTheDocument();
+    expect(listCourtFormatProfilesMock).not.toHaveBeenCalled();
+    expect(draftFilingBundleUrlMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("tab", { name: "PDF preview" }));
+    expect(draftPdfUrlMock).toHaveBeenLastCalledWith("m-1", "d-1", "generic");
+    expect(pdfArtifactMock).toHaveBeenLastCalledWith(
+      "https://api.test/draft.pdf?court_profile=generic&version_id=v-1", "approved:false:Bail application",
+    );
+    expect(screen.getByText("Lawyer review is required before signing, registration or service.")).toBeVisible();
+    expect(screen.getByTestId("draft-download-pdf")).toBeEnabled();
+  });
+
+  it.each(["cheque_bounce_notice", "conveyancing_deed"])(
+    "preserves legacy %s court controls without relabelling its saved version", async templateType => {
+      fetchDraftMock.mockResolvedValue({ ...BASE_DRAFT, template_type: templateType });
+      render(withClient(<DraftDetailPage />));
+      expect(await screen.findByTestId("court-profile-select")).toBeVisible();
+      expect(screen.getByTestId("filing-checklist")).toBeVisible();
+      expect(screen.getByTestId("draft-download-filing-bundle")).toBeVisible();
+    },
+  );
+
   it("BUG001 separates draft text from the version-pinned PDF and downloads its exact bytes", async () => {
     fetchDraftMock.mockResolvedValue(BASE_DRAFT);
     useCapabilityMock.mockReturnValue(true);

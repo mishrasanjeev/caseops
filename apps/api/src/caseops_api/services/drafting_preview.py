@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import ModelRun
 from caseops_api.schemas.drafting_templates import DraftTemplateType
+from caseops_api.services.drafting_formats import DOCUMENT_VARIANTS
 from caseops_api.services.drafting_prompts import get_prompt_parts
 from caseops_api.services.llm import (
     AvailabilityFallbackProvider,
@@ -90,6 +91,30 @@ def generate_step_preview(
     write — the original pure-function behaviour is preserved for
     fixtures.
     """
+    if template_type == DraftTemplateType.CONVEYANCING_DEED:
+        from caseops_api.services.drafting_formats import selected_conveyancing_instrument
+
+        try:
+            selected_conveyancing_instrument(facts, partial=True)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=[{
+                    "loc": ["body", "facts", "instrument_type"],
+                    "msg": str(exc), "type": "value_error",
+                }],
+            ) from None
+    elif template_type in DOCUMENT_VARIANTS:
+        from caseops_api.services.drafting_formats import selected_document_variant
+
+        try:
+            selected_document_variant(template_type.value, facts, partial=True)
+        except ValueError as exc:
+            field = DOCUMENT_VARIANTS[template_type][0]
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=[{"loc": ["body", "facts", field], "msg": str(exc), "type": "value_error"}],
+            ) from None
     parts = get_prompt_parts(template_type)
     llm = provider or _default_preview_provider()
 
@@ -99,7 +124,7 @@ def generate_step_preview(
         "write the literal placeholder '[not yet specified]' rather "
         "than inventing a plausible value.\n\n"
         "If the user indicates a step group, focus the preview on that "
-        "section of the pleading. Do NOT produce a complete draft — the "
+        "section of the selected document. Do NOT produce a complete draft — the "
         "stepper issues the full draft separately.\n"
     )
     if step_group:

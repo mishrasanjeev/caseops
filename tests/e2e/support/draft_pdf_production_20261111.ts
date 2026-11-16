@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 
-import { devices, expect, type Browser, type Response, type TestInfo } from "@playwright/test";
+import { devices, expect, type Browser, type BrowserContextOptions, type Response, type TestInfo } from "@playwright/test";
 
 import type { Draft } from "../../../apps/web/lib/api/schemas";
 import { canonicalApiValidators } from "./canonical-api-validators";
 import { noPaidProviderHeaders } from "./cost-controls";
 import { assertPublicReleaseIdentity } from "./public-release-identity";
 import { allowedProductionDraftRead, assertReportedDraftSource, capturePdfDownloadsInMemory, citationReviewExportGuard, productionDraftRequestPolicy, productionDraftSettings } from "./draft_pdf_production_policy_20261111";
-import { assertDraftPdfRender } from "./draft_pdf_render_proof_20261111";
-import type { DraftPdfProfile } from "./draft_pdf_oracle_20261111";
+import { assertDraftPdfRender, readDraftPdfTitle } from "./draft_pdf_render_proof_20261111";
+import { presentationFamilyFromManifest, type DraftPdfProfile } from "./draft_pdf_oracle_20261111";
 
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 const fingerprint = (draft: Draft) => hash(JSON.stringify(draft));
@@ -23,10 +23,15 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
   expect(info.project.retries).toBe(0);
   expect([info.project.use.trace, info.project.use.screenshot, info.project.use.video].every(mediaOff),
     "Production trace/screenshot/video must be explicitly off").toBe(true);
-  const context = await browser.newContext({ ...(phone ? devices["Pixel 5"] : { viewport: { width: 1280, height: 1000 } }),
+  const contextOptions: BrowserContextOptions = { ...(phone ? devices["Pixel 5"] : { viewport: { width: 1280, height: 1000 } }),
     baseURL: settings.web, storageState: { cookies: [], origins: [] }, serviceWorkers: "block",
-    acceptDownloads: false, extraHTTPHeaders: noPaidProviderHeaders });
+    acceptDownloads: false, extraHTTPHeaders: noPaidProviderHeaders };
+  const hasTouch = contextOptions.hasTouch === true;
+  expect(hasTouch, "Selected context touch mode").toBe(phone);
+  expect(contextOptions.isMobile === true, "Selected context mobile mode").toBe(phone);
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
+  if (phone) expect(page.viewportSize()?.width, "Phone viewport").toBe(393);
   let logins = 0, nativeDownloads = 0, blockedExternal = 0;
   let attemptedMutations = 0;
   let pdfActionAllowed = false, passiveExports = 0;
@@ -94,7 +99,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       if (!profile) throw new Error("Resolved profile metadata is absent.");
       return profile;
     };
-    const source = { title: before.title, body: version.body, citations: version.citations, reviewRequired: before.review_required };
+    const source = { title: before.title, body: version.body, citations: version.citations, reviewRequired: before.review_required,
+      presentationFamily: presentationFamilyFromManifest(version.template_manifest) };
     const unchanged = async () => {
       const after = await readDraft();
       assertReportedDraftSource(after, hash);
@@ -141,7 +147,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       else await expect(page.getByTestId("court-profile-select").locator(`option[value="${resolvedProfile}"]`)).toHaveCount(1);
       const bytes = await response.body();
       expect(bytes.subarray(0, 5).equals(Buffer.from("%PDF-")), "Real PDF bytes").toBe(true);
-      return { hash: hash(bytes), bytes: bytes.length, profile: resolvedProfile };
+      return { hash: hash(bytes), bytes: bytes.length, profile: resolvedProfile,
+        pdfTitle: source.presentationFamily ? await readDraftPdfTitle(bytes) : undefined };
     };
     const memoryDownload = async (expected: { hash: string; bytes: number }, count: number, profile?: string) => {
       const checked = receipt();
@@ -158,7 +165,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     };
     stage = "auto-profile-parity";
     const auto = await checkedPdf(initial);
-    const autoPages = await assertDraftPdfRender(page, profileFor(auto.profile), source);
+    const autoPages = await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch);
     await memoryDownload(auto, 1);
     stage = "selected-profile-parity";
     await expect(page.getByTestId("court-profile-select").locator('option[value="generic"]')).toHaveCount(1);
@@ -166,7 +173,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await page.getByTestId("court-profile-select").selectOption("generic");
     const selected = await checkedPdf(await selectedPdf, "generic");
     expect(auto.profile === "generic" || selected.hash !== auto.hash, "A different resolved preset changes the exported snapshot").toBe(true);
-    const selectedPages = await assertDraftPdfRender(page, profileFor(selected.profile), source);
+    const selectedPages = await assertDraftPdfRender(page, profileFor(selected.profile), { ...source, pdfTitle: selected.pdfTitle }, hasTouch);
     await memoryDownload(selected, 2, "generic");
     stage = "reload-parity";
     pdfActionAllowed = false;
@@ -180,7 +187,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     pdfActionAllowed = true;
     await page.getByRole("tab", { name: "PDF preview" }).click();
     expect((await checkedPdf(await reloadedPdf)).hash === auto.hash, "Reload preserves automatic-profile bytes").toBe(true);
-    expect(await assertDraftPdfRender(page, profileFor(auto.profile), source)).toBe(autoPages);
+    expect(await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch)).toBe(autoPages);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
     await unchanged();
     await release();

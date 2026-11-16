@@ -426,6 +426,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "tests/e2e/support/ip-portfolio-export-completion.ts" \
   "tests/e2e/ram-2026-11-11-bugs.spec.ts" \
   "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts" \
+  "tests/e2e/drafting-formats20261115.spec.ts" \
   "tests/e2e/support/env.ts" \
   "tests/e2e/support/ram-bugs4.ts" \
   "tests/e2e/support/canonical-api-validators.ts" \

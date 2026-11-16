@@ -64,6 +64,10 @@ def _iter_all_scenarios() -> list[tuple[DraftTemplateType, str, dict, dict]]:
         tt = DraftTemplateType(type_key)
         for s in block["scenarios"]:
             out.append((tt, s["key"], s["facts"], s))
+    from caseops_api.scripts.drafting_reference_fixtures import reference_scenarios
+
+    for type_key, key, facts in reference_scenarios(_load("reference_formats.json")):
+        out.append((DraftTemplateType(type_key), key, facts, {"must_pass_rules": []}))
     return out
 
 

@@ -4652,6 +4652,7 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
 _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
     ("retained-draft-journey", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"),
+    ("draft-formats-journey", "tests/e2e/drafting-formats20261115.spec.ts"),
     ("e2e-env", "tests/e2e/support/env.ts"),
     ("ram-bugs4", "tests/e2e/support/ram-bugs4.ts"),
     ("canonical-api-validators", "tests/e2e/support/canonical-api-validators.ts"),

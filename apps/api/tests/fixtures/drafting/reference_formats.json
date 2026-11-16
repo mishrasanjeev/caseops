@@ -1,0 +1,129 @@
+{
+  "description": "Synthetic owner-reference format fixtures. These are schema and workflow data, not legal-quality or procedural-eligibility verdicts.",
+  "court_facts": {
+    "court_name": "[Confirmed court or forum]",
+    "parties": "[Applicant and responding parties, roles and addresses]",
+    "material_facts": "[User-confirmed chronology; no sample events from the reference manual]",
+    "governing_law": "[Current law confirmed by reviewing counsel]",
+    "grounds": "[Grounds supported by supplied facts and legal sources]",
+    "relief_sought": "[Specific relief requested by the user]"
+  },
+  "court_forms": {
+    "injunction_breach_application": "[Actual order, service or knowledge evidence, and alleged breaches]",
+    "indigent_person_application": "[Disclosed means and assets; eligibility is not presumed]",
+    "execution_application": "[Decree, parties, payment or satisfaction history, and requested mode of execution]",
+    "restitution_conjugal_rights": "[Marriage, cohabitation, alleged withdrawal and requested relief]",
+    "judicial_separation_petition": "[Marriage particulars, supplied grounds and separation relief]",
+    "mutual_consent_divorce": "[Both joint petitioners, actual consent, separation and agreed settlement particulars]",
+    "letters_of_administration": "[Deceased, applicant's basis, estate, heirs and actual will position]",
+    "succession_certificate": "[Deceased, relationship, heirs, debts and securities schedule]",
+    "cheque_bounce_complaint": "[Liability, cheque, dishonour, notice, service and payment chronology]",
+    "maintenance_application": "[Each applicant, representation, relationship, needs, income and means]",
+    "consumer_complaint": "[Transaction, grievance, communications, valuation and requested remedies]",
+    "domestic_violence_complaint": "[Relationship, household, alleged acts, evidence and each remedy requested]"
+  },
+  "notice_facts": {
+    "sender_details": "[Supplied sender or counsel and address]",
+    "addressee_details": "[Actual recipient and service address]",
+    "subject": "[Subject supplied by the user]",
+    "material_facts": "[Actual chronology supplied by the user]",
+    "governing_law": "[Confirmed applicable law]",
+    "required_action": "[Action requested by the user]"
+  },
+  "notice_forms": {
+    "government_suit_notice": {
+      "service_details": "[Confirmed recipient, service requirements and mode]"
+    },
+    "legal_notice_reply": {
+      "reference_document": "[Actual original notice and its supplied date]",
+      "paragraph_wise_reply": "[The user's explicit admissions, denials and explanations]",
+      "preliminary_objections": "[Only the objections actually supplied]"
+    }
+  },
+  "deed_facts": {
+    "parties": "[Supplied parties, capacities, roles and addresses]",
+    "transaction_facts": "[Actual agreed transaction and background supplied by the user]",
+    "governing_law": "[Confirmed applicable law and jurisdiction]",
+    "operative_terms": "[Terms actually agreed by the parties; no presumed execution]"
+  },
+  "existing_variants": {
+    "civil_suit": {
+      "facts": {
+        "plaintiff_name": "Synthetic plaintiff",
+        "defendant_name": "Synthetic defendant",
+        "cause_of_action_date": "2026-11-01",
+        "cause_of_action_place": "Synthetic confirmed venue",
+        "suit_valuation_inr": 0.5,
+        "court_name": "Synthetic confirmed court",
+        "facts_brief": "Synthetic supplied chronology and requested relief only. Missing claim, property and transaction particulars remain explicit placeholders for counsel to complete.",
+        "relief_sought": ["[Only the relief actually instructed by the user]"]
+      },
+      "variants": {
+        "General civil plaint": {"suit_format": "General civil plaint"},
+        "Summary recovery": {"suit_format": "Summary recovery"},
+        "Permanent injunction": {"suit_format": "Permanent injunction"},
+        "Ejectment and damages": {"suit_format": "Ejectment and damages"},
+        "Specific performance": {"suit_format": "Specific performance"}
+      }
+    },
+    "special_leave_petition": {
+      "facts": {
+        "petitioner_name": "Synthetic petitioner",
+        "respondent_name": "Synthetic respondent",
+        "impugned_order_summary": "[Actual impugned order, proceeding and outcome supplied by the user; no sample dispute is adopted]",
+        "impugned_order_date": "2026-11-01",
+        "high_court_name": "Synthetic confirmed High Court",
+        "questions_of_law": ["[Actual question instructed by reviewing counsel]"],
+        "grounds_brief": "[Grounds actually supported by the supplied record and confirmed legal sources; no entitlement, procedural compliance or legal proposition is inferred from this synthetic fixture]"
+      },
+      "variants": {
+        "civil": {"slp_kind": "civil"},
+        "criminal": {"slp_kind": "criminal"}
+      }
+    },
+    "property_dispute_notice": {
+      "facts": {
+        "sender_name": "Synthetic sender",
+        "recipient_name": "Synthetic recipient",
+        "property_address": "[Actual premises and description supplied by the user]",
+        "property_type": "flat",
+        "title_basis": "other",
+        "relief_sought": "[Actual possession or other demand supplied by the user; no invented breach or arrears]",
+        "response_deadline_days": 15,
+        "tenancy_particulars": "[Actual occupation relationship, terms and chronology]",
+        "governing_law": "[Applicable law confirmed by reviewing counsel]",
+        "notice_requirements": "[Confirmed termination basis, period and service requirements; not a default]"
+      },
+      "variants": {
+        "General property dispute": {"notice_format": "General property dispute"},
+        "Notice to quit / ejectment": {"notice_format": "Notice to quit / ejectment"}
+      }
+    },
+    "writ_petition": {
+      "facts": {
+        "petitioner_name": "Synthetic petitioner",
+        "respondent_name": "Actual respondent",
+        "writ_court": "high_court",
+        "impugned_action": "[Actual supplied action, inaction or detention particulars]",
+        "prayer_clauses": ["[Actual relief requested by the user]"]
+      },
+      "variants": {
+        "civil": {"writ_kind": "civil", "writ_type": "mandamus"},
+        "criminal": {"writ_kind": "criminal", "writ_type": "habeas_corpus"}
+      }
+    }
+  },
+  "render_samples": {
+    "execution_application": "IN THE COURT OF [actual court]\nExecution Petition No [number]\nIn Civil Suit No [number]\n[Decree holder]\nVERSUS\n[Judgment debtor]\nEXECUTION APPLICATION\nPARTICULARS OF EXECUTION\n1. Suit number: [actual number]\n2. Parties: [actual parties and roles]\n3. Decree or order date: [actual date]\n4. Appeal position: [supplied position]\n5. Payment or satisfaction: [supplied details]\n6. Prior execution applications: [dates and results]\n7. Decree amount, interest or other relief: [actual decree terms]\n8. Awarded costs: [actual amount]\n9. Person against whom execution is sought: [actual party]\n10. Court assistance requested: [actual requested mode]\nPRAYER\n(a) [Relief tied to the actual decree]\nVERIFICATION\n[Actual paragraph ranges and knowledge or information basis]\n[Place and date]\nDecree Holder\nAdvocate",
+    "succession_certificate": "IN THE COURT OF [actual court]\nSuccession Petition No [number]\n[Petitioner and actual respondents]\nPETITION FOR SUCCESSION CERTIFICATE\nFACTS\n1. Deceased: [identity, death and residence particulars]\n2. Relationship and known heirs: [supplied particulars]\n3. Will position and prior proceedings: [actual supplied position]\n4. Jurisdiction and applicable law: [confirmed particulars]\nDEBTS AND SECURITIES\n[Description, identifying particulars and supplied value of each debt or security]\nPRAYER\n(a) [Actual certificate and powers requested]\nVERIFICATION\n[Actual knowledge and information paragraph ranges]\n[Place and date]\nPetitioner\nAdvocate",
+    "legal_notice_reply": "FROM: [actual sender or counsel]\nTO: [actual addressee]\nDate: [actual date]\nREPLY TO LEGAL NOTICE\nSubject: Notice dated [actual supplied notice date]\nPRELIMINARY OBJECTIONS\n[Objections actually instructed by the client]\nPARAGRAPH-WISE REPLY\n1. Reply to paragraph 1: [actual admission, denial or explanation]\n2. Reply to paragraph 2: [actual admission, denial or explanation]\n[Further replies matching the actual original notice]\n[Actual requested response or action]\nYours faithfully\nAdvocate"
+  },
+  "instruments": [
+    "Sale deed",
+    "Mortgage deed",
+    "Partnership deed",
+    "Dissolution of partnership",
+    "Relinquishment deed",
+    "Gift deed"
+  ]
+}

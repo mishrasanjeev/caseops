@@ -180,11 +180,25 @@ _PROPERTY_NOTICE = PromptParts(
         "dispute.\n"
         "MANDATORY OPENING: the body MUST open with explicit `FROM:` and "
         "`TO:` lines (literal labels, capitalised) before the salutation. "
-        "This is how legal-notice templates are formatted in Indian "
-        "practice and how the receiving party identifies who is "
-        "demanding what. Skip this and the registry will treat the "
-        "filing as a defective notice.\n"
-        "REQUIRED STRUCTURE:\n"
+        "Identify the actual sender, addressee, date, supplied service "
+        "method and subject clearly.\n"
+        "SELECT THE NOTICE STRUCTURE FROM notice_format:\n"
+        " - For 'Notice to quit / ejectment', identify the actual landlord/tenant "
+        "or other supplied occupation relationship, the precise premises, supplied "
+        "tenancy terms and chronology, and the actual basis and demand for "
+        "termination/possession. Use tenancy_particulars, governing_law and "
+        "notice_requirements. Keep any supplied arrears or other demand separate. "
+        "Unknown dates, legal basis, period or service particulars remain placeholders. "
+        "The response deadline is not a substitute for the legally applicable "
+        "termination/notice period. Do not label a tenant a trespasser, presume valid "
+        "termination or import the sample's dates and arrears. Do not force the "
+        "general encroachment/title-chain or statutory paragraphs below into this branch.\n"
+        " - Otherwise use the general property-dispute demand structure below; "
+        "no exact worked example of every property dispute is claimed. If notice_format "
+        "is absent in a free-form request, follow the notice actually requested in the "
+        "authorized facts/title; do not turn an explicit quit notice into an "
+        "encroachment notice merely because the selector was omitted.\n"
+        "GENERAL PROPERTY-DISPUTE STRUCTURE:\n"
         " 1. `FROM:` line with the sender's full address.\n"
         " 2. `TO:` line with the recipient's full address.\n"
         " 3. Sender and recipient addresses (repeat in the salutation).\n"
@@ -342,6 +356,16 @@ _CRIMINAL_COMPLAINT = PromptParts(
 
 _CIVIL_SUIT = PromptParts(
     system=(
+        "Use suit_format to select the plaint's structure: summary recovery "
+        "identifies the supplied debt, instrument and itemized claim; permanent "
+        "injunction separates the asserted right, alleged interference and exact "
+        "restraint sought; ejectment and damages separates property/occupation, "
+        "termination facts, possession and the supplied damages calculation; "
+        "specific performance identifies the agreement, supplied performance "
+        "facts and precise performance requested. General civil plaint retains "
+        "the ordinary structure. Selection alone never proves eligibility, "
+        "service, title, readiness, breach, entitlement or an amount. Leave "
+        "missing particulars as placeholders and apply current supported law.\n"
         "You are drafting a plaint in a civil suit. If the user has "
         "marked it a commercial suit, apply Commercial Courts Act, "
         "2015 requirements (pre-institution mediation under s.12A, "
@@ -450,8 +474,11 @@ _WRIT_PETITION = PromptParts(
         " 1. Cause title naming the writ court, petitioner, and "
         "respondent(s). Use 'In the High Court of …' or 'In the "
         "Supreme Court of India' as appropriate.\n"
-        " 2. Petition number placeholder: 'Writ Petition (C) No. ___ "
-        "of 20__'.\n"
+        " 2. Petition number placeholder matching writ_kind: 'Writ Petition (C) "
+        "No. ___ of 20__' for civil, or 'Writ Petition (Crl.) No. ___ of 20__' "
+        "for criminal, subject to the actual court's designation. If writ_kind "
+        "is absent, use the confirmed proceeding or a placeholder; do not silently "
+        "relabel a criminal matter as civil.\n"
         " 3. List of dates and events (chronology). At least the "
         "impugned action date (when known) and the date of filing.\n"
         " 4. Synopsis: half a page, the proposition + relief in plain "
@@ -991,6 +1018,9 @@ _PROBATE_PETITION = PromptParts(
 
 _SLP = PromptParts(
     system=(
+        "Use the supplied slp_kind for the civil or criminal jurisdiction title "
+        "and correct procedural roles throughout. Keep the two formats distinct; "
+        "do not invent custody, surrender, sentence or exemption particulars.\n"
         "You are drafting a Special Leave Petition under Article 136 "
         "of the Constitution. Follow Supreme Court Rules 2013 + the "
         "Practice Directions of the Registrar.\n"
@@ -1347,6 +1377,41 @@ _FILING_INDEX = PromptParts(
 
 
 _REGISTRY: dict[DraftTemplateType, PromptParts] = {
+    DraftTemplateType.CONVEYANCING_DEED: PromptParts(
+        system=(
+            "Draft only the instrument explicitly selected in instrument_type. "
+            "Do not default an unspecified instrument to a sale or gift. "
+            "Use the parties, transaction facts, confirmed governing law and agreed terms "
+            "supplied. "
+            "Retain the selected instrument's party-introduction format: BETWEEN and AND for "
+            "sale, partnership, dissolution and gift; BY and IN FAVOUR OF for mortgage and "
+            "relinquishment. Include only the actual parties and capacities supplied. "
+            "Sale: vendor/vendee, supplied title and property, consideration, transfer and "
+            "possession terms. "
+            "Mortgage: mortgagor/mortgagee, secured obligation, supplied security property and "
+            "agreed repayment/security terms. "
+            "Partnership: partners, firm/business, supplied contributions, profit/loss, "
+            "management, accounts and agreed exit terms. "
+            "Dissolution: partners and firm, supplied dissolution date, accounts, "
+            "assets/liabilities, settlement and releases actually agreed. "
+            "Relinquishment: releasor/releasee, supplied source of interest, precise share and "
+            "scope of release. "
+            "Gift: donor/donee, supplied property and gift/acceptance terms; never invent a "
+            "relationship, capacity or completed acceptance. "
+            "Retain separate recitals, numbered operative terms, schedules and execution blocks. "
+            "Never add a court cause title, litigation grounds, a prayer for decree or a pleading "
+            "verification. "
+            "Do not invent title, payment, shares, warranties, consent, registration, witnesses "
+            "or completed signatures. "
+            "Unknown execution particulars remain placeholders; distinguish agreed obligations "
+            "from completed acts. "
+            "Do not import the manual's amounts, interest rates, dates, party names or property "
+            "examples. "
+            "Use retrieved legal sources for legal propositions; the format manual is not a legal "
+            "authority."
+        ),
+        focus="Six conveyancing formats using supplied transaction details",
+    ),
     DraftTemplateType.BAIL: _BAIL,
     DraftTemplateType.ANTICIPATORY_BAIL: _ANTICIPATORY_BAIL,
     DraftTemplateType.DIVORCE_PETITION: _DIVORCE,
@@ -1382,9 +1447,45 @@ _REGISTRY: dict[DraftTemplateType, PromptParts] = {
 }
 
 
+def _register_reference_prompts() -> None:
+    from caseops_api.services.drafting_formats import REFERENCE_TEMPLATES
+
+    for key, reference in REFERENCE_TEMPLATES.items():
+        correspondence = reference.family in {"notice", "correspondence_reply"}
+        _REGISTRY[DraftTemplateType(key)] = PromptParts(
+            system=(
+                f"Draft the selected {reference.label} from the supplied facts "
+                "and confirmed governing law. "
+                + reference.instructions
+                + " Use the specific current procedure and legal sources supplied for this matter; "
+                "the manual's historical enactments and example facts are not authority. "
+                "Unknown particulars require explicit placeholders. Do not claim eligibility, "
+                "compliance, signature, service, consent or an oath has been established without "
+                "supplied support. "
+                + (
+                    "Use correspondence headings, addressee, subject and closing, without a court "
+                    "caption or pleading verification."
+                    if correspondence else
+                    "Use the actual court or forum, correct procedural roles, numbered material "
+                    "facts, distinct grounds, relief and applicable verification placeholders."
+                )
+            ),
+            focus=reference.label,
+        )
+
+
+_register_reference_prompts()
+
+
 def get_prompt_parts(template_type: DraftTemplateType) -> PromptParts:
     """Return the specialised system prompt for ``template_type``."""
-    return _REGISTRY[template_type]
+    from caseops_api.services.drafting_formats import format_instructions
+
+    parts = _REGISTRY[template_type]
+    return PromptParts(
+        system=parts.system + "\n\n" + format_instructions(str(template_type)),
+        focus=parts.focus,
+    )
 
 
 __all__ = [

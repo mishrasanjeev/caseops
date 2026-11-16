@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -28,8 +29,17 @@ from caseops_api.services.court_format_profiles import (
     resolve_profile,
     validate_required_fields,
 )
-from caseops_api.services.drafting import _load_draft, _load_matter
+from caseops_api.services.drafting import _load_draft, _load_manifest, _load_matter
+from caseops_api.services.drafting_format_blocks import (
+    EXECUTION_COLUMN_SHARES,
+    EXECUTION_PADDING_MM,
+    ExecutionTable,
+    FormatStructureError,
+    document_blocks,
+)
 from caseops_api.services.session_context import SessionContext
+
+ExecutionRowLayout = tuple[list[str], list[str], list[str]]
 
 
 def render_version_pdf(
@@ -78,9 +88,25 @@ def render_version_pdf(
         )
 
     try:
+        from caseops_api.services.drafting_formats import read_format_reference
+
+        template_manifest = _load_manifest(version.template_manifest_json, {})
+        presentation = read_format_reference(template_manifest)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "The saved document format reference is unavailable. "
+                "Regenerate or review this version before export."
+            ),
+        ) from None
+    try:
+        noncourt = presentation and presentation["family"] in {
+            "notice", "correspondence_reply", "deed",
+        }
         profile = resolve_profile(
-            explicit_key=court_profile_key,
-            court_name=getattr(matter, "court_name", None),
+            explicit_key=court_profile_key or ("generic" if noncourt else None),
+            court_name=None if noncourt else getattr(matter, "court_name", None),
         )
     except ValueError as exc:
         raise HTTPException(
@@ -98,23 +124,24 @@ def render_version_pdf(
         facts=_draft_facts(draft),
         matter_court_name=getattr(matter, "court_name", None),
     )
+    if presentation and presentation["family"] in {"notice", "correspondence_reply", "deed"}:
+        required_field_findings = []
     missing_required_field_count = sum(
         1 for finding in required_field_findings if not finding.satisfied
     )
 
-    pdf_bytes = render_pdf_bytes(
-        profile=profile,
-        title=draft.title,
-        matter_title=matter.title,
-        matter_code=matter.matter_code,
-        draft_type=str(draft.draft_type),
-        revision=version.revision,
-        status_label=str(draft.status),
-        body=version.body,
-        citations=citations,
-        review_required=draft.review_required,
-        created_at=version.created_at,
-    )
+    try:
+        pdf_bytes = render_pdf_bytes(
+            profile=profile, title=draft.title, matter_title=matter.title,
+            matter_code=matter.matter_code, draft_type=str(draft.draft_type),
+            revision=version.revision, status_label=str(draft.status), body=version.body,
+            citations=citations, review_required=draft.review_required,
+            created_at=version.created_at, template_manifest=template_manifest,
+        )
+    except FormatStructureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc),
+        ) from None
 
     safe_title = (
         "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in draft.title).strip("-")[
@@ -145,11 +172,23 @@ def render_pdf_bytes(
     citations: list[str],
     review_required: bool,
     created_at: datetime | None = None,
+    template_manifest: object = None,
 ) -> bytes:
     """Pure-function PDF renderer. Separated from ``render_version_pdf``
     so unit tests can exercise the layout without an authorisation or
     DB session."""
+    from caseops_api.services.drafting_formats import read_format_reference
     from caseops_api.services.pdf_layout import safe_pdf_class
+
+    presentation = read_format_reference(template_manifest)
+    body_blocks = list(document_blocks(body or "", presentation)) if presentation else []
+    if presentation and presentation["family"] != "registry":
+        from dataclasses import replace
+
+        profile = replace(
+            profile, show_court_header_first_page=False,
+            show_court_header_subsequent_pages=False,
+        )
 
     pdf_class = safe_pdf_class()
 
@@ -227,17 +266,14 @@ def render_pdf_bytes(
     pdf.alias_nb_pages()  # populates {nb} in the footer page-number string
     pdf.add_page()
 
-    # Title block
-    pdf.set_font(profile.body_font, size=profile.title_font_size_pt, style="B")
-    pdf.multi_cell(
-        0,
-        8,
-        _ascii_safe(title),
-        new_x="LMARGIN",
-        new_y="NEXT",
-        align="C",
-    )
-    pdf.ln(1)
+    # New reference versions carry their caption/title in the approved body.
+    # Legacy versions retain the existing title and metadata presentation.
+    if not presentation:
+        pdf.set_font(profile.body_font, size=profile.title_font_size_pt, style="B")
+        pdf.multi_cell(
+            0, 8, _ascii_safe(title), new_x="LMARGIN", new_y="NEXT", align="C",
+        )
+        pdf.ln(1)
 
     # Matter meta — small italic, single line
     pdf.set_font(profile.body_font, size=profile.body_font_size_pt - 2, style="I")
@@ -245,22 +281,26 @@ def render_pdf_bytes(
         f"Matter: {matter_title} ({matter_code})  ·  "
         f"Type: {draft_type}  ·  Revision {revision}  ·  Status: {status_label}"
     )
-    pdf.multi_cell(
-        0,
-        5,
-        _ascii_safe(meta_line),
-        new_x="LMARGIN",
-        new_y="NEXT",
-        align="C",
-    )
-    pdf.ln(3)
+    if not presentation:
+        pdf.multi_cell(
+            0, 5, _ascii_safe(meta_line), new_x="LMARGIN", new_y="NEXT", align="C",
+        )
+        pdf.ln(3)
+    else:
+        pdf.set_title(title)
+        pdf.set_keywords(
+            f"format={presentation['version']}; source={presentation['source_sha256']}; "
+            f"profile={presentation['profile']}; revision={revision}; status={status_label}"
+        )
 
     pdf.set_font(profile.body_font, size=profile.body_font_size_pt - 2, style="I")
     pdf.multi_cell(
         0,
         5,
         _ascii_safe(
-            f"Layout preset: {profile.key}. Court rules unverified; lawyer review required."
+            "Lawyer review required before signing, registration or service."
+            if presentation and presentation["family"] in {"notice", "correspondence_reply", "deed"}
+            else f"Layout preset: {profile.key}. Court rules unverified; lawyer review required."
         ),
         new_x="LMARGIN",
         new_y="NEXT",
@@ -283,7 +323,7 @@ def render_pdf_bytes(
     # Body — split on blank lines into paragraphs; respect single \n
     # as soft line breaks within a paragraph.
     pdf.set_font(profile.body_font, size=profile.body_font_size_pt)
-    for block in (body or "").split("\n\n"):
+    for block in (() if presentation else (body or "").split("\n\n")):
         block = block.strip()
         if not block:
             continue
@@ -297,6 +337,62 @@ def render_pdf_bytes(
             new_y="NEXT",
         )
         pdf.ln(2)
+
+    if presentation:
+        previous_blank = False
+        table_layouts: dict[int, list[ExecutionRowLayout]] = {}
+        for block_index, block in enumerate(body_blocks):
+            if isinstance(block, ExecutionTable):
+                layout = table_layouts.get(block_index)
+                if layout is None:
+                    layout = _execution_table_layout(pdf, block, profile)
+                _draw_execution_table(pdf, layout, profile)
+                previous_blank = False
+                continue
+            line = block
+            blank = not line.text.strip()
+            if blank:
+                if not previous_blank:
+                    pdf.ln(2)
+                previous_blank = True
+                continue
+            previous_blank = False
+            height = profile.body_line_height_mm
+            pdf.set_font(
+                profile.body_font,
+                size=profile.body_font_size_pt,
+                style="B" if line.bold else "",
+            )
+            if line.keep_with_next:
+                # Measure the actual wrapped heading; two assumed physical
+                # lines cannot keep a long caption with the next body line.
+                heading_height = pdf.multi_cell(
+                    0, height, _ascii_safe(line.text),
+                    new_x="LMARGIN", new_y="NEXT", align=line.alignment,
+                    dry_run=True, output="HEIGHT",
+                )
+                next_index = None
+                for index in range(block_index + 1, len(body_blocks)):
+                    following = body_blocks[index]
+                    if isinstance(following, ExecutionTable) or following.text.strip():
+                        next_index = index
+                        break
+                next_height = height
+                if next_index is not None:
+                    next_table = body_blocks[next_index]
+                    if isinstance(next_table, ExecutionTable):
+                        layout = _execution_table_layout(pdf, next_table, profile)
+                        table_layouts[next_index] = layout
+                        next_height = (
+                            max(len(layout[0][0]), len(layout[0][1])) * height
+                            + 2 * EXECUTION_PADDING_MM
+                        )
+                if pdf.will_page_break(float(heading_height) + next_height + 2):
+                    pdf.add_page()
+            pdf.multi_cell(
+                0, height, _ascii_safe(line.text),
+                new_x="LMARGIN", new_y="NEXT", align=line.alignment,
+            )
 
     if citations:
         pdf.ln(2)
@@ -315,6 +411,83 @@ def render_pdf_bytes(
     out = io.BytesIO()
     out.write(bytes(pdf.output()))
     return out.getvalue()
+
+
+def _execution_table_layout(
+    pdf: Any, table: ExecutionTable, profile: CourtFormatProfile,
+) -> list[ExecutionRowLayout]:
+    """Measure the same fonts/widths used for drawing, with no emitted bytes."""
+    widths = tuple(pdf.epw * share for share in EXECUTION_COLUMN_SHARES)
+    layout = []
+    with pdf.local_context():
+        for row in table.rows:
+            cells = []
+            for index, text in enumerate((row.ordinal, row.particular, row.value)):
+                pdf.set_font(
+                    profile.body_font, size=profile.body_font_size_pt,
+                    style="B" if index < 2 else "",
+                )
+                lines = pdf.multi_cell(
+                    widths[index] - 2 * EXECUTION_PADDING_MM,
+                    profile.body_line_height_mm, _ascii_safe(text),
+                    dry_run=True, output="LINES", new_x="LMARGIN", new_y="NEXT",
+                )
+                cells.append(lines or [""])
+            layout.append((cells[0], cells[1], cells[2]))
+    return layout
+
+
+def _draw_execution_table(
+    pdf: Any, layout: list[ExecutionRowLayout], profile: CourtFormatProfile,
+) -> None:
+    """Split tall values across pages without clipping or repeating source text."""
+    widths = tuple(pdf.epw * share for share in EXECUTION_COLUMN_SHARES)
+    padding = EXECUTION_PADDING_MM
+    height = profile.body_line_height_mm
+    for number_lines, label_lines, value_lines in layout:
+        offset = 0
+        first = True
+        total = max(len(number_lines), len(label_lines), len(value_lines))
+        while offset < total:
+            available = int((pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height)
+            minimum = max(len(number_lines), len(label_lines)) if first else 1
+            if available < minimum:
+                pdf.add_page()
+                available = int(
+                    (pdf.h - pdf.b_margin - pdf.get_y() - 2 * padding) // height
+                )
+                if available < minimum:
+                    raise FormatStructureError(
+                        "The execution table label cannot fit this layout.",
+                    )
+            count = min(available, total - offset)
+            row_height = count * height + 2 * padding
+            left, top = pdf.l_margin, pdf.get_y()
+            cell_lines = (
+                number_lines if first else [], label_lines if first else [],
+                value_lines[offset:offset + count],
+            )
+            # Each graphics context belongs to one physical page. Restoring a
+            # pre-table font state after several pages can leave its cached
+            # "font already emitted" flag attached to the wrong page.
+            with pdf.local_context(draw_color=(0, 0, 0), line_width=0.15):
+                for index, lines in enumerate(cell_lines):
+                    x = left + sum(widths[:index])
+                    pdf.rect(x, top, widths[index], row_height)
+                    if lines:
+                        pdf.set_xy(x + padding, top + padding)
+                        pdf.set_font(
+                            profile.body_font, size=profile.body_font_size_pt,
+                            style="B" if index < 2 else "",
+                        )
+                        pdf.multi_cell(
+                            widths[index] - 2 * padding, height, "\n".join(lines),
+                            align="C" if index == 0 else "L",
+                            new_x="LMARGIN", new_y="NEXT",
+                        )
+            pdf.set_xy(left, top + row_height)
+            first = False
+            offset += count
 
 
 def _ascii_safe(text: str) -> str:

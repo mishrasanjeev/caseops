@@ -17,6 +17,8 @@ const ALLOWED_UUID_RUNS: Record<string, string> = {
     "Loopback-only console journey (never runs against production); its local fixture endpoint is keyed by the run id.",
   "ram-2026-10-22-drafting.spec.ts":
     "Loopback-only journey on its own freshly bootstrapped tenant; support/ram_batch3_draft_fixture.py requires a UUID run.",
+  "drafting-formats20261115.spec.ts":
+    "Loopback-only format journey on its own fresh tenant; the same support/ram_batch3_draft_fixture.py requires a UUID and binds the exact company slug and Matter title.",
 };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");

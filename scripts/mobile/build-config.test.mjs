@@ -248,6 +248,7 @@ const rootWebMobileSourceTriggers = [
   'license-policy/reviewed-packages.json', 'license-policy/upstream/**',
   'tests/e2e/ram-2026-11-11-bugs.spec.ts', 'tests/fixtures/node-default-tls-probe.cjs',
   'tests/e2e/ram-2026-10-22-drafting.prod.spec.ts',
+  'tests/e2e/drafting-formats20261115.spec.ts',
   'tests/fixtures/statutes/structured-schedule-api.json',
 ];
 const mobileSourceWorkflow = () => require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
@@ -326,7 +327,7 @@ function assertMobileBuildTriggerCoverage(workflow, inputs) {
   }
 }
 
-test('mobile source CI retains every legacy filter and only the nine finite root web additions', () => {
+test('mobile source CI retains every legacy filter and only the finite root web additions', () => {
   assertMobileSourceTriggers(mobileSourceWorkflow());
 });
 

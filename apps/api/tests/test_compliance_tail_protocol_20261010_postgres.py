@@ -69,6 +69,7 @@ from tests.test_document_execution_protocol_20261010_postgres import (
     _historical_identity_columns,
     _wait_for_legacy_boundary,
 )
+from tests.test_document_finalizer_overlap_20261009_postgres import _OwnedSessionListeners
 from tests.test_document_worker_claims_20261010_postgres import _parsed, _worker
 from tests.test_matter_writer_admission_postgres import _fixture
 from tests.test_postgres_validation import _ip_race_context
@@ -799,8 +800,10 @@ def test_current_actual_manual_and_court_callers_keep_marker(tail_database, monk
         assert paid_providers_blocked_for_request()
         observations.append({"event": event_name, **fields})
 
+    listeners = _OwnedSessionListeners()
     audit = SimpleNamespace(
-        engine=database.engine, session=scoped_session, record=record, pids={}
+        engine=database.engine, session=scoped_session, record=record, pids={},
+        listen_session=listeners.listen,
     )
     upload = _UploadPhase(audit) if path == "attachment_upload" else None
     fixture = _seed(audit)
@@ -820,7 +823,12 @@ def test_current_actual_manual_and_court_callers_keep_marker(tail_database, monk
     try:
         _mutate(audit, fixture, path, monkeypatch, upload)
     finally:
-        reset_automated_test_request(token)
+        try:
+            # _mutate has left its session context; this serial caller has no
+            # worker pool. Preserve its ordinary Session and existing SQL.
+            listeners.detach()
+        finally:
+            reset_automated_test_request(token)
     with Session(audit.engine) as session:
         runs = list(
             session.scalars(

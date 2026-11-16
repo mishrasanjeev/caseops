@@ -114,7 +114,9 @@ function buildDefaults(fields: DraftingFieldSpec[]): Record<string, unknown> {
         out[f.name] = "";
         break;
       case "enum":
-        out[f.name] = f.enum_options?.[0] ?? "";
+        // A transaction must not silently become a sale because it happens to
+        // be the first supported instrument. Other existing enums keep their defaults.
+        out[f.name] = f.name === "instrument_type" ? "" : f.enum_options?.[0] ?? "";
         break;
       default:
         out[f.name] = "";
@@ -257,11 +259,16 @@ function StepperInner({
 
   const createMutation = useMutation({
     mutationFn: async (values: FieldValues) => {
-      const title = deriveTitle(template.display_name, values);
+      const title = template.template_type === "conveyancing_deed"
+        && typeof values.instrument_type === "string"
+        ? values.instrument_type
+        : deriveTitle(template.display_name, values);
       return createDraft({
         matterId,
         title,
-        draftType: "brief",
+        draftType: template.template_type === "conveyancing_deed" ? "other"
+          : template.template_type === "government_suit_notice" ? "notice"
+          : template.template_type === "legal_notice_reply" ? "reply" : "brief",
         templateType: template.template_type,
         facts: pruneFacts(values),
       });
@@ -387,7 +394,7 @@ function StepperInner({
               variant="outline"
               onClick={goPrev}
               disabled={stepIndex === 0}
-              className="w-full sm:w-auto"
+              className="min-h-11 w-full sm:w-auto"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden /> Previous
             </Button>
@@ -396,7 +403,7 @@ function StepperInner({
             <Button
               type="submit"
               disabled={createMutation.isPending}
-              className="w-full sm:ml-auto sm:w-auto"
+              className="min-h-11 w-full sm:ml-auto sm:w-auto"
               data-testid="drafting-solo-generate"
             >
               {createMutation.isPending ? (
@@ -411,7 +418,7 @@ function StepperInner({
             <Button
               type="submit"
               disabled={createMutation.isPending}
-              className="w-full sm:w-auto"
+              className="min-h-11 w-full sm:w-auto"
             >
               {createMutation.isPending ? (
                 <>
@@ -425,7 +432,7 @@ function StepperInner({
             <Button
               type="button"
               onClick={goNext}
-              className="w-full sm:w-auto"
+              className="min-h-11 w-full sm:w-auto"
             >
               Next <ArrowRight className="h-4 w-4" aria-hidden />
             </Button>
@@ -565,12 +572,13 @@ function FieldRow({
               value={(rf.value as string) || undefined}
               onValueChange={rf.onChange}
             >
-              <SelectTrigger id={field.name}>
+              <SelectTrigger id={field.name} className="min-h-11"
+                aria-invalid={errMessage ? true : undefined} aria-describedby={describedBy}>
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
               <SelectContent>
                 {field.enum_options!.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
+                  <SelectItem key={opt} value={opt} className="min-h-11">
                     {opt}
                   </SelectItem>
                 ))}
@@ -582,6 +590,7 @@ function FieldRow({
         <Input
           id={field.name}
           type="date"
+          className="min-h-11"
           placeholder={field.placeholder ?? undefined}
           aria-invalid={errMessage ? true : undefined}
           aria-describedby={describedBy}
@@ -591,6 +600,7 @@ function FieldRow({
         <Input
           id={field.name}
           type="number"
+          className="min-h-11"
           placeholder={field.placeholder ?? undefined}
           aria-invalid={errMessage ? true : undefined}
           aria-describedby={describedBy}
@@ -600,6 +610,7 @@ function FieldRow({
         <Input
           id={field.name}
           type="text"
+          className="min-h-11"
           placeholder={field.placeholder ?? undefined}
           aria-invalid={errMessage ? true : undefined}
           aria-describedby={describedBy}

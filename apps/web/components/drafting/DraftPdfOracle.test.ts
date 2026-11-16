@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assessDraftPdf, type DraftPdfPageProbe, type DraftPdfRun } from "../../../../tests/e2e/support/draft_pdf_oracle_20261111";
+import { assessDraftPdf, presentationFamilyFromManifest, type DraftPdfPageProbe, type DraftPdfRun } from "../../../../tests/e2e/support/draft_pdf_oracle_20261111";
 
 const profile = { key: "generic", page_format: "A4", margin_left_mm: 25.4, margin_right_mm: 25.4,
   margin_top_mm: 25.4, margin_bottom_mm: 25.4, page_number_format: "Page {n} of {total}" };
@@ -12,6 +12,38 @@ const probe = (runs: DraftPdfRun[], footer = "Page 1 of 1"): DraftPdfPageProbe =
 const full = () => probe([run(source.title, 0.11), run(notice, 0.16), run(source.body, 0.23), run("Authorities cited", 0.4), run(source.citations[0], 0.45)]);
 
 describe("BUG001 complete source/geometry/contrast oracle", () => {
+  it("keeps a saved internal title in PDF metadata while the legal body uses its own caption", () => {
+    const body = "Gift deed\nRECITALS\nSupplied transaction.\nEXECUTION\n[Signature]";
+    const source = { title: "Client A property transfer review", body, citations: [],
+      presentationFamily: "deed", pdfTitle: "Client A property transfer review" };
+    const page = probe([run("Lawyer review required before signing, registration or service.", 0.11),
+      run(body, 0.2)]);
+    expect(Object.values(assessDraftPdf([page], profile, source)).every(Boolean)).toBe(true);
+    expect(assessDraftPdf([page], profile, { ...source, pdfTitle: "Another saved title" }).titleComplete).toBe(false);
+    expect(assessDraftPdf([page], profile, { ...source, pdfTitle: undefined }).titleComplete).toBe(false);
+  });
+
+  it("checks a new deed's own title and complete body after its document review notice", () => {
+    const body = "Gift deed\nRECITALS\nSupplied transaction.\nEXECUTION\n[Signature]";
+    const source = { title: "Gift deed", body, citations: ["SYNTHETIC CITATION"], presentationFamily: "deed", pdfTitle: "Gift deed" };
+    const page = probe([run("Lawyer review required before signing, registration or service.", 0.11),
+      run(body, 0.2), run("Authorities cited", 0.4), run(source.citations[0], 0.45)]);
+    expect(Object.values(assessDraftPdf([page], profile, source)).every(Boolean)).toBe(true);
+    expect(assessDraftPdf([page], profile, { ...source, body: body + "\nMISSING TERM" }).sourceComplete).toBe(false);
+    expect(assessDraftPdf([page], profile, { ...source, title: "Sale deed" }).titleComplete).toBe(false);
+    // A legacy source must still meet its own original title/banner contract.
+    expect(assessDraftPdf([page], profile, { ...source, presentationFamily: undefined }).sourceComplete).toBe(false);
+  });
+
+  it("does not infer a new format from legacy metadata or accept an unknown source", () => {
+    expect(presentationFamilyFromManifest({})).toBeUndefined();
+    const reference = { schema: "caseops.presentation-reference.v1", version: "owner-manual-2026-11-15-v1",
+      source_sha256: "cc50806727ff07306d6fe0b0bceee500061edb10577b9c350b63e31ce35c6cd0", legal_rules_verified: false, family: "deed" };
+    expect(presentationFamilyFromManifest({ presentation_reference: reference })).toBe("deed");
+    for (const changed of [{ source_sha256: "unknown" }, { version: "future" }, { legal_rules_verified: true }, { family: "unknown" }]) {
+      expect(() => presentationFamilyFromManifest({ presentation_reference: { ...reference, ...changed } })).toThrow();
+    }
+  });
   it("accepts complete printable source, citations and page numbering", () => {
     expect(Object.values(assessDraftPdf([full()], profile, source)).every(Boolean)).toBe(true);
   });

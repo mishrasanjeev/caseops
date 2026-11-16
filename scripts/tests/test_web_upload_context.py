@@ -50,6 +50,7 @@ BUILDER_INPUTS = {
     "tests/fixtures/node-default-tls-probe.cjs",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
     "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+    "tests/e2e/drafting-formats20261115.spec.ts",
     *(f"tests/e2e/support/{name}.ts" for name in (
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
@@ -317,6 +318,17 @@ class NativeUploadTests(unittest.TestCase):
         self.assertNotIn(helper, runner)
         for name in (".dockerignore", ".gcloudignore"):
             self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
+
+        journey = "tests/e2e/drafting-formats20261115.spec.ts"
+        unit = (ROOT / "apps/web/lib/e2e-canonical-validator-loading.test.ts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'new URL("../../../{journey}", import.meta.url)', unit)
+        self.assertIn(journey, BUILDER_INPUTS)
+        self.assertIn(f"COPY {journey} /app/{journey}", builder.splitlines())
+        self.assertNotIn(journey, runner)
+        for name in (".dockerignore", ".gcloudignore"):
+            self.assertIn(f"!{journey}", (ROOT / name).read_text(encoding="utf-8").splitlines())
 
     def test_real_traversal_includes_records_and_excludes_secret_canaries(self):
         forbidden = {

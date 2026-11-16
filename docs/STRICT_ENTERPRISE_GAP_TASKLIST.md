@@ -277,6 +277,23 @@ producer, retain exact license/source provenance and verify the installed
 binary version. Application locks, trust roots, CA remediation and secure
 transport remain unchanged. A successful bootstrap component cannot replace
 fresh current-head CI, full Docker or exact-serving production acceptance.
+## November15 - Source-attributed legal document formats
+
+Owner-authorized J07/M06 format work is in progress in a separate PR branch.
+The supplied manual is a presentation reference with a pinned identity, not
+verified current court rules or a source of transaction facts. Reconcile all
+guided/generic/preview/regeneration/IP/output consumers, including six selectable
+deed families and14 applicable missing forms (46 prospective guided types),
+without weakening legal validation, source/tenant fences or
+approval. Word/PDF rendering and complete desktop/phone acceptance remain owed;
+prompt-only checks do not close the work. The two new browser identities are
+reconciled in both source inventories (intended792), not executed. See the dated
+format-reference brief. Retain the initial cache and hardlink setup failures.
+Historical 19-file syntax/Ruff passed in a narrow preparation exception; later
+edited inputs remain unverified. Node installation and the aggregate timed-slot
+contract remain incomplete. Application/schema/type/browser/full-suite holds
+remain in force. The owner subsequently requested draft PR publication before
+the test-window handoff; it must remain explicitly unverified.
 
 ## November14: Windows Collection Is Not A Passing Local Component
 

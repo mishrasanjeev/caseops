@@ -514,6 +514,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(missing, {}, f"Fingerprint inputs missing by image: {missing}")
         for omitted in ("tests/e2e/ram-2026-11-11-bugs.spec.ts",
                         "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+                        "tests/e2e/drafting-formats20261115.spec.ts",
                         "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
                         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
                         "apps/api/pyproject.toml", "apps/api/uv.lock",
@@ -528,6 +529,7 @@ class BootstrapTests(unittest.TestCase):
     def test_web_source_fingerprint_reports_all_missing_inputs(self):
         omitted = {"tests/e2e/ram-2026-11-11-bugs.spec.ts",
                    "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+                   "tests/e2e/drafting-formats20261115.spec.ts",
                    "scripts/mobile/npm-tooling.mjs", "apps/api/pyproject.toml"}
         required = omitted | {"apps/web/app/page.tsx"}
         scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
@@ -541,13 +543,14 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual({value for value in paths if Path(value).parts[0] == "tests"}, {
             "tests/e2e/support", "tests/e2e/ram-2026-11-11-bugs.spec.ts",
             "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
+            "tests/e2e/drafting-formats20261115.spec.ts",
             "tests/fixtures/statutes/structured-schedule-api.json",
             "tests/fixtures/node-default-tls-probe.cjs",
         })
 
     def test_web_source_fingerprint_tracks_communications_inputs_not_neighboring_specs(self):
         inputs = ("tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/support/env.ts",
-                  "tests/e2e/support/ram-bugs4.ts")
+                  "tests/e2e/support/ram-bugs4.ts", "tests/e2e/drafting-formats20261115.spec.ts")
         neighbor = "tests/e2e/unlisted-communications.spec.ts"
         for selected in inputs:
             with self.subTest(path=selected), tempfile.TemporaryDirectory() as directory:

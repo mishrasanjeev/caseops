@@ -62,7 +62,7 @@ from caseops_api.services.court_format_profiles import (
 )
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.draft_pdf_export import _ascii_safe, render_pdf_bytes
-from caseops_api.services.drafting import _load_draft, _load_matter
+from caseops_api.services.drafting import _load_draft, _load_manifest, _load_matter
 from caseops_api.services.session_context import SessionContext
 
 
@@ -107,6 +107,31 @@ def render_filing_bundle(
             detail="Draft version not found.",
         )
 
+    from caseops_api.services.drafting_format_blocks import FormatStructureError, document_blocks
+    from caseops_api.services.drafting_formats import read_format_reference
+
+    try:
+        presentation = read_format_reference(_load_manifest(version.template_manifest_json, {}))
+        if presentation and presentation["profile"] == "execution_application":
+            list(document_blocks(version.body, presentation))
+    except FormatStructureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc),
+        ) from None
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "The saved document format reference is unavailable. "
+                "Review this version before export."
+            ),
+        ) from None
+    if presentation and presentation["family"] in {"notice", "correspondence_reply", "deed"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Court filing bundles are for pleadings. Download this document as Word or PDF.",
+        )
+
     # Same citation gate as the PDF / DOCX export paths. PRD §6.1 / §17.4.
     gate_bypassed = draft.status in {DraftStatus.APPROVED, DraftStatus.FINALIZED}
     if not gate_bypassed and (version.verified_citation_count or 0) <= 0:
@@ -147,6 +172,7 @@ def render_filing_bundle(
         body=version.body,
         citations=citations,
         review_required=draft.review_required,
+        template_manifest=_load_manifest(version.template_manifest_json, {}),
     )
 
     vakalat_pdf, vakalat_source = _resolve_and_render_vakalat(
@@ -271,6 +297,7 @@ def _resolve_and_render_vakalat(
         body=target_version.body,
         citations=[],
         review_required=vakalat_draft.review_required,
+        template_manifest=_load_manifest(target_version.template_manifest_json, {}),
     )
     return pdf, f"draft:{vakalat_draft.id}"
 

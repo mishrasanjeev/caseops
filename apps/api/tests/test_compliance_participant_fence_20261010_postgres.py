@@ -85,9 +85,9 @@ class _UploadPhase:
         self.reads_omitted = 0
 
     def observe(self, session):
-        event.listen(session, "after_transaction_create", self.created)
-        event.listen(session, "after_begin", self.began)
-        event.listen(session, "after_transaction_end", self.ended)
+        self.audit.listen_session(session, "after_transaction_create", self.created)
+        self.audit.listen_session(session, "after_begin", self.began)
+        self.audit.listen_session(session, "after_transaction_end", self.ended)
 
     def created(self, _session, transaction):
         if transaction.parent is None and self.initial_transaction is None:

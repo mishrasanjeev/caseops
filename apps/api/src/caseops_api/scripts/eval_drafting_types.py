@@ -154,6 +154,13 @@ def _iter_scenarios() -> list[ScenarioRun]:
                 continue
             seen.add(pair)
             out.append(ScenarioRun(template_type=type_key, key=s["key"], facts=s["facts"]))
+    from caseops_api.scripts.drafting_reference_fixtures import reference_scenarios
+
+    for template, key, facts in reference_scenarios(_load_fixture("reference_formats.json")):
+        pair = (template, key)
+        if pair not in seen:
+            seen.add(pair)
+            out.append(ScenarioRun(template_type=template, key=key, facts=facts))
     return out
 
 

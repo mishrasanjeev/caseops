@@ -91,9 +91,175 @@ def test_hook_detach_is_idempotent_and_leaves_unowned_listeners():
         engine.dispose()
 
 
+@pytest.mark.parametrize("body_error", [False, True])
+def test_retained_closed_sessions_do_not_own_detached_audit(body_error):
+    engine, hooks, audit_ref, journal_ref = _registered_audit()
+    retained = [audit_ref().session(role) for role in ("worker", "revocation", "login")]
+    unrelated_calls = []
+
+    def unrelated(_session):
+        unrelated_calls.append("committed")
+
+    event.listen(retained[0], "after_commit", unrelated)
+    try:
+        owned = list(audit_ref().session_hooks)
+        assert len(owned) == 9
+        assert all(event.contains(owner(), name, callback) for owner, name, callback in owned)
+        if body_error:
+            with pytest.raises(ValueError, match="^Controlled retained session failure$"):
+                try:
+                    raise ValueError("Controlled retained session failure")
+                finally:
+                    for session in retained:
+                        session.close()
+        else:
+            for session in retained:
+                session.close()
+        assert audit_ref() is not None and journal_ref() is not None
+        audit_ref().detach_hooks()
+        assert hooks == []
+        assert not any(event.contains(owner(), name, callback) for owner, name, callback in owned)
+        owned.clear()
+        assert audit_ref() is None, "Retained closed sessions must release audit callbacks."
+        assert journal_ref() is None
+        assert event.contains(retained[0], "after_commit", unrelated)
+        retained[0].commit()
+        assert unrelated_calls == ["committed"]
+    finally:
+        for session in retained:
+            session.close()
+        if audit_ref() is not None:
+            audit_ref().detach_hooks()
+        event.remove(retained[0], "after_commit", unrelated)
+        engine.dispose()
+
+
+def test_partial_session_detach_preserves_exact_roots_until_all_removals_succeed(monkeypatch):
+    engine, hooks, audit_ref, journal_ref = _registered_audit()
+    retained = audit_ref().session("worker")
+    retained.close()
+    session_hooks = audit_ref().session_hooks
+    original_remove = event.remove
+
+    def fail_session_removal(target, name, callback):
+        if target is retained and name == "after_transaction_end":
+            raise RuntimeError("Controlled session listener removal failure")
+        original_remove(target, name, callback)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(overlap, "event", SimpleNamespace(
+                contains=event.contains, remove=fail_session_removal,
+            ))
+            with pytest.raises(RuntimeError, match="^Controlled session listener removal failure$"):
+                audit_ref().detach_hooks()
+        assert audit_ref().hooks is hooks and len(hooks) == 3
+        assert audit_ref().session_hooks is session_hooks and len(session_hooks) == 3
+        assert not event.contains(retained, session_hooks[0][1], session_hooks[0][2])
+        assert all(event.contains(retained, name, callback)
+                   for _, name, callback in session_hooks[1:])
+        assert journal_ref() is not None
+        audit_ref().detach_hooks()
+        assert hooks == [] and session_hooks == []
+        assert audit_ref() is None and journal_ref() is None
+    finally:
+        if audit_ref() is not None:
+            audit_ref().detach_hooks()
+        retained.close()
+        engine.dispose()
+
+
+def test_shared_upload_observer_releases_with_retained_session():
+    from tests.test_compliance_participant_fence_20261010_postgres import _UploadPhase
+
+    engine, hooks, audit_ref, journal_ref = _registered_audit()
+    retained = audit_ref().session("mutation")
+    upload = _UploadPhase(audit_ref())
+    upload.observe(retained)
+    upload_ref = ref(upload)
+    del upload
+    try:
+        retained.close()
+        assert upload_ref() is not None
+        assert len(audit_ref().session_hooks) == 6
+        audit_ref().detach_hooks()
+        assert hooks == []
+        assert upload_ref() is None and audit_ref() is None and journal_ref() is None
+    finally:
+        if audit_ref() is not None:
+            audit_ref().detach_hooks()
+        retained.close()
+        engine.dispose()
+
+
+def test_session_registry_does_not_retain_completed_session():
+    engine, hooks, audit_ref, journal_ref = _registered_audit()
+    session = audit_ref().session("worker")
+    session_ref = ref(session)
+    try:
+        session.close()
+        del session
+        assert session_ref() is None
+        assert len(audit_ref().session_hooks) == 3
+        assert all(owner() is None for owner, _, _ in audit_ref().session_hooks)
+        audit_ref().detach_hooks()
+        assert hooks == [] and audit_ref() is None and journal_ref() is None
+    finally:
+        if audit_ref() is not None:
+            audit_ref().detach_hooks()
+        engine.dispose()
+
+
+@pytest.mark.parametrize("body_error", [False, True])
+def test_minimal_tail_audit_owns_upload_listeners_without_finalizer_sql(body_error):
+    from tests.test_compliance_participant_fence_20261010_postgres import _UploadPhase
+
+    engine = create_engine("sqlite+pysqlite://", poolclass=NullPool)
+    listeners = overlap._OwnedSessionListeners()
+    journal = overlap._FinalizerJournal(StringIO(), Path("minimal-tail-only.jsonl"), "minimal")
+    journal_ref = ref(journal)
+    audit = SimpleNamespace(pids={}, record=journal.record, listen_session=listeners.listen)
+    upload = _UploadPhase(audit)
+    upload_ref = ref(upload)
+    session = overlap.Session(engine)
+    upload.observe(session)
+    unrelated_calls = []
+
+    def unrelated(_session):
+        unrelated_calls.append("committed")
+
+    event.listen(session, "after_commit", unrelated)
+    del audit, upload, journal
+    try:
+        assert upload_ref() is not None and journal_ref() is not None
+        assert len(listeners.hooks) == 3
+        if body_error:
+            with pytest.raises(ValueError, match="^Controlled minimal tail failure$"):
+                try:
+                    raise ValueError("Controlled minimal tail failure")
+                finally:
+                    session.close()
+                    listeners.detach()
+        else:
+            session.close()
+            listeners.detach()
+        assert listeners.hooks == []
+        assert upload_ref() is None and journal_ref() is None
+        assert event.contains(session, "after_commit", unrelated)
+        session.commit()
+        assert unrelated_calls == ["committed"]
+    finally:
+        listeners.detach()
+        event.remove(session, "after_commit", unrelated)
+        session.close()
+        engine.dispose()
+
+
 @pytest.mark.parametrize("active", ["callback", "workers"])
 def test_hook_detach_keeps_all_ownership_during_active_capture_or_pool(active):
     engine, hooks, audit_ref, journal_ref = _registered_audit()
+    session = audit_ref().session("worker")
+    session_hooks = audit_ref().session_hooks
     timing = overlap._PassiveOverlapTiming(sql_cap=1, gc_cap=4)
     audit_ref().passive = timing
     try:
@@ -102,19 +268,27 @@ def test_hook_detach_keeps_all_ownership_during_active_capture_or_pool(active):
                 with pytest.raises(AssertionError, match="Passive capture is active"):
                     audit_ref().detach_hooks()
                 _assert_audit_roots(engine, hooks, audit_ref, journal_ref)
+                assert len(session_hooks) == 3
+                assert all(event.contains(session, name, callback)
+                           for _, name, callback in session_hooks)
         else:
             with audit_ref().pool():
                 assert timing.critical_pools == 1
                 with pytest.raises(AssertionError, match="Owned workers are still active"):
                     audit_ref().detach_hooks()
                 _assert_audit_roots(engine, hooks, audit_ref, journal_ref)
+                assert len(session_hooks) == 3
+                assert all(event.contains(session, name, callback)
+                           for _, name, callback in session_hooks)
             assert timing.critical_pools == 0
         audit_ref().detach_hooks()
         assert hooks == [] and audit_ref() is None and journal_ref() is None
+        assert session_hooks == []
     finally:
         timing.stop()
         if audit_ref() is not None:
             audit_ref().detach_hooks()
+        session.close()
         engine.dispose()
 
 

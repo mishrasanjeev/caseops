@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { devices, expect, request, test, type APIRequestContext } from "@playwright/test";
+import { devices, expect, request, test, type APIRequestContext, type BrowserContextOptions } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { runLocalPythonFileFixture } from "./support/local-python-file-fixture";
@@ -32,9 +32,14 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
   })) throw new Error("This synthetic fixture is strictly loopback-only.");
   const run = runId(), slug = `b5draft-${run}`, email = `${slug}@example.com`, password = `Synthetic!${run}aA9`;
   const api = await request.newContext({ extraHTTPHeaders: localTransportHeaders(apiBaseUrl) });
-  const context = await browser.newContext({ ...(phone ? devices["Pixel 5"] : { viewport: { width: 1280, height: 1000 } }),
-    baseURL, extraHTTPHeaders: localTransportHeaders(baseURL) });
+  const contextOptions: BrowserContextOptions = { ...(phone ? devices["Pixel 5"] : { viewport: { width: 1280, height: 1000 } }),
+    baseURL, extraHTTPHeaders: localTransportHeaders(baseURL) };
+  const hasTouch = contextOptions.hasTouch === true;
+  expect(hasTouch, "Selected context touch mode").toBe(phone);
+  expect(contextOptions.isMobile === true, "Selected context mobile mode").toBe(phone);
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
+  if (phone) expect(page.viewportSize()?.width, "Phone viewport").toBe(393);
   let modelCalls = 0;
   let pdfActionAllowed = false, passiveExports = 0;
   try {
@@ -110,7 +115,7 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
         return profile;
       };
       const source = { title: before.title, body: fixture.body, citations: before.versions[0].citations, reviewRequired: before.review_required };
-      const pages = await assertDraftPdfRender(page, profileFor(pdfResponses[0].profile), source);
+      const pages = await assertDraftPdfRender(page, profileFor(pdfResponses[0].profile), source, hasTouch);
       expect(pages).toBeGreaterThan(1);
       expect(new URL(pdfResponses[0].url).searchParams.get("version_id")).toBe(fixture.version_id);
       const downloadPromise = page.waitForEvent("download");
@@ -130,7 +135,7 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
       expect(new URL(pdfResponses[2].url).searchParams.get("court_profile")).toBe("generic");
       expect(new URL(pdfResponses[2].url).searchParams.get("version_id")).toBe(fixture.version_id);
       expect(pdfResponses[2].profile).toBe("generic");
-      await assertDraftPdfRender(page, profileFor("generic"), source);
+      await assertDraftPdfRender(page, profileFor("generic"), source, hasTouch);
       const selectedDownload = page.waitForEvent("download");
       await page.getByTestId("draft-download-pdf").click();
       const selectedPath = info.outputPath("approved-draft-generic.pdf");
@@ -147,7 +152,7 @@ for (const phone of [false, true]) test(`BUG001 2026-11-11 ${phone ? "[mobile] p
       pdfActionAllowed = true;
       await page.getByRole("tab", { name: "PDF preview" }).click();
       await expect.poll(() => pdfResponses.length).toBe(5);
-      await assertDraftPdfRender(page, profileFor(pdfResponses[4].profile), source);
+      await assertDraftPdfRender(page, profileFor(pdfResponses[4].profile), source, hasTouch);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
       expect(await json(auth, draftApi)).toEqual(before);
       expect(modelCalls).toBe(0);

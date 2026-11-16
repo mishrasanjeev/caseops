@@ -110,9 +110,8 @@ function TemplateGrid({ matterId }: { matterId: string }) {
           Start a new draft
         </h2>
         <p className="text-sm text-[var(--color-mute)]">
-          Pick a template to launch the fact-capture stepper. Every template is
-          grounded in the cited statute and feeds the same citation-checked
-          generator.
+          Pick a document format, add your facts and review the generated draft.
+          Check the applicable law and requirements with your lawyer before use.
         </p>
       </header>
 
