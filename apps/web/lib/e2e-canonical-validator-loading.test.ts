@@ -144,7 +144,10 @@ it.each(["version", "body"])("rejects reported Draft %s drift before render/expo
   expect(sourceGuard.mock.results[0].value.message).toMatch(/Reported draft.*differs/);
   expect(forbiddenWrite).not.toHaveBeenCalled();
   expect(info.attach).not.toHaveBeenCalled();
-  expect(info.annotations).toEqual([]);
+  expect(info.annotations).toEqual([{
+    type: "caseops-b5-failure-stage", description: "reported-draft:authorized-persisted-version",
+  }]);
+  expect(JSON.stringify(info.annotations)).not.toContain(retained.versions[0].body);
   expect(JSON.stringify(retained)).toBe(before);
   expect(browserContext.close).toHaveBeenCalledTimes(1);
   for (const method of ["POST", "PATCH", "DELETE"]) {
@@ -164,8 +167,16 @@ it("emits only the bounded reported-Draft annotation after final source and read
   visit(source);
   const pushes = nodes.filter(node => ts.isCallExpression(node)
     && node.expression.getText(source) === "info.annotations.push");
-  expect(pushes).toHaveLength(1);
-  const push = pushes[0] as ts.CallExpression;
+  expect(pushes).toHaveLength(2);
+  const typed = (type: string) => pushes.filter(node => {
+    const argument = (node as ts.CallExpression).arguments[0];
+    return argument && ts.isObjectLiteralExpression(argument) && argument.properties.some(property =>
+      ts.isPropertyAssignment(property) && property.name.getText(source) === "type"
+      && ts.isStringLiteral(property.initializer) && property.initializer.text === type);
+  });
+  expect(typed("caseops-b5-reported-draft")).toHaveLength(1);
+  expect(typed("caseops-b5-failure-stage")).toHaveLength(1);
+  const push = typed("caseops-b5-reported-draft")[0] as ts.CallExpression;
   const target = draftPolicy.reportedDraftTarget;
   const info = { annotations: [] as Array<{ type: string; description: string }> };
   const hash = vi.fn(() => target.bodySha256);
@@ -184,4 +195,59 @@ it("emits only the bounded reported-Draft annotation after final source and read
   const preceding = source.text.slice(0, push.pos);
   expect(preceding.lastIndexOf("await unchanged();")).toBeGreaterThan(preceding.lastIndexOf('stage = "reload-parity"'));
   expect(preceding.lastIndexOf("attemptedMutations === 0")).toBeGreaterThan(preceding.lastIndexOf("await unchanged();"));
+});
+
+
+it.each([
+  { label: "reported Draft", file: "draft_pdf_production_20261111.ts", prefix: "reported-draft:",
+    stages: ["release-before-login", "reporter-login", "authorized-persisted-version", "initial-preview",
+      "export-http-<status>", "citation-review-guard", "auto-profile-parity", "selected-profile-parity", "reload-parity"] },
+  { label: "reported contract", file: "bugs5_contract_reported_20261111.ts", prefix: "reported-contract:",
+    stages: ["identity", "original-metadata-controls", "original-indexed-pdf-preview", "original-manual-term-controls", "unchanged-source"] },
+])("keeps $label failure phases bounded and separate from successful evidence", ({ file, prefix, stages }) => {
+  const source = ts.createSourceFile(file, readFileSync(
+    new URL(`../../../tests/e2e/support/${file}`, import.meta.url), "utf8",
+  ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const nodes: ts.Node[] = [];
+  function visit(node: ts.Node) { nodes.push(node); ts.forEachChild(node, visit); }
+  visit(source);
+  const calls = nodes.filter((node): node is ts.CallExpression => ts.isCallExpression(node)
+    && node.expression.getText(source) === "info.annotations.push");
+  const failures = calls.filter(call => ts.isObjectLiteralExpression(call.arguments[0])
+    && call.arguments[0].properties.some(property => ts.isPropertyAssignment(property)
+      && property.name.getText(source) === "type" && ts.isStringLiteral(property.initializer)
+      && property.initializer.text === "caseops-b5-failure-stage"));
+  expect(failures).toHaveLength(1);
+  const argument = failures[0].arguments[0];
+  if (!ts.isObjectLiteralExpression(argument)) throw new Error("Failure phase must be an exact record.");
+  expect(argument.properties.map(property => property.name?.getText(source))).toEqual(["type", "description"]);
+  const property = argument.properties[1];
+  if (!ts.isPropertyAssignment(property) || !ts.isTemplateExpression(property.initializer)) {
+    throw new Error("Only the phase label may be interpolated.");
+  }
+  expect(property.initializer.head.text).toBe(prefix);
+  expect(property.initializer.templateSpans.map(span => [span.expression.getText(source), span.literal.text]))
+    .toEqual([["stage", ""]]);
+  let parent: ts.Node | undefined = failures[0].parent;
+  while (parent && !ts.isCatchClause(parent)) parent = parent.parent;
+  expect(parent && ts.isCatchClause(parent)).toBe(true);
+  const initial = nodes.filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node)
+    && node.name.getText(source) === "stage");
+  expect(initial).toHaveLength(1);
+  const first = initial[0].initializer;
+  if (!first || !ts.isStringLiteral(first)) throw new Error("Phase starts at a reviewed literal.");
+  const actual = [first.text];
+  for (const node of nodes) {
+    if (!ts.isBinaryExpression(node) || node.left.getText(source) !== "stage") continue;
+    expect(node.operatorToken.kind).toBe(ts.SyntaxKind.EqualsToken);
+    if (ts.isStringLiteral(node.right)) actual.push(node.right.text);
+    else {
+      if (!ts.isTemplateExpression(node.right)) throw new Error("Unbounded phase input rejected.");
+      expect(node.right.head.text).toBe("export-http-");
+      expect(node.right.templateSpans.map(span => [span.expression.getText(source), span.literal.text]))
+        .toEqual([["initial.status()", ""]]);
+      actual.push("export-http-<status>");
+    }
+  }
+  expect(actual).toEqual(stages);
 });

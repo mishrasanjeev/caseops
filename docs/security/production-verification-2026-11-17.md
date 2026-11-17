@@ -197,3 +197,30 @@ personal ownership, unchanged version1, original53-row committed imports and
 creation audits. Exact row backups are retained in operator evidence. Deleting
 these existing saved preferences is pending an explicit owner decision; no
 candidate, other saved view or legal record has been changed.
+
+## Failure-phase annotation contracts
+
+HEAD48 CI retains3179 frontend passes/3 failures from the old annotation
+expectations. The negative version/body drift journeys must now emit exactly
+the fixed failure phase while still rejecting before render/export and making
+zero writes. Their positive counterpart must still emit exactly one bounded
+successful receipt only after all final source/read-only assertions. Two new
+independent AST controls reject unbounded phase inputs in both helpers; only
+the reviewed literal phase labels and observed HTTP status may be recorded.
+The complete focused module passes10 tests, and component/E2E compilation pass.
+
+The complete frozen Windows frontend run on48 retains3170 passes/5 failures and
+7 unverified hook-skipped cases across3182 tests/311 files. Source hashes for
+every tracked repository input, exact changed paths and empty untracked/dirty
+sets remain unchanged. Three failures match CI's annotation expectations; the
+other two are a native ZIP/QR/accessibility worker constructor timeout and the
+default-client TLS test's existing15-second whole-test timeout. The App source
+inventory's native15-second collection timeout prevented its7 later assertions.
+These are independent failures; do not attribute them to the annotation change.
+
+A serial maximum-one-worker diagnostic retains64 passes/4 failures/7 unverified
+cases across75 tests in176.82s. It does not establish the original cause or clear
+the Windows metadata/worker/TLS boundaries. All constructor and test deadlines,
+real TLS verification, exact inventories and assertions remain unchanged.
+No replacement full Docker gate has started. Native startup profiling and a
+complete replacement frontend run remain required before that expensive gate.
