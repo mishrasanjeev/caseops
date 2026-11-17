@@ -42,7 +42,8 @@ def test_windows_runs_the_complete_frontend_inventory_with_original_budgets() ->
     linux = workflow["jobs"]["web"]
     windows = workflow["jobs"]["web-windows"]
     assert windows["runs-on"] == "windows-latest"
-    assert windows["timeout-minutes"] == linux["timeout-minutes"] == 15
+    assert windows["timeout-minutes"] == 60
+    assert linux["timeout-minutes"] == 15
     steps = windows["steps"]
     node = next(step for step in steps if step.get("uses") == "actions/setup-node@v4")
     assert node["with"]["node-version"] == "22.23.4"
@@ -58,7 +59,9 @@ def test_windows_runs_the_complete_frontend_inventory_with_original_budgets() ->
                                "npx --no-install playwright install chromium",
                                "npm run test:coverage --workspace @caseops/web"}:
             assert step["env"] == linux_install["env"]
-    source = (ROOT / "apps/web/lib/e2e-external-journey-loading.test.ts").read_text(encoding="utf-8")
+    source = (ROOT / "apps/web/lib/e2e-external-journey-loading.test.ts").read_text(
+        encoding="utf-8"
+    )
     assert "timeout: 15_000" in source and "timeout: 5000" in source
     assert "expected: 3, unexpected: 0, skipped: 0, flaky: 0" in source
 
@@ -72,5 +75,7 @@ def test_windows_retains_failure_phases_and_trust_lifecycle_without_media() -> N
     }
     assert all(step["if"] == "always()" for step in artifacts)
     assert all(step["with"].get("include-hidden-files", False) is False for step in artifacts)
-    source = (ROOT / "apps/web/lib/e2e-external-journey-loading.test.ts").read_text(encoding="utf-8")
+    source = (ROOT / "apps/web/lib/e2e-external-journey-loading.test.ts").read_text(
+        encoding="utf-8"
+    )
     assert 'writeFileSync(path.join(retained, "stages.json"), JSON.stringify(stages))' in source

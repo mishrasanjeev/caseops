@@ -249,7 +249,7 @@ source/platform gates remain pending.
 
 Add an independent Windows frontend CI job with the same pinned Node22.23.4,
 reviewed host trust setup, component/E2E typechecks, whole coverage command,
-coverage thresholds and15-minute job ceiling. Preserve the Linux web/build
+coverage thresholds and the existing Windows one-hour whole-suite window. Preserve the Linux web/build
 and Docker gates. Native failure stages and trust timing evidence are retained
 as synthetic JSON only. A hosted Windows pass must name that actual runner;
 it cannot rewrite the earlier workstation failures or certify an unrun Docker
@@ -276,3 +276,33 @@ closure and inventory tests before freezing a long gate. The next full
 frontend inventory is3197cases/312files; the browser journey identities remain
 unchanged. New complete CI, native/Docker and exact-serving production QA are
 still required before merge/deploy certification or guarded scheduler resume.
+
+The final child timer also deducts synchronous constructor time from its
+original absolute budget. Raw bounded synthetic stage lines are retained
+inside valid JSON, so a partial final line cannot replace the primary native
+failure with a diagnostic decoder exception. These final source changes
+supersede the first Windows-CI candidate; no earlier pass is transferred.
+
+The first hosted Windows candidate1a80 retains20 trust passes,8 native loader
+passes and11 owned-view cleanup passes. Its three originally failing checks
+therefore passed on that actual isolated Windows runner, not the workstation.
+The newly added15-minute overall Windows job ceiling interrupted the complete
+coverage invocation; no full Windows pass is claimed. The replacement new job
+uses the existing3600-second Windows whole-suite window, including its own
+provisioning. Existing Linux CI remains15minutes, and every original native,
+OpenSSL, per-test, interactive and production deadline remains unchanged.
+
+The first candidate additionally fails the committed-change governance review
+and an independent CI trust-action count. The reviewed map adds only the
+builder-only/test-cleanup note; canonical render/validate passes, and the
+compiled projection differs only in its document fingerprint and projection
+identity. Every other AST node, schema/class and policy value is unchanged.
+The map change check initially still refuses while that review is uncommitted;
+it must pass on the committed replacement. The independent complete workflow
+inventory now requires20 setup sites and206 Node commands with all nine trust
+outputs. A local mobile inventory invocation is setup-incomplete because the
+candidate has no installed mobile parser dependency; fresh complete hosted
+source-gate evidence remains required. Native upload-context tests pass all13
+cases in591.484s; focused workflow/closure checks pass61cases in137.75s. Correct
+API-project Ruff passes; earlier wrong-root lint invocations remain separate
+operator evidence and do not authorize unrelated fixture edits.

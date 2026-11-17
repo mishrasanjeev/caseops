@@ -144,7 +144,9 @@ test('native accessibility builder retains its instance and detects a real unnam
   writeFileSync(path.join(retained, "native.json"), result.stdout ?? "");
   writeFileSync(path.join(retained, "stderr.json"), JSON.stringify({ stderr: result.stderr ?? "" }));
   if (existsSync(path.join(dir, "stages.jsonl"))) {
-    const stages = readFileSync(path.join(dir, "stages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
+    // Preserve a final partial line after termination without hiding the
+    // original constructor failure behind a diagnostic JSON decoder error.
+    const stages = { jsonl: readFileSync(path.join(dir, "stages.jsonl"), "utf8") };
     writeFileSync(path.join(retained, "stages.json"), JSON.stringify(stages));
   }
   expect(readFileSync(path.join(retained, "native.json"), "utf8")).toBe(result.stdout);

@@ -63,7 +63,8 @@ async function child(args: string[], env = cleanEnv(), options?: { file: string;
   let timedOut = false;
   proc.stdout.on("data", (value) => { stdout += value; });
   proc.stderr.on("data", (value) => { stderr += value; });
-  const timer = setTimeout(() => { timedOut = true; proc.kill(); }, budget);
+  const remaining = Math.max(0, budget - (performance.now() - started));
+  const timer = setTimeout(() => { timedOut = true; proc.kill(); }, remaining);
   let failure: Error | undefined;
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
     proc.once("error", error => { failure = error; });
