@@ -5778,3 +5778,19 @@ independent unchanged-sibling proof. Future IP18 cleanup is confined to the
 current invocation's acknowledged preference. The projection scheduler remains
 paused until exact-serving full QA and the guarded maintenance resume fences
 pass. See [dated evidence](security/production-verification-2026-11-17.md).
+
+### 2026-11-18 — PR624 current verification and standalone API isolation
+
+J01/M01, J14/M13; FT001–002 and NFT001: **Partially implemented;
+Inconclusive; release NO-GO**. Head9a89 has complete hosted CI and a complete
+4202-test local Windows PostgreSQL pass. Its next desktop shard fails one
+Admin navigation assertion; later desktop/mobile shards remain unverified.
+Twenty-six controlled probes do not establish its historical cause. Preserve
+that failed gate separately from any future current-workflow acceptance.
+An independent actual-HTTP negative control proves the four standalone
+app-spine API constructors lacked their own no-paid marker. The shared
+constructor repair has two real-receiver unit passes, including failed and
+explicitly retried reads. It does not explain the navigation timeout. Final
+3200-case frontend coverage, complete Docker/CI, exact-serving full production
+QA and guarded projection recovery remain required. See the
+[dated evidence and release boundaries](security/production-verification-2026-11-17.md).

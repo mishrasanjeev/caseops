@@ -7400,3 +7400,19 @@ private repacks, strict negative and all17 positive compatibility checks; it
 grants no app/native/store credit. Fresh final source/CI/build acceptance and
 complete83 cases per platform, physical checks and signing/promotion remain
 required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
+
+### 2026-11-18 — PR624 browser gate and independent transport repair
+
+**Inconclusive; release NO-GO.** The complete Windows PostgreSQL inventory at
+head9a89 passes4202tests/12606phases. The following browser shard records
+360passes/8declared skips/one Admin navigation timeout; later desktop/mobile
+shards are unverified. Preserve this failure and the unidentified historical
+cause, including26 diagnostic probes that did not reproduce it.
+Separately, actual loopback HTTP receipts reproduce missing no-paid headers
+on original standalone app-spine API contexts. All four constructors now use
+the shared marked context; two new units prove real happy/failed/retried
+requests without changing authentication, payloads, assertions or deadlines.
+This transport repair is not a causal claim about Admin navigation. Complete
+replacement source-bound gates and deployed QA remain required; projection
+maintenance stays paused. See
+[dated evidence](security/production-verification-2026-11-17.md).

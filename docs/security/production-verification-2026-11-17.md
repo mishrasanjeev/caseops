@@ -347,3 +347,44 @@ uses Windows locale decoding for a UTF-8 workflow source. Read the module's
 source/fixture text explicitly as UTF-8; do not remove valid source characters
 or hide the earlier failures with a process-wide encoding flag. Replay the
 complete295-case two-module inventory on the corrected source.
+
+## November 18 replacement candidate and retained local browser failure
+
+At head9a89d2f6 the complete hosted checks pass, including3198 frontend
+tests on both Windows and Linux. The complete local Windows PostgreSQL gate
+passes4202 tests and12606 phases in eight naturally completed groups, with
+unchanged source, retained native reports and independently verified cleanup.
+The original90-second projection case passes in25.263seconds. This current
+result does not establish the cause of its earlier latency failure.
+
+The following local desktop shard retains360passes,8 declared skips and one
+failure: `app-spine.spec.ts`, "every top-level nav destination renders a real
+page". Its Admin heading misses the unchanged15-second assertion while the
+workspace loading fallback remains visible. The canonical gate stops there;
+the second359-case desktop shard and64-case mobile inventory are unverified
+locally. Preserve the full failed gate and original trace, screenshot, video
+and error context. Twenty-six finite controlled probes do not reproduce the
+stall, including original navigation, delayed font delivery, delayed prefetch
+and CPU-throttled controls. Its historical cause remains **Inconclusive**;
+these probes are diagnostics, not a replacement release pass.
+
+An adjacent verification defect is independently reproduced: standalone
+Playwright API contexts do not inherit a browser fixture's no-paid marker.
+All four app-spine constructors now use `createNoPaidApiContext` from the
+existing cost-controls helper. A real owned loopback receiver retains the
+original missing-marker control and verifies marked successful requests,
+failed requests and an explicit retry, payload/authentication preservation,
+independent contexts and no automatic retries. Both new unit cases pass.
+This is a test-isolation repair; it is **not** a proven cause or repair of the
+Admin stall and is not evidence of a paid call in the isolated local stack.
+All navigation assertions, ordering, deadlines and production controls remain
+unchanged. The expected replacement frontend inventory is3200cases/313files.
+
+The replacement candidate requires complete component/E2E compilation,
+dependency and source-closure checks, current-head CI and a fresh full frozen
+Docker gate. Complete combined-main CI must precede deployment. Production QA
+must then pass on the exact serving release, followed by two later clean,
+serial projection executions (second rebuild_count0) and guarded scheduler
+resume. Until those proofs exist the release remains **NO-GO** and projection
+maintenance remains paused. Earlier failed and interrupted reports stay
+retained; no passing prefix or diagnostic probe supersedes a whole gate.

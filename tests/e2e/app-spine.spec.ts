@@ -1,7 +1,8 @@
-import { expect, request, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
+import { createNoPaidApiContext } from "./support/cost-controls";
 
 const PASSWORD = "SpinePass123!";
 
@@ -63,7 +64,7 @@ test.describe("App spine", () => {
       ownerEmail: `owner@${slug}.in`,
       ownerName: "Spine Owner",
     };
-    const api = await request.newContext();
+    const api = await createNoPaidApiContext(apiBaseUrl);
     try {
       await bootstrapViaApi(api, input);
     } finally {
@@ -196,7 +197,7 @@ test.describe("App spine", () => {
       ownerEmail: `owner@${slug}.in`,
       ownerName: "Stub Owner",
     };
-    const api = await request.newContext();
+    const api = await createNoPaidApiContext(apiBaseUrl);
     try {
       await bootstrapViaApi(api, input);
     } finally {
@@ -240,7 +241,7 @@ test.describe("App spine", () => {
       ownerEmail: `owner@${slug}.in`,
       ownerName: "Lists Owner",
     };
-    const api = await request.newContext();
+    const api = await createNoPaidApiContext(apiBaseUrl);
     try {
       await bootstrapViaApi(api, input);
     } finally {
@@ -280,7 +281,7 @@ test.describe("App spine", () => {
       ownerEmail: `owner@${slug}.in`,
       ownerName: "Roles Owner",
     };
-    const api = await request.newContext();
+    const api = await createNoPaidApiContext(apiBaseUrl);
     try {
       await bootstrapViaApi(api, input);
       // Owner signs in to create a member, via the API.
