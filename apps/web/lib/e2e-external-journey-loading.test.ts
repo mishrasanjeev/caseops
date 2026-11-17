@@ -72,7 +72,7 @@ const stage = (value: string) => require('node:fs').appendFileSync(${JSON.string
 // Reuse one controlled offline page. Persistent launch creates its initial
 // renderer with the browser instead of starting a renderer for each scene.
 // Startup and each test keep five seconds; the whole native child keeps fifteen.
-const test = base.extend<{}, { offlinePage: Page }>({ offlinePage: [async ({}, use) => {
+const test = process.platform === 'win32' ? base.extend<{}, { offlinePage: Page }>({ offlinePage: [async ({}, use) => {
   stage('browser-start');
   const context = await chromium.launchPersistentContext(${JSON.stringify(path.join(dir, "profile"))}, {
     timeout: 5000,
@@ -84,7 +84,10 @@ const test = base.extend<{}, { offlinePage: Page }>({ offlinePage: [async ({}, u
     expect(context.pages()).toHaveLength(1);
     await use(context.pages()[0]);
   } finally { await context.close(); }
-}, { scope: 'worker', timeout: 5000 }] });
+}, { scope: 'worker', timeout: 5000 }] }) : base.extend<{ offlinePage: Page }>({
+  // Preserve the original non-Windows headless-shell/browser fixture path.
+  offlinePage: async ({ page }, use) => { await use(page); },
+});
 test.beforeAll(() => {
   const deny = () => { throw new Error('Network forbidden in external loader regression'); };
   for (const name of ['node:http', 'node:https']) { const transport = require(name); transport.request = deny; transport.get = deny; }

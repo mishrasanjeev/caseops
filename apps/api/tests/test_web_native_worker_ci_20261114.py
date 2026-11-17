@@ -41,12 +41,24 @@ def test_windows_runs_the_complete_frontend_inventory_with_original_budgets() ->
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     linux = workflow["jobs"]["web"]
     windows = workflow["jobs"]["web-windows"]
-    assert windows["runs-on"] == "windows-latest"
+    assert windows["runs-on"] == "windows-2025-vs2026"
     assert windows["timeout-minutes"] == 60
     assert linux["timeout-minutes"] == 15
     steps = windows["steps"]
     node = next(step for step in steps if step.get("uses") == "actions/setup-node@v4")
     assert node["with"]["node-version"] == "22.23.4"
+    python = next(step for step in steps if step.get("id") == "metadata_python")
+    assert python["uses"] == (
+        "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+    )
+    assert python["with"]["python-version"] == "3.13.14"
+    stdlib = next(step for step in steps
+                  if step.get("name") == "Create candidate-owned stdlib metadata environment")
+    assert stdlib["timeout-minutes"] == 1
+    assert "-m venv --without-pip apps/api/.venv" in stdlib["run"]
+    assert "sys.version_info[:3] == (3, 13, 14)" in stdlib["run"]
+    assert steps.index(stdlib) < next(index for index, step in enumerate(steps)
+                                     if step.get("run") == "npm ci")
     runs = [step.get("run") for step in steps]
     assert runs.count("npm run test:coverage --workspace @caseops/web") == 1
     assert "npm run typecheck:web" in runs and "npm run typecheck:e2e" in runs

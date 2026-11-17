@@ -273,7 +273,7 @@ budgets,50-view product limit, API authorization and all UI/CSV/continuation
 assertions remain unchanged. Add the helper to the exact builder COPY,
 Docker/gcloud allowlists and deploy dirty-input closure. Reconcile independent
 closure and inventory tests before freezing a long gate. The next full
-frontend inventory is3197cases/312files; the browser journey identities remain
+frontend inventory is3198cases/312files; the browser journey identities remain
 unchanged. New complete CI, native/Docker and exact-serving production QA are
 still required before merge/deploy certification or guarded scheduler resume.
 
@@ -306,3 +306,44 @@ source-gate evidence remains required. Native upload-context tests pass all13
 cases in591.484s; focused workflow/closure checks pass61cases in137.75s. Correct
 API-project Ruff passes; earlier wrong-root lint invocations remain separate
 operator evidence and do not authorize unrelated fixture edits.
+
+Head37 Linux frontend retains3196passes/one loader failure: the new persistent
+browser fixture's setup hit its original five-second deadline. Preserve the
+original non-Windows Playwright page/headless-shell fixture path, while keeping
+the separately verified Windows persistent profile. All three real native
+cases, zero retries/skips and existing deadlines remain required.
+
+The local head37 complete frontend attempt is interrupted: its control session
+is unavailable, its completion receipt/native whole report are absent, and
+read-only process inspection finds no remaining candidate-owned runner. Do
+not infer a whole pass from the retained prefix. It also records Windows
+0xC0000142 process-initialization exits, distinct from actual policy refusal.
+No owned orphan browser was proven and no unrelated process was stopped.
+The pinned runtime subsequently returns its correct version with exit0; that
+diagnostic does not clear the interrupted test run or establish its cause.
+
+Require each startup negative to show the genuine policy message/exit1 or
+the exact Node CA-option conflict/exit9. A process that never initialized,
+was killed or failed for another reason cannot count as security proof. Add
+a regression for the observed initialization code and unrelated refusals;
+the next complete frontend inventory is3198cases/312files. Final component,
+native/full source, CI, Docker and production replay remain pending.
+
+The complete final local native selection passes40/40 across its three files
+in17.64s, including actual CA/hostname/marker checks, three native browser
+journeys and the new initialization-failure negative oracle. This focused
+result is not a complete frontend or release pass; final source replay follows.
+Head37 hosted Windows completes3196passes/one setup failure: the metadata
+interceptor requires the candidate-owned API Python executable, which the new
+frontend-only runner had not provisioned. Prepare only a stdlib venv with the
+already accepted Python3.13.14; retain the original one-second marker fixture
+deadline and zero external/Docker requests. Pin the actual observed supported
+`windows-2025-vs2026` image label. The separate complete browser-caller inventory
+must admit this one Windows job while keeping every old Linux job restricted
+to literal ubuntu24.04, rejecting floating/dynamic and cross-platform labels.
+
+The complete workflow replay09 retains258passes/37failures: every failure
+uses Windows locale decoding for a UTF-8 workflow source. Read the module's
+source/fixture text explicitly as UTF-8; do not remove valid source characters
+or hide the earlier failures with a process-wide encoding flag. Replay the
+complete295-case two-module inventory on the corrected source.

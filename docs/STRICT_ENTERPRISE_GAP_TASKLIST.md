@@ -5761,3 +5761,20 @@ private repacks, strict negative and all17 positive compatibility checks; it
 grants no app/native/store credit. Fresh final source/CI/build acceptance and
 complete83 cases per platform, physical checks and signing/promotion remain
 required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
+
+
+### 2026-11-17 — PR624 Windows and production release verification
+
+Release **NO-GO; Inconclusive** until the complete replacement gates finish.
+The original Windows/native and exact-serving production failures remain
+retained. PR624 repairs native child cancellation/closure, preserves original
+per-test budgets, adds complete Windows coverage, reconciles the exact browser
+runner inventory and prepares its stdlib-only metadata fixture. A Windows
+process-initialization failure cannot certify a security refusal. UTF-8 source
+reads must not depend on Windows locale. The complete295-case workflow replay
+passes; this does not certify the remaining frontend, Docker or production
+inventories. Owner-approved removal of exactly two old test preferences has
+independent unchanged-sibling proof. Future IP18 cleanup is confined to the
+current invocation's acknowledged preference. The projection scheduler remains
+paused until exact-serving full QA and the guarded maintenance resume fences
+pass. See [dated evidence](security/production-verification-2026-11-17.md).

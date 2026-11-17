@@ -470,12 +470,28 @@ jobs:
 
   web-windows:
     name: Windows web (typecheck + complete coverage)
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     # Match the existing Windows full-frontend verification window. This new
     # job includes provisioning; all per-test and native deadlines stay fixed.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Set up metadata fixture Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        id: metadata_python
+        with:
+          python-version: "3.13.14"
+      - name: Create candidate-owned stdlib metadata environment
+        shell: pwsh
+        timeout-minutes: 1
+        env:
+          CASEOPS_METADATA_PYTHON: ${{ steps.metadata_python.outputs.python-path }}
+        run: |
+          if (Test-Path -LiteralPath apps/api/.venv) { throw 'Metadata environment already exists' }
+          & $env:CASEOPS_METADATA_PYTHON -m venv --without-pip apps/api/.venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./apps/api/.venv/Scripts/python.exe -c "import sys; assert sys.version_info[:3] == (3, 13, 14); print('CASEOPS_METADATA_PYTHON_READY')"
+          exit $LASTEXITCODE
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.4"

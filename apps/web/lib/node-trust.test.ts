@@ -44,6 +44,14 @@ function activeScope() {
   return scope;
 }
 
+function assertStartupRefusal(result: { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }, conflict = false, label = "startup refusal") {
+  expect(result.signal, label).toBeNull();
+  expect(result.code, label).toBe(conflict ? 9 : 1);
+  expect(result.stdout, label).not.toContain("APP_RAN");
+  if (conflict) expect(result.stderr, label).toContain("either --use-openssl-ca or --use-bundled-ca can be used, not both");
+  else expect(result.stderr, label).toContain("CaseOps Node trust policy refused startup.");
+}
+
 function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const key of ["NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "NODE_USE_SYSTEM_CA", "NODE_TLS_REJECT_UNAUTHORIZED", "SSL_CERT_FILE", "SSL_CERT_DIR", "OPENSSL_CONF"]) delete env[key];
@@ -211,6 +219,15 @@ test("ended native test scope cannot start a later child", async () => {
   expect(scope.children.size).toBe(0);
 });
 
+test("process initialization failure cannot count as a startup policy refusal", () => {
+  for (const result of [
+    { code: 3221225794, signal: null, stdout: "", stderr: "" }, // 0xC0000142
+    { code: null, signal: "SIGTERM" as const, stdout: "", stderr: "" },
+    { code: 1, signal: null, stdout: "", stderr: "Unrelated native startup failure" },
+  ]) expect(() => assertStartupRefusal(result)).toThrow();
+  expect(() => assertStartupRefusal({ code: 9, signal: null, stdout: "", stderr: "Unrelated option failure" }, true)).toThrow();
+});
+
 test("aborted native child physically closes before its fixture can be removed", async () => {
   const controller = new AbortController();
   const scope: NativeScope = { signal: controller.signal, closed: false, children: new Set(), closings: new Set() };
@@ -372,8 +389,8 @@ test("extra or competing trust settings fail before app", async () => {
   ];
   await batches(controls, async control => {
     const result = await child(control.args, control.env);
-    expect(result.code, control.label).not.toBe(0);
-    expect(result.stdout).not.toContain("APP_RAN");
+    const conflict = control.env.NODE_OPTIONS === "--use-bundled-ca" || control.args[0] === "--use-bundled-ca";
+    assertStartupRefusal(result, conflict, control.label);
   });
 });
 
