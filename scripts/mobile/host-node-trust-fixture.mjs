@@ -64,7 +64,7 @@ async function descendants(target) {
 }
 async function nextWorker(target) {
   const require = createRequire(new URL('../../package.json', import.meta.url));
-  if (require('next/package.json').version !== '16.4.2') throw new Error('HOST_TLS_FIXTURE_NEXT_VERSION');
+  if (require('next/package.json').version !== '16.4.6') throw new Error('HOST_TLS_FIXTURE_NEXT_VERSION');
   const { Worker: NextWorker } = require('next/dist/lib/worker');
   const worker = new NextWorker(fileURLToPath(new URL('./host-node-trust-next-worker.cjs', import.meta.url)), {
     numWorkers: 1, enableSourceMaps: true, isolatedMemory: true, exposedMethods: ['probe'],

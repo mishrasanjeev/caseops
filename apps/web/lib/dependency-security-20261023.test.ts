@@ -10,8 +10,8 @@ const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8
   packages: Record<string, { version?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }>;
 };
 
-// Reviewed stable releases fixing the October22 Next and Vitest advisories.
-const nextVersion = "16.4.2";
+// Retain the October baseline and the November GHSA-mfr8-8qww-v76h repair.
+const nextVersion = "16.4.6";
 const vitestVersion = "4.1.12";
 
 describe("October23 dependency security baseline", () => {

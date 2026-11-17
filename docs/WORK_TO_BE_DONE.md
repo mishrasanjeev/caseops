@@ -1,3 +1,16 @@
+## 2026-11-17 — production QA follow-up
+
+PRs612,621 and623 are merged and mainacff is live. Release certification remains
+incomplete: exact production44011493757 has four IP reference setup failures,
+and a fresh audit requires patched Next16.4.6. The source repair moves the
+four cases into the existing serialized reporting role. Current CI,
+complete native/browser gates and production
+replay are still required. Three operational schedules resumed; private
+projection maintenance remains paused behind its original QA/recovery guard.
+The older Windows full-suite failure also remains incomplete. Historical
+entries below retain their dated evidence rather than superseding these facts.
+See [the November17 record](security/production-verification-2026-11-17.md).
+
 ## 2026-11-14 — disposable native V1 setup gateway remains unverified
 
 J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;

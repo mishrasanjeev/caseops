@@ -927,12 +927,12 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
     assert not (tmp_path / "test-results").exists()
     if release_contract == "current":
         assert result.returncode == 0, result.stderr
-        # Nov7 remains in B5; four Nov14 official-reference cases belong to tester.
+        # Nov7 remains in B5; Nov14 references use the serialized reporting role.
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 3,
-            "partitions": {"tester": 101, "tester-catalog": 18,
+            "partitions": {"tester": 97, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13-a": 40,
-                           "test-legal-write-oct13-b": 11},
+                           "test-legal-write-oct13-b": 15},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }
     else:
@@ -1199,6 +1199,29 @@ def test_patent_and_statute_production_phases_are_release_owned_and_bounded() ->
     assert "--project=prod-chromium" in legacy
     assert steps.index(by_name["Run prod-Playwright suite (notice module)"]) < steps.index(check)
     assert steps.index(check) < steps.index(patent) < steps.index(statutes)
+
+
+def test_reference_journeys_keep_the_existing_serialized_reporting_credentials() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    step = next(item for item in steps if item.get("name") == (
+        "Run release-owned test-legal portfolio and Calendar regressions"
+    ))
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
+    assert step["env"]["CASEOPS_RAM_PROD_PASSWORD"] == (
+        "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}"
+    )
+    assert step["if"] == (
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
+    assert "--workers=1 --retries=0" in step["run"]
+    assert not any("CASEOPS_IP_REFERENCE_PROD_" in key for key in step["env"])
 
 
 def test_notice_acceptance_is_in_the_exact_release_tester_inventory() -> None:

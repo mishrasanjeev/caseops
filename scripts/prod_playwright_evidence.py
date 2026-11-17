@@ -188,8 +188,8 @@ TESTER_PARTITIONS = {
 }
 # Reviewed exact inventory; any new or removed case requires an explicit update.
 TESTER_PARTITION_COUNTS = {
-    "tester": 101, "tester-catalog": 18, "tester-index": 6,
-    "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
+    "tester": 97, "tester-catalog": 18, "tester-index": 6,
+    "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 15,
 }
 # These mandatory positive journeys are separate from the reviewed tester union.
 BATCH3_MANDATORY_CASES = {
@@ -322,8 +322,8 @@ OCT13_FILES = {
 }
 
 
-# Immutable whole-file partitions of the original canonical51 oracle above.
-# Their tuple order preserves the two contiguous native discovery blocks.
+# Preserve the original51 oracle above; four references now use its existing
+# reporting principal. Tuple order retains the two native discovery blocks.
 OCT13_PARTITION_FILES = {
     "test-legal-write-oct13-a": (
         "ram-2026-10-13-hearings.spec.ts",
@@ -336,6 +336,7 @@ OCT13_PARTITION_FILES = {
         "ram-2026-10-17-ip-reminders.spec.ts",
         "ram-2026-10-17-ip-tracker.spec.ts",
         "ram-2026-10-22-prod.spec.ts",
+        NOV14_REFERENCE_FILE,
     ),
 }
 OCT13_PROJECT = "test-legal-write-prod-chromium"
@@ -377,7 +378,7 @@ def _nov14_rows(rows, *, production=False, execution=False):
     files = {NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE}
     selected = [row for row in rows if row["file"] in files]
     expected = Counter(
-        ("tester-prod-chromium" if production else project, file, (file, title))
+        (OCT13_PROJECT if production else project, file, (file, title))
         for project, file, title in NOV14_APP_CASES
         if not production or file == NOV14_REFERENCE_FILE
     )
@@ -664,7 +665,7 @@ def _tester_inventory(canonical):
     if len(semantic_cases) != len(rows):
         raise EvidenceError("duplicate_tester_semantic_identity")
     for project, expected_files in (
-        (TESTER_PARTITIONS["tester-index"], INDEX_FILES), (OCT13_PROJECT, OCT13_FILES)
+        (TESTER_PARTITIONS["tester-index"], INDEX_FILES), (OCT13_PROJECT, {**OCT13_FILES, NOV14_REFERENCE_FILE: 4})
     ):
         actual = Counter(
             Path(row["file"]).name
@@ -714,7 +715,7 @@ def _check_tester_selection(binding, discovery, canonical, *, execution=False):
     ]
     if [_tester_case_identity(row) for row in discovery["tests"]] != expected:
         raise EvidenceError("tester_partition_selection_mismatch")
-    if binding["invocation"] == "tester":
+    if binding["invocation"] == "test-legal-write-oct13-b":
         _nov14_rows(discovery["tests"], production=True, execution=execution)
 
 

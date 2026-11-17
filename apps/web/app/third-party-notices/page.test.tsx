@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, eleven named components and fourteen full notices", () => {
+  it("renders one heading, twelve named components and fifteen full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(11);
-    expect(article.querySelectorAll("details")).toHaveLength(14);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(12);
+    expect(article.querySelectorAll("details")).toHaveLength(15);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -70,6 +70,7 @@ describe("third-party license notices", () => {
       ["pako", "1.0.11"],
       ["qrcode.react", "4.2.0"],
       ["node", "22.23.4"],
+      ["next", "16.4.6"],
       ["liberation-fonts", "2.1.5"],
       ["NotoSansDevanagari", "2.002"],
       ["NotoSans", "2.008"],
@@ -138,6 +139,25 @@ describe("third-party license notices", () => {
     expect(original).toHaveLength(145485);
     expect(sha256(original)).toBe("c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4");
     expect(component.notices[0].text).toBe(original.toString("utf8"));
+  });
+
+  it("retains the exact patched Next license in the public notice and installed runtime", () => {
+    const component = notices.components.find(({ packageName }) => packageName === "next")!;
+    expect(component.version).toBe("16.4.6");
+    expect(component.notices).toHaveLength(1);
+    expect(component.notices[0]).toMatchObject({
+      license: "MIT", sourceFile: "license.md",
+      sourceUrl: "https://raw.githubusercontent.com/vercel/next.js/54b876b6b161b0ecda19562eb264bec637e60d6d/license.md",
+      retainedSource: "license-policy/upstream/next_16.4.6/LICENSE.md",
+      filename: "next-16.4.6-LICENSE.txt",
+      sha256: "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224",
+    });
+    const retained = readFileSync(path.join(repoRoot, "license-policy/upstream/next_16.4.6/LICENSE.md"));
+    expect(retained).toHaveLength(1079);
+    expect(sha256(retained)).toBe("ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224");
+    expect(component.notices[0].text).toBe(retained.toString("utf8"));
+    expect(readFileSync(path.join(repoRoot, "node_modules/next/license.md"))).toEqual(retained);
+    expect(readFileSync(path.join(publicRoot, "next-16.4.6-LICENSE.txt"))).toEqual(retained);
   });
 
   it("pins PDF fonts and both shaping-engine licences to separate original API sources", () => {

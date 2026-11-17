@@ -208,6 +208,8 @@ test.describe("Public landing page and user guide", () => {
       "/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md",
       "/third-party-compliance/license-policy/reviewed-packages.json",
       "/license-policy/upstream/LGPL-3.0-or-later.txt",
+      "/license-policy/upstream/next_16.4.6/LICENSE.md",
+      "/third-party-compliance/license-policy/upstream/next_16.4.6/LICENSE.md",
     ]) {
       const response = await request.get(path, { failOnStatusCode: false });
       expect(response.status(), path).toBe(404);
@@ -465,8 +467,8 @@ test.describe("Public landing page and user guide", () => {
       await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
       await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
-      await expect(page.locator("article h2")).toHaveCount(11);
-      await expect(page.locator("article details")).toHaveCount(14);
+      await expect(page.locator("article h2")).toHaveCount(12);
+      await expect(page.locator("article details")).toHaveCount(15);
       for (const component of thirdPartyNotices.components) {
         const section = page.getByRole("region", { name: component.name, exact: true });
         await expect(section).toContainText(component.packageName);

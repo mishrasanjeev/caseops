@@ -31,6 +31,7 @@ const WORKSPACE_REQUIREMENTS_SPECS = /ram-2026-11-07-(?:contracts|teams)\.spec\.
 const BATCH5_SPECS = /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
+const OFFICIAL_REFERENCE_PROD_SPEC = /ram-2026-11-14-prod\.spec\.ts$/;
 // Batch 4 specs sign in as the reporting tester themselves and run the same
 // journeys locally (app config) and here against the exact serving release.
 const BATCH4_SPECS = /ram-2026-(?:10-31-[a-z0-9-]+|11-01-adj-pickers)\.spec\.ts$/;
@@ -155,7 +156,7 @@ export default defineConfig({
     {
       name: "tester-prod-chromium",
       testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/, /ram-2026-10-08-notices\.spec\.ts$/, /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/],
-      testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS],
+      testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, OFFICIAL_REFERENCE_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS],
       // Mutating halves of read-only production checks run only against a local app.
       grepInvert: /\[local-only\]/,
       use: {
@@ -293,7 +294,7 @@ export default defineConfig({
     },
     {
       name: "test-legal-write-prod-chromium",
-      testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC],
+      testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC, OFFICIAL_REFERENCE_PROD_SPEC],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

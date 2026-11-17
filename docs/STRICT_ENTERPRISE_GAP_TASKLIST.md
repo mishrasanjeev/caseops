@@ -1,3 +1,16 @@
+## November17 — live release verification follow-up
+
+**Partially implemented; NO-GO for complete certification.** Canonical retry
+deployed mainacff with exact public identity, health and runtime checks; three
+operational schedules resumed. Production44011493757 exposes four official IP
+reference setup failures from a QA-bot/test-legal helper mismatch. Preserve that
+failed partition and all still-pending roles. Route the four references
+to the existing serialized reporting role without changing tenant guards. A fresh moderate Next16.4.2 advisory
+also requires the16.4.6 runtime/compiler/license/TLS closure and new security,
+Docker and deployed evidence. Private projection cadence remains held until
+successful exact QA and two later clean executions meet the existing guard.
+See [the dated release record](security/production-verification-2026-11-17.md).
+
 ## November16 — PR621 integration verification
 
 Partially implemented / Inconclusive; NO-GO. PR612 is merged at main736c15d3;

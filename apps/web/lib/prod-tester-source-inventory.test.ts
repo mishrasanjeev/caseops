@@ -14,9 +14,9 @@ type Case = { id: string; file: string; titles: string[]; project: string; repea
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const projects = {
-  "tester-prod-chromium": 119,
+  "tester-prod-chromium": 115,
   "tester-index-prod-chromium": 6,
-  "test-legal-write-prod-chromium": 51,
+  "test-legal-write-prod-chromium": 55,
 };
 const batch3Projects = {
   "batch3-clients-prod-chromium": 1,
@@ -33,11 +33,12 @@ const datedFiles = {
   "ram-2026-10-17-ip-reminders.spec.ts": 4,
   "ram-2026-10-17-ip-tracker.spec.ts": 2,
   "ram-2026-10-22-prod.spec.ts": 1,
+  "ram-2026-11-14-prod.spec.ts": 4,
 };
 
 // These are independent reviewed identities, not imported planner expectations.
-// The unchanged Playwright project owns all51 cases; only native invocations
-// select these contiguous whole-file groups.
+// Preserve all51 original cases and move the four reference cases into the
+// existing serialized reporting role without changing their semantic union.
 const oct13AFiles = [
   "ram-2026-10-13-hearings.spec.ts",
   "ram-2026-10-13-ip-portfolio.spec.ts",
@@ -49,6 +50,7 @@ const oct13BFiles = [
   "ram-2026-10-17-ip-reminders.spec.ts",
   "ram-2026-10-17-ip-tracker.spec.ts",
   "ram-2026-10-22-prod.spec.ts",
+  "ram-2026-11-14-prod.spec.ts",
 ] as const;
 const oct13AIdentities = [
   ["ram-2026-10-13-hearings.spec.ts","October 13 court Calendar acceptance","saved court identities and every hidden event remain reachable at 1280px"],
@@ -104,10 +106,14 @@ const oct13BIdentities = [
   ["ram-2026-10-17-ip-tracker.spec.ts","IP18 current-source tracker filters saved views export and full continuation at 1280px"],
   ["ram-2026-10-17-ip-tracker.spec.ts","IP18 current-source tracker filters saved views export and full continuation at 393px"],
   ["ram-2026-10-22-prod.spec.ts","NOTES22 newest three of four saved notes persist after reload at 1280px and 393px"],
+  ["ram-2026-11-14-prod.spec.ts","IP India content and form references /app/ip/registry desktop"],
+  ["ram-2026-11-14-prod.spec.ts","IP India content and form references /app/ip/patents desktop"],
+  ["ram-2026-11-14-prod.spec.ts","[mobile] IP India content and form references /app/ip/registry phone"],
+  ["ram-2026-11-14-prod.spec.ts","[mobile] IP India content and form references /app/ip/patents phone"],
 ] as const;
 const oct13Parts = [
   { invocation: "test-legal-write-oct13-a", files: oct13AFiles, identities: oct13AIdentities, count: 40 },
-  { invocation: "test-legal-write-oct13-b", files: oct13BFiles, identities: oct13BIdentities, count: 11 },
+  { invocation: "test-legal-write-oct13-b", files: oct13BFiles, identities: oct13BIdentities, count: 15 },
 ] as const;
 
 function datedIdentity(row: Case) {
@@ -201,7 +207,7 @@ function expectNov15(rows: Case[]) {
 function expectNov14(rows: Case[], production = false) {
   const selected = rows.filter(isNov14);
   const expected = nov14Cases.filter(([, file]) => !production || file === "ram-2026-11-14-prod.spec.ts")
-    .map(([project, file, title]) => JSON.stringify([production ? "tester-prod-chromium" : project, file, [file, title]])).sort();
+    .map(([project, file, title]) => JSON.stringify([production ? "test-legal-write-prod-chromium" : project, file, [file, title]])).sort();
   expect(selected.map(row => JSON.stringify([row.project, row.file, row.titles])).sort()).toEqual(expected);
   expect(new Set(selected.map(row => row.id)).size).toBe(selected.length);
   expect(selected.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
@@ -530,7 +536,7 @@ describe("reviewed production tester source inventory", () => {
 
   beforeAll(() => { cases = collectProjects(projects); });
 
-  it("collects reviewed119+6+51 QA roles with four reference cases but no local draft generation", () => {
+  it("collects reviewed115+6+55 QA roles with four reference cases but no local draft generation", () => {
     expect(counts(cases.map(row => row.project))).toEqual(projects);
     expect(cases).toHaveLength(176);
     expectNov14(cases, true);
@@ -567,6 +573,17 @@ describe("reviewed production tester source inventory", () => {
     expect(source).toContain('throw new Error("Production notes mutations are test-legal only.")');
   });
 
+  it("routes all four official-reference cases to the serialized reporting principal", () => {
+    const references = cases.filter(row => row.file === "ram-2026-11-14-prod.spec.ts");
+    expect(references).toHaveLength(4);
+    expect(references.every(row => row.project === "test-legal-write-prod-chromium")).toBe(true);
+    expectNov14(references, true);
+    const source = readFileSync(path.join(root, "tests/e2e/support/ram-bugs4.ts"), "utf8");
+    expect(source).toContain('if (!local && credentials.slug !== "test-legal")');
+    expect(source).toContain('throw new Error("Production batch-4 acceptance is test-legal only.")');
+    expect(source).not.toContain("CASEOPS_IP_REFERENCE_PROD_");
+  });
+
   it("retains exact per-file index and dated inventories", () => {
     expect(counts(cases.filter(row => row.project === "tester-index-prod-chromium").map(row => row.file))).toEqual(indexFiles);
     expect(counts(cases.filter(row => row.project === "test-legal-write-prod-chromium").map(row => row.file))).toEqual(datedFiles);
@@ -580,22 +597,23 @@ describe("reviewed production tester source inventory", () => {
   });
 
 
-  it("retains every literal dated identity in the contiguous disjoint40+11 canonical order", () => {
+  it("retains all51 dated identities plus four references in disjoint40+15 canonical order", () => {
     const dated = cases.filter(row => row.project === "test-legal-write-prod-chromium");
     const a = dated.filter(row => oct13AFiles.some(file => file === row.file));
     const b = dated.filter(row => oct13BFiles.some(file => file === row.file));
     expect(oct13AIdentities).toHaveLength(40);
-    expect(oct13BIdentities).toHaveLength(11);
+    expect(oct13BIdentities).toHaveLength(15);
+    expect(dated.filter(row => !isNov14(row))).toHaveLength(51);
     expect(a.map(datedIdentity)).toEqual(oct13AIdentities);
     expect(b.map(datedIdentity)).toEqual(oct13BIdentities);
     expect(dated.map(datedIdentity)).toEqual([...oct13AIdentities, ...oct13BIdentities]);
     expect(dated.map(row => row.id)).toEqual([...a, ...b].map(row => row.id));
-    expect(new Set([...a, ...b].map(row => row.id)).size).toBe(51);
+    expect(new Set([...a, ...b].map(row => row.id)).size).toBe(55);
     expect(a.every(row => !b.some(other => other.id === row.id))).toBe(true);
     expect([...new Set(a.map(row => row.file))]).toEqual(oct13AFiles);
     expect([...new Set(b.map(row => row.file))]).toEqual(oct13BFiles);
     expect([...oct13AFiles, ...oct13BFiles]).toEqual(Object.keys(datedFiles));
-    expect(new Set([...oct13AFiles, ...oct13BFiles]).size).toBe(8);
+    expect(new Set([...oct13AFiles, ...oct13BFiles]).size).toBe(9);
     expect(counts(a.map(row => row.file))).toEqual({
       "ram-2026-10-13-hearings.spec.ts": 2,
       "ram-2026-10-13-ip-portfolio.spec.ts": 4,
@@ -607,6 +625,7 @@ describe("reviewed production tester source inventory", () => {
       "ram-2026-10-17-ip-reminders.spec.ts": 4,
       "ram-2026-10-17-ip-tracker.spec.ts": 2,
       "ram-2026-10-22-prod.spec.ts": 1,
+      "ram-2026-11-14-prod.spec.ts": 4,
     });
   });
 
@@ -628,7 +647,7 @@ describe.each(oct13Parts)("$invocation fixed native source inventory", part => {
   let cases: Case[];
 
   // Each subset has its own original8s native collection bound. The unfiltered
-  // canonical project above remains the independent51-case admission oracle.
+  // canonical project preserves the original51 plus four reporting references.
   beforeAll(() => {
     cases = collectProjects({ "test-legal-write-prod-chromium": part.count }, part.files);
   });

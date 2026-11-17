@@ -182,11 +182,11 @@ def test_batch5_inventory_cannot_infer_unreviewed_counts_or_change_historical_pi
             "ram-2026-11-07-teams.spec.ts",
         }
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 101,
+        "tester": 97,
         "tester-catalog": 18,
         "tester-index": 6,
         "test-legal-write-oct13-a": 40,
-        "test-legal-write-oct13-b": 11,
+        "test-legal-write-oct13-b": 15,
     }
     assert evidence.APP_BASE_PROJECT_COUNTS == {"app-chromium": 719, "app-mobile": 55}
     assert len(evidence.APP_EXPECTED_SKIPS) == 21

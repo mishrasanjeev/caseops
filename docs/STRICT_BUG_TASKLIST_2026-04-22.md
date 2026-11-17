@@ -1,3 +1,18 @@
+## November17 — production reference fixture and dependency verification
+
+**Partially fixed / Inconclusive; NO-GO for complete release certification.**
+Mainacff is live and three operational schedules resumed. Production run44011493757
+retains84 tester passes,13 skips and four setup failures: the new official IP
+reference cases call a test-legal-only helper with the QA-bot suite's account.
+The IP page assertions were not reached. Move these four cases into the
+existing serialized reporting role, preserving the helper, tenant fence,
+all original UI checks and complete176-case semantic union. The earlier
+credential-binding alternative and its interrupted gate remain incomplete. Fresh audit also flags
+Next16.4.2; the replacement pins16.4.6 and must reconcile its complete runtime,
+compiler, license and TLS fixture closure. Complete CI, source/native/browser
+replay and production QA remain required. Projection cadence stays held.
+See [retained evidence and remaining checks](security/production-verification-2026-11-17.md).
+
 ## November14 — CI optional notice audit consumer
 
 Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
