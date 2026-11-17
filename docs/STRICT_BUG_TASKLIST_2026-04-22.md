@@ -13,6 +13,14 @@ compiler, license and TLS fixture closure. Complete CI, source/native/browser
 replay and production QA remain required. Projection cadence stays held.
 See [retained evidence and remaining checks](security/production-verification-2026-11-17.md).
 
+Windows follow-up remains **Partially fixed / Inconclusive**. Head6967 hosted
+CI is green; its full workstation run retains3181passes/three native failures.
+Preserve that evidence. The candidate cancels and joins failed native work,
+keeps all startup/TLS/browser budgets, and adds whole Windows CI coverage.
+The exact approved two-view cleanup is completed and audited; other48 views
+are unchanged. The IP18 journey's own cleanup is source-covered but full
+deployed replay is pending. No complete release or scheduler-resume credit.
+
 ## November14 — CI optional notice audit consumer
 
 Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.

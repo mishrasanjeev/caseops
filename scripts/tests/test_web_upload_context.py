@@ -59,7 +59,7 @@ BUILDER_INPUTS = {
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
-        "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
+        "ip-portfolio-export-completion", "ip18-owned-view-cleanup", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
         "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",

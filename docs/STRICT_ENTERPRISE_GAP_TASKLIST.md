@@ -11,6 +11,15 @@ Docker and deployed evidence. Private projection cadence remains held until
 successful exact QA and two later clean executions meet the existing guard.
 See [the dated release record](security/production-verification-2026-11-17.md).
 
+Windows native follow-up: **Partially implemented; NO-GO** for complete
+certification. Source6967 hosted CI passes, but the complete workstation
+frontend retains three failures. Add independent whole Windows coverage and
+physical native-child cancellation/closure fences without deadline waivers.
+The approved two synthetic-view removal has exact backup/audit/readback proof;
+48other preferences remain unchanged. Future IP18 cleanup uses only its own
+acknowledged ID and separately records failures. Complete final source gates,
+Docker inventory and exact-serving production QA remain required.
+
 ## November16 — PR621 integration verification
 
 Partially implemented / Inconclusive; NO-GO. PR612 is merged at main736c15d3;

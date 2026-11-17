@@ -11,6 +11,14 @@ The older Windows full-suite failure also remains incomplete. Historical
 entries below retain their dated evidence rather than superseding these facts.
 See [the November17 record](security/production-verification-2026-11-17.md).
 
+Later November17: head6967 CI is green, while its complete Windows frontend
+replacement still fails three native checks. The candidate preserves all
+deadlines and assertions, fences/joins cancelled native children, and adds
+independent complete Windows CI coverage. The owner-approved two-view IP18
+cleanup is completed with48 unchanged preferences and audited fresh readback;
+the journey now cleans up its own acknowledged view. Final source/platform,
+Docker and production replay remain pending; projection cadence stays held.
+
 ## 2026-11-14 — disposable native V1 setup gateway remains unverified
 
 J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;

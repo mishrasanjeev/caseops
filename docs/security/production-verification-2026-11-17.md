@@ -224,3 +224,55 @@ the Windows metadata/worker/TLS boundaries. All constructor and test deadlines,
 real TLS verification, exact inventories and assertions remain unchanged.
 No replacement full Docker gate has started. Native startup profiling and a
 complete replacement frontend run remain required before that expensive gate.
+
+## Windows harness follow-up and approved IP18 cleanup
+
+Head6967 completes its five GitHub workflows successfully, including all3184
+Linux frontend cases/311files. Its frozen Windows replacement retains3181
+passes/three native failures, with unchanged source and deadlines. These are
+not a green complete Windows inventory. Subsequent source-bound diagnostics
+retain their own failed counts and phases; do not rerun unchanged timing races
+or treat system-load observations as a proven historical cause.
+
+Native diagnostics expose sequential OS startup costs, an OpenSSL preparation
+timeout and a browser-startup timeout. The candidate uses fresh P-256 test
+certificates, finite independent controls, and a test-local cancellation scope
+that joins physical child closure. It rejects a late successful exit rather
+than accepting a delayed timer. Two cancellation controls and11 owned-view
+cleanup controls pass in a39-case run retaining36passes/three failures. The
+original8-second Node child,5-second OpenSSL/browser/test and15-second
+whole-invocation/test budgets remain unchanged. The offline worker retains all
+three real ZIP/QR/accessibility cases and now uses its Playwright-managed
+browser and one controlled offline profile; privacy, no-paid headers and actual
+rendered-pixel/hostname/CA assertions remain enforced. Complete replacement
+source/platform gates remain pending.
+
+Add an independent Windows frontend CI job with the same pinned Node22.23.4,
+reviewed host trust setup, component/E2E typechecks, whole coverage command,
+coverage thresholds and15-minute job ceiling. Preserve the Linux web/build
+and Docker gates. Native failure stages and trust timing evidence are retained
+as synthetic JSON only. A hosted Windows pass must name that actual runner;
+it cannot rewrite the earlier workstation failures or certify an unrun Docker
+inventory. Current component/E2E compilation passes before the latest small
+process-helper refactor and must be replayed on the final source.
+
+The owner explicitly approved removing exactly two old IP18 preferences on
+November17. One exact-serving operation at13:52UTC deleted only the reviewed
+IDs beginning537c0410 and8646711c. A fresh separate-connection readback proves the
+other48 complete saved-view snapshots and the original import/creation-audit
+snapshots unchanged. Two canonical SYSTEM audit events document the operation,
+with no reporting-user impersonation. Exact backups and execution/log receipts
+are retained in operator evidence; the one-use job definition was removed and
+its absence verified. No legal record or other saved preference was changed.
+
+The IP18 journey now records only its own201-acknowledged canonical view ID,
+removes that one preference in independent cleanup, and rereads the complete
+unchanged sibling response. Original workflow failures take precedence over
+separately retained cleanup failures. Existing240-second workflow and export
+budgets,50-view product limit, API authorization and all UI/CSV/continuation
+assertions remain unchanged. Add the helper to the exact builder COPY,
+Docker/gcloud allowlists and deploy dirty-input closure. Reconcile independent
+closure and inventory tests before freezing a long gate. The next full
+frontend inventory is3197cases/312files; the browser journey identities remain
+unchanged. New complete CI, native/Docker and exact-serving production QA are
+still required before merge/deploy certification or guarded scheduler resume.

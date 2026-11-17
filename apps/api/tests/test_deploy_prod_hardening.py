@@ -1259,6 +1259,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
         "tests/e2e/support/public-release-identity.ts",
         "tests/e2e/support/ip-import-acknowledgements.ts",
         "tests/e2e/support/ip-portfolio-export-completion.ts",
+        "tests/e2e/support/ip18-owned-view-cleanup.ts",
         "tests/e2e/support/run-id.ts",
     } <= required
     _assert_web_builder_inputs(
@@ -1487,6 +1488,7 @@ def test_web_communications_ast_read_closure_rejects_each_omission(
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
     "ip-import-acknowledgements.ts", "public-release-identity.ts",
     "ip-portfolio-export-completion.ts",
+    "ip18-owned-view-cleanup.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: str) -> None:
     path = f"tests/e2e/support/{helper}"
@@ -1503,6 +1505,7 @@ def test_web_fixture_closure_rejects_omitted_direct_or_transitive_copy(helper: s
     "bounded-network-evidence.ts", "prod-api-response-evidence.ts", "cost-controls.ts",
     "ip-import-acknowledgements.ts", "public-release-identity.ts",
     "ip-portfolio-export-completion.ts",
+    "ip18-owned-view-cleanup.ts",
 ])
 def test_web_fixture_closure_rejects_omitted_context_input(ignore_path: str, helper: str) -> None:
     path = f"tests/e2e/support/{helper}"
@@ -4650,6 +4653,7 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
 
 
 _WEB_DIRTY_CLOSURE_REGRESSIONS = (
+    ("ip18-owned-view-cleanup", "tests/e2e/support/ip18-owned-view-cleanup.ts"),
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
     ("retained-draft-journey", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"),
     ("draft-formats-journey", "tests/e2e/drafting-formats20261115.spec.ts"),

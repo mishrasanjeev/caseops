@@ -1,6 +1,7 @@
 // @vitest-environment node
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { X509Certificate, createHash } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -11,7 +12,7 @@ import path from "node:path";
 import { rootCertificates } from "node:tls";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, aroundEach, beforeAll, expect, test } from "vitest";
 
 const require = createRequire(import.meta.url);
 const web = path.resolve(import.meta.dirname, "..");
@@ -20,6 +21,28 @@ const denied = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b
 const fingerprint = (pem: string) => createHash("sha256").update(new X509Certificate(pem).raw).digest("hex");
 let temp: string;
 let trust: string;
+const nativeTimings: Array<{ index: number; elapsedMs: number; code: unknown; signal: unknown }> = [];
+type NativeScope = { signal: AbortSignal; closed: boolean; children: Set<ChildProcess>; closings: Set<Promise<unknown>> };
+const nativeScope = new AsyncLocalStorage<NativeScope>();
+
+aroundEach(async (runTest, context) => {
+  const scope: NativeScope = { signal: context.signal, closed: false, children: new Set(), closings: new Set() };
+  await nativeScope.run(scope, async () => {
+    try { await runTest(); }
+    finally {
+      scope.closed = true;
+      for (const child of scope.children) child.kill();
+      await Promise.allSettled([...scope.closings]);
+    }
+  });
+});
+
+function activeScope() {
+  const scope = nativeScope.getStore();
+  if (!scope || scope.closed) throw new Error("Native trust test scope ended.");
+  scope.signal.throwIfAborted();
+  return scope;
+}
 
 function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -27,18 +50,38 @@ function cleanEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-async function child(args: string[], env = cleanEnv()) {
-  const proc = spawn(process.execPath, args, { env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+async function child(args: string[], env = cleanEnv(), options?: { file: string; cwd: string; timeout: 5000 }) {
+  const scope = activeScope();
+  const started = performance.now();
+  const index = nativeTimings.length;
+  nativeTimings.push({ index, elapsedMs: -1, code: null, signal: null });
+  const budget = options?.timeout ?? 8_000;
+  const proc = spawn(options?.file ?? process.execPath, args, { env, cwd: options?.cwd, signal: scope.signal, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  scope.children.add(proc);
   let stdout = "";
   let stderr = "";
+  let timedOut = false;
   proc.stdout.on("data", (value) => { stdout += value; });
   proc.stderr.on("data", (value) => { stderr += value; });
-  const timer = setTimeout(() => proc.kill(), 8_000);
+  const timer = setTimeout(() => { timedOut = true; proc.kill(); }, budget);
+  let failure: Error | undefined;
+  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+    proc.once("error", error => { failure = error; });
+    proc.once("close", (code, signal) => resolve({ code, signal }));
+  });
+  scope.closings.add(closed);
   try {
-    const [code, signal] = await once(proc, "close");
+    // Abort emits error before close. Await physical closure before releasing
+    // fixture files, including on a timed-out test or a failed spawn.
+    const { code, signal } = await closed;
+    nativeTimings[index] = { index, elapsedMs: Math.round(performance.now() - started), code, signal };
+    if (failure) throw failure;
+    if (timedOut || performance.now() - started > budget || signal !== null || code === null) throw new Error("Native trust child did not finish inside its original deadline.");
     return { code, signal, stdout, stderr };
   } finally {
     clearTimeout(timer);
+    scope.children.delete(proc);
+    scope.closings.delete(closed);
   }
 }
 
@@ -54,7 +97,31 @@ beforeAll(() => {
   }
 });
 
-afterAll(() => fs.rmSync(temp, { recursive: true, force: true }));
+// Independent native controls share no files they mutate. Bound startup fan-out
+// and await every started child even when one rejects; never accept a killed
+// process as a successful negative security control.
+async function batches<T>(values: readonly T[], check: (value: T) => Promise<void>) {
+  let next = 0;
+  const worker = async () => {
+    while (next < values.length) {
+      activeScope();
+      const index = next++;
+      await check(values[index]);
+    }
+  };
+  // Two physical children at most, starting the next independent control when
+  // either slot is free. Always join both slots, including on rejection.
+  const results = await Promise.allSettled(Array.from({ length: Math.min(2, values.length) }, worker));
+  const failures = results.filter(result => result.status === "rejected");
+  if (failures.length) throw new AggregateError(failures.map(result => result.reason), "Native trust controls failed.");
+}
+
+afterAll(() => {
+  const retained = path.join(web, "../../test-results/native-trust", path.basename(temp));
+  fs.mkdirSync(retained, { recursive: true });
+  fs.writeFileSync(path.join(retained, "timings.json"), JSON.stringify(nativeTimings));
+  fs.rmSync(temp, { recursive: true, force: true });
+});
 
 test("Docker generates trust before npm and inherits it into build and runtime", () => {
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
@@ -76,7 +143,7 @@ test("Docker's exact runtime tool-absence program rejects files, dangling launch
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
   const program = docker.match(/&& node -e '([^']+UNUSED_GLOBAL_TOOL_REMAINS[^']+)'/);
   assert.ok(program, "Missing actual trusted-base absence program");
-  for (const mode of ["absent", "file", "dangling-link", "metadata-error"]) {
+  await batches(["absent", "file", "dangling-link", "metadata-error"], async mode => {
     const root = path.join(temp, `tool-absence-${mode}`);
     fs.mkdirSync(root);
     const name = mode === "dangling-link" ? "/usr/local/bin/npm" : "/usr/local/lib/node_modules/npm";
@@ -104,7 +171,7 @@ test("Docker's exact runtime tool-absence program rejects files, dangling launch
     expect(result.code, mode).toBe(mode === "absent" ? 0 : 1);
     expect(result.stdout).toBe("");
     if (mode === "file" || mode === "dangling-link") expect(fs.lstatSync(target)).toBeTruthy();
-  }
+  });
 });
 
 test("Docker runtime explicitly preloads the guard independently of NODE_OPTIONS", () => {
@@ -131,6 +198,44 @@ test("preserves every current upstream root when G3 is already absent", () => {
 
 test("requires the exact shipping Node runtime for positive trust acceptance", () => {
   expect(process.versions.node).toBe("22.23.4");
+});
+
+test("ended native test scope cannot start a later child", async () => {
+  const scope: NativeScope = { signal: new AbortController().signal, closed: true, children: new Set(), closings: new Set() };
+  const count = nativeTimings.length;
+  await nativeScope.run(scope, async () => {
+    await expect(child(["-e", "throw new Error('MUST_NOT_START')"])).rejects.toThrow("scope ended");
+  });
+  expect(nativeTimings).toHaveLength(count);
+  expect(scope.children.size).toBe(0);
+});
+
+test("aborted native child physically closes before its fixture can be removed", async () => {
+  const controller = new AbortController();
+  const scope: NativeScope = { signal: controller.signal, closed: false, children: new Set(), closings: new Set() };
+  const marker = path.join(temp, "abort-ready");
+  const result = Promise.allSettled([nativeScope.run(scope, () => child(["-e",
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ready'); setInterval(()=>{},1000);`]))]);
+  let completed: PromiseSettledResult<unknown> | undefined;
+  const completion = result.then(values => { completed = values[0]; });
+  let readinessFailure: unknown;
+  try {
+    const deadline = performance.now() + 5_000;
+    while (!fs.existsSync(marker) && performance.now() < deadline) {
+      if (completed?.status === "rejected") throw completed.reason;
+      if (completed) throw new Error("Native child completed without its readiness barrier.");
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    expect(fs.existsSync(marker), "Real native child must reach its readiness barrier").toBe(true);
+  } catch (error) { readinessFailure = error; }
+  finally { controller.abort(); await completion; }
+  const settled = await result;
+  if (readinessFailure) throw readinessFailure;
+  expect(settled[0].status).toBe("rejected");
+  if (settled[0].status === "rejected") expect(settled[0].reason.name).toBe("AbortError");
+  expect(scope.children.size).toBe(0);
+  expect(scope.closings.size).toBe(0);
+  fs.unlinkSync(marker);
 });
 
 test("already-removed G3 trust filtering is idempotent", () => {
@@ -227,29 +332,25 @@ test.each(["valid", "tampered", "read-error", "stat-error", "open-error", "path-
 });
 
 test("missing or tampered bundle and nonempty or missing CA directory fail before app", async () => {
-  const dir = path.join(temp, "invalid-trust");
-  fs.mkdirSync(dir);
-  for (const name of ["node-trust.cjs", "node-trust-start.cjs"]) fs.copyFileSync(path.join(scripts, name), path.join(dir, name));
-  const args = ["--use-openssl-ca", "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"];
-  const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(dir, "ca-bundle.pem"), SSL_CERT_DIR: path.join(dir, "empty") };
-  const reject = async () => {
+  const generated = path.join(temp, "invalid-trust-generated");
+  fs.mkdirSync(generated);
+  fs.copyFileSync(path.join(scripts, "node-trust.cjs"), path.join(generated, "node-trust.cjs"));
+  expect((await child([path.join(generated, "node-trust.cjs"), "--generate"])).code).toBe(0);
+  const canonical = fs.readFileSync(path.join(generated, "ca-bundle.pem"));
+  await batches(["missing-bundle", "tampered-bundle", "nonempty-directory", "missing-directory"], async mode => {
+    const dir = path.join(temp, "invalid-trust-" + mode);
+    fs.mkdirSync(dir);
+    for (const name of ["node-trust.cjs", "node-trust-start.cjs"]) fs.copyFileSync(path.join(scripts, name), path.join(dir, name));
+    const args = ["--use-openssl-ca", "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"];
+    const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(dir, "ca-bundle.pem"), SSL_CERT_DIR: path.join(dir, "empty") };
+    if (mode !== "missing-bundle") fs.writeFileSync(env.SSL_CERT_FILE, mode === "tampered-bundle" ? Buffer.concat([canonical, Buffer.from("\n")]) : canonical, { mode: 0o444 });
+    if (mode !== "missing-directory") fs.mkdirSync(env.SSL_CERT_DIR);
+    if (mode === "nonempty-directory") fs.writeFileSync(path.join(env.SSL_CERT_DIR, "unexpected.pem"), "unexpected");
     const result = await child(args, env);
     expect(result.code).not.toBe(0);
     expect(result.stdout).not.toContain("APP_RAN");
     expect(result.stderr).toContain("CaseOps Node trust policy refused startup.");
-  };
-  await reject();
-  expect((await child([path.join(dir, "node-trust.cjs"), "--generate"])).code).toBe(0);
-  fs.chmodSync(env.SSL_CERT_FILE, 0o644);
-  fs.appendFileSync(env.SSL_CERT_FILE, "\n");
-  await reject();
-  fs.writeFileSync(env.SSL_CERT_FILE, policy().createBundle(rootCertificates));
-  fs.chmodSync(env.SSL_CERT_DIR, 0o755);
-  fs.writeFileSync(path.join(env.SSL_CERT_DIR, "unexpected.pem"), "unexpected");
-  await reject();
-  fs.rmSync(path.join(env.SSL_CERT_DIR, "unexpected.pem"));
-  fs.rmdirSync(env.SSL_CERT_DIR);
-  await reject();
+  });
 });
 
 test("extra or competing trust settings fail before app", async () => {
@@ -258,45 +359,52 @@ test("extra or competing trust settings fail before app", async () => {
   for (const name of ["node-trust.cjs", "node-trust-start.cjs"]) fs.copyFileSync(path.join(scripts, name), path.join(dir, name));
   expect((await child([path.join(dir, "node-trust.cjs"), "--generate"])).code).toBe(0);
   const base = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(dir, "ca-bundle.pem"), SSL_CERT_DIR: path.join(dir, "empty") };
-  for (const changed of [
+  const changes = [
     { NODE_EXTRA_CA_CERTS: base.SSL_CERT_FILE }, { NODE_USE_SYSTEM_CA: "1" },
     { NODE_TLS_REJECT_UNAUTHORIZED: "0" }, { NODE_OPTIONS: "--use-bundled-ca" },
     { NODE_OPTIONS: "" }, { SSL_CERT_FILE: "unexpected.pem" }, { SSL_CERT_DIR: os.tmpdir() },
     { OPENSSL_CONF: "unexpected.cnf" },
-  ]) {
-    const result = await child(["--use-openssl-ca", "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"], { ...base, ...changed });
-    expect(result.code, JSON.stringify(changed)).not.toBe(0);
+  ];
+  const controls = [
+    ...changes.map(changed => ({ args: ["--use-openssl-ca", "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"], env: { ...base, ...changed }, label: JSON.stringify(changed) })),
+    ...["--use-bundled-ca", "--no-use-openssl-ca"].map(flag => ({ args: [flag, "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"], env: base, label: flag })),
+  ];
+  await batches(controls, async control => {
+    const result = await child(control.args, control.env);
+    expect(result.code, control.label).not.toBe(0);
     expect(result.stdout).not.toContain("APP_RAN");
-  }
-  for (const flag of ["--use-bundled-ca", "--no-use-openssl-ca"]) {
-    const competing = await child([flag, "--require", path.join(dir, "node-trust-start.cjs"), "-e", "console.log('APP_RAN')"], base);
-    expect(competing.code, flag).not.toBe(0);
-    expect(competing.stdout).not.toContain("APP_RAN");
-  }
+  });
 });
 
 test("actual fetch and https enforce selected CA and hostname verification offline", async () => {
   const probe = fileURLToPath(new URL("../../../tests/fixtures/node-default-tls-probe.cjs", import.meta.url));
-  for (const target of ["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"]) {
+  await batches(["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"], async target => {
     const rejected = await child([probe, target]);
     expect(rejected.code, target).not.toBe(0);
     expect(rejected.stdout, target).toBe("");
     expect(rejected.stderr, target).toContain("only an explicit loopback HTTPS origin");
-  }
+  });
   const fixture = path.join(temp, "tls");
   fs.mkdirSync(fixture);
   const openssl = process.env.CASEOPS_TEST_OPENSSL ?? (process.platform === "win32" ? "C:/Program Files/Git/usr/bin/openssl.exe" : "openssl");
-  const run = (args: string[]) => execFileSync(openssl, args, { cwd: fixture, timeout: 5_000, windowsHide: true, stdio: "pipe" });
-  for (const name of ["trusted", "untrusted"]) {
-    run(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", `${name}.key`, "-out", `${name}.pem`, "-days", "2", "-subj", `/CN=CaseOps local-only ${name} TLS fixture`, "-addext", "subjectAltName=IP:127.0.0.1"]);
-  }
-  run(["req", "-new", "-newkey", "rsa:2048", "-nodes", "-keyout", "wrong-host.key", "-out", "wrong-host.csr", "-subj", "/CN=CaseOps local-only wrong hostname"]);
+  const run = (args: string[]) => {
+    return child(args, cleanEnv(), { file: openssl, cwd: fixture, timeout: 5000 }).then(result => {
+      expect(result.code, result.stderr).toBe(0);
+    });
+  };
+  // Fresh P-256 fixtures exercise the same default-client trust/hostname
+  // boundaries without repeated RSA prime searches inside the 15-second test.
+  await batches(["trusted", "untrusted", "wrong-host"], async name => {
+    const common = ["req", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes", "-keyout", `${name}.key`];
+    if (name === "wrong-host") await run([...common, "-new", "-out", "wrong-host.csr", "-subj", "/CN=CaseOps local-only wrong hostname"]);
+    else await run([...common, "-x509", "-out", `${name}.pem`, "-days", "2", "-subj", `/CN=CaseOps local-only ${name} TLS fixture`, "-addext", "subjectAltName=IP:127.0.0.1"]);
+  });
   fs.writeFileSync(path.join(fixture, "wrong-host.ext"), "subjectAltName=DNS:wrong.invalid\n");
-  run(["x509", "-req", "-in", "wrong-host.csr", "-CA", "trusted.pem", "-CAkey", "trusted.key", "-CAcreateserial", "-out", "wrong-host.pem", "-days", "2", "-extfile", "wrong-host.ext"]);
+  await run(["x509", "-req", "-in", "wrong-host.csr", "-CA", "trusted.pem", "-CAkey", "trusted.key", "-CAcreateserial", "-out", "wrong-host.pem", "-days", "2", "-extfile", "wrong-host.ext"]);
   const empty = path.join(fixture, "empty");
   fs.mkdirSync(empty);
   const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(fixture, "trusted.pem"), SSL_CERT_DIR: empty };
-  for (const name of ["trusted", "untrusted", "wrong-host"]) {
+  await batches(["trusted", "untrusted", "wrong-host"], async name => {
     const receivedMarkers: string[][] = [];
     const server = https.createServer({ key: fs.readFileSync(path.join(fixture, `${name}.key`)), cert: fs.readFileSync(path.join(fixture, `${name}.pem`)) }, (request, response) => {
       const markers: string[] = [];
@@ -322,5 +430,5 @@ test("actual fetch and https enforce selected CA and hostname verification offli
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
-  }
+  });
 });

@@ -6,6 +6,7 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders } from "./support/cost-controls";
 import { prepareIp15Workspace, type Ip15Workspace } from "./support/ip15-workspace";
 import { type PortfolioExportCompletion, waitForPortfolioExport } from "./support/ip-portfolio-export-completion";
+import { cleanupOwnedIp18View, type Ip18CleanupView, type OwnedIp18View } from "./support/ip18-owned-view-cleanup";
 
 test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
   if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
@@ -80,6 +81,11 @@ for (const width of [1280, 393]) {
     async ({ page, request, baseURL }) => {
       test.setTimeout(240_000);
       const workspace = await prepareIp15Workspace(page, request, baseURL, width);
+      let ownedView: OwnedIp18View | undefined;
+      let bodyFailed = false;
+      let bodyFailure: unknown;
+      const cleanupFailures: unknown[] = [];
+      try {
       const fixture = await sourceFixture(workspace, request);
       // B4-ADJ-42: the same filters without the search reach every retained source in the
       // tenant. test-legal keeps every run's fixtures, and filtering the unanalyzed fact
@@ -166,6 +172,12 @@ for (const width of [1280, 393]) {
       const savedResponse = await saved;
       expect(savedResponse.status()).toBe(201);
       const savedView = await savedResponse.json();
+      // Capture only an acknowledged, uniquely named server ID; never search by
+      // a prefix or infer an identity from the submitted name during cleanup.
+      expect(savedView.id).toMatch(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+      expect(savedView.name).toBe(viewName);
+      expect(savedView.version).toBe(1);
+      ownedView = { id: savedView.id, name: savedView.name, version: savedView.version };
       expect(savedView.filters).toMatchObject(filters);
       expect(savedView.columns).toEqual(["mark", "application_date", "renewal_due_date"]);
       await expect(dialog).toHaveCount(0);
@@ -224,5 +236,30 @@ for (const width of [1280, 393]) {
       await expect(tracker.getByRole("link", { name: fixture.dueName, exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
       await workspace.release();
+      } catch (error) {
+        bodyFailed = true;
+        bodyFailure = error;
+      } finally {
+        if (ownedView) {
+          try {
+            const receipt = await cleanupOwnedIp18View(ownedView, {
+              release: workspace.release,
+              list: async () => (await json<{ views: Ip18CleanupView[] }>(
+                await request.get(`${workspace.api.origin}/api/ip/portfolio/views`, { headers: workspace.headers, timeout: 10_000 }))).views,
+              remove: async id => {
+                const response = await request.delete(`${workspace.api.origin}/api/ip/portfolio/views/${id}`, { headers: workspace.headers, timeout: 10_000 });
+                expect(response.status(), "Owned IP18 preference cleanup rejected; private response omitted.").toBe(204);
+              },
+            });
+            await test.info().attach("IP18-owned-view-cleanup", { body: JSON.stringify(receipt), contentType: "application/json" });
+          } catch (error) {
+            cleanupFailures.push(error);
+            test.info().annotations.push({ type: "ip18-cleanup-failure", description: "Owned saved-view cleanup incomplete; no automatic replay." });
+          }
+        }
+      }
+      // Preserve the original workflow failure even when independent cleanup fails.
+      if (bodyFailed) throw bodyFailure;
+      if (cleanupFailures.length) throw cleanupFailures[0];
     });
 }
