@@ -83,7 +83,10 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
     config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
     project = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
-    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in project
+    assert (
+        "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC]" in project
+    )
     assert "storageState: { cookies: [], origins: [] }" in project
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
@@ -104,10 +107,14 @@ def test_notes22_production_case_uses_its_required_tenant_project() -> None:
     tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
     writer = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
     assert (
-        "testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS]"
+        "testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS]"
         in tester
     )
-    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in writer
+    assert (
+        "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC]" in writer
+    )
     source = (REPO_ROOT / "tests/e2e/ram-2026-10-22-prod.spec.ts").read_text()
     assert 'if (!local && credentials.company_slug !== "test-legal")' in source
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())

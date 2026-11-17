@@ -137,3 +137,63 @@ do not delete retained data, raise the50-view limit or call later export
 assertions verified. Artifact14302073924 retains the full native report.
 A second private mobile dependency preparation also exceeded its original
 30-second deadline; native TLS consumer proof remains incomplete.
+
+## Completed November17 run and PR624
+
+Production44011493757 completed with three failed browser groups. Batch5 desktop
+retains5 passes/2 failures: original contract controls and retained draft PDF
+parity. Its mobile invocation was never reached. The source's privacy-preserving
+native error redaction retained the failing line but discarded the phase text.
+Add a failure annotation containing only the existing local phase label or HTTP
+status, preserving error redaction, failure status, every original assertion,
+deadline and the read-only record fences. This is diagnostic coverage, not a
+fix or successful replay of either reported record.
+
+The independent production database check ran exactly once as
+`caseops-release623-read-20261117-01-gcbxh` on the exact serving API image.
+PostgreSQL confirmed `transaction_read_only=on`; the transaction rolled back,
+with zero business mutations. At06:21UTC, the reporting membership owns exactly50
+saved views, meeting the existing quota that refused both IP18 creates.48 names
+match the historical automated fixture shape; that shape alone does not grant
+deletion authority. No view, draft, contract, attachment or account was changed.
+The original contract has its indexed PDF and populated editor metadata. The
+draft remains finalized, revision2, on the independently pinned version/body
+hash with2 verified citations. Those data facts do not prove the browser paths
+or explain their remaining failure. Retain the full exact image/job receipt in
+the operator evidence, without publishing private source text or credentials.
+
+PR624 source76c8d0ce passes all3182 frontend tests across311 files, strict web
+and E2E compilation, build, native upload, Linux/Windows dependency audits and
+mobile source gates. The actual Next page-data Worker TLS test passes with the
+new installed runtime, retaining certificate and hostname rejection controls;
+the earlier local npm preparation failures remain incomplete local evidence.
+This is source/CI proof, not native device or owner sign-in acceptance.
+
+CI44028393260/shard7 retains1481 passes/2 failures/714 explicit skips. Two old
+exact configuration assertions omitted the newly routed reference-file constant.
+Reconcile all three affected assertions, preserving the exact role guards,
+credential/release checks and complete semantic inventory. The complete repaired
+workflow module then passes271 cases on Windows in513.82s. New complete CI,
+remaining source/native/browser gates and exact-serving QA remain required.
+
+CI's independent shard6 also retains1878 passes/5 failures/186 explicit skips:
+five missing-file regressions still asserted the old reporting-role total51.
+Retain that negative baseline and require55 total, exactly51 original cases and
+exactly4 reference cases before the unchanged missing-file rejection oracle.
+The complete repaired evidence and Batch5 wiring modules pass886 cases without
+failures/skips on Windows in1349.64s, using a fresh short owned temporary root.
+The follow-up's E2E TypeScript and changed API lint also pass. These complete
+module results do not complete the earlier interrupted whole Windows gate.
+
+Exact-serving HTTP logs show the retained contract preview and all five draft
+PDF requests returned200 during Batch5. That rules out an HTTP refusal for those
+specific calls, not a rendering, byte-parity or browser-boundary failure. The
+new phase-only diagnostics preserve native privacy redaction and all original
+browser assertions so the replay can locate the remaining boundary precisely.
+
+Read-only execution`caseops-release623-read-20261117-02-gxv6v` additionally
+verified two old synthetic view candidates against exact filters/columns,
+personal ownership, unchanged version1, original53-row committed imports and
+creation audits. Exact row backups are retained in operator evidence. Deleting
+these existing saved preferences is pending an explicit owner decision; no
+candidate, other saved view or legal record has been changed.

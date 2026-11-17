@@ -2310,7 +2310,10 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
     project = evidence.OCT13_PROJECT
-    assert sum(row["project_name"] == project for row in rows) == 51
+    reporting = [row for row in rows if row["project_name"] == project]
+    assert len(reporting) == 55
+    assert sum(row["file"] != "ram-2026-11-14-prod.spec.ts" for row in reporting) == 51
+    assert sum(row["file"] == "ram-2026-11-14-prod.spec.ts" for row in reporting) == 4
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
     ):

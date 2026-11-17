@@ -202,6 +202,8 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       unchanged: true, attempted_mutations: attemptedMutations,
     }) });
   } catch {
+    // Stage contains only fixed phase labels or the observed HTTP status.
+    info.annotations.push({ type: "caseops-b5-failure-stage", description: `reported-draft:${stage}` });
     failure = parityUnverified ? "BUG001 PARITYUNVERIFIED: the existing citation/review guard blocks export; no production record was changed."
       : `BUG001 production read-only parity failed at ${stage}; private details omitted.`;
   } finally {
