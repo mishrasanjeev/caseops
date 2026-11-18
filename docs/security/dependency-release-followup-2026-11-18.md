@@ -109,3 +109,27 @@ admit the guarded scheduler resume. The three routine schedulers remain
 enabled and projection remains paused. The owner-approved two old test-view
 deletions already occurred once and must not be repeated. No live payment,
 owner OAuth, Mac/device, store or private MFA acceptance is claimed here.
+
+## Complete constructor byte count: retained head0aa failure
+
+The exact head0aa Security workflow and both actual platform dependency audits
+passed. Its Linux source job134525865698 failed one existing iOS constructor
+assertion: the expected32045346 bytes counted only two reads of the archive.
+The real complete inventory additionally reads the8542-byte held registry
+entry and two113-byte POSIX shims twice:32062882 bytes. All2605 entries and
+7815 observations remain required. The archive and every runtime guard are
+unchanged. No deadline, count bound, tamper assertion or hook cleanup is relaxed.
+
+The immutable official Node24.15.0 Linux image independently reproduces the
+original failure and passes the exact original constructor journey with only
+that expectation corrected. Both owned containers are independently absent.
+The scoped receipt is pr624-ios-inventory-paired06.json; earlier diagnostic
+setup refusals stay unentered evidence, not assertion results. Independent
+archive/registry/shim byte accounting is pr624-inventory-byte-account01.json.
+The whole intended source workflow must still pass on the new committed head.
+
+Frozen head0aa frontend07 completed with3203/3203 tests across313 files, no
+failures/skips/todos, successful component compilation and unchanged complete
+source/remote identities. This is scoped head0aa proof, not successor CI or
+full Docker/production certification. The replacement release remains NO-GO
+until all remaining boundaries above actually complete.
