@@ -35,7 +35,7 @@ Current development proof in the operator's merge161001 evidence directory:
   non-divisible repeated-word witness. These are expected red controls.
 - `pr624-overlap-focused-green22-01.log` and `-green24-01.log`: both focused
   cases pass naturally after repair on their actual accepted runtimes.
-- `pr624-overlap-security2201.log` and `-security2401.log`: all eight complete
+- `pr624-overlap-security2201.log` and `-security2401.log`: all seven complete
   security cases pass on each runtime, including original negative controls and
   the299593 finite backslash-output comparisons. No skips or retries.
 - `pr624-overlap-producer01.log`: all12 deterministic origin, unchanged-byte,
@@ -87,3 +87,19 @@ audits (zero vulnerabilities at every severity). Web component, E2E and mobile
 compilation, API Ruff and all-extras dependency compatibility, governance map
 and compiled projection validation also pass. These uncommitted development
 checks do not replace the pending frozen release and production inventories.
+
+The isolated security file has seven cases; the installed-copy file has three,
+for ten combined cases. The earlier eight-case description was a counting
+error, corrected against the retained native reports and literal declarations.
+
+The first repaired-head CI (f80d2eb2) retains a separate mobile harness failure:
+1909 declared cases, 1905 passed, one failed and three skipped. The accepted
+current lock was read correctly, but a generated stale-node-forge variant now
+contained the repaired matcher integrity and therefore differed from the
+previous exact stale-lock digest. Both current-stale and historical bytes are
+independently reconstructed on Node22 and Node24. The repair preserves the
+historical 53c67dc3 digest and adds the current-stale 34022fda digest. Both must
+be rejected before any archive payload is opened, with original positive
+archive, wrong-extent and no-output assertions retained. Complete Linux native
+harness replay and all later source/export steps remain required. No archive,
+SDK, dependency, attribution or production-admission policy changes here.

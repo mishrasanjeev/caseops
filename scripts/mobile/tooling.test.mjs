@@ -6383,15 +6383,23 @@ test('iOS local archive admission accepts the current full lock and refuses stal
   Object.assign(old.packages['node_modules/node-forge'], { version: '1.4.1',
     resolved: 'https://registry.npmjs.org/node-forge/-/node-forge-1.4.1.tgz',
     integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
+  const staleForgeBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
+  assert.equal(staleForgeBytes.length, bytes.length);
+  assert.equal(createHash('sha256').update(staleForgeBytes).digest('hex'), '34022fda1a86525457ee5486661b06fa5dbfe82dc89c7de0f7d5b272d65b0858');
+  // Retain the earlier exact stale-lock witness as well as the current lock
+  // with only node-forge reverted. A matcher repair must not relabel history.
+  old.packages['node_modules/picomatch'].integrity = 'sha512-kf1q+F+yNl2zOpKF1y8Ly4RMctOJ16lEmH8qPJKKh1HkSnGWx+JToOcBOu+5C4T7aNk6Gk7dv+o8b/wq563ASw==';
   const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
   assert.equal(oldBytes.length, bytes.length);
   assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '53c67dc370ed29978716f044794098ef3f67ad16cb888eab02c3618a7df72cdc');
-  try {
-    fs.writeFileSync(lock, oldBytes);
-    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
-    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
-  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
-  assert.equal(archiveOpens, 0);
+  for (const rejectedBytes of [oldBytes, staleForgeBytes]) {
+    try {
+      fs.writeFileSync(lock, rejectedBytes);
+      fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+      assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
+    } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+    assert.equal(archiveOpens, 0);
+  }
   try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
     assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);
