@@ -4452,3 +4452,8 @@ requirements when using the fallback.
   after legitimate input changes. Pin hash-bound manifest/lock line endings,
   reproduce canonical installer bytes and keep a same-length stale-source
   negative control; a checkout-normalized digest is not source admission.
+- A licence catalogue update must reconcile the independent literal browser
+  component and notice inventories as well as page units and image checks.
+  Replay the complete public-content browser file before freezing another
+  expensive release gate. A count failure leaves all later byte, keyboard,
+  download and responsive assertions unverified; retain the original failure.

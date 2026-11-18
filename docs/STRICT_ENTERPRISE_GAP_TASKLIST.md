@@ -5826,3 +5826,14 @@ repaired controls and exact-output coverage; full current-head security,
 source, Docker, production QA and guarded scheduler recovery remain pending.
 See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
 projection resume, scanner exception or completed release is claimed.
+
+### November18 PR624: public notice browser inventory correction
+
+Partially implemented / NO-GO. Head6c09 has two source-bound public-content
+failures: stale independent component/notice counts12/15, corrected to14/18
+without weakening later licence byte, public download, keyboard or viewport
+checks. Complete-file browser replay precedes the next expensive release
+gate. Docker03 is interrupted after1577 PostgreSQL passes; partial native
+evidence and strict owned cleanup are retained, not full acceptance. All
+fresh final gates, production QA and guarded projection recovery remain open.
+See docs/security/dependency-release-followup-2026-11-18.md.

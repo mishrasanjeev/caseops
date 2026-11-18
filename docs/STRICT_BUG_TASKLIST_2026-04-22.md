@@ -7451,3 +7451,14 @@ repaired controls and exact-output coverage; full current-head security,
 source, Docker, production QA and guarded scheduler recovery remain pending.
 See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
 projection resume, scanner exception or completed release is claimed.
+
+### November18 PR624: public notice browser inventory correction
+
+Inconclusive / NO-GO. Head6c09 CI retained706P/20 explicit skips/2 failures:
+both public-content viewport journeys expected12/15 instead of the catalogue
+and page units'14 components/18 notices. Only the two literal browser counts
+are corrected; the full original per-notice byte/hash/keyboard/responsive
+journey still requires replay. Docker03 retained1577 completed PostgreSQL
+cases and an interrupted fourth group; all local browser shards remain
+unverified. Complete replacement gates and exact-serving production QA are
+pending. See docs/security/dependency-release-followup-2026-11-18.md.

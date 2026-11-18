@@ -180,3 +180,38 @@ The precommit byte guard refused a CRLF root lock before commit. That refusal
 is retained. Root manifests and lockfiles now have explicit LF checkout rules,
 matching the mobile inputs; canonical regeneration must reproduce those bytes.
 JSON dependency identities and native SDK/archive inputs are unchanged.
+
+## Head6c09 browser inventory failure: replacement remains NO-GO
+
+CI run44226684086, desktop job134564327590, completed with706 passes,
+20 explicit skips and two failures. Both viewport variants of the public
+third-party notice journey stopped at public-content.spec.ts:470: their
+independent literals still expected12 components and15 notices. The reviewed
+catalogue and page component coverage already require14 components and18
+notices after the private matcher and official Arborist additions. The
+correction changes only those two browser literals, preserving every test
+identity, deadline, per-notice byte/hash check, keyboard action and responsive
+assertion. Later assertions were not reached in the failed journeys.
+
+The complete native report is retained in
+pr624-head6c09-desktop-native.zip, SHA256
+e590e2941b816152f5cf99ec71858e5e1791f7d51cfe93901ad03787f1d743e9.
+The derivative missing final wrapper receipt is not the original failure.
+Security, Mobile and all three separate CodeQL analyses/zero-PR-alert verdict
+passed for6c09; those scoped facts do not clear the failed browser workflow.
+
+Local full Docker03 was stopped after this source-bound rejection. Its first
+three PostgreSQL groups passed1577 calls/4731 phases. Group4 is interrupted;
+all local browser shards are unexecuted. The exact native driver subtree was
+stopped after ancestry/command/UTC creation checks while its cleanup parent
+remained alive. The parent exited1 with completed=false, unchanged source
+and main. Canonical retention preserved171 files for the partial fourth
+group, and independent exact-project container/volume/network reads prove
+cleanup. No broad pruning or foreign-resource removal occurred. Original
+Docker02 Admin-navigation failure remains separate and unexplained.
+
+The complete corrected public-content browser file must run before a new
+expensive Docker gate is frozen. Fresh exact-head frontend/source/platform,
+CI and separate alert checks, whole Docker acceptance, independent review,
+combined-main checks, deployment and exact-serving production QA remain
+required. Production and projection scheduler state have not changed.
