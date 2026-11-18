@@ -420,6 +420,29 @@ describe("complete independent App CI project inventory", () => {
 });
 
 describe("App metadata constructor and source-order controls", () => {
+  it.each(["timeout", "nonzero"] as const)(
+    "rejects native App discovery %s without retry or accepting a JSON prefix", failure => {
+      let calls = 0;
+      const execute: MetadataConstructor = (_command, args, options) => {
+        calls++;
+        expect(args).toContain("--list");
+        expect(options.timeout).toBe(15_000);
+        return {
+          error: failure === "timeout" ? Object.assign(new Error("bounded native discovery"), { code: "ETIMEDOUT" }) : undefined,
+          status: failure === "timeout" ? null : 1,
+          stderr: "",
+          // A valid prefix must never turn an incomplete constructor into
+          // an accepted empty inventory, even if its schema would parse.
+          stdout: JSON.stringify({ errors: [], suites: [], config: { projects:
+            Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+          } }),
+        };
+      };
+      expect(() => collectAppProject(undefined, execute)).toThrow();
+      expect(calls).toBe(1);
+    },
+  );
+
   it.each(["title", "missing", "duplicate", "project", "repeat", "retry", "executed", "expected-skip"])(
     "Nov15 exact format identities reject %s", damage => {
       const rows: Case[] = nov15Cases.map(([project, file, title], index) => ({

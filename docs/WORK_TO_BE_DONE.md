@@ -4294,3 +4294,15 @@ Docker/CI and exact-serving production acceptance remain due. Docker05 is
 interrupted after one complete526-case group and276 partial bodies, not a
 whole pass. Projection remains paused. See
 [the overlap handoff](security/matcher-overlap-2026-11-18.md).
+
+## November18 - hosted Windows discovery remains a release blocker
+
+**Partially implemented; NO-GO.** Local frozen frontend13 passes3208/313 on
+cb734abf, but hosted CI44307961816/job134814523691 times out the complete App
+metadata constructor and skips its seven dependent cases. Neither result
+erases the other. The replacement preserves15s/8s limits, introduces no cache
+or retry and places the complete source oracle in its own first project.
+Precommit native discovery proves the disjoint1+312 file partition; actual
+component compilation and all51 source cases pass. Full3210/313 coverage,
+native temporal/identity proof, hosted CI and release gates remain pending.
+See [bounded native inventory scheduling](security/frontend-inventory-scheduling-2026-11-18.md).

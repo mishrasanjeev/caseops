@@ -4473,3 +4473,10 @@ requirements when using the fallback.
   ordinary non-overlapping forms, on the actual supported runtimes. Preserve
   the rejected backport's acknowledged match-entry failure and the original
   matching budget; clean advisory scans do not prove this runtime property.
+
+- Native discovery limits include cold startup and complete collection. Keep
+  their bounds unchanged and isolate the inventory's execution group from
+  competing coverage files. Inline inherited include arrays can concatenate:
+  prove the actual disjoint file union before running the full gate, then
+  prove native group ordering and every original identity. Preserve an earlier
+  source-identical hosted failure even when a local complete run passed.

@@ -103,3 +103,11 @@ be rejected before any archive payload is opened, with original positive
 archive, wrong-extent and no-output assertions retained. Complete Linux native
 harness replay and all later source/export steps remain required. No archive,
 SDK, dependency, attribution or production-admission policy changes here.
+
+The later cb734abf security/mobile/native matcher checks and configured
+independent app re-review pass, with no open PR CodeQL alerts. Release is
+nevertheless blocked by its separate hosted Windows App inventory timeout;
+local frozen3208/313 passing does not waive that same-source failure. The
+bounded scheduling repair and full replacement requirements are recorded in
+[the frontend inventory handoff](frontend-inventory-scheduling-2026-11-18.md).
+No expensive Docker06 or deployment has been admitted for cb734abf.

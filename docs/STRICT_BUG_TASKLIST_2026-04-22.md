@@ -7496,3 +7496,14 @@ Installed closure and all complete current-source release/production gates
 remain unverified. Docker05's complete526 cases and partial276 bodies are
 scoped history; no whole pass or deployment is claimed. See
 [the overlap handoff](security/matcher-overlap-2026-11-18.md).
+
+## November18 - bounded Windows App inventory constructor
+
+**Partially fixed / Inconclusive; NO-GO.** Preserve native hosted cb734abf
+failure ETIMEDOUT at the15-second App collector:3201 passes/seven unreached
+cases/one failed suite across313 files. Local3208/313 does not supersede it.
+The repair isolates the complete51-case source file before the unchanged312
+ordinary files, keeps existing worker trust and every deadline, and adds two
+single-attempt failure controls. Native partition and focused51 cases pass;
+complete new grouped coverage, hosted Windows/Linux and production evidence
+remain required. See [bounded native inventory scheduling](security/frontend-inventory-scheduling-2026-11-18.md).

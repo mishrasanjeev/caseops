@@ -5864,3 +5864,14 @@ deadline. Native security8+8 and producer12 development cases pass, but
 installed dependency closure, complete fresh release gates, independent review
 and deployed QA still gate release. Earlier Docker05/CI prefixes are retained,
 not transferred. [Evidence and acceptance](security/matcher-overlap-2026-11-18.md).
+
+## November18 - native collection resource ownership
+
+**Partially implemented; NO-GO.** QG-REL-003/005/008: a passing local frontend
+does not clear the same source's hosted native collection timeout. Preserve
+the failed cb734abf run and all seven unexecuted cases. Use ordered projects
+to keep the bounded source oracle exclusive, prove actual file/identity union
+and native temporal separation, retain global coverage and every original
+deadline, and replay complete current-head/platform gates before release.
+The rejected inherited-glob development layout remains incomplete evidence.
+See [bounded native inventory scheduling](security/frontend-inventory-scheduling-2026-11-18.md).
