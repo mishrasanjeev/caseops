@@ -113,6 +113,20 @@ jobs:
             ghcr.io/google/osv-scanner:v2.5.0@sha256:5b8b38e45bb2c5c4976f0f1f07860551ea6e1f235f642cf215f74d266fec2c1b \
             scan source --lockfile=/src/package-lock.json
 
+      - name: Verify bounded matcher controls and the installed web graph
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+          CASEOPS_MOBILE_DEPENDENCY_SCOPE: root-only
+        run: node --test scripts/mobile/picomatch-security.test.mjs scripts/mobile/picomatch-installed.test.mjs
+
   pip-audit:
     name: pip-audit (high+critical)
     runs-on: ubuntu-latest

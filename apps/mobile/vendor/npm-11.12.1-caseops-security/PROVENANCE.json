@@ -3,9 +3,9 @@
   "npmCliVersion": "11.12.1",
   "artifact": {
     "file": "npm-11.12.1-caseops-security.tgz",
-    "sha256": "fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052",
-    "sizeBytes": 4043346,
-    "integrity": "sha512-+VNalMDZUHBNe6TDDl/Qv/1E7isq3gLkmAs15beXmIJe22PipBXa+XiQCDO22dKQo8mfGo3urzevtDvO1WdOHw=="
+    "sha256": "90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010",
+    "sizeBytes": 4066593,
+    "integrity": "sha512-Wclf1th93qfkuB9UFw62JAZxbrrEhT50UwpL4CKIQ8e8SiqsibG/wP/Fr3VncMFs7dmpwB5TUdvDl77sVJDlAg=="
   },
   "upstreamInputs": [
     {
@@ -173,6 +173,29 @@
       "url": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz",
       "integrity": "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==",
       "targetPrefix": "package/node_modules/tinyglobby/node_modules/picomatch/"
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.7-caseops.1",
+      "kind": "verified-local-security-backport",
+      "targetPrefix": "package/node_modules/tinyglobby/node_modules/picomatch/",
+      "localArtifact": "../picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
+      "archive": {
+        "sha256": "d10a7367ca87ec9f477ecaa97385787ee272af5663520507d74a1eedbfb05662",
+        "sizeBytes": 25945
+      }
+    },
+    {
+      "name": "@npmcli/arborist",
+      "version": "9.9.3",
+      "kind": "official",
+      "url": "https://registry.npmjs.org/@npmcli/arborist/-/arborist-9.9.3.tgz",
+      "integrity": "sha512-OxRSMNRPzL2/x2zsVrzdMZItfNj3cVXZIYgGNlUaBRUyH16YKdwN1r9z+I13keR1mjVNKelMfi2a7A/0JJ4NCw==",
+      "targetPrefix": "package/node_modules/@npmcli/arborist/",
+      "archive": {
+        "sha256": "1df524ba355949e271d9d2259b05fdd914b7f3a57fe1880595c41483c53d57e4",
+        "sizeBytes": 160417
+      }
     }
   ],
   "manifestEdits": [
@@ -235,26 +258,101 @@
       "field": "dependencies.minimatch",
       "from": "^10.2.4",
       "to": "11.0.1"
+    },
+    {
+      "path": "package/node_modules/tinyglobby/package.json",
+      "field": "dependencies.picomatch",
+      "from": "^4.0.3",
+      "to": "4.0.7-caseops.1"
+    },
+    {
+      "path": "package/node_modules/tinyglobby/node_modules/fdir/package.json",
+      "field": "peerDependencies.picomatch",
+      "from": "^3 || ^4",
+      "to": "^3 || ^4 || 4.0.7-caseops.1"
+    },
+    {
+      "path": "package/package.json",
+      "field": "dependencies.@npmcli/arborist",
+      "from": "^9.4.2",
+      "to": "9.9.3"
     }
   ],
   "unchanged": "Every other official upstream member, including npm own bin/lib/index source; no npm CLI source patch.",
-  "proof": {
-    "twoIndependentArchiveBytesEqual": true,
-    "all2149MemberPayloadModeAndMetadataEqual": true,
-    "packageIdentities": 146,
-    "ownedModuleMarkers": 42,
-    "embeddedDependencies": 7,
-    "upstreamGlobMapping": 1,
-    "noticeMembers": 149,
-    "observedPlatform": "darwin-arm64",
-    "node": "24.15.0",
-    "linuxWindowsAcceptance": "Required separately in CI; not implied by Mac proof."
-  },
   "packagingDifference": {
     "path": "package/bin/node-gyp-bin/node-gyp.cmd",
     "officialSha256": "8cb8b915e6f433f7f8994eae04e74595d5a169d1e593833bb4a5f2cbe213f02d",
     "acceptedSha256": "081880abf39d600c58b850ab0e28c5e562eac0d5c81bbc49226588d850dcd5d3",
     "sizeBytes": 144,
     "reason": "Retain the previously accepted LF node-gyp launcher; npm own executable source remains otherwise official."
+  },
+  "securityBackportLayer": {
+    "advisory": "GHSA-fc5q-39xc-vjpf",
+    "upstreamPatchedRelease": null,
+    "previousArtifact": {
+      "file": "npm-11.12.1-caseops-security.tgz",
+      "sha256": "fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052",
+      "sizeBytes": 4043346,
+      "integrity": "sha512-+VNalMDZUHBNe6TDDl/Qv/1E7isq3gLkmAs15beXmIJe22PipBXa+XiQCDO22dKQo8mfGo3urzevtDvO1WdOHw=="
+    },
+    "previousProof": {
+      "twoIndependentArchiveBytesEqual": true,
+      "all2149MemberPayloadModeAndMetadataEqual": true,
+      "packageIdentities": 146,
+      "ownedModuleMarkers": 42,
+      "embeddedDependencies": 7,
+      "upstreamGlobMapping": 1,
+      "noticeMembers": 149,
+      "observedPlatform": "darwin-arm64",
+      "node": "24.15.0",
+      "linuxWindowsAcceptance": "Required separately in CI; not implied by Mac proof."
+    },
+    "retainedBaseline": "upstream/npm-11.12.1-caseops-security-20261028.tgz",
+    "backport": "../picomatch-4.0.7-caseops.1/provenance.json",
+    "workspaceOverrideRepair": {
+      "officialArborist": "9.9.3",
+      "upstreamFix": "https://github.com/npm/cli/pull/9671",
+      "runtimeCodeUnmodified": true,
+      "retainedManifestCompatibility": "dependencies.minimatch=11.0.1"
+    },
+    "changedMembers": [
+      "package/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/index.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/isolated-reifier.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/load-actual.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/load-virtual.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/rebuild.js",
+      "package/node_modules/@npmcli/arborist/lib/arborist/reify.js",
+      "package/node_modules/@npmcli/arborist/lib/audit-report.js",
+      "package/node_modules/@npmcli/arborist/lib/calc-dep-flags.js",
+      "package/node_modules/@npmcli/arborist/lib/can-place-dep.js",
+      "package/node_modules/@npmcli/arborist/lib/dep-valid.js",
+      "package/node_modules/@npmcli/arborist/lib/install-scripts.js",
+      "package/node_modules/@npmcli/arborist/lib/isolated-classes.js",
+      "package/node_modules/@npmcli/arborist/lib/link.js",
+      "package/node_modules/@npmcli/arborist/lib/node.js",
+      "package/node_modules/@npmcli/arborist/lib/optional-set.js",
+      "package/node_modules/@npmcli/arborist/lib/place-dep.js",
+      "package/node_modules/@npmcli/arborist/lib/query-selector-all.js",
+      "package/node_modules/@npmcli/arborist/lib/release-age-exclude.js",
+      "package/node_modules/@npmcli/arborist/lib/script-allowed.js",
+      "package/node_modules/@npmcli/arborist/lib/shrinkwrap.js",
+      "package/node_modules/@npmcli/arborist/lib/unreviewed-scripts.js",
+      "package/node_modules/@npmcli/arborist/lib/vuln.js",
+      "package/node_modules/@npmcli/arborist/package.json",
+      "package/node_modules/tinyglobby/node_modules/fdir/package.json",
+      "package/node_modules/tinyglobby/node_modules/picomatch/CASEOPS-BACKPORT-NOTICE.txt",
+      "package/node_modules/tinyglobby/node_modules/picomatch/README.md",
+      "package/node_modules/tinyglobby/node_modules/picomatch/lib/parse.js",
+      "package/node_modules/tinyglobby/node_modules/picomatch/lib/picomatch.js",
+      "package/node_modules/tinyglobby/node_modules/picomatch/lib/scan.js",
+      "package/node_modules/tinyglobby/node_modules/picomatch/package.json",
+      "package/node_modules/tinyglobby/package.json",
+      "package/package.json"
+    ],
+    "removedMembers": [],
+    "memberCount": 2154,
+    "npmOwnCodeChanged": false,
+    "acceptance": "Current native platform, dependency, advisory and consumer verification required separately."
   }
 }

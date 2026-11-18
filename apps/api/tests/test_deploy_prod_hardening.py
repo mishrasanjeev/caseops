@@ -1339,7 +1339,8 @@ def _web_npm_tooling_inputs(root: Path) -> set[str]:
         "apps/mobile/vendor/npm-11.12.1-caseops-security/"
         "npm-11.12.1-caseops-security.tgz"
     ]
-    required = {helper, "scripts/mobile/npm-registry.mjs", artifact[0]}
+    matcher = "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz"
+    required = {helper, "scripts/mobile/npm-registry.mjs", artifact[0], matcher}
     assert all((root / path).is_file() for path in required), "Missing pinned npm source input"
     return required
 
@@ -1351,8 +1352,11 @@ def _assert_web_npm_tooling_inputs(dockerfile: str, ignore: str, required: set[s
         "COPY scripts/mobile/npm-tooling.mjs scripts/mobile/npm-registry.mjs "
         "/opt/caseops/scripts/mobile/" in tooling
     )
-    artifact = next(path for path in required if path.endswith(".tgz"))
+    artifact = next(path for path in required if path.endswith("/npm-11.12.1-caseops-security.tgz"))
     assert f"COPY {artifact} /opt/caseops/{artifact}" in tooling, "Missing pinned npm archive COPY"
+    matcher = "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz"
+    deps = dockerfile.split("FROM builder-tooling AS deps", 1)[1].split("FROM deps AS", 1)[0]
+    assert f"COPY {matcher} /app/{matcher}" in deps, "Missing pinned matcher archive COPY"
     patterns = set(ignore.splitlines())
     parents = {parent.as_posix() + "/" for path in required for parent in Path(path).parents
                if parent != Path(".")}
@@ -1376,6 +1380,7 @@ def _assert_web_npm_tooling_inputs(dockerfile: str, ignore: str, required: set[s
 @pytest.mark.parametrize("path", [
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
 ])
 def test_web_npm_tooling_closure_rejects_each_omission(boundary: str, path: str) -> None:
     dockerfile = _read_repo_text("apps/web/Dockerfile")
@@ -4653,6 +4658,8 @@ def test_deploy_prod_enabled_readback_requires_the_exact_state(
 
 
 _WEB_DIRTY_CLOSURE_REGRESSIONS = (
+    ("picomatch-security-artifact",
+     "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz"),
     ("ip18-owned-view-cleanup", "tests/e2e/support/ip18-owned-view-cleanup.ts"),
     ("communications-journey", "tests/e2e/ram-2026-11-11-bugs.spec.ts"),
     ("retained-draft-journey", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts"),
@@ -4806,6 +4813,9 @@ def test_deploy_fixture_stops_before_launch_if_any_fake_cli_is_missing(
         ("npm-registry", "scripts/mobile/npm-registry.mjs", "modify", True),
         ("npm-archive",
          "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+         "modify", True),
+        ("picomatch-archive",
+         "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
          "modify", True),
         ("unrelated-doc", "docs/unrelated-note.md", "modify", False),
         ("registry", "license-policy/reviewed-packages.json", "modify", True),

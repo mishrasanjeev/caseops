@@ -409,6 +409,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   .dockerignore .gcloudignore "license-policy" \
   "scripts/mobile/npm-tooling.mjs" "scripts/mobile/npm-registry.mjs" \
   "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz" \
+  "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
   "scripts/qa_manual_ip_grant_release.py" "scripts/release_security_gate.py" \

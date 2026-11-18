@@ -5794,3 +5794,10 @@ explicitly retried reads. It does not explain the navigation timeout. Final
 3200-case frontend coverage, complete Docker/CI, exact-serving full production
 QA and guarded projection recovery remain required. See the
 [dated evidence and release boundaries](security/production-verification-2026-11-17.md).
+
+PR624's next b28 head is rejected by newly reviewed picomatch advisory data.
+The private source backport and installer compatibility changes remain
+**Partially implemented / Inconclusive / NO-GO** until complete final-head
+source, installed-platform, frontend, Docker and CI gates pass. Preserve the
+old failed runs and the unexplained local Admin failure. See the
+[November18 source-bound security handoff](security/picomatch-security-2026-11-18.md).

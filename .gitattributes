@@ -184,3 +184,13 @@ apps/api/vendor/dnspython-2.9.2/provenance.json text eol=lf
 apps/api/vendor/opentelemetry-util-http-0.66b2/LICENSE text eol=lf
 apps/api/vendor/opentelemetry-util-http-0.66b2/NOTICE.txt text eol=lf
 apps/api/vendor/opentelemetry-util-http-0.66b2/provenance.json text eol=lf
+
+# Private picomatch backport preserves every reviewed upstream/runtime byte.
+apps/mobile/vendor/picomatch-4.0.7-caseops.1/** -text
+scripts/mobile/rebuild-picomatch-compat.py text eol=lf
+scripts/mobile/rebuild-picomatch-compat.test.py text eol=lf
+scripts/mobile/picomatch-security.test.mjs text eol=lf
+scripts/mobile/picomatch-installed.test.mjs text eol=lf
+scripts/mobile/fixtures/picomatch-byte-input.mjs text eol=lf
+apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/** -text
+scripts/mobile/fixtures/picomatch-redos-probe.cjs text eol=lf

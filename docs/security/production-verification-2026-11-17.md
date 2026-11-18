@@ -388,3 +388,10 @@ serial projection executions (second rebuild_count0) and guarded scheduler
 resume. Until those proofs exist the release remains **NO-GO** and projection
 maintenance remains paused. Earlier failed and interrupted reports stay
 retained; no passing prefix or diagnostic probe supersedes a whole gate.
+
+The next b28 candidate is rejected by newly reviewed picomatch advisory data.
+Its failed security/mobile checks are retained and its expensive CI was
+superseded. The private source backport, exact installer compatibility repair,
+native controls, failed attempts and outstanding final gates are recorded in
+[the November18 security handoff](picomatch-security-2026-11-18.md).
+This does not close the earlier local navigation or production findings.

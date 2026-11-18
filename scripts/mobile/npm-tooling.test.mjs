@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import childProcess, { spawnSync } from 'node:child_process';
-import { syncBuiltinESMExports } from 'node:module';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,6 +13,7 @@ import http from 'node:http';
 import { EventEmitter } from 'node:events';
 import { auditNpmInventory, NPM_ARTIFACT, npmAdvisoryInventory, npmWindowsOwnerDiagnostic, prepareNpm, readPinnedArchive, regularTarMembers, reviewNpmWindowsOwnerOutput, reviewNpmCIArchiveHardenResult, runCINpm, runNpm, verifyInstalledNpm } from './npm-tooling.mjs';
 import { installNpmRegistryTransport } from './npm-registry.mjs';
+import { readFixtureBytes } from './fixtures/picomatch-byte-input.mjs';
 
 const archive = process.env.CASEOPS_TEST_NPM_ARCHIVE || fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', import.meta.url));
 const hash = b => createHash('sha256').update(b).digest('hex');
@@ -59,7 +60,7 @@ function verify(v) { return verifyInstalledNpm(v.root, v.rows, v.directories, pe
 
 test('the exact pinned installer classifies every package, marker and embedded dependency', () => {
   const bytes = readPinnedArchive(archive), members = regularTarMembers(gunzipSync(bytes)), graph = npmAdvisoryInventory(members);
-  assert.equal(hash(bytes), NPM_ARTIFACT.sha256); assert.equal(members.length, 2149);
+  assert.equal(hash(bytes), NPM_ARTIFACT.sha256); assert.equal(members.length, 2154);
   assert.equal(graph.logicalPackages, 146); assert.equal(graph.ownedModuleMarkers, 42); assert.equal(graph.rows.length, 154); assert.equal(graph.names, 142);
   assert.deepEqual(graph.graph.glob, ['14.0.2', '14.0.2-caseops.1']); assert.deepEqual(graph.graph.minimatch, ['11.0.1']);
   assert.deepEqual(graph.graph['lru-cache'], ['11.2.7', '11.5.3']);
@@ -131,7 +132,7 @@ test('an incomplete installed inventory fails instead of reporting an empty succ
     () => assert.throws(() => verify(value), /NPM_TOOLING_COMPLETE_INSTALLED_INVENTORY/));
 });
 test('new staged bytes execute the unchanged npm CLI and a healthy full dependency graph', t => {
-  const root = fixture(t), result = prepareNpm({ parent: root, archive }); assert.equal(result.files, 2149); assert.equal(result.inventory.entries, 2600); assert.equal(result.inventory.observations, 7800);
+  const root = fixture(t), result = prepareNpm({ parent: root, archive }); assert.equal(result.files, 2154); assert.equal(result.inventory.entries, 2605); assert.equal(result.inventory.observations, 7815);
   assert.ok(Object.entries(result.environment).every(([name, value]) => name.length + value.length < 8191));
   assert.ok(result.environment.CASEOPS_PINNED_NPM_ENTRY.endsWith('caseops-entry.mjs'));
   assert.equal(result.environment.CASEOPS_PINNED_NPM_BOOTSTRAP.includes('\n'), false);
@@ -143,6 +144,59 @@ test('new staged bytes execute the unchanged npm CLI and a healthy full dependen
     const run = spawnSync(process.execPath, ['--input-type=module', '--eval', result.environment.CASEOPS_PINNED_NPM_BOOTSTRAP, '--', 'npm', ...args], { env, cwd: root, encoding: 'utf8', timeout: 15000, maxBuffer: 65536, windowsHide: true });
     assert.equal(run.error, undefined); assert.equal(run.status, 0, run.stderr); assert.equal(run.signal, null);
     if (args[0] === 'ls') assert.equal(JSON.parse(run.stdout).version, '11.12.1'); else assert.equal(run.stdout.trim(), '11.12.1');
+  }
+});
+
+test('real installed workspace links retain transitive overrides after the original refusal', async t => {
+  const root = fixture(t), prepared = prepareNpm({ parent: root, archive });
+  const baseline = fileURLToPath(new URL('../../apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/npm-11.12.1-caseops-security-20261028.tgz', import.meta.url));
+  const raw = readFixtureBytes(baseline, 4043346);
+  assert.equal(raw.length, 4043346);
+  assert.equal(hash(raw), 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052');
+  const legacy = path.join(root, 'legacy'); fs.mkdirSync(legacy);
+  const rows = regularTarMembers(gunzipSync(raw, { maxOutputLength: 33554432 }));
+  assert.equal(rows.length, 2149);
+  for (const row of rows) {
+    const target = path.join(legacy, row.path);
+    assert.ok(target.startsWith(legacy + path.sep));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, row.bytes, { flag: 'wx', mode: row.mode });
+    assert.equal(hash(fs.readFileSync(target)), row.sha256);
+  }
+  const project = path.join(root, 'workspace-proof'); fs.mkdirSync(project);
+  function manifest(relative, value) {
+    const file = path.join(project, relative, 'package.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value), { flag: 'wx' });
+  }
+  manifest('', { name: 'override-root', version: '1.0.0', private: true,
+    workspaces: ['workspace'], overrides: { 'owned-leaf': '2.0.0' } });
+  manifest('workspace', { name: 'owned-workspace', version: '1.0.0', dependencies: { 'owned-bridge': '1.0.0' } });
+  manifest('node_modules/owned-bridge', { name: 'owned-bridge', version: '1.0.0', dependencies: { 'owned-leaf': '^1.0.0' } });
+  manifest('node_modules/owned-leaf', { name: 'owned-leaf', version: '2.0.0' });
+  const target = path.join(project, 'workspace'), link = path.join(project, 'node_modules/owned-workspace');
+  assert.ok(target.startsWith(project + path.sep) && link.startsWith(project + path.sep));
+  fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal(fs.realpathSync(link), fs.realpathSync(target));
+  const calls = [], originalHttp = { request: http.request, get: http.get },
+    originalHttps = { request: https.request, get: https.get }, originalFetch = globalThis.fetch;
+  const deny = () => { calls.push('unexpected-network'); throw new Error('OWNED_OFFLINE_WORKSPACE_PROOF'); };
+  try {
+    http.request = http.get = https.request = https.get = globalThis.fetch = deny;
+    syncBuiltinESMExports();
+    const OldArborist = createRequire(path.join(legacy, 'package/bin/npm-cli.js'))('@npmcli/arborist');
+    const NewArborist = createRequire(prepared.cli)('@npmcli/arborist');
+    const before = await new OldArborist({ path: project, offline: true }).loadActual();
+    const oldEdge = before.children.get('owned-workspace').target.edgesOut.get('owned-bridge').to.edgesOut.get('owned-leaf');
+    assert.equal(oldEdge.rawSpec, '^1.0.0'); assert.equal(oldEdge.error, 'INVALID');
+    const after = await new NewArborist({ path: project, offline: true }).loadActual();
+    const edge = after.children.get('owned-workspace').target.edgesOut.get('owned-bridge').to.edgesOut.get('owned-leaf');
+    assert.equal(edge.rawSpec, '^1.0.0'); assert.equal(edge.spec, '2.0.0');
+    assert.equal(edge.error, null); assert.equal(edge.to.version, '2.0.0');
+    assert.equal(edge.overrides.value, '2.0.0'); assert.deepEqual(calls, []);
+  } finally {
+    Object.assign(http, originalHttp); Object.assign(https, originalHttps); globalThis.fetch = originalFetch;
+    syncBuiltinESMExports();
   }
 });
 

@@ -34,8 +34,16 @@ for (const change of ['none', 'growth', 'replacement', 'parent-replacement', 're
     t.after(() => { rmSync(folder, { recursive: true, force: true }); rmSync(retained, { recursive: true, force: true }); });
     const file = path.join(folder, 'public.json');
     writeFileSync(file, '{"public":true}');
-    let descriptor, changed = false;
-    const io = { openSync: (...args) => { descriptor = openSync(...args); return descriptor; }, closeSync, fstatSync, lstatSync,
+    let descriptor, changed = false, modeledParentLink = false;
+    const io = { openSync: (...args) => { descriptor = openSync(...args); return descriptor; }, closeSync, fstatSync,
+      lstatSync(name, options) {
+        const value = lstatSync(name, options);
+        return modeledParentLink && name === folder ? new Proxy(value, { get(target, key) {
+          if (key === 'isDirectory') return () => false;
+          if (key === 'isSymbolicLink') return () => true;
+          return Reflect.get(target, key);
+        } }) : value;
+      },
       readSync: (...args) => {
         if (!changed) {
           changed = true;
@@ -45,8 +53,18 @@ for (const change of ['none', 'growth', 'replacement', 'parent-replacement', 're
             writeFileSync(file, '{"public":false}');
           }
           if (change === 'parent-replacement') {
-            renameSync(folder, retained);
-            symlinkSync(retained, folder, process.platform === 'win32' ? 'junction' : 'dir');
+            const before = lstatSync(folder, { bigint: true });
+            try {
+              renameSync(folder, retained);
+              symlinkSync(retained, folder, process.platform === 'win32' ? 'junction' : 'dir');
+            } catch (error) {
+              assert.equal(process.platform, 'win32'); assert.equal(error.code, 'EPERM');
+              assert.equal(existsSync(retained), false);
+              assert.equal(lstatSync(folder, { bigint: true }).ino, before.ino);
+              assert.equal(fstatSync(descriptor, { bigint: true }).ino, lstatSync(file, { bigint: true }).ino);
+              t.diagnostic('Windows refused the real open-parent rename; exercise the late-link guard with a controlled namespace observation.');
+              modeledParentLink = true;
+            }
           }
           if (change === 'read-error') throw new Error('Synthetic bounded read failure');
         }
@@ -111,6 +129,7 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
     'node ../../scripts/mobile/npm-tooling.mjs --cli-health > npm-cli-dependencies.json',
     'node ../../scripts/mobile/npm-tooling.mjs --audit-cli > npm-cli-audit.json',
     'node --test ../../scripts/mobile/forge-security.test.mjs ../../scripts/mobile/deepmerge-installed.test.mjs ../../scripts/mobile/npm-tooling.test.mjs',
+    'node --test ../../scripts/mobile/picomatch-security.test.mjs ../../scripts/mobile/picomatch-installed.test.mjs',
     'node ../../scripts/mobile/npm-tooling.mjs audit --audit-level=high --json > dependency-audit.json',
   ]);
   for (const step of job.steps) assert.notEqual(step['continue-on-error'], true);
@@ -172,7 +191,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/picomatch-security.test.mjs', 'scripts/mobile/picomatch-installed.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
     'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs',
     'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs', 'scripts/mobile/ios-https-qualification.test.mjs'];
@@ -187,6 +206,7 @@ test('mobile CI selects every tooling module and audits before either platform e
     ['Verify QA-only Android observer merged manifest projection', 'python3 scripts/mobile/android-observer-manifest.test.py'],
     ['Verify guarded local store packaging child transport', 'python3 scripts/mobile/store-packaging-host.test.py'],
     ['Verify deterministic private deepmerge package', 'python3 scripts/mobile/rebuild-deepmerge-compat.test.py'],
+    ['Verify deterministic matcher and bundled installer packages', 'python3 scripts/mobile/rebuild-picomatch-compat.test.py'],
     ['Verify isolated nonbillable V1 entitlement authority', 'python3 scripts/mobile/local-v1-entitlements.test.py'],
     ['Verify disabled-by-default synthetic V1 controls', 'python3 scripts/mobile/local-v1-controls.test.py'],
     ['Verify separate queue and account-request controls', 'python3 scripts/mobile/local-queue-privacy-controls.test.py'],
@@ -405,7 +425,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
   assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
   assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
-  assert.ok(protection.run.includes("'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052'"));
+  assert.ok(protection.run.includes("'90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010'"));
   assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
   assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });
@@ -896,8 +916,35 @@ test('selected source binds the opened descriptor before bytes when its pathname
   assert.equal(control.bytes(), 0); snapshotClosed(control);
 });
 test('selected source refuses a late parent link to the same opened leaf before bytes', t => {
-  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one' }), parent = path.join(root, 'apps/mobile/a'), file = path.join(parent, 'one.txt'); let changed = false;
-  const control = snapshotFileHooks(file, { fstat: value => { if (!changed) { changed = true; renameSync(parent, parent + '-retained'); symlinkSync(parent + '-retained', parent, process.platform === 'win32' ? 'junction' : 'dir'); } return value; } });
+  const root = snapshotFixture(t, { 'apps/mobile/a/one.txt': 'one' }), parent = path.join(root, 'apps/mobile/a'), file = path.join(parent, 'one.txt');
+  let changed = false, modeledParentLink = false;
+  const control = snapshotFileHooks(file, { fstat: value => {
+    if (!changed) {
+      changed = true;
+      const before = lstatSync(parent, { bigint: true });
+      try {
+        renameSync(parent, parent + '-retained');
+        symlinkSync(parent + '-retained', parent, process.platform === 'win32' ? 'junction' : 'dir');
+      } catch (error) {
+        assert.equal(process.platform, 'win32'); assert.equal(error.code, 'EPERM');
+        assert.equal(existsSync(parent + '-retained'), false);
+        assert.equal(lstatSync(parent, { bigint: true }).ino, before.ino);
+        assert.equal(lstatSync(file, { bigint: true }).ino, value.ino);
+        t.diagnostic('Windows refused the real open-parent rename; a controlled late-link observation must still reject before payload.');
+        modeledParentLink = true;
+      }
+    }
+    return value;
+  } });
+  const originalLstat = control.hooks.lstatSync;
+  control.hooks.lstatSync = (name, ...args) => {
+    const value = originalLstat(name, ...args);
+    return modeledParentLink && name === parent ? new Proxy(value, { get(target, key) {
+      if (key === 'isDirectory') return () => false;
+      if (key === 'isSymbolicLink') return () => true;
+      return Reflect.get(target, key);
+    } }) : value;
+  };
   snapshotHooks(control.hooks, () => assert.throws(() => sourceSnapshot(root), /SOURCE_CANONICAL_PATH_CHANGED|SOURCE_ANCESTOR_DIRECTORY_REQUIRED/));
   assert.equal(control.bytes(), 0); snapshotClosed(control);
 });

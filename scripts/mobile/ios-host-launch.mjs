@@ -425,7 +425,7 @@ export function renderIosHostBuildEntry(helper) {
 const NPM_INPUTS = Object.freeze({
   tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: '3ae83ab92f7e517dc2af1ba55efd5cd01c7cb487d74f6044b01584642a5c2f4b', sizeBytes: 40040 }),
   registry: Object.freeze({ relative: 'scripts/mobile/npm-registry.mjs', sha256: 'f354a9d943ebcb78cb7afdb78c83bc0961fc01bbe183a6791486464cad6db9de', sizeBytes: 12058 }),
-  archive: Object.freeze({ relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', sha256: 'fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052', sizeBytes: 4043346 }),
+  archive: Object.freeze({ relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', sha256: '90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010', sizeBytes: 4066593 }),
 });
 const NPM_ENV_KEYS = ['CASEOPS_PINNED_NPM_NODE', 'CASEOPS_PINNED_NPM_ROOT', 'CASEOPS_PINNED_NPM_ENTRY', 'CASEOPS_PINNED_NPM_BOOTSTRAP', 'CASEOPS_PINNED_NPM_CLI_SHA256', 'CASEOPS_PINNED_NPX_CLI_SHA256', 'CASEOPS_PINNED_NPM_DEADLINE', 'CASEOPS_PINNED_NPM_CLI', 'CASEOPS_PINNED_NPX_CLI', 'PATH'];
 function npmInputReferences(root) {
@@ -477,7 +477,7 @@ export async function prepareIosNpmRuntime(p, { end = Date.now() + 20000 } = {})
     const { prepareNpm } = await import(toolingURL);
     const prepared = prepareNpm({ parent: p.nodeNpm.parent, archive: p.nodeNpm.archive.path }); check(end);
     assert.ok(path.dirname(prepared.root) === p.nodeNpm.parent && /^caseops-npm-[A-Za-z0-9]{6}$/.test(path.basename(prepared.root))
-      && prepared.files === 2149 && prepared.inventory.entries === 2600 && prepared.inventory.observations === 7800, 'IOS_HOST_NPM_CANONICAL_CONSTRUCTOR');
+      && prepared.files === 2154 && prepared.inventory.entries === 2605 && prepared.inventory.observations === 7815, 'IOS_HOST_NPM_CANONICAL_CONSTRUCTOR');
     exact(prepared.environment, NPM_ENV_KEYS, 'IOS_HOST_NPM_CANONICAL_ENVIRONMENT');
     return prepared;
   } finally { hooks?.deregister(); tooling.bytes.fill(0); registry?.bytes.fill(0); }

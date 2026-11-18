@@ -4229,3 +4229,13 @@ private repacks, strict negative and all17 positive compatibility checks; it
 grants no app/native/store credit. Fresh final source/CI/build acceptance and
 complete83 cases per platform, physical checks and signing/promotion remain
 required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
+
+
+## 2026-11-18 — PR624 dependency security blocker
+
+Partially implemented / Inconclusive / NO-GO. Newly reviewed picomatch
+advisory data rejects b28. The private parser backport, exact installer
+compatibility, native negative controls and preserved failures require fresh
+complete source/platform/frontend/Docker/CI acceptance before merge. Full
+exact-serving production QA and the guarded projection resume remain pending.
+See [current evidence and boundaries](security/picomatch-security-2026-11-18.md).

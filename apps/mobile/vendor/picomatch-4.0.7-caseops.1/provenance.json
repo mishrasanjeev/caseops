@@ -1,0 +1,70 @@
+{
+  "kind": "caseops-picomatch-security-backport-v1",
+  "name": "picomatch",
+  "version": "4.0.7-caseops.1",
+  "upstreamName": "picomatch",
+  "upstreamVersion": "4.0.7",
+  "upstreamSha256": "697b463be3cdbd9ffc8f4194fd5019a69ddf95875fb703d78b2b115cc9e740a8",
+  "upstreamIntegrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+  "advisory": "GHSA-fc5q-39xc-vjpf",
+  "upstreamPatchedRelease": null,
+  "artifactSha256": "d10a7367ca87ec9f477ecaa97385787ee272af5663520507d74a1eedbfb05662",
+  "artifactIntegrity": "sha512-/ZnF2FYUNpvy9FSgh79Ov5pcdOUHlcX9997ZdcfgTPBj+UhiMR4p12eVQrnk5oXduoklu8row29zB/Vov4gI4A==",
+  "files": {
+    "CASEOPS-BACKPORT-NOTICE.txt": {
+      "sha256": "2163741483e227f5c61212896bf5a1c1dff2cae2e199df819ce1a37a3721b154",
+      "upstreamSha256": null,
+      "sizeBytes": 1173
+    },
+    "LICENSE": {
+      "sha256": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+      "upstreamSha256": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+      "sizeBytes": 1091
+    },
+    "README.md": {
+      "sha256": "a69b87120fe2b9cb8f9057eaef6b9f9887f803e02185ca2f431e8162f6312220",
+      "upstreamSha256": "a69b87120fe2b9cb8f9057eaef6b9f9887f803e02185ca2f431e8162f6312220",
+      "sizeBytes": 28319
+    },
+    "index.js": {
+      "sha256": "02ae26406508e28f9ba0865be16cf77f0b33de6c4d4d49c212c4176df1d5625a",
+      "upstreamSha256": "02ae26406508e28f9ba0865be16cf77f0b33de6c4d4d49c212c4176df1d5625a",
+      "sizeBytes": 479
+    },
+    "lib/constants.js": {
+      "sha256": "c28f952d2758261fe5428a121add485cc25b03e0193633f649de903dc0e5e222",
+      "upstreamSha256": "c28f952d2758261fe5428a121add485cc25b03e0193633f649de903dc0e5e222",
+      "sizeBytes": 4552
+    },
+    "lib/parse.js": {
+      "sha256": "e5cd61efdd055d9d654447a4b2882f4e5641a15544f5cc182d2149d567fb6010",
+      "upstreamSha256": "4e1e05447668aa1e94366c5516a2bcd8f5fff800cc92b1d0cd7d77703b8618c4",
+      "sizeBytes": 36027
+    },
+    "lib/picomatch.js": {
+      "sha256": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+      "upstreamSha256": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+      "sizeBytes": 10722
+    },
+    "lib/scan.js": {
+      "sha256": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+      "upstreamSha256": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+      "sizeBytes": 9483
+    },
+    "lib/utils.js": {
+      "sha256": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+      "upstreamSha256": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+      "sizeBytes": 1994
+    },
+    "package.json": {
+      "sha256": "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",
+      "upstreamSha256": "479b70b87aa7b44344d62c8a459ae7e53dd2bca6c61f1396bd55e63e9de73fc6",
+      "sizeBytes": 2077
+    },
+    "posix.js": {
+      "sha256": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+      "upstreamSha256": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+      "sizeBytes": 60
+    }
+  }
+}

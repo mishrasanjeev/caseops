@@ -7416,3 +7416,13 @@ This transport repair is not a causal claim about Admin navigation. Complete
 replacement source-bound gates and deployed QA remain required; projection
 maintenance stays paused. See
 [dated evidence](security/production-verification-2026-11-17.md).
+
+
+## 2026-11-18 — PR624 dependency security blocker
+
+Partially implemented / Inconclusive / NO-GO. Newly reviewed picomatch
+advisory data rejects b28. The private parser backport, exact installer
+compatibility, native negative controls and preserved failures require fresh
+complete source/platform/frontend/Docker/CI acceptance before merge. Full
+exact-serving production QA and the guarded projection resume remain pending.
+See [current evidence and boundaries](security/picomatch-security-2026-11-18.md).

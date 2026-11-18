@@ -44,6 +44,9 @@ apps/mobile/vendor/*
 !apps/mobile/vendor/npm-11.12.1-caseops-security/
 apps/mobile/vendor/npm-11.12.1-caseops-security/*
 !apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz
+!apps/mobile/vendor/picomatch-4.0.7-caseops.1/
+apps/mobile/vendor/picomatch-4.0.7-caseops.1/*
+!apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz
 !scripts/
 scripts/*
 !scripts/mobile/

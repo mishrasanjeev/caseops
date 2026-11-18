@@ -1,6 +1,6 @@
 {
   "kind": "exact-npm-rebundle-member-catalogue",
-  "artifactSha256": "fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831052",
+  "artifactSha256": "90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010",
   "members": [
     {
       "path": "package/LICENSE",
@@ -2782,62 +2782,62 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js",
-      "sha256": "ae6809d5ab55bfabc7b1c3064e8dfa78b1a5f7f36f67de5cce85f70c71654c60",
-      "sizeBytes": 58380,
+      "sha256": "2d81bb9ec47696cbaaff154fa128f3639ac885b743f08b367bdf5cc9ee11f401",
+      "sizeBytes": 65826,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/index.js",
-      "sha256": "f1e50b07fc64355001526f8e1437c77395d790e07c6dfa7ed867cdb0c9e0d05d",
-      "sizeBytes": 9864,
+      "sha256": "eab368e9ba8b9c3990b5ab02e084bd3ccef724d8cc1c9ceadad92b5cc7a97001",
+      "sizeBytes": 10396,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/isolated-reifier.js",
-      "sha256": "682e67c216703a6e8707b1e163ea141b4c6977e1d58d9b5e06ddf17f0a5d35f4",
-      "sizeBytes": 17807,
+      "sha256": "344da86453edadc6074c09aa5a67bfe9815136db7c422b43ce1471be0113be15",
+      "sizeBytes": 20878,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/load-actual.js",
-      "sha256": "05599b17d1c977dc91cc2004c6f04650774bd7bf8f8486a044019fa2acb6c9b8",
-      "sizeBytes": 14735,
+      "sha256": "add7c5c2ec70b19e874b0a3c86ec82e6b7ac93b2eb0c3f2d9a2ef3dbf63c327e",
+      "sizeBytes": 17710,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/load-virtual.js",
-      "sha256": "5acd380ec9f592db8f5418319facdd4e61de8d621cbeacd63e5f3edecdbe4c45",
-      "sizeBytes": 9113,
+      "sha256": "0dfa413c5f4b8d77ed13431150a903dce83dd4ae0a7c43037baf0602ac6513d3",
+      "sizeBytes": 10368,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/rebuild.js",
-      "sha256": "3bbe7f326942762557e567b47025acd49e2aac21d16293bc3f24852f0efdf3dd",
-      "sizeBytes": 12585,
+      "sha256": "31cff57da873a9b2ce1fd16fbb6ce7d68108ce2bae628ca43b5772ab5ee5336c",
+      "sizeBytes": 13682,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/arborist/reify.js",
-      "sha256": "92d2f4fb7f47d7bb7b74ed1c47326da0cdc7b3005c02999dca8cac1fc64c61cb",
-      "sizeBytes": 60964,
+      "sha256": "bcd9de86dc8bdb70797bf9ee2e5a73f1eab653dd7446e0c3ca09eab5e3d29dcd",
+      "sizeBytes": 79593,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/audit-report.js",
-      "sha256": "aaca4b48b1b412bd2f9d7976b08ef4540607e9a908ab625bc9f37bde16d3bd6f",
-      "sizeBytes": 9619,
+      "sha256": "e8d7d864eb6bd85849c103733bba5930229cdb36277e5a7451f3443e4104b85c",
+      "sizeBytes": 12166,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/calc-dep-flags.js",
-      "sha256": "43d06b32789a16fbfd1c567d10794e279f0e0ea66ed370e772aa92eb040d20eb",
-      "sizeBytes": 3359,
+      "sha256": "ee52204dfdf97fdb510e041fab275e29b459ec47beb625eb52637691d50e06b8",
+      "sizeBytes": 4003,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/can-place-dep.js",
-      "sha256": "fc717e8ba5e94129d7c23c7f6998c12e5b8b4df04c5366a63809e2721e3d18ef",
-      "sizeBytes": 14273,
+      "sha256": "70326efec64e93c56be5ac0aa349a9e533bb179e67ab12379c352a96de3ef12e",
+      "sizeBytes": 14920,
       "mode": 420
     },
     {
@@ -2866,8 +2866,8 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/dep-valid.js",
-      "sha256": "b6328406231815d130e55c55b2e177f92e46ca5c104d2bcb7adaf4b23606da68",
-      "sizeBytes": 5128,
+      "sha256": "10d58dfb42236333c0f6f68f44e7ba51264927da27acaea3472a2dde91d1c4ed",
+      "sizeBytes": 6185,
       "mode": 420
     },
     {
@@ -2901,6 +2901,12 @@
       "mode": 420
     },
     {
+      "path": "package/node_modules/@npmcli/arborist/lib/install-scripts.js",
+      "sha256": "184253c44ac1eab7728dc37107de688ecafed9f5c89ad3e2897caf257dc02d9b",
+      "sizeBytes": 4494,
+      "mode": 420
+    },
+    {
       "path": "package/node_modules/@npmcli/arborist/lib/inventory.js",
       "sha256": "cb149709ffd828f2f5c82dacce2e04493da3ce5d3c8b94f4f7c565988c71528e",
       "sizeBytes": 3321,
@@ -2908,26 +2914,26 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/isolated-classes.js",
-      "sha256": "1324f09bc72cdebfe876c56ac8248eb700fcd252417a57ea599cd5eaad92cc5f",
-      "sizeBytes": 2717,
+      "sha256": "2fa43ff1ec5891fe1f4f4eafef4300385be6a851bd92a02f254332b47a02148b",
+      "sizeBytes": 3023,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/link.js",
-      "sha256": "83044a8daa2708d853e0ceb0fe730bc633aeb09c486285c1bf486c680f9a3a2a",
-      "sizeBytes": 3114,
+      "sha256": "366b76dbfb7ff2fa0d601fef281325737f13bc6b89ee73926818f81e67372250",
+      "sizeBytes": 4380,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/node.js",
-      "sha256": "50ba0586f3ffe89f3bc1214be213e2c3eba189b617e1e1b3bb25dd87aa43e991",
-      "sizeBytes": 49828,
+      "sha256": "2df02801c449ad50bbf1196b82c0fd7ae61039bfc612ba7269b960a252c33269",
+      "sizeBytes": 50041,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/optional-set.js",
-      "sha256": "9d77eaa97a6c7b499dbe9c0cc7eee78a39089baacdfa675c4dd9a65a0feafe82",
-      "sizeBytes": 1201,
+      "sha256": "fbf038e1eba919c45eb77c30d8639608d0166610e20332c3e8e1d14cb5bcc1e9",
+      "sizeBytes": 1222,
       "mode": 420
     },
     {
@@ -2956,8 +2962,8 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/place-dep.js",
-      "sha256": "82f3551eb81c9e3ac2145d1bc22d316f60169ac80150646d4bd32eedb87cd82b",
-      "sizeBytes": 20250,
+      "sha256": "67211007f6b1135788d6a1fec7c5307d03477bc648c14c19c18656a527833b8e",
+      "sizeBytes": 20289,
       "mode": 420
     },
     {
@@ -2968,14 +2974,20 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/query-selector-all.js",
-      "sha256": "a05e60fcb4f1b50f5cdf7abfe9cdb592b09099f8ab1c7e70aad12047a45f94f3",
-      "sizeBytes": 30361,
+      "sha256": "81a0a2617decca1e2a8692fb0c2b035ead4e8dffddae734a4866653d8677dbac",
+      "sizeBytes": 30756,
       "mode": 420
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/realpath.js",
       "sha256": "54fb13b5b30d62115123b24e7b09b28d1ea6fa5363a81aae9ecd337de323662f",
       "sizeBytes": 2655,
+      "mode": 420
+    },
+    {
+      "path": "package/node_modules/@npmcli/arborist/lib/release-age-exclude.js",
+      "sha256": "4ed0a8cc048bdabcf046c2d61cd7834b83c57e84aef9213f2092860e3bdd8e6a",
+      "sizeBytes": 2062,
       "mode": 420
     },
     {
@@ -2997,9 +3009,15 @@
       "mode": 420
     },
     {
+      "path": "package/node_modules/@npmcli/arborist/lib/script-allowed.js",
+      "sha256": "c3378a6f25d26eb93f8aedcb09f3022b7ab4a1e2fc1c89785a50240a82f6e507",
+      "sizeBytes": 16427,
+      "mode": 420
+    },
+    {
       "path": "package/node_modules/@npmcli/arborist/lib/shrinkwrap.js",
-      "sha256": "418c671d6f50737d2ff9f0dd5ecdc0a65de4b473af4f5d25b931489d3bab6376",
-      "sizeBytes": 37721,
+      "sha256": "5c803fa4fff641bb6afb94bc8a8b38204ce27a17348baff8c195cd8e2738072b",
+      "sizeBytes": 40362,
       "mode": 420
     },
     {
@@ -3033,6 +3051,12 @@
       "mode": 420
     },
     {
+      "path": "package/node_modules/@npmcli/arborist/lib/unreviewed-scripts.js",
+      "sha256": "77d4a679312280f2bd4586529a1255db80275e273adbdbc5ae8492a0a8dc0fbb",
+      "sizeBytes": 3622,
+      "mode": 420
+    },
+    {
       "path": "package/node_modules/@npmcli/arborist/lib/version-from-tgz.js",
       "sha256": "d075a9f60b773d160c1aee10ea077e1f9eef6ef4e22147eabf32a0c2ee6f9d49",
       "sizeBytes": 1488,
@@ -3040,8 +3064,8 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/lib/vuln.js",
-      "sha256": "b1534bab0009bb6debfc77457398acfe2560224b2956f49bd83ffc31aada73ec",
-      "sizeBytes": 5958,
+      "sha256": "a99eb09f88773c0df05d2e9f1391bbf94063070d34652e4cea36132a07f4e252",
+      "sizeBytes": 6117,
       "mode": 420
     },
     {
@@ -3052,7 +3076,7 @@
     },
     {
       "path": "package/node_modules/@npmcli/arborist/package.json",
-      "sha256": "710b8dd79252e5c7d987dfb41c97ddddf51be1a1903ef5175d771c89b0d735b1",
+      "sha256": "a79e59dda7f590dc2922de4bfeae1a1e3dac5a1f30cbc85d1d44015407a8329e",
       "sizeBytes": 2789,
       "mode": 420
     },
@@ -12550,8 +12574,14 @@
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/fdir/package.json",
-      "sha256": "aca49395d61ef383a09f74555c66ed45817ca2b5724e710a4dc9e0471b83d8f5",
-      "sizeBytes": 2694,
+      "sha256": "97ca9ae0838dc22c0b6ccbd718c275bf9aaefb1ddf5752b268747dc5e65c7a8f",
+      "sizeBytes": 2713,
+      "mode": 420
+    },
+    {
+      "path": "package/node_modules/tinyglobby/node_modules/picomatch/CASEOPS-BACKPORT-NOTICE.txt",
+      "sha256": "2163741483e227f5c61212896bf5a1c1dff2cae2e199df819ce1a37a3721b154",
+      "sizeBytes": 1173,
       "mode": 420
     },
     {
@@ -12562,8 +12592,8 @@
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/README.md",
-      "sha256": "abaa6b58484e1f252b8d40b949b53602f5f2d7e6990f20d85fe6174ca5cb802f",
-      "sizeBytes": 28332,
+      "sha256": "a69b87120fe2b9cb8f9057eaef6b9f9887f803e02185ca2f431e8162f6312220",
+      "sizeBytes": 28319,
       "mode": 420
     },
     {
@@ -12580,20 +12610,20 @@
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/lib/parse.js",
-      "sha256": "ce57c04e04994b83e2ca566170fa192e6fe19d710bea6da00ce2f76d01c0dea4",
-      "sizeBytes": 33731,
+      "sha256": "e5cd61efdd055d9d654447a4b2882f4e5641a15544f5cc182d2149d567fb6010",
+      "sizeBytes": 36027,
       "mode": 420
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/lib/picomatch.js",
-      "sha256": "bbe9824eae8210954eac016e1fa1ac6174093557f30a72e91621d74a6c25e170",
-      "sizeBytes": 10091,
+      "sha256": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+      "sizeBytes": 10722,
       "mode": 420
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/lib/scan.js",
-      "sha256": "227fcc994a477ea95c5a0435d32783566334c6bd0dcc4a103029735ad8c9c535",
-      "sizeBytes": 9189,
+      "sha256": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+      "sizeBytes": 9483,
       "mode": 420
     },
     {
@@ -12604,8 +12634,8 @@
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/package.json",
-      "sha256": "b8deb10b4e1f7cc2fe8236a70995f4c6b5ec3ecf93f02f2b6427a8600d2c1d20",
-      "sizeBytes": 1896,
+      "sha256": "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",
+      "sizeBytes": 2077,
       "mode": 420
     },
     {
@@ -12616,8 +12646,8 @@
     },
     {
       "path": "package/node_modules/tinyglobby/package.json",
-      "sha256": "473bd5e2e8708e7c5700b2196c4225b42418c310d29893d4043aece3d5dea51d",
-      "sizeBytes": 1818,
+      "sha256": "b6fc42c5a29d80d71ad58ba59274e34c0349f77a196578b44a90d6c331624074",
+      "sizeBytes": 1828,
       "mode": 420
     },
     {
@@ -12892,11 +12922,9 @@
     },
     {
       "path": "package/package.json",
-      "sha256": "1a9b5bdd3077eeb68a377573754d3b13bed73c971e98c6f0a89fcb664a1a9b1a",
-      "sizeBytes": 6578,
+      "sha256": "9042d530fa3273173f659ee4dad8630157308e6d3459d1aa2be819741230e6fb",
+      "sizeBytes": 6577,
       "mode": 420
     }
-  ],
-  "packageIdentityCount": 146,
-  "ownedModuleMarkerCount": 42
+  ]
 }

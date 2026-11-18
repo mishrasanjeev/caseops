@@ -3462,7 +3462,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
   }
   // Includes the explicit Chromium install and the five independently scoped
   // commands in the complete Windows frontend gate; every old command remains.
-  assert.equal(setupCount, 20); assert.equal(commandCount, 206);
+  assert.equal(setupCount, 20); assert.equal(commandCount, 208);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
@@ -3688,7 +3688,7 @@ function iosProjectionFixture() {
   const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
     podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
   const npmRoot = policy.nodeNpm.parent + '/caseops-npm-ABC123';
-  admitted.npmRuntime = { root: npmRoot, files: 2149, inventory: { entries: 2600, observations: 7800 },
+  admitted.npmRuntime = { root: npmRoot, files: 2154, inventory: { entries: 2605, observations: 7815 },
     environment: { CASEOPS_PINNED_NPM_NODE: policy.tools.node.path, CASEOPS_PINNED_NPM_ROOT: npmRoot,
       CASEOPS_PINNED_NPM_ENTRY: npmRoot + '/caseops-entry.mjs', CASEOPS_PINNED_NPM_BOOTSTRAP: 'SYNTHETIC-REVIEWED-NPM-BOOTSTRAP',
       CASEOPS_PINNED_NPM_CLI_SHA256: '4'.repeat(64), CASEOPS_PINNED_NPX_CLI_SHA256: '5'.repeat(64), CASEOPS_PINNED_NPM_DEADLINE: String(policy.deadlineEpochMs),
@@ -6333,7 +6333,7 @@ test('iOS npm version uses the actual held public constructor and deregisters it
     const held = readIosHostInput(f.policy.helper, { maxBytes: 131072 }); let m;
     try { m = await import('data:text/javascript;base64,' + held.bytes.toString('base64')); } finally { held.bytes.fill(0); }
     f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
-    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2600, observations: 7800, bytesRead: 31910612 });
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2605, observations: 7815, bytesRead: 32045346 });
     assert.equal(registered, 1); assert.equal(deregistered, 1);
     const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
     fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');

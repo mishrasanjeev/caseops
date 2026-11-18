@@ -517,6 +517,7 @@ class BootstrapTests(unittest.TestCase):
                         "tests/e2e/drafting-formats20261115.spec.ts",
                         "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
                         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+                        "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
                         "apps/api/pyproject.toml", "apps/api/uv.lock",
                         "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Liberation.txt",
                         "apps/api/src/caseops_api/assets/pdf_fonts/OFL-Noto.txt",

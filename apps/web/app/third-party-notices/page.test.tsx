@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, twelve named components and fifteen full notices", () => {
+  it("renders one heading, fourteen named components and eighteen full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(12);
-    expect(article.querySelectorAll("details")).toHaveLength(15);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(14);
+    expect(article.querySelectorAll("details")).toHaveLength(18);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -61,7 +61,7 @@ describe("third-party license notices", () => {
     expect(screen.getByRole("main")).not.toHaveTextContent(/all licenses (?:approved|compliant)|production image|server image/i);
   });
 
-  it("binds each notice to the exact package or pinned shipping runtime version", () => {
+  it("binds each notice to installed packages and reviewed runtime or build-tool inputs", () => {
     expect(notices.components.map(({ packageName, version }) => [packageName, version])).toEqual([
       ["@fontsource/atkinson-hyperlegible", "5.2.8"],
       ["@fontsource/jetbrains-mono", "5.2.8"],
@@ -75,11 +75,23 @@ describe("third-party license notices", () => {
       ["NotoSansDevanagari", "2.002"],
       ["NotoSans", "2.008"],
       ["uharfbuzz", "0.57.0"],
+      ["picomatch", "4.0.7-caseops.1"],
+      ["@npmcli/arborist", "9.9.3"],
     ]);
     const apiVersions: Record<string, string> = {
       "liberation-fonts": "2.1.5", NotoSansDevanagari: "2.002", NotoSans: "2.008", uharfbuzz: "0.57.0",
     };
     for (const component of notices.components) {
+      if (component.packageName === "@npmcli/arborist") {
+        // Arborist belongs to the separately verified bundled npm installer,
+        // rather than the application's node_modules. Native npm and producer
+        // tests bind its shipped bytes to this exact official source input.
+        const source = JSON.parse(readFileSync(path.join(repoRoot,
+          "license-policy/upstream/_npmcli_arborist_9.9.3/package.json"), "utf8"));
+        expect(source.name).toBe(component.packageName);
+        expect(source.version).toBe(component.version);
+        continue;
+      }
       if (Object.hasOwn(apiVersions, component.packageName)) {
         expect(component.version).toBe(apiVersions[component.packageName]);
         continue;

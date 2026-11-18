@@ -21,6 +21,18 @@ NODE_SOURCE = "license-policy/upstream/node_22.23.4/LICENSE"
 NODE_SOURCE_SHA256 = "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
 NEXT_SOURCE = "license-policy/upstream/next_16.4.6/LICENSE.md"
 NEXT_SOURCE_SHA256 = "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224"
+BUILD_TOOL_SOURCES = {
+    "license-policy/upstream/_npmcli_arborist_9.9.3/LICENSE.md":
+        "27d998b503b18cdb16c49e93da04069a99ba8a1d7e18d67146de8e242f9a6d21",
+    "license-policy/upstream/_npmcli_arborist_9.9.3/package.json":
+        "df0a95f15021d3cb892047195ee24fe6cd78bc8ad5f302f5acc7f8d97848183b",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/LICENSE":
+        "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/CASEOPS-BACKPORT-NOTICE.txt":
+        "2163741483e227f5c61212896bf5a1c1dff2cae2e199df819ce1a37a3721b154",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/package.json":
+        "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",
+}
 
 
 def test_security_runs_and_retains_the_native_upload_gate():
@@ -125,6 +137,8 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
     expected[NODE_SOURCE] = NODE_SOURCE_SHA256
     assert NEXT_SOURCE not in expected
     expected[NEXT_SOURCE] = NEXT_SOURCE_SHA256
+    assert not set(expected) & set(BUILD_TOOL_SOURCES)
+    expected.update(BUILD_TOOL_SOURCES)
     actual = set()
     for visited, path in enumerate((ROOT / "license-policy/upstream").rglob("*"), start=1):
         assert visited <= 128
@@ -138,7 +152,7 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 57
+    assert len(actual) == 62
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
 

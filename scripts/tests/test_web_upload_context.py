@@ -28,6 +28,18 @@ NEXT_MATERIALS = {
     "apps/web/public/third-party-notices/next-16.4.6-LICENSE.txt",
     "license-policy/upstream/next_16.4.6/LICENSE.md",
 }
+PICOMATCH_MATERIALS = {
+    "apps/web/public/third-party-notices/picomatch-4.0.7-caseops.1-MIT-LICENSE.txt",
+    "apps/web/public/third-party-notices/picomatch-4.0.7-caseops.1-BACKPORT-NOTICE.txt",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/LICENSE",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/CASEOPS-BACKPORT-NOTICE.txt",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/package.json",
+}
+ARBORIST_MATERIALS = {
+    "apps/web/public/third-party-notices/npm-arborist-9.9.3-ISC-LICENSE.txt",
+    "license-policy/upstream/_npmcli_arborist_9.9.3/LICENSE.md",
+    "license-policy/upstream/_npmcli_arborist_9.9.3/package.json",
+}
 NPM_TOOLING_INPUTS = {
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
@@ -49,6 +61,7 @@ PDF_PUBLIC_NOTICES = {
 }
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
@@ -76,6 +89,11 @@ BUILDER_INPUTS = {
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
 SIBLING_CANARIES = {
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/unlisted.txt",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/private/canary.tgz",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/upstream/picomatch-4.0.7.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/arborist-9.9.3.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/npm-11.12.1-caseops-security-20261028.tgz",
     "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/src/private-sibling.txt",
     "apps/api/tests/private-sibling.txt", "apps/other-private/canary.txt",
     "apps/api/src/caseops_api/private-sibling.txt",
@@ -125,10 +143,11 @@ class NativeUploadTests(unittest.TestCase):
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
         self.required = {
             REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *NEXT_MATERIALS,
+            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS,
             *PDF_PUBLIC_NOTICES,
             *(value["path"] for entry in record["packages"] for value in entry["materials"]),
         }
-        self.assertEqual(len(self.required), 74)
+        self.assertEqual(len(self.required), 82)
 
     def files(self, paths):
         for relative in paths:
@@ -167,7 +186,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 58)
+        self.assertEqual(len(operator), 63)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",
@@ -427,6 +446,13 @@ class NativeUploadTests(unittest.TestCase):
             "apps/mobile/vendor/npm-11.12.1-caseops-security/**": {
                 "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
                 "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/npm-11.12.1-caseops-security-20261028.tgz",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/arborist-9.9.3.tgz",
+            },
+            "apps/mobile/vendor/picomatch-4.0.7-caseops.1/**": {
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/unlisted.txt",
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/private/canary.tgz",
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/upstream/picomatch-4.0.7.tgz",
             },
             "scripts/**": {"scripts/unlisted.txt", "scripts/other-private/canary.txt"},
             "scripts/mobile/**": {

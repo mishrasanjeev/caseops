@@ -40,13 +40,15 @@
     "prettier": "3.6.2",
     "typescript": "6.0.3",
     "deepmerge": "file:vendor/deepmerge-4.3.1-caseops.1/deepmerge-4.3.1-caseops.1.tgz",
-    "glob": "file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz"
+    "glob": "file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz",
+    "picomatch": "file:vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz"
   },
   "overrides": {
     "node-forge": "1.4.3",
     "zod": "$zod",
     "deepmerge": "$deepmerge",
     "glob": "$glob",
-    "minimatch": "11.0.1"
+    "minimatch": "11.0.1",
+    "picomatch": "$picomatch"
   }
 }
