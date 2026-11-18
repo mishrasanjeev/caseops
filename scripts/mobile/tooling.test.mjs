@@ -6383,7 +6383,7 @@ test('iOS local archive admission accepts the current full lock and refuses stal
     integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
   const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
   assert.equal(oldBytes.length, bytes.length);
-  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), 'd15da4b402622883d58f0c61cd5b8fd7bc95cb36bb8ead1b3cc46b1b596c5def');
+  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '0b42a18d7ac428c19b1ec5dc44fa2e7ab58e74e68f2321f4c64ca0ee93f03f00');
   try {
     fs.writeFileSync(lock, oldBytes);
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };

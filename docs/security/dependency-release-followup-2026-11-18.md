@@ -1,0 +1,111 @@
+# PR624 dependency and verification follow-up
+
+Status: **Partially implemented / Inconclusive / NO-GO** until final release
+and exact-serving production acceptance complete. PRD: J01/M01, J14/M13;
+FT001–002 and NFT001. No application feature, SQL schema or policy change.
+
+Head92c178f4b retains the rejected Security and Mobile source runs. Its
+expensive CI was cancelled after the known licence-image failure. CodeQL's
+workflow succeeds, but its separate analysis and alert verdict still needs
+reconciliation. The Codex review guard succeeds while actual AI review is
+disabled by its missing API key; that is not an independent review.
+
+On that exact unchanged head, the complete affected source inventory passes
+871 tests with five declared POSIX-only skips on Windows. Eight complete
+modules,876 total cases, native XML and before/after source hashes are retained.
+Component compilation and all3203 frontend cases/313 files pass. The external
+wrapper refuses an outdated3200 expectation; preserve that refusal. Exact
+case reconciliation retains every old case, two reviewed title changes and
+only the physical worktree prefix in path-valued parameter titles. The three
+new cases verify the added public notice texts. The final expected frontend
+inventory is3203/313, with zero failures, skips, cancellations or todos.
+
+## Actual pruned-image licence inventory
+
+The failure is not a missing required Linux runtime or an orphan lock row.
+Sharp's FreeBSD and Webcontainers optional packages require an unconstrained
+WASM child, which requires @emnapi/runtime. New Arborist pruning correctly
+omits this inactive branch on ordinary Linux x64 musl. The old scanner looks
+only at each row's own platform fields and incorrectly requires both children.
+The original pruned-image failure and complete package edges are retained.
+
+The scanner now proves active production reachability and exact incompatible
+optional ancestry before excusing an absent optional descendant. Shared
+required/peer paths, copied ancestors, every copied byte, missing optionality,
+disconnected foreign claims and cycles are regressed. Existing own-platform
+classification and whole physical pruned-tree equality remain mandatory.
+All151 unit cases pass, including copied-GPL policy denial and CLI exit1.
+No allow-list or any of the19 historical exception entries changes.
+
+The unchanged Security AUDIT program passes on the actual pruned musl image:
+127 identities/161 physical copies, complete coverage and zero denied
+licences. Only the two unconstrained children inherit exclusions from both
+exact absent Sharp ancestors. An actual Sharp PNG resize and raw decode
+verify every expected2x2 red RGBA pixel. Exact owned-container absence is
+independently confirmed. The first local shell attempt enters no scan because
+Windows text-mode stdin converts LF to CRLF; the successor sends exact bytes.
+The next audit passes, but its external receipt rejects overly broad reason
+classification. Restoring original own-platform reasons gives the complete
+third scoped audit pass. Earlier reports are preserved.
+
+## Cold startup and the unchanged matcher budget
+
+The Windows installed-graph job passes its existing native npm tests, then
+the new one-second matcher probes expire before READY. Both original and
+repaired probes are unentered evidence; neither proves matcher behavior.
+
+The physical child retains the real inherited trust bootstrap. Its existing
+20-second preparation bound covers startup and compilation. After READY, one
+exact admitted trigger starts the unchanged1000ms matching/exit budget. The
+child separately acknowledges match entry. All original adversarial subjects,
+literalization checks and ordinary matching oracles remain. Output and owned
+child cleanup remain bounded; no retry or production timeout change is added.
+The original source still exceeds one second in all four controls, while the
+private source completes naturally. All six matcher/installed-consumer cases
+pass on each pinned Node runtime. The actual inherited Windows Node24 trust
+policy also passes all three matcher cases, with zero global trust changes.
+The complete npm module passes57 cases with one declared POSIX-only skip;
+build configuration passes100 cases and the deterministic producer passes12.
+
+## Preserve the reviewed mobile SDK cohort
+
+The broad head92 deduplication refreshed unrelated SDK packages, including
+ExpoFont58.0.12, and broke the retained native-source catalogue. That candidate
+and its failed iOS source checks remain preserved. The successor restores
+the original SDK identities, including ExpoFont58.0.10 at the root and58.0.11
+under Expo. All four native package inputs, ten archives and45025306 archive
+bytes remain unchanged. No new native SDK or device acceptance is claimed.
+
+Canonical targeted regeneration admits the existing unchanged fdir6.5.0
+explicitly as a development dependency so its peer has a stable hoisted home.
+One proven stale nested public matcher lock row is removed only after exact
+backup; the canonical installer regenerates the graph. Fresh full npm ci,
+whole actual npm ls --all and audit all succeed. Both installed and locked
+matcher inventories contain only the reviewed private source, proven by the
+complete native consumer checks. Root and mobile audits report zero findings.
+
+The hash-bound mobile manifest and lock now require canonical LF bytes. The
+earlier CRLF operator lock fails its same-length stale control and is not
+admitted. Canonical npm regeneration reproduces the exact266715-byte LF lock.
+The source catalogue's lock reference, the exact npm-helper source reference,
+and the held iOS launcher are rebound to those actual bytes. The stale Forge
+control remains the same length and rejects before archive payload reads.
+Full intended Linux source CI must replay these iOS guards; Windows does not
+certify a Mac build. Old unentered or wrong-platform host-suite reports stay
+incomplete and are not converted into passes.
+
+## Remaining release boundaries
+
+Fresh final committed-head CI, separate CodeQL analysis/alert verdicts,
+complete frozen frontend coverage and the full canonical Windows Docker gate
+remain required. The old Admin15-second navigation failure is historical and
+unexplained; finite diagnostic passes and the independent no-paid constructor
+repair do not establish its cause. A fresh full browser inventory must pass.
+
+Only normal merge followed by complete combined-main CI admits canonical
+exact-SHA deployment. Full production QA must pass on that serving release.
+Only two later serial clean projection executions, with second rebuild_count0,
+admit the guarded scheduler resume. The three routine schedulers remain
+enabled and projection remains paused. The owner-approved two old test-view
+deletions already occurred once and must not be repeated. No live payment,
+owner OAuth, Mac/device, store or private MFA acceptance is claimed here.

@@ -6,6 +6,13 @@ const pattern = process.argv[3];
 const subject = process.argv[4];
 const matcher = picomatch(pattern);
 fs.writeSync(1, JSON.stringify({ stage: 'ready', pattern, length: subject.length }) + '\n');
+// Parent admission separates the inherited trust bootstrap/compilation from
+// the unchanged one-second matching budget. No match runs before this byte.
+const trigger = Buffer.alloc(2);
+if (fs.readSync(0, trigger, 0, 2, null) !== 1 || trigger[0] !== 77) {
+  throw new Error('PICOMATCH_PROBE_TRIGGER_REQUIRED');
+}
+fs.writeSync(1, JSON.stringify({ stage: 'matching' }) + '\n');
 const started = performance.now();
 const matched = matcher(subject);
 fs.writeSync(1, JSON.stringify({ stage: 'result', matched,

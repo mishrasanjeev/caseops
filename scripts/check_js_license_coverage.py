@@ -140,6 +140,58 @@ def physical_packages(root: Path, node_modules: Path):
     return paths
 
 
+def optional_platform_descendants(root, packages, roots, host):
+    """Prove inactive ancestry; a package's optional flag alone excuses nothing.
+
+    An absent platform-only branch can have unconstrained descendants. A shared
+    production path or a physically copied ancestor keeps those descendants
+    required. Dev roots never establish production reachability or exclusions.
+    """
+    def edges(parent):
+        metadata = packages[parent]
+        optional = metadata.get("optionalDependencies", {})
+        peers = {name for name in metadata.get("peerDependencies", {})
+                 if not metadata.get("peerDependenciesMeta", {}).get(name, {}).get("optional")}
+        for name in sorted(set(metadata.get("dependencies", {})) | set(optional) | peers):
+            target = resolve_dependency(packages, parent, name)
+            if packages[target].get("link"):
+                target = packages[target]["resolved"]
+            yield target, name in optional and name not in peers
+
+    active, blocked, pending = set(), set(), list(roots)
+    while pending:
+        parent = pending.pop()
+        if parent in active:
+            continue
+        active.add(parent)
+        for target, optional_edge in edges(parent):
+            metadata = packages[target]
+            compatible = all(permitted_platform(metadata.get(field, []), host[field])
+                             for field in ("os", "cpu", "libc"))
+            directory = root / target
+            if not directory.resolve().is_relative_to(root):
+                raise ValueError("Installed package escapes root")
+            absent = not is_directory_link(directory) and not directory.exists()
+            if optional_edge and metadata.get("optional") and not compatible and absent:
+                blocked.add(target)
+            else:
+                pending.append(target)
+
+    ancestry = {}
+    for ancestor in sorted(blocked):
+        seen, pending = set(), [ancestor]
+        while pending:
+            parent = pending.pop()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            for target, _optional in edges(parent):
+                if target not in active and target != ancestor:
+                    ancestry.setdefault(target, set()).add(ancestor)
+                pending.append(target)
+    return {target: sorted(ancestors) for target, ancestors in ancestry.items()}
+
+
 def inventory(root: Path, host=None, require_pruned=False):
     root = root.resolve()
     host = host or host_platform()
@@ -150,6 +202,9 @@ def inventory(root: Path, host=None, require_pruned=False):
     packages = lock["packages"]
     for path, metadata in packages.items():
         package_metadata(metadata, "lock:" + path)
+        if "node_modules/" in path and (any(c in path for c in ("\\", ":"))
+                or PurePosixPath(path).is_absolute() or ".." in PurePosixPath(path).parts):
+            raise ValueError("Unsafe lock package path")
     workspaces = manifest.get("workspaces")
     if not isinstance(workspaces, list) or not workspaces:
         raise ValueError("Expected nonempty explicit shipped workspace inventory")
@@ -195,6 +250,7 @@ def inventory(root: Path, host=None, require_pruned=False):
             raise ValueError("Workspace link manifest bytes differ from reviewed workspace: " + path)
         workspace_links[path] = {"workspace": workspace, "target": target.relative_to(root).as_posix(),
             "name": name, "package_sha256": linked_hash}
+    inactive_descendants = optional_platform_descendants(root, packages, roots, host)
     expected = {}
     excluded = []
     for path, metadata in packages.items():
@@ -206,6 +262,11 @@ def inventory(root: Path, host=None, require_pruned=False):
         if not installed_file.resolve().is_relative_to(root):
             raise ValueError("Installed package escapes root")
         compatible = all(permitted_platform(metadata.get(field, []), host[field]) for field in ("os", "cpu", "libc"))
+        if (compatible and metadata.get("optional") and path in inactive_descendants
+                and not installed_file.parent.exists() and not is_directory_link(installed_file.parent)):
+            excluded.append({"path": path, "reason": "optional ancestor platform mismatch",
+                             "ancestors": inactive_descendants[path]})
+            continue
         if not compatible:
             if not metadata.get("optional"):
                 raise ValueError("Required production package incompatible with host: " + path)

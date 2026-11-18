@@ -114,3 +114,9 @@ that serving release; only two later serial clean projection executions,
 with second rebuild_count0, can admit the guarded scheduler resume. Production
 has not been changed by this repair and projection remains paused. Native
 Mac/device/store, owner OAuth and provider UAT acceptance are separate claims.
+
+The broad mobile deduplication and first cold matcher fixture are superseded
+by the [source-bound follow-up](dependency-release-followup-2026-11-18.md).
+It preserves the original native SDK cohort, separates bounded trust startup
+from the unchanged matching budget and proves the actual pruned-image licence
+inventory. Preserve every earlier refusal and failed candidate separately.

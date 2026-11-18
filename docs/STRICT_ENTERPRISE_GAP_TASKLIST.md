@@ -5801,3 +5801,17 @@ The private source backport and installer compatibility changes remain
 source, installed-platform, frontend, Docker and CI gates pass. Preserve the
 old failed runs and the unexplained local Admin failure. See the
 [November18 source-bound security handoff](security/picomatch-security-2026-11-18.md).
+
+
+## 2026-11-18 — PR624 pruned inventory and bounded matcher follow-up
+
+Partially implemented / Inconclusive / NO-GO. Exact head92 source checks pass
+871 cases with five declared POSIX skips; native frontend passes3203/313,
+with the original stale-count wrapper refusal retained. The corrected actual
+pruned musl licence audit covers127 identities/161 copies and native Sharp
+pixels;151 offline regressions keep copied GPL and shared required paths
+closed. Matcher startup retains inherited trust while matching keeps its
+one-second bound. The successor restores unrelated native SDK identities
+and rebinds canonical source bytes. Fresh final CI, full Docker, exact-serving
+production QA and guarded projection recovery remain required. See the
+[source-bound follow-up](security/dependency-release-followup-2026-11-18.md).

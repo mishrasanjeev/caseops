@@ -194,3 +194,6 @@ scripts/mobile/picomatch-installed.test.mjs text eol=lf
 scripts/mobile/fixtures/picomatch-byte-input.mjs text eol=lf
 apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/** -text
 scripts/mobile/fixtures/picomatch-redos-probe.cjs text eol=lf
+# These exact bytes are also admitted by the native archive source catalogue.
+apps/mobile/package.json text eol=lf
+apps/mobile/package-lock.json text eol=lf

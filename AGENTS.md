@@ -4436,3 +4436,19 @@ requirements when using the fallback.
   pin. Preserve frozen/hash-locked dependency and source-layer ordering tests;
   run every affected deployment and packaging module together before certifying
   the release. Publishing a pending branch is not a passing verification claim.
+- A matcher hang witness must acknowledge readiness and actual match entry.
+  Preserve inherited trust startup in its existing bounded preparation phase,
+  then start the unchanged matching budget from the admitted trigger. A cold
+  startup refusal is unentered evidence. Never remove inherited trust or
+  increase the matching deadline to turn that refusal into a green result.
+- A package without platform constraints can inherit an inactive optional
+  ancestor's constraints. Excuse its absence only with complete production
+  reachability proof; a shared required or peer path keeps it required. Every
+  physically copied package still needs exact licence coverage and policy
+  admission. A disconnected foreign ancestor or optional flag alone proves
+  nothing, and a copied ancestor cannot hide a missing required child.
+- A targeted dependency repair must preserve unrelated reviewed native SDK
+  identities. Reconcile every held-source pin, launcher and archive catalogue
+  after legitimate input changes. Pin hash-bound manifest/lock line endings,
+  reproduce canonical installer bytes and keep a same-length stale-source
+  negative control; a checkout-normalized digest is not source admission.

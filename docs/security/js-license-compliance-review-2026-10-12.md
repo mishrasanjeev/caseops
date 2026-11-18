@@ -189,3 +189,22 @@ inventory is62 files; public credits contain14 components and18 notice texts.
 Source-only baseline archives are excluded from Docker/cloud upload. Current
 Windows/Linux installed inventories, complete source and image scans, actual
 builder context checks and exact-serving production acceptance remain required.
+
+The November18 follow-up corrects the installed-platform inventory for absent
+transitive children of platform-only optional branches. A child without its
+own platform fields is absent only when all production paths are blocked by
+the exact absent incompatible optional ancestors. An active required or peer
+path, any physically copied package, a copied ancestor, an absent optional
+flag or a disconnected foreign-parent claim remains fail-closed. Original
+own-platform exclusions keep their existing classification. No allow-list or
+historical package exception is added or changed.
+
+The complete151-case offline module passes, including exact copied-GPL denial
+and actual CLI refusal. The original Security audit program passes on the
+actual pruned Linux x64 musl dependency image:127 package identities,
+161 physical copies, zero denied licences and complete physical coverage.
+Only the absent @img/sharp-wasm32 and @emnapi/runtime children inherit the
+documented FreeBSD/Webcontainers ancestor exclusions. Native Sharp also
+produces and independently decodes the exact expected2x2 RGBA pixels. These
+are scoped engineering proofs, not a completed application release. The
+earlier failed image audit and unentered operator-shell attempt stay retained.

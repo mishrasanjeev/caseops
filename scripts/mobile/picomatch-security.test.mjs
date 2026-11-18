@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -28,14 +28,63 @@ const cases = [
 // original single-branch witnesses and every physical deadline stay unchanged.
 const counterfactualCases = [...cases.slice(0, 3), cases[4]];
 
-function probe(packageRoot, pattern, subject) {
-  const result = spawnSync(process.execPath, [worker, packageRoot, pattern, subject], {
-    timeout: 1000, encoding: 'utf8', windowsHide: true, maxBuffer: 16384,
+async function probe(packageRoot, pattern, subject) {
+  // Keep the real inherited CI bootstrap. Its existing20-second preparation
+  // bound is separate from matching; the acknowledged trigger starts the
+  // original1000ms physical budget, including IPC and natural child closure.
+  const child = spawn(process.execPath, [worker, packageRoot, pattern, subject], {
+    windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
   });
-  const rows = (result.stdout ?? '').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-  assert.deepEqual(rows[0], { stage: 'ready', pattern, length: subject.length },
-    'A cold process refusal is not proof of regex execution');
-  return { result, rows };
+  const rows = [];
+  let pending = '', stderr = '', charged = 0, failure, matchingTimer, cleanupTimer;
+  let resolveClosed, rejectClosed;
+  const closed = new Promise((resolve, reject) => { resolveClosed = resolve; rejectClosed = reject; });
+  function stop(error) {
+    failure ??= error;
+    if (!cleanupTimer) {
+      cleanupTimer = setTimeout(() => rejectClosed(new Error('PICOMATCH_PROBE_CLEANUP_DEADLINE')), 5000);
+      child.kill();
+    }
+  }
+  const preparationTimer = setTimeout(() => stop({ code: 'PREPARATION_DEADLINE' }), 20000);
+  const account = chunk => {
+    charged += chunk.length;
+    if (charged > 16384) { stop({ code: 'PROBE_OUTPUT_BOUND' }); return false; }
+    return true;
+  };
+  child.stdout.on('data', chunk => {
+    if (!account(chunk)) return;
+    pending += chunk.toString('utf8');
+    let end;
+    while ((end = pending.indexOf('\n')) !== -1) {
+      const line = pending.slice(0, end); pending = pending.slice(end + 1);
+      try {
+        const row = JSON.parse(line);
+        rows.push(row);
+        if (rows.length === 1) {
+          assert.deepEqual(row, { stage: 'ready', pattern, length: subject.length });
+          clearTimeout(preparationTimer);
+          matchingTimer = setTimeout(() => stop({ code: 'ETIMEDOUT' }), 1000);
+          child.stdin.end(Buffer.from('M'));
+        } else if (rows.length === 2) assert.deepEqual(row, { stage: 'matching' });
+        else assert.equal(rows.length, 3);
+      } catch { stop({ code: 'PROBE_PROTOCOL_REFUSED' }); }
+    }
+  });
+  child.stderr.on('data', chunk => { if (account(chunk)) stderr += chunk.toString('utf8'); });
+  child.stdin.on('error', error => stop({ code: error.code ?? 'PROBE_TRIGGER_REFUSED' }));
+  child.on('error', error => stop({ code: error.code ?? 'PROBE_SPAWN_REFUSED' }));
+  child.once('close', (status, signal) => resolveClosed({ status, signal, stderr, error: failure }));
+  try {
+    const result = await closed;
+    assert.deepEqual(rows[0], { stage: 'ready', pattern, length: subject.length },
+      'A cold process refusal is not proof of regex execution');
+    assert.deepEqual(rows[1], { stage: 'matching' }, 'The physical matcher must acknowledge entry');
+    assert.equal(pending, '', 'Every child response must be complete');
+    return { result, rows };
+  } finally {
+    clearTimeout(preparationTimer); clearTimeout(matchingTimer); clearTimeout(cleanupTimer);
+  }
 }
 
 function originalPackage(t) {
@@ -62,33 +111,33 @@ function originalPackage(t) {
   return path.join(root, 'package');
 }
 
-test('the pinned original really enters and exceeds the unchanged regex budget', t => {
+test('the pinned original really enters and exceeds the unchanged regex budget', async t => {
   const original = originalPackage(t);
-  const control = probe(original, '*.js', 'ordinary.js');
+  const control = await probe(original, '*.js', 'ordinary.js');
   assert.equal(control.result.status, 0);
-  assert.equal(control.rows[1].matched, true);
+  assert.equal(control.rows[2].matched, true);
   for (const [pattern, subject] of counterfactualCases) {
-    const { result, rows } = probe(original, pattern, subject);
+    const { result, rows } = await probe(original, pattern, subject);
     assert.equal(result.error?.code, 'ETIMEDOUT', pattern);
     assert.equal(result.status, null, pattern);
-    assert.equal(rows.length, 1, pattern);
+    assert.equal(rows.length, 2, pattern);
   }
 });
 
-test('the private backport completes the exact same adversarial probes naturally', () => {
+test('the private backport completes the exact same adversarial probes naturally', async () => {
   const packageRoot = path.join(vendor, 'package');
   for (const [pattern, subject] of cases) {
-    const { result, rows } = probe(packageRoot, pattern, subject);
+    const { result, rows } = await probe(packageRoot, pattern, subject);
     assert.equal(result.error, undefined, pattern);
     assert.equal(result.status, 0, pattern);
     assert.equal(result.signal, null, pattern);
     assert.equal(result.stderr, '', pattern);
-    assert.equal(rows.length, 2, pattern);
-    assert.equal(rows[1].matched, false, pattern);
-    assert.ok(rows[1].elapsedMs < 1000, pattern);
-    const literal = probe(packageRoot, pattern, pattern);
+    assert.equal(rows.length, 3, pattern);
+    assert.equal(rows[2].matched, false, pattern);
+    assert.ok(rows[2].elapsedMs < 1000, pattern);
+    const literal = await probe(packageRoot, pattern, pattern);
     assert.equal(literal.result.status, 0);
-    assert.equal(literal.rows[1].matched, true, 'Risky extglobs follow the existing literalization policy');
+    assert.equal(literal.rows[2].matched, true, 'Risky extglobs follow the existing literalization policy');
   }
 });
 
