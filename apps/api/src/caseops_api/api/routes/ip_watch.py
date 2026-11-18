@@ -19,6 +19,7 @@ from caseops_api.schemas.ip_watch import (
     IpWatchHitResponse,
     IpWatchProfileCreateRequest,
     IpWatchProfileResponse,
+    IpWatchProfileStatusResponse,
     IpWatchProfileUpdateRequest,
     IpWatchWorkspaceResponse,
 )
@@ -79,20 +80,18 @@ def watch_profile_create(
     )
 
 
-@router.post("/watch/profiles/{profile_id}/status", response_model=IpWatchProfileResponse)
+@router.post("/watch/profiles/{profile_id}/status", response_model=IpWatchProfileStatusResponse)
 def watch_profile_status(
     profile_id: str,
     payload: IpWatchProfileUpdateRequest,
     session: DbSession,
     context: Annotated[SessionContext, Depends(require_capability("ip:watch_manage"))],
-) -> IpWatchProfileResponse:
-    return IpWatchProfileResponse.model_validate(
-        update_watch_profile_status(
-            session,
-            context=context,
-            profile_id=profile_id,
-            payload=payload,
-        )
+) -> IpWatchProfileStatusResponse:
+    return update_watch_profile_status(
+        session,
+        context=context,
+        profile_id=profile_id,
+        payload=payload,
     )
 
 

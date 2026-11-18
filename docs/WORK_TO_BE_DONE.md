@@ -1,3 +1,22 @@
+## 2026-11-18 — local Docker04 failures remain release blockers
+
+PR624 head7c6c has green hosted checks but its complete local Docker04 failed.
+All4202 PostgreSQL tests/12606 phases passed. Desktop728 retained712 passes,
+13 explicit skips and three failures; mobile64 was not executed. The failures
+are the journal entry moving out of view after profile pause and two assistant
+history fixtures failing on Windows filenames inside Linux. Exact owned
+container/volume/network absence and retained artifact bytes are verified.
+
+The separate repair candidate is **Partially fixed / Inconclusive; NO-GO**.
+It returns the existing actor-visible intake count with a confirmed status,
+before commit, and updates that count with the profile. It maps bundled source
+filenames only after the existing Docker ownership fence. Five wrapper controls,
+92 focused frontend cases and the complete68-case SQLite family pass; two
+subtests pass. Five PostgreSQL cases, actual affected Docker journeys, full
+replacement/frontend/source/CI and production acceptance remain required.
+OpenAPI is regenerated. No merge/deployment or projection-resume credit.
+See [the dated record](security/production-verification-2026-11-17.md).
+
 ## 2026-11-17 — production QA follow-up
 
 PRs612,621 and623 are merged and mainacff is live. Release certification remains

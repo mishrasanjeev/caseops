@@ -1,3 +1,27 @@
+## November18 — journal availability and Docker fixture filename failures
+
+**Partially fixed / Inconclusive; NO-GO.** Exact7c6c Docker04 passes4202
+PostgreSQL cases and12606 phases, but desktop728 has712 passes/13 skips/3
+failures and mobile64 is unexecuted. Preserve all native/std reports, the
+original15-second viewport rejection and both pre-UI IndexErrors.
+
+UJ-21/IP-WATCH-01/02: the profile badge changes before the stale intake count.
+The repair returns a count from the existing actor-visible intake predicate
+under writer locks, resolves the response before commit, and updates profile
+and count together. SQLite checks cover global counts across dockets, foreign
+principals, quota-paused eligibility and fresh persisted rollback/audit reads.
+Two controlled frontend cases reject the exact old page and pass the repair
+while the refetch notification is held. The original browser assertions and
+deadlines remain unchanged and still require a complete native replay.
+
+IPLF-062/J14/M14: the bundled fixture's Windows __file__ is not a Linux path.
+The guarded adapter now gives owned Docker execution a canonical virtual path;
+host identities, exact source bytes, stdin, module fences and budgets remain.
+Five actual-wrapper controls retain3 red assertions and pass after repair;
+both actual retained-history browser bodies remain pending. Full affected
+SQLite coverage passes68 cases/two subtests; five PostgreSQL cases remain due.
+See [the evidence record](security/production-verification-2026-11-17.md).
+
 ## November17 — production reference fixture and dependency verification
 
 **Partially fixed / Inconclusive; NO-GO for complete release certification.**

@@ -1,3 +1,20 @@
+## November18 — a green CI does not supersede failed local acceptance
+
+**Partially implemented / Inconclusive; NO-GO.** Docker04 at7c6c retains a
+complete4202-case PostgreSQL pass, but712/728 desktop passes with13 skips and
+three failures. Mobile64 is unexecuted. All retained artifacts remain intact;
+exact-project container/volume/network absence is independently checked.
+
+Existing J08/M08 and J14/M14 own the repair: a current actor-visible intake
+count must accompany the confirmed profile change, and bundled host filenames
+must be translated only after owned-interpreter admission. Counts use the same
+server predicate before commit, not partial loaded-row arithmetic. The failed
+count-read control proves unchanged persisted profile and audit before retry.
+Complete source, compilation, fresh security/CI, PostgreSQL and browser replay,
+independent review and exact-serving production QA are still required. Private
+projection cadence remains behind successful QA and two later clean executions.
+See [the dated record](security/production-verification-2026-11-17.md).
+
 ## November17 — live release verification follow-up
 
 **Partially implemented; NO-GO for complete certification.** Canonical retry

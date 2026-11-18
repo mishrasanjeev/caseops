@@ -156,6 +156,11 @@ class IpWatchProfileResponse(BaseModel):
     updated_at: datetime
 
 
+class IpWatchProfileStatusResponse(IpWatchProfileResponse):
+    # Current actor-visible intake set, not a count of the loaded profile page.
+    intake_profile_count: int = Field(ge=0)
+
+
 class IpJournalPublicationCreate(BaseModel):
     application_id: str | None = None
     journal_number: str = Field(min_length=1, max_length=80)

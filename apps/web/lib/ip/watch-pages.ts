@@ -35,7 +35,7 @@ export function mergeWatchPages(pages: IpWatchWorkspace[]): MergedWatchWorkspace
 }
 
 /** Rows a mutation's response just returned, as the server stored them. */
-export type ConfirmedWatchRows = { profile?: IpWatchProfile; hit?: IpWatchHit };
+export type ConfirmedWatchRows = { profile?: IpWatchProfile; hit?: IpWatchHit; intakeProfileCount?: number };
 
 /**
  * Writes rows the server just confirmed into every loaded page. A workspace
@@ -48,6 +48,7 @@ export function withConfirmedRows(pages: IpWatchWorkspace[], rows: ConfirmedWatc
     row ? list.map((item) => (item.id === row.id ? row : item)) : list;
   return pages.map((page) => ({
     ...page,
+    ...(rows.intakeProfileCount === undefined ? {} : { intake_profile_count: rows.intakeProfileCount }),
     profiles: swap(page.profiles, rows.profile),
     hit_profiles: swap(page.hit_profiles, rows.profile),
     hits: swap(page.hits, rows.hit),

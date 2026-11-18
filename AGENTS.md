@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A server-confirmed profile status and its derived intake availability must
+  reach the UI together. A badge update with an old global count can collapse
+  a form after a reader scrolls. Return actor-visible counts under the existing
+  writer fences before commit; never infer them from a loaded page. Prove
+  cross-docket/tenant scope, quota eligibility and a failed read's actual rollback.
+- A bundled fixture's host filename is not a Linux execution path. Preserve
+  inspected source bytes and host execution identities; map virtual filenames
+  only after the core helper proves its owned Docker interpreter/database.
+  Regress Windows and POSIX callers, module/main identity, stdin and the real
+  affected journeys without loosening ownership, expiry or provider fences.
+
 - Receiving a complete HTTP response does not prove the server handler has
   finished its cleanup or journal publication. Test fixtures that inspect those
   effects must await actual handler completion within the existing request

@@ -395,3 +395,76 @@ superseded. The private source backport, exact installer compatibility repair,
 native controls, failed attempts and outstanding final gates are recorded in
 [the November18 security handoff](picomatch-security-2026-11-18.md).
 This does not close the earlier local navigation or production findings.
+
+## November18 Docker04: three new local failures, replacement required
+
+Exact source7c6c02a39c3c82da1866b0a2e138d2c6ea4b20d5 ran from
+05:10:04UTC to09:32:40UTC. All4202 PostgreSQL cases/12606 phases passed
+naturally in eight groups. Desktop shard1 completed361 passes/eight skips;
+shard2 completed351 passes/five skips/three failures. Both native exits,
+standard and redacted-native JSON, XML, discovery identities and retained
+artifact hashes are preserved. There were no retries or flaky cases.
+The64 mobile cases were unexecuted after the second shard rejection. The
+outer verifier exited1/completed=false with unchanged source/main and clean
+inputs. Exact-project container/volume/network absence is independently
+verified. The failed04 source/worktree remains unchanged.
+
+The journal failure is `ram-2026-10-31-watch.spec.ts:359`. Its recorded entry
+exists, but after the profile is paused its final original15-second half-
+viewport assertion observes ratio0. The profile badge is confirmed immediately
+while the old intake count can remain1 until the background read returns0.
+This source-level race can remove the obsolete form and shift the entry;
+its exact timing in the original viewport failure remains an inference.
+The component control proves the stale gate, not the native geometry. Do not
+increase the viewport deadline, lower its ratio or add another scroll to hide
+the original failure. The candidate obtains the count from the same canonical
+actor-visible intake predicate under existing writer/context locks, constructs
+the complete status response before commit, and updates count/profile together.
+It does not subtract from a partial profile list. Quota-paused profiles retain
+their existing eligibility. The API response adds only a nonnegative derived
+count; OpenAPI is regenerated, with no migration or storage owner change.
+
+Both `ram-2026-11-07-assistant` journeys fail at fixture validate(IndexError),
+before browser assertions. The exact inspected Windows filename is supplied
+as __file__ inside Linux, where Path.parents[3] has no such ancestor. Only
+after the existing core proves an owned Docker interpreter/database does the
+adapter translate virtual main/module filenames to/app/tests/e2e/support.
+Host filename/source identity, input bytes, namespace fences, no-model policy
+and physical interpreter budget remain unchanged. Actual-wrapper tests retain
+three red assertions, including the IndexError, and pass all five after repair.
+
+Current scoped evidence in the operator's merge161001 directory:
+
+- `pr624-docker04-failed-scope05.json`: complete failed-desktop scope,4202
+  PostgreSQL pass, retained artifact bytes and exact-project absence. Earlier
+  auxiliary reader refusals are separate: report grouping/schema, six native
+  title redactions and Windows260-300character retained paths. The reader
+  uses extended-length paths and one descriptor per retained byte/hash check;
+  it never skips, rewrites, copies or deletes an artifact to obtain acceptance.
+- `pr624-file-identity-red01.log` and `-green01.log`: three failures/two
+  passes before repair, five passes after. Host and owned Windows/POSIX paths,
+  module/main ownership, stdin and compile-before-execution refusal are covered.
+- `pr624-intake-count-red01.xml` is invalid fixture setup for its first
+  scenario (duplicate bootstrap slug), not a reproduced count defect.
+  Corrected `-red02.xml` reaches the missing status count; its rollback hook
+  is not yet implemented. `-green01.xml` passes both SQLite scenarios.
+- `pr624-browser-focused01.json`: all92 cases in the three complete affected
+  frontend files pass. Two cases prove cache success with bounded observer
+  notification still pending, deliver inside act and restore/clear the client.
+- `pr624-watch-old-ui-control01.json`: the exact old page implementation
+  fails both new availability cases (other23 cases excluded from this negative
+  control). The fixed page is restored byte-for-byte. This is not a full gate.
+- `pr624-watch-complete01.xml`: all68 selected SQLite/API cases and two
+  subtests pass, with five explicitly deselected PostgreSQL cases. A fresh,
+  short owned Windows temporary root is used. It is not PostgreSQL acceptance.
+
+These are uncommitted repair-candidate observations, not deployed proof or
+closure. Verdict remains **Partially fixed / Inconclusive; NO-GO**. Still due:
+complete affected PostgreSQL/browser replay, actual component/E2E/mobile
+compilation, frozen complete frontend, fresh source/native/security/audits and
+exact-head CI/separate alert verdict, full replacement Docker inventory and
+cleanup, independent review, combined-main checks, canonical deployment and
+full exact-serving production QA. Original Batch5 production failures remain
+unresolved until that replay. Projection cadence requires the latest successful
+mutation-capable QA plus two later clean serial executions, second rebuild0,
+through the guarded resume command; no direct scheduler resume.

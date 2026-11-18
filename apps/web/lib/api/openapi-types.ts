@@ -36209,6 +36209,67 @@ export interface components {
             /** Word Terms Json */
             word_terms_json: string[];
         };
+        /** IpWatchProfileStatusResponse */
+        IpWatchProfileStatusResponse: {
+            /** Class Numbers Json */
+            class_numbers_json: number[];
+            /** Company Id */
+            company_id: string;
+            /** Cost Currency */
+            cost_currency: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Criteria Version */
+            criteria_version: string;
+            /** Device References Json */
+            device_references_json: string[];
+            /** Docket Id */
+            docket_id: string;
+            /** Frequency */
+            frequency: string;
+            /** Id */
+            id: string;
+            /** Intake Profile Count */
+            intake_profile_count: number;
+            /** Jurisdictions Json */
+            jurisdictions_json: string[];
+            /** Last Polled At */
+            last_polled_at: string | null;
+            /** Max Cost Minor Per Period */
+            max_cost_minor_per_period: number;
+            /** Name */
+            name: string;
+            /** Next Poll At */
+            next_poll_at: string | null;
+            /** Pause Reason */
+            pause_reason: string | null;
+            /** Phonetic Terms Json */
+            phonetic_terms_json: string[];
+            /** Poll Status */
+            poll_status: string;
+            /** Proprietor Terms Json */
+            proprietor_terms_json: string[];
+            /** Provider Key */
+            provider_key: string;
+            /** Recipient Membership Ids Json */
+            recipient_membership_ids_json: string[];
+            /** Spent Cost Minor In Period */
+            spent_cost_minor_in_period: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+            /** Word Terms Json */
+            word_terms_json: string[];
+        };
         /** IpWatchProfileUpdateRequest */
         IpWatchProfileUpdateRequest: {
             /** Expected Version */
@@ -70169,7 +70230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IpWatchProfileResponse"];
+                    "application/json": components["schemas"]["IpWatchProfileStatusResponse"];
                 };
             };
             /** @description Validation Error */
