@@ -7,7 +7,7 @@ import tempfile
 import time
 import types
 import unittest
-from unittest import mock
+import unittest.mock
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,7 +41,7 @@ class Backport(unittest.TestCase):
         with tarfile.open(fileobj=io.BytesIO(self.raw), mode="r:gz") as archive:
             original = {member.name: archive.extractfile(member).read() for member in archive}
         for name, body in original.items():
-            if name not in ("package/lib/parse.js", "package/package.json"):
+            if name not in ("package/lib/parse.js", "package/lib/utils.js", "package/package.json"):
                 self.assertEqual(built[name], body, name)
         metadata = json.loads(built["package/package.json"])
         self.assertEqual(metadata["name"], "picomatch")
@@ -159,7 +159,7 @@ class Backport(unittest.TestCase):
             def stable_clock():
                 ticks.append(0)
                 return 0
-            with mock.patch.object(builder, "time", types.SimpleNamespace(monotonic=stable_clock)):
+            with unittest.mock.patch.object(builder, "time", types.SimpleNamespace(monotonic=stable_clock)):
                 receipt = builder.verify_output(root, {"ordinary.txt": b"stable"}, 1)
             self.assertTrue(receipt["rootPresent"])
             total = len(ticks)
@@ -167,7 +167,7 @@ class Backport(unittest.TestCase):
             def final_expiry():
                 calls.append(0)
                 return 1 if len(calls) == total else 0
-            with mock.patch.object(builder, "time", types.SimpleNamespace(monotonic=final_expiry)):
+            with unittest.mock.patch.object(builder, "time", types.SimpleNamespace(monotonic=final_expiry)):
                 with self.assertRaisesRegex(ValueError, "OUTPUT_VERIFICATION_DEADLINE"):
                     builder.verify_output(root, {"ordinary.txt": b"stable"}, 1)
             self.assertEqual(len(calls), total)

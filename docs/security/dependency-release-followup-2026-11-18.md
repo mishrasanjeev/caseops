@@ -133,3 +133,50 @@ failures/skips/todos, successful component compilation and unchanged complete
 source/remote identities. This is scoped head0aa proof, not successor CI or
 full Docker/production certification. The replacement release remains NO-GO
 until all remaining boundaries above actually complete.
+
+## Separate CodeQL alert verdict: headcd13 is rejected
+
+All three CodeQL analysis jobs completed successfully for PR merge49899e4a,
+but the separate full alert inventory retained high-severity alert879 in the
+original picomatch removeBackslashes helper and note880 for duplicate unittest
+imports. Green analysis jobs did not mean zero findings. The source-bound
+snapshot is pr624-headcd13-codeql-snapshot01.json. No dismissal or scanner
+exception is added; headcd13 remains NO-GO despite its other passing workflows.
+
+The upstream unanchored bracket regex rescans unmatched suffixes repeatedly.
+The private producer now replaces only that additional helper with two
+monotonic lookahead cursors, preserving complete bracket groups, escapes and
+all four regex line terminators. The original helper and actual public scan
+API exceed the unchanged one-second physical budget after acknowledged entry;
+the replacement completes both identical100000-bracket inputs naturally.
+Independent literal expectations and299593 exhaustive short inputs preserve
+the original output. Both actual pinned Node22 and24 execute these controls.
+The producer imports unittest.mock directly and retains every original test.
+
+The replacement private matcher artifact is
+825c8fd99fcf846c788a9f74288ee5af6fd88142e3e91bbc716c006e655606ba.
+The npm11.12.1 rebundle is
+d2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54,
+4066974 bytes, with unchanged2154 members and17725440 uncompressed tar bytes.
+The complete two-read POSIX inventory is32065064 bytes, including the registry
+entry and both shims. Exact upstream baseline and original licence bytes stay
+unchanged. The explicit modification notice now describes this second repair.
+
+Canonical targeted lock regeneration changes only the matcher integrity in
+each root/mobile lock. No dependency version, native SDK cohort, archive or
+manifest is refreshed. The mobile lock remains266715 canonical LF bytes.
+All exact archive, helper, launcher, public/retained notice and stale-lock
+controls are rebound to the new bytes; the previous failed artifacts remain
+retained evidence. Fresh installs, full intended source/security/alert checks,
+frozen frontend, complete Docker and production acceptance remain required.
+
+Headcd13 full frozen frontend08 passed3203/3203 tests across313 files with
+component compilation, no failures/skips/todos and unchanged source/ref
+identities. Its complete release-harness source04 passed871/876 with five
+declared POSIX-only Windows skips. These remain exact scoped old-head facts,
+not a replacement release certificate. Projection maintenance stays paused.
+
+The precommit byte guard refused a CRLF root lock before commit. That refusal
+is retained. Root manifests and lockfiles now have explicit LF checkout rules,
+matching the mobile inputs; canonical regeneration must reproduce those bytes.
+JSON dependency identities and native SDK/archive inputs are unchanged.

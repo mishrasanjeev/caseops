@@ -9,8 +9,8 @@ import { gunzipSync } from 'node:zlib';
 import { npmRegistryEntry, npmRegistryBootstrap } from './npm-registry.mjs';
 
 // This is a distinct local dependency rebundle. npm's own CLI remains 11.12.1.
-export const NPM_ARTIFACT = Object.freeze({ sha256: '90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010',
-  sizeBytes: 4066593, tarBytes: 17725440, members: 2154,
+export const NPM_ARTIFACT = Object.freeze({ sha256: 'd2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54',
+  sizeBytes: 4066974, tarBytes: 17725440, members: 2154,
   relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz' });
 const fields = ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs', 'uid', 'gid', 'mode', 'nlink'];
 const directoryFields = ['dev', 'ino', 'mode', 'uid', 'gid'];
@@ -179,7 +179,7 @@ function hardenCIPinnedArchive(end) {
 $clock=[Diagnostics.Stopwatch]::StartNew();function Check {if($clock.ElapsedMilliseconds -ge 3500){throw 'bounded'}}
 Check;$rights=[Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
 $f=[IO.FileStream]::new($env:CASEOPS_NPM_HARDEN_PATH,[IO.FileMode]::Open,$rights,[IO.FileShare]::Read,4096,[IO.FileOptions]::None)
-Check;if(!$f.CanRead -or !$f.CanSeek -or $f.Length -ne 4066593){throw 'extent'}
+Check;if(!$f.CanRead -or !$f.CanSeek -or $f.Length -ne 4066974){throw 'extent'}
 $assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsNpmArchiveHandle'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
 $type=$assembly.DefineDynamicModule('Native').DefineType('CaseOpsNpmArchiveHandle.Native',[Reflection.TypeAttributes]::Public)
 $method=$type.DefinePInvokeMethod('GetFileInformationByHandle','kernel32.dll','GetFileInformationByHandle',[Reflection.MethodAttributes]'Public,Static,PinvokeImpl',[Reflection.CallingConventions]::Standard,[bool],[Type[]]@([IntPtr],[IntPtr]),[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode)
@@ -193,11 +193,11 @@ $mtime=([uint64][BitConverter]::ToUInt32($b,24) -shl 32) -bor [uint64][BitConver
 $size=([uint64][BitConverter]::ToUInt32($b,32) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,36)
 if(([BitConverter]::ToUInt32($b,0) -band 1040) -ne 0 -or [BitConverter]::ToUInt32($b,40) -ne 1 -or $birth -le 116444736000000000 -or $mtime -le 116444736000000000){throw 'identity'}
 $culture=[Globalization.CultureInfo]::InvariantCulture
-if($ino.ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_MTIME -or $size -ne 4066593 -or $f.Length -ne 4066593){throw 'identity'}
+if($ino.ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_MTIME -or $size -ne 4066974 -or $f.Length -ne 4066974){throw 'identity'}
 return ,$b
 }
 function Digest {$f.Position=0;$h=[Security.Cryptography.SHA256]::Create();try{return [BitConverter]::ToString($h.ComputeHash($f)).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}}
-$first=Identity;$before=Digest;if($before -cne '90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010'){throw 'changed'}
+$first=Identity;$before=Digest;if($before -cne 'd2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54'){throw 'changed'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$identity.User;$t=$identity.Owner
 if(!$u -or !$t -or $u.Value -in @('S-1-5-18','S-1-5-32-544')){throw 'owner'}
 $old=$f.GetAccessControl();$o=$old.GetOwner([Security.Principal.SecurityIdentifier]).Value

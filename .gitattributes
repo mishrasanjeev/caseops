@@ -197,3 +197,7 @@ scripts/mobile/fixtures/picomatch-redos-probe.cjs text eol=lf
 # These exact bytes are also admitted by the native archive source catalogue.
 apps/mobile/package.json text eol=lf
 apps/mobile/package-lock.json text eol=lf
+
+# Root manifests and lockfiles also feed the reviewed build inputs.
+/package.json text eol=lf
+/package-lock.json text eol=lf

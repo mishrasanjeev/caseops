@@ -5815,3 +5815,14 @@ one-second bound. The successor restores unrelated native SDK identities
 and rebinds canonical source bytes. Fresh final CI, full Docker, exact-serving
 production QA and guarded projection recovery remain required. See the
 [source-bound follow-up](security/dependency-release-followup-2026-11-18.md).
+
+### November18 PR624: separate CodeQL verdict still NO-GO
+
+Headcd13 passed full frontend3203/313 and Windows release harness871P/5
+explicit POSIX skips, but alert879 exposes quadratic backslash removal and
+note880 a duplicate unittest import. Retain the successful analysis jobs and
+failed separate alert verdict. The isolated replacement has native original/
+repaired controls and exact-output coverage; full current-head security,
+source, Docker, production QA and guarded scheduler recovery remain pending.
+See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
+projection resume, scanner exception or completed release is claimed.

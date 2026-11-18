@@ -208,3 +208,14 @@ documented FreeBSD/Webcontainers ancestor exclusions. Native Sharp also
 produces and independently decodes the exact expected2x2 RGBA pixels. These
 are scoped engineering proofs, not a completed application release. The
 earlier failed image audit and unentered operator-shell attempt stay retained.
+
+### November18 separate CodeQL backslash-removal repair
+
+The unreleased private matcher also replaces its upstream ambiguous bracket
+regex with a linear helper. The exact MIT licence and every historical19
+exception object remain unchanged. Its explicit modification notice now binds
+this second source change, public text, retained text and image inventory.
+Current matcher825c8fd9 and npm rebundled2c67621 require fresh complete native
+licence, deterministic-source, dependency, alert, Docker and deployed proof.
+See dependency-release-followup-2026-11-18.md; prior green analysis jobs with
+open high alert879 are retained as a rejected release, not an exception.

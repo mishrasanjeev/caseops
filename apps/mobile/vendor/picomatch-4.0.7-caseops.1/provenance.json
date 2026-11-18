@@ -8,13 +8,13 @@
   "upstreamIntegrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
   "advisory": "GHSA-fc5q-39xc-vjpf",
   "upstreamPatchedRelease": null,
-  "artifactSha256": "d10a7367ca87ec9f477ecaa97385787ee272af5663520507d74a1eedbfb05662",
-  "artifactIntegrity": "sha512-/ZnF2FYUNpvy9FSgh79Ov5pcdOUHlcX9997ZdcfgTPBj+UhiMR4p12eVQrnk5oXduoklu8row29zB/Vov4gI4A==",
+  "artifactSha256": "825c8fd99fcf846c788a9f74288ee5af6fd88142e3e91bbc716c006e655606ba",
+  "artifactIntegrity": "sha512-kf1q+F+yNl2zOpKF1y8Ly4RMctOJ16lEmH8qPJKKh1HkSnGWx+JToOcBOu+5C4T7aNk6Gk7dv+o8b/wq563ASw==",
   "files": {
     "CASEOPS-BACKPORT-NOTICE.txt": {
-      "sha256": "2163741483e227f5c61212896bf5a1c1dff2cae2e199df819ce1a37a3721b154",
+      "sha256": "f08d9841fdd1e143095de28a772896efb62122bf416e6172c49ab04f309c63e2",
       "upstreamSha256": null,
-      "sizeBytes": 1173
+      "sizeBytes": 1340
     },
     "LICENSE": {
       "sha256": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
@@ -52,9 +52,9 @@
       "sizeBytes": 9483
     },
     "lib/utils.js": {
-      "sha256": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+      "sha256": "601a7e449556c5453781471e043a6aa1d415dce8eedeef8b56e6190d39b993f8",
       "upstreamSha256": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
-      "sizeBytes": 1994
+      "sizeBytes": 2918
     },
     "package.json": {
       "sha256": "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",

@@ -29,7 +29,9 @@ published patched version. This package extends the existing repeated-extglob
 safety policy: branches containing an unescaped, unquoted glob star outside
 character classes, and repeated literal alternatives such as ab|abab, use the
 existing literalization path. Common non-overlapping extglobs remain functional.
-Other runtime files and public APIs are unchanged. The existing explicitly
+The backslash-removal helper uses monotonic linear lookahead instead of an
+ambiguous unanchored bracket regex. Bracket, escape and line-break output is
+preserved. All other runtime files and public APIs are unchanged. The existing explicitly
 unsafe maxExtglobRecursion:false opt-out remains for trusted patterns only.
 This is not a guarantee that arbitrary user-supplied regex/glob programs are safe.
 
@@ -74,6 +76,43 @@ NEW_OVERLAP = """      const shorter = a.length <= b.length ? a : b;
           longer === shorter.repeat(longer.length / shorter.length)) {
         return true;
       }"""
+
+OLD_REMOVE_BACKSLASHES = r'''exports.removeBackslashes = str => {
+  return str.replace(REGEX_REMOVE_BACKSLASH, match => {
+    return match === '\\' ? '' : match;
+  });
+};'''
+NEW_REMOVE_BACKSLASHES = r'''exports.removeBackslashes = str => {
+  // Monotonic cursors prevent a fresh suffix scan for every unmatched '['.
+  // The original dot excludes four line terminators; its final class may
+  // consume one immediately before the closing bracket.
+  const lineBreak = ch => ch === '\n' || ch === '\r' || ch === '\u2028' || ch === '\u2029';
+  let closing = 0;
+  let boundary = 0;
+  let kept = 0;
+  const output = [];
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '[') {
+      if (closing < i + 2) {
+        closing = i + 2;
+        while (closing < str.length && (str[closing] !== ']' || str[closing - 1] === '\\')) closing++;
+      }
+      if (boundary < i + 1) {
+        boundary = i + 1;
+        while (boundary < str.length && !lineBreak(str[boundary])) boundary++;
+      }
+      if (closing < str.length && closing <= boundary + 1) {
+        i = closing;
+        continue;
+      }
+    }
+    if (str[i] === '\\' && i + 1 < str.length && !lineBreak(str[i + 1])) {
+      output.push(str.slice(kept, i));
+      kept = i + 1;
+    }
+  }
+  return output.join('') + str.slice(kept);
+};'''
 
 
 def digest(raw):
@@ -157,6 +196,12 @@ def build(raw):
             raise ValueError("EXACT_REVIEWED_PATCH_REQUIRED")
         source = source.replace(old, new)
     files["lib/parse.js"] = source.encode()
+    utils = files["lib/utils.js"].decode("utf-8")
+    if utils.count(OLD_REMOVE_BACKSLASHES) != 1 or utils.count("  REGEX_REMOVE_BACKSLASH,\n") != 1:
+        raise ValueError("EXACT_REVIEWED_UTILS_PATCH_REQUIRED")
+    files["lib/utils.js"] = utils.replace(OLD_REMOVE_BACKSLASHES, NEW_REMOVE_BACKSLASHES).replace(
+        "  REGEX_REMOVE_BACKSLASH,\n", ""
+    ).encode()
     metadata = json.loads(files["package.json"])
     metadata.update(version=VERSION, private=True)
     metadata["caseopsBackport"] = {"upstream": "picomatch@4.0.7", "advisory": "GHSA-fc5q-39xc-vjpf",

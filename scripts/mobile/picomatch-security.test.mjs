@@ -28,11 +28,12 @@ const cases = [
 // original single-branch witnesses and every physical deadline stay unchanged.
 const counterfactualCases = [...cases.slice(0, 3), cases[4]];
 
-async function probe(packageRoot, pattern, subject) {
+async function probe(packageRoot, pattern, subject, operation = 'match') {
+  const length = operation === 'match' ? subject.length : Number(subject) + 2;
   // Keep the real inherited CI bootstrap. Its existing20-second preparation
   // bound is separate from matching; the acknowledged trigger starts the
   // original1000ms physical budget, including IPC and natural child closure.
-  const child = spawn(process.execPath, [worker, packageRoot, pattern, subject], {
+  const child = spawn(process.execPath, [worker, packageRoot, pattern, subject, operation], {
     windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
   });
   const rows = [];
@@ -62,7 +63,7 @@ async function probe(packageRoot, pattern, subject) {
         const row = JSON.parse(line);
         rows.push(row);
         if (rows.length === 1) {
-          assert.deepEqual(row, { stage: 'ready', pattern, length: subject.length });
+          assert.deepEqual(row, { stage: 'ready', pattern, length });
           clearTimeout(preparationTimer);
           matchingTimer = setTimeout(() => stop({ code: 'ETIMEDOUT' }), 1000);
           child.stdin.end(Buffer.from('M'));
@@ -77,7 +78,7 @@ async function probe(packageRoot, pattern, subject) {
   child.once('close', (status, signal) => resolveClosed({ status, signal, stderr, error: failure }));
   try {
     const result = await closed;
-    assert.deepEqual(rows[0], { stage: 'ready', pattern, length: subject.length },
+    assert.deepEqual(rows[0], { stage: 'ready', pattern, length },
       'A cold process refusal is not proof of regex execution');
     assert.deepEqual(rows[1], { stage: 'matching' }, 'The physical matcher must acknowledge entry');
     assert.equal(pending, '', 'Every child response must be complete');
@@ -166,4 +167,55 @@ test('common, escaped, quoted, class and safe nested forms retain real matching 
   }
   assert.equal(provenance.upstreamPatchedRelease, null);
   assert.equal(provenance.advisory, 'GHSA-fc5q-39xc-vjpf');
+});
+
+test('the original backslash remover enters and exceeds the unchanged physical budget', async t => {
+  const original = originalPackage(t);
+  for (const operation of ['remove-backslashes', 'scan-unescape']) {
+    const control = await probe(original, 'backslash-removal', '1', operation);
+    assert.equal(control.result.status, 0);
+    assert.equal(control.rows[2].matched, true);
+    const { result, rows } = await probe(original, 'backslash-removal', '100000', operation);
+    assert.equal(result.error?.code, 'ETIMEDOUT', operation);
+    assert.equal(result.status, null, operation);
+    assert.equal(rows.length, 2, operation);
+  }
+});
+
+test('the linear backslash remover completes the identical hostile input naturally', async () => {
+  for (const operation of ['remove-backslashes', 'scan-unescape']) {
+    const { result, rows } = await probe(path.join(vendor, 'package'), 'backslash-removal', '100000', operation);
+    assert.equal(result.error, undefined, operation);
+    assert.equal(result.status, 0, operation);
+    assert.equal(result.signal, null, operation);
+    assert.equal(result.stderr, '', operation);
+    assert.equal(rows.length, 3, operation);
+    assert.equal(rows[2].matched, true, operation);
+    assert.equal(rows[2].source, operation);
+    assert.ok(rows[2].elapsedMs < 1000, operation);
+  }
+});
+
+test('linear removal preserves literal escapes, bracket groups and every regex line terminator', t => {
+  const original = createRequire(path.join(originalPackage(t), 'package.json'))('./lib/utils.js').removeBackslashes;
+  const repaired = createRequire(path.join(vendor, 'package/package.json'))('./lib/utils.js').removeBackslashes;
+  const rows = [
+    ['\\a', 'a'], ['[a\\b]', '[a\\b]'], ['[]\\a', '[]a'],
+    ['[\\]', '[]'], ['[a\\]]', '[a\\]]'], ['[\\\n]', '[\\\n]'],
+    ['[a\n\\x]', '[a\nx]'], ['\\\n', '\\\n'], ['\\', '\\'],
+    ['[\n]', '[\n]'], ['[\u2028]', '[\u2028]'], ['[\u2029]', '[\u2029]'],
+  ];
+  for (const [input, expected] of rows) {
+    assert.equal(original(input), expected, 'Independent pinned original literal output');
+    assert.equal(repaired(input), expected, JSON.stringify(input));
+  }
+  const alphabet = ['[', ']', '\\', 'a', '\n', '\r', '\u2028', '\u2029'];
+  let compared = 0;
+  function visit(input, depth) {
+    assert.equal(repaired(input), original(input), JSON.stringify(input));
+    compared++;
+    if (depth) for (const char of alphabet) visit(input + char, depth - 1);
+  }
+  visit('', 6);
+  assert.equal(compared, 299593);
 });

@@ -3,7 +3,6 @@
 
 const {
   REGEX_BACKSLASH,
-  REGEX_REMOVE_BACKSLASH,
   REGEX_SPECIAL_CHARS,
   REGEX_SPECIAL_CHARS_GLOBAL
 } = require('./constants');
@@ -28,9 +27,35 @@ exports.isWindows = () => {
 };
 
 exports.removeBackslashes = str => {
-  return str.replace(REGEX_REMOVE_BACKSLASH, match => {
-    return match === '\\' ? '' : match;
-  });
+  // Monotonic cursors prevent a fresh suffix scan for every unmatched '['.
+  // The original dot excludes four line terminators; its final class may
+  // consume one immediately before the closing bracket.
+  const lineBreak = ch => ch === '\n' || ch === '\r' || ch === '\u2028' || ch === '\u2029';
+  let closing = 0;
+  let boundary = 0;
+  let kept = 0;
+  const output = [];
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '[') {
+      if (closing < i + 2) {
+        closing = i + 2;
+        while (closing < str.length && (str[closing] !== ']' || str[closing - 1] === '\\')) closing++;
+      }
+      if (boundary < i + 1) {
+        boundary = i + 1;
+        while (boundary < str.length && !lineBreak(str[boundary])) boundary++;
+      }
+      if (closing < str.length && closing <= boundary + 1) {
+        i = closing;
+        continue;
+      }
+    }
+    if (str[i] === '\\' && i + 1 < str.length && !lineBreak(str[i + 1])) {
+      output.push(str.slice(kept, i));
+      kept = i + 1;
+    }
+  }
+  return output.join('') + str.slice(kept);
 };
 
 exports.escapeLast = (input, char, lastIdx) => {

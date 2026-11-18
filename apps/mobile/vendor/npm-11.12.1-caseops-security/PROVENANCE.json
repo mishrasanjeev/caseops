@@ -3,9 +3,9 @@
   "npmCliVersion": "11.12.1",
   "artifact": {
     "file": "npm-11.12.1-caseops-security.tgz",
-    "sha256": "90fc1752d15fd1683f3b232bd23fc63024d4506b1150fe244cd0f0217bc75010",
-    "sizeBytes": 4066593,
-    "integrity": "sha512-Wclf1th93qfkuB9UFw62JAZxbrrEhT50UwpL4CKIQ8e8SiqsibG/wP/Fr3VncMFs7dmpwB5TUdvDl77sVJDlAg=="
+    "sha256": "d2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54",
+    "sizeBytes": 4066974,
+    "integrity": "sha512-tiPxAXARaJR5hFm+A83Hc9VN4YwWET9XaxeN8Dj3eE2SImuWI6nsBNlCSFXXRJUTJdkc1gJa99gT8/wKiSgLfQ=="
   },
   "upstreamInputs": [
     {
@@ -181,8 +181,8 @@
       "targetPrefix": "package/node_modules/tinyglobby/node_modules/picomatch/",
       "localArtifact": "../picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
       "archive": {
-        "sha256": "d10a7367ca87ec9f477ecaa97385787ee272af5663520507d74a1eedbfb05662",
-        "sizeBytes": 25945
+        "sha256": "825c8fd99fcf846c788a9f74288ee5af6fd88142e3e91bbc716c006e655606ba",
+        "sizeBytes": 26335
       }
     },
     {
@@ -346,6 +346,7 @@
       "package/node_modules/tinyglobby/node_modules/picomatch/lib/parse.js",
       "package/node_modules/tinyglobby/node_modules/picomatch/lib/picomatch.js",
       "package/node_modules/tinyglobby/node_modules/picomatch/lib/scan.js",
+      "package/node_modules/tinyglobby/node_modules/picomatch/lib/utils.js",
       "package/node_modules/tinyglobby/node_modules/picomatch/package.json",
       "package/node_modules/tinyglobby/package.json",
       "package/package.json"

@@ -6334,8 +6334,8 @@ test('iOS npm version uses the actual held public constructor and deregisters it
     try { m = await import('data:text/javascript;base64,' + held.bytes.toString('base64')); } finally { held.bytes.fill(0); }
     f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
     // Both full payload reads include the archive, registry entry and two POSIX shims.
-    // 2 * (16022673 + 8542 + 113 + 113); archive-only bytes are not the complete inventory.
-    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2605, observations: 7815, bytesRead: 32062882 });
+    // 2 * (16023764 + 8542 + 113 + 113); archive-only bytes are not the complete inventory.
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2605, observations: 7815, bytesRead: 32065064 });
     assert.equal(registered, 1); assert.equal(deregistered, 1);
     const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
     fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');
@@ -6385,7 +6385,7 @@ test('iOS local archive admission accepts the current full lock and refuses stal
     integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
   const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
   assert.equal(oldBytes.length, bytes.length);
-  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '0b42a18d7ac428c19b1ec5dc44fa2e7ab58e74e68f2321f4c64ca0ee93f03f00');
+  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '53c67dc370ed29978716f044794098ef3f67ad16cb888eab02c3618a7df72cdc');
   try {
     fs.writeFileSync(lock, oldBytes);
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
