@@ -425,7 +425,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
   assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
   assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
-  assert.ok(protection.run.includes("'d2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54'"));
+  assert.ok(protection.run.includes("'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b'"));
   assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
   assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });

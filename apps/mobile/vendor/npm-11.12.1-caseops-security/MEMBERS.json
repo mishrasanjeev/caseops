@@ -1,6 +1,6 @@
 {
   "kind": "exact-npm-rebundle-member-catalogue",
-  "artifactSha256": "d2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54",
+  "artifactSha256": "f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b",
   "members": [
     {
       "path": "package/LICENSE",
@@ -12610,8 +12610,8 @@
     },
     {
       "path": "package/node_modules/tinyglobby/node_modules/picomatch/lib/parse.js",
-      "sha256": "e5cd61efdd055d9d654447a4b2882f4e5641a15544f5cc182d2149d567fb6010",
-      "sizeBytes": 36027,
+      "sha256": "f315ca28b2beb0723f688d8063827a0321a675a0f3c4c34ee54847e1da858e60",
+      "sizeBytes": 36209,
       "mode": 420
     },
     {

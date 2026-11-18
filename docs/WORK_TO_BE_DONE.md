@@ -4283,3 +4283,14 @@ repaired controls and exact-output coverage; full current-head security,
 source, Docker, production QA and guarded scheduler recovery remain pending.
 See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
 projection resume, scanner exception or completed release is claimed.
+### November18 PR624: independent matcher P1, replacement required
+
+Partially fixed / NO-GO. The configured reviewer found that25ab loses the
+original safe refusal for `aa|aaa`; native Node22/24 controls confirm entered
+backtracking under the unchanged1s budget. The repair preserves the old guard
+and covers the adjacent non-divisible repeated-word case. Its archives and
+held-source pins are regenerated; complete installed/locked/source/frontend/
+Docker/CI and exact-serving production acceptance remain due. Docker05 is
+interrupted after one complete526-case group and276 partial bodies, not a
+whole pass. Projection remains paused. See
+[the overlap handoff](security/matcher-overlap-2026-11-18.md).

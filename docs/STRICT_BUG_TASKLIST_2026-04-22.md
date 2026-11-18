@@ -7486,3 +7486,13 @@ journey still requires replay. Docker03 retained1577 completed PostgreSQL
 cases and an interrupted fourth group; all local browser shards remain
 unverified. Complete replacement gates and exact-serving production QA are
 pending. See docs/security/dependency-release-followup-2026-11-18.md.
+### November18 PR624: independent P1 matcher review
+
+Verdict: Partially fixed; NO-GO. GitHub comment4613399770 reports25ab's loss
+of the old `aa|aaa` safety guard. Real native controls reproduce acknowledged
+entry and the original1s deadline refusal; the isolated repair passes the
+full security cases8+8 and producer12 while preserving the original controls.
+Installed closure and all complete current-source release/production gates
+remain unverified. Docker05's complete526 cases and partial276 bodies are
+scoped history; no whole pass or deployment is claimed. See
+[the overlap handoff](security/matcher-overlap-2026-11-18.md).

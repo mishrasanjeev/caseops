@@ -70,10 +70,14 @@ OLD_OVERLAP = """      const char = a[0];
       if (a === b || a.startsWith(b) || b.startsWith(a)) {
         return true;
       }"""
-NEW_OVERLAP = """      const shorter = a.length <= b.length ? a : b;
-      const longer = a.length <= b.length ? b : a;
-      if (longer.length % shorter.length === 0 &&
-          longer === shorter.repeat(longer.length / shorter.length)) {
+NEW_OVERLAP = """      const char = a[0];
+      if (char && a === char.repeat(a.length) && b === char.repeat(b.length) &&
+          (a === b || a.startsWith(b) || b.startsWith(a))) {
+        return true;
+      }
+      // Nonempty words commute exactly when both repeat a common word.
+      // This includes non-divisible lengths, such as aa|aaa and abab|ababab.
+      if (a.length > 0 && b.length > 0 && a + b === b + a) {
         return true;
       }"""
 

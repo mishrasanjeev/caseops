@@ -21,12 +21,13 @@ const cases = [
   ['+(*)z', 'a'.repeat(30) + '!'], ['+(*a)', 'a'.repeat(30) + '!'],
   ['+(a*)z', 'a'.repeat(30) + '!'], ['+(ab|abab)z', 'ab'.repeat(35) + '!'],
   ['+(ab|abab)z', 'ab'.repeat(50) + '!'],
+  ['+(abab|ababab)z', 'ab'.repeat(100) + '!'],
 ];
 // V8 in Node24 can complete the35-repeat overlap witness inside one second.
 // Keep that exact case in the repaired-path coverage, and use the stronger
 // fifty-repeat sibling for the cross-runtime negative control. The three
 // original single-branch witnesses and every physical deadline stay unchanged.
-const counterfactualCases = [...cases.slice(0, 3), cases[4]];
+const counterfactualCases = [...cases.slice(0, 3), cases[4], cases[5]];
 
 async function probe(packageRoot, pattern, subject, operation = 'match') {
   const length = operation === 'match' ? subject.length : Number(subject) + 2;
@@ -139,6 +140,38 @@ test('the private backport completes the exact same adversarial probes naturally
     const literal = await probe(packageRoot, pattern, pattern);
     assert.equal(literal.result.status, 0);
     assert.equal(literal.rows[2].matched, true, 'Risky extglobs follow the existing literalization policy');
+  }
+});
+
+test('non-divisible repeated-character alternatives retain the pinned original guard', async t => {
+  const original = originalPackage(t);
+  const packageRoot = path.join(vendor, 'package');
+  for (const [pattern, subject] of [
+    ['+(aa|aaa)z', 'a'.repeat(100) + '!'],
+    ['+(aaa|aa)z', 'a'.repeat(100) + '!'],
+    ['+(bb|bbb)z', 'b'.repeat(100) + '!'],
+    ['*(aa|aaa)z', 'a'.repeat(100) + '!'],
+  ]) {
+    const baseline = await probe(original, pattern, subject);
+    t.diagnostic(JSON.stringify({ variant: 'pinned-original', pattern, rows: baseline.rows,
+      status: baseline.result.status, errorCode: baseline.result.error?.code }));
+    assert.equal(baseline.result.error, undefined, pattern);
+    assert.equal(baseline.result.status, 0, pattern);
+    assert.equal(baseline.rows.length, 3, pattern);
+    assert.equal(baseline.rows[2].matched, false, pattern);
+    const repaired = await probe(packageRoot, pattern, subject);
+    t.diagnostic(JSON.stringify({ variant: 'private-backport', pattern, rows: repaired.rows,
+      status: repaired.result.status, errorCode: repaired.result.error?.code }));
+    assert.equal(repaired.result.error, undefined, pattern);
+    assert.equal(repaired.result.status, 0, pattern);
+    assert.equal(repaired.result.signal, null, pattern);
+    assert.equal(repaired.result.stderr, '', pattern);
+    assert.equal(repaired.rows.length, 3, pattern);
+    assert.equal(repaired.rows[2].matched, false, pattern);
+    assert.ok(repaired.rows[2].elapsedMs < 1000, pattern);
+    const literal = await probe(packageRoot, pattern, pattern);
+    assert.equal(literal.result.status, 0, pattern);
+    assert.equal(literal.rows[2].matched, true, pattern);
   }
 });
 

@@ -215,3 +215,14 @@ expensive Docker gate is frozen. Fresh exact-head frontend/source/platform,
 CI and separate alert checks, whole Docker acceptance, independent review,
 combined-main checks, deployment and exact-serving production QA remain
 required. Production and projection scheduler state have not changed.
+# Independent P1 overlap regression supersedes candidate25ab
+
+Candidate25ab is rejected by GitHub Codex comment4613399770. The original
+same-character overlap guard was lost for non-divisible lengths; entered
+native controls reproduce the1s failure. Docker05 and its hosted CI were
+stopped with partial evidence retained and exact-project cleanup verified.
+The isolated repair restores that guard, covers non-divisible repeated words,
+regenerates both archives and rebinds locks/held inputs while preserving SDK
+identities. Development controls are green; all complete replacement release
+gates and deployed QA remain pending. See
+[the source-bound overlap handoff](matcher-overlap-2026-11-18.md). NO-GO.

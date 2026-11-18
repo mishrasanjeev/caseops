@@ -3,9 +3,9 @@
   "npmCliVersion": "11.12.1",
   "artifact": {
     "file": "npm-11.12.1-caseops-security.tgz",
-    "sha256": "d2c6762145744d7d11e4e12d383e682b0f06239d9fd7d388978f088b3318cb54",
-    "sizeBytes": 4066974,
-    "integrity": "sha512-tiPxAXARaJR5hFm+A83Hc9VN4YwWET9XaxeN8Dj3eE2SImuWI6nsBNlCSFXXRJUTJdkc1gJa99gT8/wKiSgLfQ=="
+    "sha256": "f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b",
+    "sizeBytes": 4067054,
+    "integrity": "sha512-bdaDyr/r3SRO/Irc32nMTRaIn+Zen3Qf9ud9XCCda7xMJ/TVCZ6NhLXJQ/BmxO8BWr76zWP4YJhJE9FSybu32Q=="
   },
   "upstreamInputs": [
     {
@@ -181,8 +181,8 @@
       "targetPrefix": "package/node_modules/tinyglobby/node_modules/picomatch/",
       "localArtifact": "../picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
       "archive": {
-        "sha256": "825c8fd99fcf846c788a9f74288ee5af6fd88142e3e91bbc716c006e655606ba",
-        "sizeBytes": 26335
+        "sha256": "0baf6afb8b049047c17d5312261705c6e26f018e7104133a0f4b8928444a8d57",
+        "sizeBytes": 26417
       }
     },
     {

@@ -4468,3 +4468,8 @@ requirements when using the fallback.
   Replay the complete public-content browser file before freezing another
   expensive release gate. A count failure leaves all later byte, keyboard,
   download and responsive assertions unverified; retain the original failure.
+- Extending matcher safety must retain every upstream safe refusal. Regress
+  non-divisible repeated-character and repeated-word alternatives, alongside
+  ordinary non-overlapping forms, on the actual supported runtimes. Preserve
+  the rejected backport's acknowledged match-entry failure and the original
+  matching budget; clean advisory scans do not prove this runtime property.

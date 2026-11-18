@@ -5854,3 +5854,13 @@ gate. Docker03 is interrupted after1577 PostgreSQL passes; partial native
 evidence and strict owned cleanup are retained, not full acceptance. All
 fresh final gates, production QA and guarded projection recovery remain open.
 See docs/security/dependency-release-followup-2026-11-18.md.
+### November18 PR624: stop-ship repeated-alternative regression
+
+QG-SEC-001, Partially implemented / NO-GO. Independent review of25ab finds
+an entered1s matcher hang for a pattern the pinned original already refused
+safely. Restore the original repeated-character policy while covering
+non-divisible repeated words; keep ordinary semantics and every original
+deadline. Native security8+8 and producer12 development cases pass, but
+installed dependency closure, complete fresh release gates, independent review
+and deployed QA still gate release. Earlier Docker05/CI prefixes are retained,
+not transferred. [Evidence and acceptance](security/matcher-overlap-2026-11-18.md).

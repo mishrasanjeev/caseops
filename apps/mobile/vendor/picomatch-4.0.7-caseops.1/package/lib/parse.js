@@ -146,10 +146,14 @@ const hasRepeatedCharPrefixOverlap = branches => {
     for (let j = i + 1; j < values.length; j++) {
       const a = values[i];
       const b = values[j];
-      const shorter = a.length <= b.length ? a : b;
-      const longer = a.length <= b.length ? b : a;
-      if (longer.length % shorter.length === 0 &&
-          longer === shorter.repeat(longer.length / shorter.length)) {
+      const char = a[0];
+      if (char && a === char.repeat(a.length) && b === char.repeat(b.length) &&
+          (a === b || a.startsWith(b) || b.startsWith(a))) {
+        return true;
+      }
+      // Nonempty words commute exactly when both repeat a common word.
+      // This includes non-divisible lengths, such as aa|aaa and abab|ababab.
+      if (a.length > 0 && b.length > 0 && a + b === b + a) {
         return true;
       }
     }
