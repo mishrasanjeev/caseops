@@ -7,6 +7,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { installContractPreviewReceipt, type ContractPreviewReceipt } from "../../../../tests/e2e/support/bugs5_contract_reported_20261111";
+import { readOfflineContractPreview, requestMockContractPreview } from "../../../../tests/fixtures/contract-preview-probe";
 
 const bytes = new TextEncoder().encode("%PDF-1.7\nSynthetic observer fixture\n");
 const digest = createHash("sha256").update(bytes).digest("hex");
@@ -14,6 +15,7 @@ const binding = { origin: "http://127.0.0.1:47199", pathname: "/api/contracts/11
 const url = binding.origin + binding.pathname;
 const receipt = () => (window as unknown as { __caseopsContractPreview: { receipt: ContractPreviewReceipt } }).__caseopsContractPreview.receipt;
 let original: ReturnType<typeof vi.fn>;
+const request = (target: RequestInfo | URL, init?: RequestInit) => requestMockContractPreview(target, init, original);
 
 beforeEach(() => {
   original = vi.fn();
@@ -33,7 +35,7 @@ it("observes the same streamed fetch, preserves caller arguments and application
   original.mockImplementation(() => Promise.resolve(response()));
   installContractPreviewReceipt(binding);
   const init = { headers: { Authorization: "Bearer synthetic-only", "X-CaseOps-Automated-Test": "no-paid-providers" }, credentials: "include" as const };
-  const received = await window.fetch(url, init);
+  const received = await request(url, init);
   expect(new Uint8Array(await received.arrayBuffer())).toEqual(bytes);
   await vi.waitFor(() => expect(receipt().status).toBe("complete"));
   expect(original.mock.calls).toEqual([[url, init]]);
@@ -46,7 +48,7 @@ it("keeps a wrong source digest distinguishable rather than using a separate suc
   const changed = new Uint8Array(bytes); changed[changed.length - 2] ^= 1;
   original.mockImplementation(() => Promise.resolve(response(changed)));
   installContractPreviewReceipt(binding);
-  expect(new Uint8Array(await (await window.fetch(url)).arrayBuffer())).toEqual(changed);
+  expect(new Uint8Array(await (await request(url)).arrayBuffer())).toEqual(changed);
   await vi.waitFor(() => expect(receipt().status).toBe("complete"));
   expect(receipt().bytes).toBe(bytes.length);
   expect(receipt().sha256 === digest).toBe(false);
@@ -61,7 +63,7 @@ const inadmissibleResponses: ResponseInit[] = [
 it.each(inadmissibleResponses)("refuses an inadmissible response without consuming or replacing the application's response", async init => {
   original.mockImplementation(() => Promise.resolve(new Response(bytes, init)));
   installContractPreviewReceipt(binding);
-  const received = await window.fetch(url);
+  const received = await request(url);
   expect(new Uint8Array(await received.arrayBuffer())).toEqual(bytes);
   expect(receipt().status).toBe("failed");
   expect(receipt().failure).toBe("admission");
@@ -73,7 +75,7 @@ it("bounds the actual cloned stream even without content-length, preserving the 
   const larger = new Uint8Array(bytes.length + 1); larger.set(bytes); larger[larger.length - 1] = 9;
   original.mockImplementation(() => Promise.resolve(response(larger)));
   installContractPreviewReceipt(binding);
-  expect(new Uint8Array(await (await window.fetch(url)).arrayBuffer())).toEqual(larger);
+  expect(new Uint8Array(await (await request(url)).arrayBuffer())).toEqual(larger);
   await vi.waitFor(() => expect(receipt().status).toBe("failed"));
   expect(receipt().failure).toBe("oversize");
   expect(receipt().sha256).toBeNull();
@@ -83,9 +85,9 @@ it("bounds the actual cloned stream even without content-length, preserving the 
 it("fails duplicate preview admission instead of hiding an extra application request", async () => {
   original.mockImplementation(() => Promise.resolve(response()));
   installContractPreviewReceipt(binding);
-  await (await window.fetch(url)).arrayBuffer();
+  await (await request(url)).arrayBuffer();
   await vi.waitFor(() => expect(receipt().status).toBe("complete"));
-  await (await window.fetch(url)).arrayBuffer();
+  await (await request(url)).arrayBuffer();
   expect(receipt().status).toBe("failed");
   expect(receipt().failure).toBe("duplicate");
   expect(receipt().requests).toBe(2);
@@ -97,8 +99,8 @@ it("keeps a duplicate refusal latched when the first fetch resolves after the se
   original.mockImplementationOnce(() => new Promise<Response>(resolve => { finishFirst = resolve; }))
     .mockImplementationOnce(() => Promise.resolve(response()));
   installContractPreviewReceipt(binding);
-  const first = window.fetch(url);
-  await (await window.fetch(url)).arrayBuffer();
+  const first = request(url);
+  await (await request(url)).arrayBuffer();
   expect(receipt().failure).toBe("duplicate");
   finishFirst(response());
   expect(new Uint8Array(await (await first).arrayBuffer())).toEqual(bytes);
@@ -115,7 +117,7 @@ it("retains a stream failure separately from a successful digest", async () => {
     controller.error(new Error("Synthetic stream refusal"));
   } }), { headers: { "content-type": "application/pdf" } })));
   installContractPreviewReceipt(binding);
-  const received = await window.fetch(url);
+  const received = await request(url);
   await expect(received.arrayBuffer()).rejects.toThrow("Synthetic stream refusal");
   await vi.waitFor(() => expect(receipt().status).toBe("failed"));
   expect(receipt().failure).toBe("stream");
@@ -127,7 +129,7 @@ it("ends the observer at ten seconds without cancelling the application's body",
   let source!: ReadableStreamDefaultController<Uint8Array>;
   original.mockImplementation(() => Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start(controller) { source = controller; } }), { headers: { "content-type": "application/pdf" } })));
   installContractPreviewReceipt(binding);
-  const received = await window.fetch(url);
+  const received = await request(url);
   await vi.advanceTimersByTimeAsync(9_999);
   expect(receipt().status).toBe("reading");
   await vi.advanceTimersByTimeAsync(1);
@@ -143,13 +145,13 @@ it("ends the observer at ten seconds without cancelling the application's body",
 it.each([url + "?other=1", url + "/different", "https://other.example" + binding.pathname])("does not observe a different request or make a replacement fetch", async other => {
   original.mockImplementation(() => Promise.resolve(response()));
   installContractPreviewReceipt(binding);
-  await (await window.fetch(other)).arrayBuffer();
+  await (await request(other)).arrayBuffer();
   expect(receipt().status).toBe("waiting");
   expect(receipt().requests).toBe(0);
   expect(original).toHaveBeenCalledTimes(1);
 });
 
-it("keeps one exact binding and rejects unsafe or oversized observation setup", () => {
+it("keeps one exact binding and rejects unsafe or oversized observation setup", async () => {
   expect(() => installContractPreviewReceipt({ ...binding, origin: "https://other.example" })).toThrow();
   expect(() => installContractPreviewReceipt({ ...binding, maxBytes: 32 * 1024 * 1024 + 1 })).toThrow();
   installContractPreviewReceipt(binding);
@@ -158,6 +160,13 @@ it("keeps one exact binding and rejects unsafe or oversized observation setup", 
   expect(window.fetch).toBe(fetch);
   expect(() => installContractPreviewReceipt({ ...binding, maxBytes: bytes.length - 1 })).toThrow();
   expect(original).not.toHaveBeenCalled();
+  const unadmitted = vi.fn();
+  vi.stubGlobal("fetch", unadmitted);
+  for (const target of ["https://api.caseops.ai" + binding.pathname, url + "?other=1",
+    binding.origin + "/unadmitted", "http://127.0.0.1:47200" + binding.pathname]) {
+    await expect(readOfflineContractPreview(target)).rejects.toThrow("Offline contract preview fixture requires its own loopback source.");
+  }
+  expect(unadmitted).not.toHaveBeenCalled();
 });
 
 it("proves the observer in an offline browser, including transport-injected headers and wrong-source bytes", async () => {
@@ -208,7 +217,7 @@ it("proves the observer in an offline browser, including transport-injected head
       if (changed) await page.reload({ timeout: 5_000 });
       await page.evaluate(installContractPreviewReceipt, binding);
       // The real constructor receives the marker from its context, not fetch init.
-      const appBytes = await page.evaluate(async target => Array.from(new Uint8Array(await (await fetch(target)).arrayBuffer())), url);
+      const appBytes = await page.evaluate(readOfflineContractPreview, url);
       const expectedBytes = Array.from(bytes);
       if (changed) expectedBytes[expectedBytes.length - 2] ^= 1;
       expect(appBytes).toEqual(expectedBytes);

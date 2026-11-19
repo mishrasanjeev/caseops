@@ -68,6 +68,7 @@ COPY apps/web ./
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
 COPY tests/fixtures/node-default-tls-probe.cjs /app/tests/fixtures/node-default-tls-probe.cjs
+COPY tests/fixtures/contract-preview-probe.ts /app/tests/fixtures/contract-preview-probe.ts
 # Colocated diagnostic units require their direct and transitive support imports.
 # Admit this explicit closure in both root ignore files; keep it out of the runner.
 COPY tests/e2e/support/prod-failure-diagnostics.ts /app/tests/e2e/support/prod-failure-diagnostics.ts

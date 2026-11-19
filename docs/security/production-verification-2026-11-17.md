@@ -556,3 +556,17 @@ remained unchanged and the controller was reaped with exit1. Hosted Web CI
 phase labels to those independent literal arrays; equality, AST privacy checks,
 original UI assertions and deadlines remain intact. The complete three affected
 frontend files now pass55 cases. A fresh full3226-case replacement remains due.
+
+Source831 local acceptance additionally completed ten whole affected API/source
+modules:1681 passes/five explicit POSIX-only Windows skips, native exit0 and
+retained JUnit. E2E TypeScript compilation passes. Later CI shard7/13 correctly
+rejects the inline HTTP probes in ContractPreviewReceipt.test.ts through the
+unchanged cross-language deadline inventory; the API aggregate failure is a
+consequence of that shard. The repair moves mock and real offline-browser
+transport into the explicit repository fixture contract-preview-probe.ts. Real
+transport rejects production/foreign targets before dispatch and retains a
+five-second whole-body/64KiB bound. All11 mock probe call sites also leave web
+source. No inventory exclusion or assertion/deadline relaxation is added.
+All55 affected frontend cases and both unchanged deadline-inventory cases pass
+on the working repair; complete fresh source, closure, compilation, frontend,
+CI/main/deployment and production verification remain due.

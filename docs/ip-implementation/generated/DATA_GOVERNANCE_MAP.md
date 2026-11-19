@@ -6,7 +6,7 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `5284fe13f144bc74f3d55c837bc660c227d687c4fb4a9a4f4cdaafadb5c8ec09`
+- Canonical map SHA-256: `eb05b3a6720dffd276c5adfcc767ee086fa7d2a984c68064f80c47c6c37b0234`
 - SQL tables: `364`
 - SQL columns: `5804`
 - ORM indexes: `1829`
