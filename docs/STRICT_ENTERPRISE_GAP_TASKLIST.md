@@ -11,6 +11,8 @@ Draft read-only harness's omitted, ordinary tenant teams-list GET. It preserves
 single-fetch byte/hash/pixel proof, whole Draft DTO equality, all write/marker
 fences and original deadlines. Focused45 cases and component compilation pass;
 complete replacement/source/CI/deployed desktop+phone verification remain due.
+Separate candidate diagnostic44467426442 passes all14 original desktop/phone
+Batch5 bodies againste564; this is not the final canonical full-release run.
 The earlier team timeout remains unidentified, despite two diagnostic passes.
 Projection remains paused behind complete QA and two later clean executions.
 See [the dated evidence](security/production-verification-2026-11-17.md).

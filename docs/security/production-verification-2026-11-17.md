@@ -532,3 +532,18 @@ offline control now uses the public browser-server process handle, verifies
 native exit0 and exact owned temporary-profile ENOENT after close. An attempted
 cleanup of the earlier synthetic profile was rejected by automatic policy before
 execution; that scratch remains retained, not falsely recorded as removed.
+
+Observation-only diagnostic44467426442 subsequently passed all14 original
+Batch5 desktop/phone bodies against still-servinge564 using the23fd helper
+subset (diagnostic sourcefdebcf44). Both original-record Contract controls/PDF
+and retained Draft READ_ONLY_PARITY_VERIFIED receipts passed with zero retries
+or skips. This is actual desktop/phone workflow evidence, but not canonical
+whole-release acceptance or a transfer to the later failure-latch candidate.
+
+The first full-frontend replacement preflight on4275875 refused before compile
+or Vitest: source-bound CI44467998092/APIruff135370451073 correctly rejected an
+unreviewed web Dockerfile change. The builder-only helper review is now recorded
+in DATA_GOVERNANCE_MAP.yaml; the canonical generator, runtime projection and
+human map renderer were replayed without changing classes or policy approval.
+The original refused gate/log remain retained; complete replacement validation
+and a new source-bound green CI are still required.
