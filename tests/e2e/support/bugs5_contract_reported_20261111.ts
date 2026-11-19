@@ -72,28 +72,40 @@ export async function verifyReportedContractControls(
     if (!attachment || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(attachment.id)) {
       throw new Error("Reported contract lacks its indexed source identity.");
     }
+    stage = "original-attachments-tab";
     await page.getByRole("tab", { name: /^Attachments/ }).click();
     const rows = page.getByRole("tabpanel").getByRole("listitem");
+    stage = "original-attachment-row-count";
     await expect(rows).toHaveCount(before.attachments.length);
     const href = `/app/contracts/${reportedId}/attachments/${attachment.id}/view`;
     const view = page.getByRole("tabpanel").getByRole("link", { name: "View document", exact: true })
       .and(page.locator(`a[href="${href}"]`));
+    stage = "original-view-action-count";
     await expect(view).toHaveCount(1);
+    stage = "original-view-action-identity";
     expect(await view.getAttribute("href") === href,
       "Visible source action is bound to the exact attachment").toBe(true);
     const preview = page.waitForResponse(response => new URL(response.url()).origin === rt.api.origin
       && new URL(response.url()).pathname === `${prefix}/attachments/${attachment.id}/preview`
       && response.request().method() === "GET");
+    stage = "original-view-action-click";
     await view.click();
+    stage = "original-preview-response-headers";
     const response = await preview;
+    stage = "original-preview-http-status";
     expect(response.status(), "Original source preview admission").toBe(200);
+    stage = "original-preview-no-paid-header";
     expect(response.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+    stage = "original-preview-body-read";
     const bytes = await response.body();
+    stage = "original-preview-source-bytes";
     expect(bytes.length === attachment.size_bytes
       && createHash("sha256").update(bytes).digest("hex") === attachment.sha256_hex,
     "Original preview is the retained source, without writing private bytes to evidence").toBe(true);
     const canvas = page.getByTestId("pdf-viewer").locator("canvas");
+    stage = "original-preview-visible-canvas";
     await expect(canvas).toBeVisible();
+    stage = "original-preview-visible-ink";
     await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => {
       const pixels = element.getContext("2d")!.getImageData(0, 0, element.width, element.height).data;
       let ink = 0;
@@ -117,7 +129,13 @@ export async function verifyReportedContractControls(
     expect(mutations, "No reported-record mutation was attempted").toBe(0);
     await rt.release();
     info.annotations.push({ type: "caseops-b5-reported-record", description: "original-contract-readonly-controls-and-pdf; no record changes or retained private media" });
-  } catch {
+  } catch (error) {
+    const stack = error instanceof Error ? error.stack ?? "" : "";
+    for (const basename of ["bugs5_contract_reported_20261111.ts", "draft_pdf_production_20261111.ts", "draft_pdf_render_proof_20261111.ts"]) {
+      const escaped = basename.replaceAll(".", "\\.");
+      const position = new RegExp(`${escaped}:(\\d+):(\\d+)`).exec(stack);
+      if (position) info.annotations.push({ type: "caseops-b5-diagnostic-line", description: `${basename}:${position[1]}:${position[2]}` });
+    }
     // Fixed local phase labels survive native error redaction without legal data.
     info.annotations.push({ type: "caseops-b5-failure-stage", description: `reported-contract:${stage}` });
     throw new Error(`B5 original-contract read-only acceptance failed at ${stage}; private values omitted.`);
