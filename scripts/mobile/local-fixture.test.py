@@ -515,6 +515,7 @@ class BootstrapTests(unittest.TestCase):
         for omitted in ("tests/e2e/ram-2026-11-11-bugs.spec.ts",
                         "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
                         "tests/e2e/drafting-formats20261115.spec.ts",
+                        "tests/fixtures/contract-preview-probe.ts",
                         "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
                         "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
                         "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
@@ -531,6 +532,7 @@ class BootstrapTests(unittest.TestCase):
         omitted = {"tests/e2e/ram-2026-11-11-bugs.spec.ts",
                    "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
                    "tests/e2e/drafting-formats20261115.spec.ts",
+                   "tests/fixtures/contract-preview-probe.ts",
                    "scripts/mobile/npm-tooling.mjs", "apps/api/pyproject.toml"}
         required = omitted | {"apps/web/app/page.tsx"}
         scopes = [Path(value) for value in bootstrap_module.WEB_PATHS]
@@ -547,11 +549,13 @@ class BootstrapTests(unittest.TestCase):
             "tests/e2e/drafting-formats20261115.spec.ts",
             "tests/fixtures/statutes/structured-schedule-api.json",
             "tests/fixtures/node-default-tls-probe.cjs",
+            "tests/fixtures/contract-preview-probe.ts",
         })
 
     def test_web_source_fingerprint_tracks_communications_inputs_not_neighboring_specs(self):
         inputs = ("tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/support/env.ts",
-                  "tests/e2e/support/ram-bugs4.ts", "tests/e2e/drafting-formats20261115.spec.ts")
+                  "tests/e2e/support/ram-bugs4.ts", "tests/e2e/drafting-formats20261115.spec.ts",
+                  "tests/fixtures/contract-preview-probe.ts")
         neighbor = "tests/e2e/unlisted-communications.spec.ts"
         for selected in inputs:
             with self.subTest(path=selected), tempfile.TemporaryDirectory() as directory:

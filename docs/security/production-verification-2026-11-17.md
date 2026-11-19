@@ -588,3 +588,23 @@ root. A separate strict verifier proves the exact18 declared root relocations
 from byte-identical source and complete3226 identity equality without replaying
 or altering native results. This scoped success does not waive the later
 fixture changes or current-head required replacement gates.
+
+Currentc691 hosted Mobile source gate135410758918 rejects the new preview
+fixture missing from native web-image fingerprint closure. Both failed Node
+cases and the complete1909-case log are retained (1904P,2F,3 declared Linux
+skips). The repair adds exactly that fixture to WEB_PATHS, both workflow
+triggers and the independent finite trigger/fingerprint inventories. Python
+controls additionally omit the new input and change its actual snapshot bytes;
+whole-tree admission remains rejected. Both preview helper paths are also added
+to the existing independent deploy omission and nativeGit dirty-input layouts,
+adding four pytest cases that must stop before any fake cloud invocation.
+
+Complete frontend04 onc691 again executes3226 passes/314 files, compilation0,
+zero skips/failures and unchanged source/remote refs. Its post-run controller
+hits a variable-name error (OLD_head), retained as exit1; a separate strict
+verifier checks every native result, source hash, exact18 checkout-title
+relocations and complete original3210-plus16 identity equality without rerun
+or result rewriting. Currentc691 CodeQL has three successful analyses and zero
+open PR-ref alerts; this is not complete release readiness while Mobile fails.
+The closure repair is isolated while the old complete rehearsal finishes; new
+source-bound CI, complete local validation and production proof remain required.
