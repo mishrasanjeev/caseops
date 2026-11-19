@@ -65,6 +65,7 @@ BUILDER_INPUTS = {
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
+    "tests/fixtures/node-local-tls-certificates.cjs",
     "tests/fixtures/contract-preview-probe.ts",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
     "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",

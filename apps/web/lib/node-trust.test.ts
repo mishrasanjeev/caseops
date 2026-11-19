@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { X509Certificate, createHash } from "node:crypto";
+import { X509Certificate, createHash, createPrivateKey } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import https from "node:https";
@@ -23,7 +23,6 @@ let temp: string;
 let trust: string;
 type NativeTiming = { index: number; executable: string; operation: string; budgetMs: number; elapsedMs: number; code: unknown; signal: unknown; timedOut: boolean };
 const nativeTimings: NativeTiming[] = [];
-let nativeOpenSsl: { executable: string; code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string } | undefined;
 type NativeScope = { signal: AbortSignal; closed: boolean; children: Set<ChildProcess>; closings: Set<Promise<unknown>> };
 const nativeScope = new AsyncLocalStorage<NativeScope>();
 
@@ -132,7 +131,6 @@ afterAll(() => {
   const retained = path.join(web, "../../test-results/native-trust", path.basename(temp));
   fs.mkdirSync(retained, { recursive: true });
   fs.writeFileSync(path.join(retained, "timings.json"), JSON.stringify(nativeTimings));
-  if (nativeOpenSsl) fs.writeFileSync(path.join(retained, "openssl.json"), JSON.stringify(nativeOpenSsl));
   fs.rmSync(temp, { recursive: true, force: true });
 });
 
@@ -398,6 +396,32 @@ test("extra or competing trust settings fail before app", async () => {
   });
 });
 
+test("synthetic TLS certificate factory refuses unsupported targets before writing", async () => {
+  const factory = fileURLToPath(new URL("../../../tests/fixtures/node-local-tls-certificates.cjs", import.meta.url));
+  const wrongName = path.join(temp, "unsupported");
+  const nonempty = path.join(temp, "tls");
+  fs.mkdirSync(wrongName);
+  fs.mkdirSync(nonempty);
+  const sentinel = path.join(nonempty, "retained.txt");
+  fs.writeFileSync(sentinel, "unchanged synthetic fixture");
+  try {
+    for (const target of ["relative/tls", path.join(temp, "missing"), wrongName, nonempty]) {
+      const result = await child([factory, target], cleanEnv(), { file: process.execPath, cwd: temp, timeout: 5000 });
+      expect(result.code).toBe(1);
+      expect(result.signal).toBeNull();
+      expect(result.stdout).toBe("");
+      expect(result.stderr.trim()).toBe("CASEOPS_SYNTHETIC_TLS_FIXTURE_REFUSED");
+      expect(fs.readdirSync(wrongName)).toEqual([]);
+      expect(fs.readdirSync(nonempty)).toEqual(["retained.txt"]);
+      expect(fs.readFileSync(sentinel, "utf8")).toBe("unchanged synthetic fixture");
+    }
+  } finally {
+    fs.unlinkSync(sentinel);
+    fs.rmdirSync(nonempty);
+    fs.rmdirSync(wrongName);
+  }
+});
+
 test("actual fetch and https enforce selected CA and hostname verification offline", async () => {
   const probe = fileURLToPath(new URL("../../../tests/fixtures/node-default-tls-probe.cjs", import.meta.url));
   await batches(["https://example.com:443/", "http://127.0.0.1:443/", "https://127.0.0.1/", "https://user@127.0.0.1:443/", "https://127.0.0.1:443/other"], async target => {
@@ -408,31 +432,32 @@ test("actual fetch and https enforce selected CA and hostname verification offli
   });
   const fixture = path.join(temp, "tls");
   fs.mkdirSync(fixture);
-  // Git's usr/bin executable starts the MSYS compatibility runtime. Its first
-  // two concurrent req processes exceeded 5s in Windows CI before any TLS
-  // assertion ran. Use Git's native Windows build, with the same 5s budget.
-  const openssl = process.env.CASEOPS_TEST_OPENSSL ?? (process.platform === "win32" ? "C:/Program Files/Git/mingw64/bin/openssl.exe" : "openssl");
-  if (process.platform === "win32") {
-    const version = await child(["version", "-a"], cleanEnv(), { file: openssl, cwd: fixture, timeout: 5000 });
-    nativeOpenSsl = { executable: openssl, ...version };
-    expect(version.code, version.stderr).toBe(0);
-    expect(version.stdout).toMatch(/^OpenSSL \d+\.\d+\.\d+ /);
-    expect(version.stdout).toMatch(/^platform: (?:mingw64|VC-WIN64A)\r?$/m);
+  const factory = fileURLToPath(new URL("../../../tests/fixtures/node-local-tls-certificates.cjs", import.meta.url));
+  const generated = await child([factory, fixture], cleanEnv(), { file: process.execPath, cwd: fixture, timeout: 5000 });
+  expect(generated.code, generated.stderr).toBe(0);
+  expect(generated.stderr).toBe("");
+  expect(JSON.parse(generated.stdout)).toEqual({ version: 1, names: ["trusted", "untrusted", "wrong-host"], files: 6, algorithm: "P-256/SHA-256" });
+  const certificates = Object.fromEntries(["trusted", "untrusted", "wrong-host"].map(name => [name,
+    new X509Certificate(fs.readFileSync(path.join(fixture, `${name}.pem`)))]));
+  expect(fs.readdirSync(fixture).sort()).toEqual(["trusted.key", "trusted.pem", "untrusted.key", "untrusted.pem", "wrong-host.key", "wrong-host.pem"].sort());
+  expect(certificates.trusted.ca).toBe(true);
+  expect(certificates.untrusted.ca).toBe(true);
+  expect(certificates["wrong-host"].ca).toBe(false);
+  expect(certificates.trusted.fingerprint256).not.toBe(certificates.untrusted.fingerprint256);
+  for (const name of ["trusted", "untrusted", "wrong-host"]) {
+    const cert = certificates[name];
+    const key = createPrivateKey(fs.readFileSync(path.join(fixture, `${name}.key`)));
+    expect(cert.checkPrivateKey(key)).toBe(true);
+    expect(cert.publicKey.asymmetricKeyType).toBe("ec");
+    expect(cert.publicKey.asymmetricKeyDetails?.namedCurve).toBe("prime256v1");
+    expect(cert.checkIssued(name === "wrong-host" ? certificates.trusted : cert)).toBe(true);
+    expect(cert.verify(name === "wrong-host" ? certificates.trusted.publicKey : cert.publicKey)).toBe(true);
   }
-  const run = (args: string[]) => {
-    return child(args, cleanEnv(), { file: openssl, cwd: fixture, timeout: 5000 }).then(result => {
-      expect(result.code, result.stderr).toBe(0);
-    });
-  };
-  // Fresh P-256 fixtures exercise the same default-client trust/hostname
-  // boundaries without repeated RSA prime searches inside the 15-second test.
-  await batches(["trusted", "untrusted", "wrong-host"], async name => {
-    const common = ["req", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes", "-keyout", `${name}.key`];
-    if (name === "wrong-host") await run([...common, "-new", "-out", "wrong-host.csr", "-subj", "/CN=CaseOps local-only wrong hostname"]);
-    else await run([...common, "-x509", "-out", `${name}.pem`, "-days", "2", "-subj", `/CN=CaseOps local-only ${name} TLS fixture`, "-addext", "subjectAltName=IP:127.0.0.1"]);
-  });
-  fs.writeFileSync(path.join(fixture, "wrong-host.ext"), "subjectAltName=DNS:wrong.invalid\n");
-  await run(["x509", "-req", "-in", "wrong-host.csr", "-CA", "trusted.pem", "-CAkey", "trusted.key", "-CAcreateserial", "-out", "wrong-host.pem", "-days", "2", "-extfile", "wrong-host.ext"]);
+  expect(certificates.trusted.checkIP("127.0.0.1")).toBe("127.0.0.1");
+  expect(certificates.untrusted.checkIP("127.0.0.1")).toBe("127.0.0.1");
+  expect(certificates["wrong-host"].checkIP("127.0.0.1")).toBeUndefined();
+  expect(certificates["wrong-host"].checkHost("wrong.invalid")).toBe("wrong.invalid");
+  expect(certificates["wrong-host"].verify(certificates.untrusted.publicKey)).toBe(false);
   const empty = path.join(fixture, "empty");
   fs.mkdirSync(empty);
   const env = { ...cleanEnv(), NODE_OPTIONS: "--use-openssl-ca", SSL_CERT_FILE: path.join(fixture, "trusted.pem"), SSL_CERT_DIR: empty };

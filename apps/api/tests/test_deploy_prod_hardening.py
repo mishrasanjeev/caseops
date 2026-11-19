@@ -1252,6 +1252,7 @@ def test_web_diagnostic_unit_helper_is_narrow_and_builder_only(ignore_path: str)
     assert {
         "tests/fixtures/statutes/structured-schedule-api.json",
         "tests/fixtures/node-default-tls-probe.cjs",
+        "tests/fixtures/node-local-tls-certificates.cjs",
         "tests/e2e/support/prod-failure-diagnostics.ts",
         "tests/e2e/support/bounded-network-evidence.ts",
         "tests/e2e/support/prod-api-response-evidence.ts",
@@ -1403,9 +1404,7 @@ def test_web_npm_tooling_closure_rejects_broad_sibling_admission(ignore_path: st
         )
 
 
-@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
-def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
-    path = "tests/fixtures/node-default-tls-probe.cjs"
+def _assert_native_tls_fixture_omission(path: str, boundary: str) -> None:
     required = _web_external_unit_dependencies(REPO_ROOT)
     assert path in required
     dockerfile = _read_repo_text("apps/web/Dockerfile")
@@ -1418,6 +1417,16 @@ def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
         message = f"Missing context input: {re.escape(path)}"
     with pytest.raises(AssertionError, match=message):
         _assert_web_builder_inputs(dockerfile, ignore, required)
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+def test_web_native_tls_fixture_closure_rejects_omission(boundary: str) -> None:
+    _assert_native_tls_fixture_omission("tests/fixtures/node-default-tls-probe.cjs", boundary)
+
+
+@pytest.mark.parametrize("boundary", ["copy", ".dockerignore", ".gcloudignore"])
+def test_web_native_tls_certificate_factory_closure_rejects_omission(boundary: str) -> None:
+    _assert_native_tls_fixture_omission("tests/fixtures/node-local-tls-certificates.cjs", boundary)
 
 
 def test_web_fixture_dependency_inventory_follows_transitive_literal_forms(tmp_path: Path) -> None:
@@ -4828,6 +4837,7 @@ def test_deploy_fixture_stops_before_launch_if_any_fake_cli_is_missing(
         ("statute-fixture", "tests/fixtures/statutes/structured-schedule-api.json",
          "modify", True),
         ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs", "modify", True),
+        ("native-tls-certificates", "tests/fixtures/node-local-tls-certificates.cjs", "modify", True),
         ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts", "modify", True),
         ("network-evidence", "tests/e2e/support/bounded-network-evidence.ts", "modify", True),
         ("api-evidence", "tests/e2e/support/prod-api-response-evidence.ts", "modify", True),
@@ -4841,6 +4851,7 @@ def test_deploy_fixture_stops_before_launch_if_any_fake_cli_is_missing(
         *((case, path, "modify", True) for case, path in _WEB_DIRTY_CLOSURE_REGRESSIONS),
         ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
         ("team-initial-read-new", "tests/e2e/support/team-initial-read.ts", "new", True),
+        ("native-tls-certificates-new", "tests/fixtures/node-local-tls-certificates.cjs", "new", True),
         ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
          "delete", True),
     ],
@@ -4888,6 +4899,7 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
             ("review", "docs/security/js-license-compliance-review-2026-10-12.md"),
             ("fixture", "tests/fixtures/statutes/structured-schedule-api.json"),
             ("native-tls-probe", "tests/fixtures/node-default-tls-probe.cjs"),
+            ("native-tls-certificates", "tests/fixtures/node-local-tls-certificates.cjs"),
             ("diagnostics", "tests/e2e/support/prod-failure-diagnostics.ts"),
             ("network", "tests/e2e/support/bounded-network-evidence.ts"),
             ("api", "tests/e2e/support/prod-api-response-evidence.ts"),

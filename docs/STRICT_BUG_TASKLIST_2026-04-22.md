@@ -7549,9 +7549,11 @@ complete browser/release/production proof remain required. Preserve backend
 
 ## November 19 - Windows native TLS preparation
 
-**Partially fixed; release NO-GO.** J14/M14. PR627's fresh Windows CI
-retains3247 passes and one OpenSSL5s preparation failure; actual TLS checks were
-unreached. Use Git's native Windows executable with actual platform validation.
-All21 focused native trust cases pass and the real MSYS override is rejected;
-original deadlines and TLS controls remain. Complete replacement gates and
-production proof are pending. See [evidence and remaining acceptance](security/windows-native-tls-fixture-2026-11-19.md).
+**Partially fixed; release NO-GO.** J14/M14. Retain the77ed OpenSSL5s
+preparation timeout and the578b missing-native-executable CI failure.
+The repository fixture now uses pinned Node22.23.4: original21 plus one
+unsupported-target case pass, with real TLS checks and unchanged deadlines.
+Independent cryptography parsing/signature/extension checks also pass.
+Full input closure, replacement3249-case frontend/1704 affected API
+inventories, current CI/Docker and production acceptance remain pending.
+See [evidence and remaining gates](security/windows-native-tls-fixture-2026-11-19.md).
