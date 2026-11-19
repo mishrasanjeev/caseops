@@ -441,6 +441,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "tests/e2e/support/retained-assistant-evidence.ts" \
   "tests/e2e/support/draft_pdf_oracle_20261111.ts" \
   "tests/e2e/support/draft_pdf_production_policy_20261111.ts" \
+  "tests/e2e/support/bugs5_contract_reported_20261111.ts" \
   "tests/e2e/support/draft_pdf_production_20261111.ts" \
   "tests/e2e/support/draft_pdf_render_proof_20261111.ts" \
   "tests/e2e/support/prod-diagnostic-test.ts" \

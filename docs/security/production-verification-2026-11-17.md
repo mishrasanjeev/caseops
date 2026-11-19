@@ -468,3 +468,57 @@ full exact-serving production QA. Original Batch5 production failures remain
 unresolved until that replay. Projection cadence requires the latest successful
 mutation-capable QA plus two later clean serial executions, second rebuild0,
 through the guarded resume command; no direct scheduler resume.
+
+
+## November19 — PR624 merged and deployed; complete production acceptance remains failed
+
+PR624 is merged as `e56437b8672d89e5eeb2a1642be4e759c3c6d2ef`.
+Its four combined-main workflows passed all70 jobs; full local Docker07 passed
+4204 PostgreSQL cases and792 browser cases (778 passes,14 declared skips).
+The three original Windows failures have complete replacement frontend proof:
+3210 tests across313 files, with component compilation and source-group order.
+Canonical deployment completed November19 at02:47UTC. API00527-9tj and
+web00502-zn4 serve100% untagged traffic; public33-case QA and native Android
+app-link/compatibility probes passed. These are scoped passes, not full release
+certification or private device/Mac sign-in acceptance.
+
+Exact-serving production run44446805801 is **FAILED / NO-GO for complete
+certification**. Its13 other completed jobs pass. Independent original-source
+native reconciliation validates20 successful invocations:476 cases,459 passes,
+17 explicit skips. Ten of the11 production counterparts to main's declared
+skips passed; the historical owner-Matter case remains skipped/unverified.
+Batch5 desktop has4 passes and3 failures; its phone invocation was never run.
+The final evidence job is skipped. Earlier failures remain retained.
+
+| Actual failed desktop journey | Evidence and bounded diagnosis | Current verdict |
+| --- | --- | --- |
+| AI-TEAM-01 membership/audited lead journey |120046ms timeout; final cleanup location does not identify its original body boundary. Two later observation-only diagnostics pass the body; no historical cause is asserted. | Inconclusive until complete canonical replacement acceptance |
+| B5-CON-005/006/009 original contract preview | Original HTTP200/marker precede CDP `response.body()` refusal. Fixed-step diagnostics identify `No data found for resource`; source-byte/pixel checks were not reached. This does not establish a product rendering defect. | Inconclusive; test observer repair under verification |
+| BUG001 retained draft PDF parity | Diagnostic confirms every render/download/reload/whole-DTO check precedes final safety refusal. Counters:1 violation,0 mutations,1 login,0 native downloads,0 passive exports. The refused normalized path is exactly `/api/teams/`, the existing tenant team-list read from the Matter header. | Inconclusive; exact read-dependency repair under verification |
+
+Observation-only diagnostic runs44464522436 and44465040030 use a source distinct
+from servinge564 and cannot certify a release. Their safe receipts retain no
+private response bodies, DOM, media, credentials or tokens. The repair preserves
+the exact original UI-triggered preview status/transport marker, single fetch,
+retained source size/SHA and visible canvas/pixel assertions. A bounded clone of
+that same browser fetch supplies digest metadata in memory when CDP has discarded
+the streamed body. It never substitutes a second API GET or changes application
+stream bytes. Fourteen observer controls include actual offline-browser proof,
+wrong-source bytes, duplicate admission, body bounds, stream failure and the
+unchanged ten-second deadline. The draft boundary adds only the marked team-list
+read; team writes, other team records and unmarked reads remain refused.
+
+Current focused evidence:44 frontend cases pass, including the real offline
+browser; actual web component compilation passes. Original thirteen upload
+closure checks pass; the new independent closure control and all complete
+replacement/source/CI/deployed desktop+phone gates remain due. Every new unit
+and its root helper must be committed and included in the builder COPY closure,
+both cloud/context allowlists and the deploy dirty-input fence.
+
+Projection cadence remains **PAUSED**. Document-processing, court-sync and18:00
+case-tracking schedules are enabled. Resume requires a successful complete
+exact-serving canonical QA run, then two later clean serial maintenance
+executions with the second rebuild count0 and the guarded inventory command.
+No direct projection resume is allowed. Owner/provider credentials/consents,
+Mac/APK sign-in and approved governed-renewal fixture configuration remain
+explicitly unverified; no synthetic legal approvals or identity substitutions.

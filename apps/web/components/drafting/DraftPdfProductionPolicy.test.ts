@@ -54,6 +54,18 @@ describe("BUG001 production-only read boundary", () => {
     expect(citationReviewExportGuard(503, guard, "draft", 0)).toBe(false);
     expect(citationReviewExportGuard(422, { detail: "Unsupported characters" }, "draft", 0)).toBe(false);
   });
+  it("admits the existing tenant team-list read used by the Matter header without allowing team mutations or unmarked reads", () => {
+    const teams = `${settings.api}/api/teams/`;
+    expect(allowedProductionDraftRead("/api/teams/")).toBe(true);
+    expect(productionDraftRequestPolicy(teams, "GET", "no-paid-providers", settings)).toBe("read");
+    expect(productionDraftRequestPolicy(teams, "GET", undefined, settings)).toBe("blocked");
+    for (const method of ["POST", "PATCH", "DELETE"]) {
+      expect(productionDraftRequestPolicy(teams, method, "no-paid-providers", settings)).toBe("blocked");
+    }
+    expect(allowedProductionDraftRead("/api/teams/another-team")).toBe(false);
+    expect(allowedProductionDraftRead("/api/teams/another-team/members")).toBe(false);
+    expect(productionDraftRequestPolicy(`${settings.api}/api/teams/another-team/members`, "GET", "no-paid-providers", settings)).toBe("blocked");
+  });
   it("admits only the exact reported Matter workspace GET, never other records or writes", () => {
     const workspace = `/api/matters/${reportedDraftTarget.matterId}/workspace`;
     expect(allowedProductionDraftRead(workspace)).toBe(true);

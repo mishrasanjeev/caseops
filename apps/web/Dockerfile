@@ -101,6 +101,7 @@ COPY tests/e2e/support/run-id.ts /app/tests/e2e/support/run-id.ts
 COPY tests/e2e/support/retained-assistant-evidence.ts /app/tests/e2e/support/retained-assistant-evidence.ts
 COPY tests/e2e/support/draft_pdf_oracle_20261111.ts /app/tests/e2e/support/draft_pdf_oracle_20261111.ts
 COPY tests/e2e/support/draft_pdf_production_policy_20261111.ts /app/tests/e2e/support/draft_pdf_production_policy_20261111.ts
+COPY tests/e2e/support/bugs5_contract_reported_20261111.ts /app/tests/e2e/support/bugs5_contract_reported_20261111.ts
 COPY tests/e2e/support/draft_pdf_production_20261111.ts /app/tests/e2e/support/draft_pdf_production_20261111.ts
 COPY tests/e2e/support/draft_pdf_render_proof_20261111.ts /app/tests/e2e/support/draft_pdf_render_proof_20261111.ts
 COPY tests/e2e/ram-2026-10-22-drafting.prod.spec.ts /app/tests/e2e/ram-2026-10-22-drafting.prod.spec.ts

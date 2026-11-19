@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { expect, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 
 import type { components } from "../../../apps/web/lib/api/openapi-types";
@@ -7,6 +5,108 @@ import type { TesterRuntime } from "./ram-bugs4";
 
 const reportedId = "a8220330-c668-4d51-b245-3468cd259cde";
 type Workspace = components["schemas"]["ContractWorkspaceResponse"];
+
+export type ContractPreviewReceipt = {
+  status: "waiting" | "reading" | "complete" | "failed";
+  requests: number;
+  bytes: number;
+  sha256: string | null;
+  mime: string | null;
+  failure: "none" | "duplicate" | "admission" | "oversize" | "deadline" | "stream";
+};
+
+/** Observe the UI's single fetch in browser memory; CDP can discard streamed bodies. */
+export function installContractPreviewReceipt(binding: { origin: string; pathname: string; maxBytes: number }) {
+  const origin = new URL(binding.origin);
+  if (origin.origin !== binding.origin || origin.username || origin.password
+    || !(origin.origin === "https://api.caseops.ai" || ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname))
+    || !["http:", "https:"].includes(origin.protocol)
+    || !/^\/api\/contracts\/[a-f0-9-]{36}\/attachments\/[a-f0-9-]{36}\/preview$/.test(binding.pathname)
+    || !Number.isSafeInteger(binding.maxBytes) || binding.maxBytes <= 0 || binding.maxBytes > 32 * 1024 * 1024) {
+    throw new Error("Invalid bounded contract-preview observation.");
+  }
+  const state = window as unknown as { __caseopsContractPreview?: {
+    binding: typeof binding; receipt: ContractPreviewReceipt;
+  } };
+  if (state.__caseopsContractPreview) {
+    if (JSON.stringify(state.__caseopsContractPreview.binding) !== JSON.stringify(binding)) {
+      throw new Error("Contract-preview observation already has a different binding.");
+    }
+    return;
+  }
+  const receipt: ContractPreviewReceipt = {
+    status: "waiting", requests: 0, bytes: 0, sha256: null, mime: null, failure: "none",
+  };
+  state.__caseopsContractPreview = { binding, receipt };
+  const observationFailed = () => receipt.status === "failed";
+  const original = window.fetch;
+  window.fetch = async function (input, init) {
+    const value = input instanceof Request ? input.url : String(input);
+    const url = new URL(value, location.href);
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (url.origin !== binding.origin || url.pathname !== binding.pathname || url.search || method !== "GET") {
+      return original.call(this, input, init);
+    }
+    receipt.requests++;
+    if (receipt.requests !== 1) {
+      receipt.status = "failed"; receipt.failure = "duplicate";
+      return original.call(this, input, init);
+    }
+    let response: Response;
+    try { response = await original.call(this, input, init); }
+    catch (error) { receipt.status = "failed"; receipt.failure = "stream"; throw error; }
+    receipt.mime = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? null;
+    const declared = response.headers.get("content-length");
+    if (response.status !== 200 || receipt.mime !== "application/pdf"
+      || declared !== null && (!/^\d+$/.test(declared) || Number(declared) > binding.maxBytes)) {
+      receipt.status = "failed"; receipt.failure = "admission";
+      return response;
+    }
+    const clone = response.clone();
+    const reader = clone.body?.getReader();
+    if (!reader) { receipt.status = "failed"; receipt.failure = "stream"; return response; }
+    receipt.status = "reading";
+    const chunks: Uint8Array[] = [];
+    const timer = setTimeout(() => {
+      receipt.status = "failed"; receipt.failure = "deadline";
+      void reader.cancel().catch(() => {});
+    }, 10_000);
+    void (async () => {
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (observationFailed()) return;
+          if (next.done) break;
+          receipt.bytes += next.value.byteLength;
+          if (receipt.bytes > binding.maxBytes) {
+            receipt.status = "failed"; receipt.failure = "oversize";
+            void reader.cancel().catch(() => {});
+            return;
+          }
+          // The observer owns copies; zeroing them must never change the app's stream.
+          chunks.push(new Uint8Array(next.value));
+        }
+        const bytes = new Uint8Array(receipt.bytes);
+        try {
+          let offset = 0;
+          for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+          const digest = await crypto.subtle.digest("SHA-256", bytes);
+          if (observationFailed()) return;
+          receipt.sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+          receipt.status = "complete";
+        } finally { bytes.fill(0); }
+      } catch {
+        receipt.status = "failed";
+        if (receipt.failure === "none") receipt.failure = "stream";
+      } finally {
+        clearTimeout(timer);
+        for (const chunk of chunks) chunk.fill(0);
+        reader.releaseLock();
+      }
+    })();
+    return response;
+  };
+}
 
 /** Production original-record proof is read-only; all writes use the run's separate fixture. */
 export async function verifyReportedContractControls(
@@ -84,16 +184,30 @@ export async function verifyReportedContractControls(
     const preview = page.waitForResponse(response => new URL(response.url()).origin === rt.api.origin
       && new URL(response.url()).pathname === `${prefix}/attachments/${attachment.id}/preview`
       && response.request().method() === "GET");
+    const binding = { origin: rt.api.origin, pathname: `${prefix}/attachments/${attachment.id}/preview`, maxBytes: attachment.size_bytes };
+    stage = "original-preview-observer-admission";
+    await page.addInitScript(installContractPreviewReceipt, binding);
+    await page.evaluate(installContractPreviewReceipt, binding);
+    stage = "original-preview-request";
     await view.click();
     const response = await preview;
     expect(response.status(), "Original source preview admission").toBe(200);
     expect(response.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
-    const bytes = await response.body();
-    expect(bytes.length === attachment.size_bytes
-      && createHash("sha256").update(bytes).digest("hex") === attachment.sha256_hex,
+    stage = "original-preview-browser-digest";
+    expect(await response.finished(), "Original preview transport completes").toBeNull();
+    await expect.poll(() => page.evaluate(() => (window as unknown as {
+      __caseopsContractPreview: { receipt: ContractPreviewReceipt };
+    }).__caseopsContractPreview.receipt.status)).toBe("complete");
+    const received = await page.evaluate(() => (window as unknown as {
+      __caseopsContractPreview: { receipt: ContractPreviewReceipt };
+    }).__caseopsContractPreview.receipt);
+    expect(received.requests === 1 && received.mime === "application/pdf"
+      && received.bytes === attachment.size_bytes && received.sha256 === attachment.sha256_hex,
     "Original preview is the retained source, without writing private bytes to evidence").toBe(true);
+    stage = "original-preview-visible-canvas";
     const canvas = page.getByTestId("pdf-viewer").locator("canvas");
     await expect(canvas).toBeVisible();
+    stage = "original-preview-visible-ink";
     await expect.poll(() => canvas.evaluate((element: HTMLCanvasElement) => {
       const pixels = element.getContext("2d")!.getImageData(0, 0, element.width, element.height).data;
       let ink = 0;
