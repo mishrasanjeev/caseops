@@ -130,6 +130,13 @@ export async function verifyReportedContractControls(
     await rt.release();
     info.annotations.push({ type: "caseops-b5-reported-record", description: "original-contract-readonly-controls-and-pdf; no record changes or retained private media" });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const kind = message.includes("No resource with given identifier") ? "devtools-resource-unavailable"
+      : message.includes("evicted") ? "devtools-response-evicted"
+      : message.includes("No data found for resource") ? "devtools-resource-data-unavailable"
+      : message.includes("Target page, context or browser has been closed") ? "browser-target-closed"
+      : "unclassified-private-error";
+    info.annotations.push({ type: "caseops-b5-diagnostic-transport", description: kind });
     const stack = error instanceof Error ? error.stack ?? "" : "";
     for (const basename of ["bugs5_contract_reported_20261111.ts", "draft_pdf_production_20261111.ts", "draft_pdf_render_proof_20261111.ts"]) {
       const escaped = basename.replaceAll(".", "\\.");

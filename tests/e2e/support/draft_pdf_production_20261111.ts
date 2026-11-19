@@ -65,6 +65,10 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     if (!["GET", "HEAD", "OPTIONS"].includes(method) && decision !== "login") attemptedMutations++;
     if (decision === "external") { blockedExternal++; return route.abort("blockedbyclient"); }
     if (decision === "blocked" || (decision === "login" && ++logins > 1)) {
+      if (info.annotations.filter(row => row.type === "caseops-b5-diagnostic-refusal").length < 16) {
+        const normalized = url.pathname.replace(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/gi, ":uuid");
+        info.annotations.push({ type: "caseops-b5-diagnostic-refusal", description: `method-${method}:origin-${url.origin === settings.api ? "api" : "web"}:normalized-path-sha256-${hash(normalized)}` });
+      }
       violations.add("prohibited-operation-or-missing-marker");
       return route.abort("blockedbyclient");
     }
@@ -202,6 +206,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await unchanged();
     await release();
     stage = "reload-read-only-boundary";
+    info.annotations.push({ type: "caseops-b5-diagnostic-counters", description: `violations-${violations.size}:attempts-${attemptedMutations}:logins-${logins}:native-downloads-${nativeDownloads}:passive-exports-${passiveExports}` });
     expect(violations.size === 0 && attemptedMutations === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
     await info.attach("bug001-production-parity", { body: JSON.stringify({ outcome: "READ_ONLY_PARITY_VERIFIED", sha: settings.sha,
       autoHash: auto.hash, selectedHash: selected.hash, autoPages, selectedPages, blockedExternal,
