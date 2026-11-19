@@ -65,6 +65,7 @@ BUILDER_INPUTS = {
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
+    "tests/fixtures/contract-preview-probe.ts",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
     "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
     "tests/e2e/drafting-formats20261115.spec.ts",
@@ -75,6 +76,7 @@ BUILDER_INPUTS = {
         "ip-portfolio-export-completion", "ip18-owned-view-cleanup", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
+        "bugs5_contract_reported_20261111",
         "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",
         "prod-diagnostic-test",
         "env", "ram-bugs4", "canonical-api-validators",
@@ -259,6 +261,22 @@ class NativeUploadTests(unittest.TestCase):
                     self.assertIn(
                         f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines()
                     )
+
+    def test_contract_preview_receipt_unit_has_explicit_builder_admission(self):
+        unit = (ROOT / "apps/web/components/document/ContractPreviewReceipt.test.ts").read_text(
+            encoding="utf-8"
+        )
+        dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
+        for stem in ("tests/e2e/support/bugs5_contract_reported_20261111", "tests/fixtures/contract-preview-probe"):
+            with self.subTest(helper=stem):
+                helper = stem + ".ts"
+                self.assertIn(f'from "../../../../{stem}"', unit)
+                self.assertIn(helper, BUILDER_INPUTS)
+                self.assertIn(f"COPY {helper} /app/{helper}", dockerfile.splitlines())
+                self.assertNotIn(helper, dockerfile.split("FROM trusted-base AS runner", 1)[1])
+                self.assertIn(helper, (ROOT / "scripts/deploy-prod.sh").read_text(encoding="utf-8"))
+                for name in (".dockerignore", ".gcloudignore"):
+                    self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
 
     def test_original_draft_proof_unit_inputs_have_explicit_builder_admission(self):
         unit = (ROOT / "apps/web/lib/e2e-canonical-validator-loading.test.ts").read_text(

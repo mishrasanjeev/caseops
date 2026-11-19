@@ -1,5 +1,22 @@
 ## November18 — a green CI does not supersede failed local acceptance
 
+## November19 — deployed PR624, production Batch5 acceptance still open
+
+**Inconclusive / NO-GO for complete certification.** Main e564 is live and all70
+combined-main jobs plus complete Docker07/Windows replacement gates passed.
+Exact-serving QA44446805801 fails Batch5 desktop; phone is unexecuted. Its20
+other native invocations independently reconcile459 passes/17 declared skips.
+The bounded repair addresses a discarded CDP streamed response body and the
+Draft read-only harness's omitted, ordinary tenant teams-list GET. It preserves
+single-fetch byte/hash/pixel proof, whole Draft DTO equality, all write/marker
+fences and original deadlines. Focused45 cases and component compilation pass;
+complete replacement/source/CI/deployed desktop+phone verification remain due.
+Separate candidate diagnostic44467426442 passes all14 original desktop/phone
+Batch5 bodies againste564; this is not the final canonical full-release run.
+The earlier team timeout remains unidentified, despite two diagnostic passes.
+Projection remains paused behind complete QA and two later clean executions.
+See [the dated evidence](security/production-verification-2026-11-17.md).
+
 **Partially implemented / Inconclusive; NO-GO.** Docker04 at7c6c retains a
 complete4202-case PostgreSQL pass, but712/728 desktop passes with13 skips and
 three failures. Mobile64 is unexecuted. All retained artifacts remain intact;

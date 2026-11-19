@@ -4679,6 +4679,8 @@ _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("draft-pdf-production-journey", "tests/e2e/support/draft_pdf_production_20261111.ts"),
     ("draft-pdf-render-proof", "tests/e2e/support/draft_pdf_render_proof_20261111.ts"),
     ("production-diagnostic-test", "tests/e2e/support/prod-diagnostic-test.ts"),
+    ("contract-preview-observer", "tests/e2e/support/bugs5_contract_reported_20261111.ts"),
+    ("contract-preview-probe", "tests/fixtures/contract-preview-probe.ts"),
 )
 
 

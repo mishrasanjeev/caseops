@@ -270,6 +270,7 @@ const rootWebMobileSourceTriggers = [
   'tests/e2e/ram-2026-10-22-drafting.prod.spec.ts',
   'tests/e2e/drafting-formats20261115.spec.ts',
   'tests/fixtures/statutes/structured-schedule-api.json',
+  'tests/fixtures/contract-preview-probe.ts',
 ];
 const mobileSourceWorkflow = () => require('js-yaml').load(readFileSync(path.join(repo, '.github/workflows/mobile-source.yml'), 'utf8'));
 function assertMobileSourceTriggers(workflow) {

@@ -189,8 +189,10 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     expect((await checkedPdf(await reloadedPdf)).hash === auto.hash, "Reload preserves automatic-profile bytes").toBe(true);
     expect(await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch)).toBe(autoPages);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
+    stage = "whole-dto-unchanged";
     await unchanged();
     await release();
+    stage = "read-only-boundary";
     expect(violations.size === 0 && attemptedMutations === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
     await info.attach("bug001-production-parity", { body: JSON.stringify({ outcome: "READ_ONLY_PARITY_VERIFIED", sha: settings.sha,
       autoHash: auto.hash, selectedHash: selected.hash, autoPages, selectedPages, blockedExternal,

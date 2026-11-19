@@ -468,3 +468,158 @@ full exact-serving production QA. Original Batch5 production failures remain
 unresolved until that replay. Projection cadence requires the latest successful
 mutation-capable QA plus two later clean serial executions, second rebuild0,
 through the guarded resume command; no direct scheduler resume.
+
+
+## November19 — PR624 merged and deployed; complete production acceptance remains failed
+
+PR624 is merged as `e56437b8672d89e5eeb2a1642be4e759c3c6d2ef`.
+Its four combined-main workflows passed all70 jobs; full local Docker07 passed
+4204 PostgreSQL cases and792 browser cases (778 passes,14 declared skips).
+The three original Windows failures have complete replacement frontend proof:
+3210 tests across313 files, with component compilation and source-group order.
+Canonical deployment completed November19 at02:47UTC. API00527-9tj and
+web00502-zn4 serve100% untagged traffic; public33-case QA and native Android
+app-link/compatibility probes passed. These are scoped passes, not full release
+certification or private device/Mac sign-in acceptance.
+
+Exact-serving production run44446805801 is **FAILED / NO-GO for complete
+certification**. Its13 other completed jobs pass. Independent original-source
+native reconciliation validates20 successful invocations:476 cases,459 passes,
+17 explicit skips. Ten of the11 production counterparts to main's declared
+skips passed; the historical owner-Matter case remains skipped/unverified.
+Batch5 desktop has4 passes and3 failures; its phone invocation was never run.
+The final evidence job is skipped. Earlier failures remain retained.
+
+| Actual failed desktop journey | Evidence and bounded diagnosis | Current verdict |
+| --- | --- | --- |
+| AI-TEAM-01 membership/audited lead journey |120046ms timeout; final cleanup location does not identify its original body boundary. Two later observation-only diagnostics pass the body; no historical cause is asserted. | Inconclusive until complete canonical replacement acceptance |
+| B5-CON-005/006/009 original contract preview | Original HTTP200/marker precede CDP `response.body()` refusal. Fixed-step diagnostics identify `No data found for resource`; source-byte/pixel checks were not reached. This does not establish a product rendering defect. | Inconclusive; test observer repair under verification |
+| BUG001 retained draft PDF parity | Diagnostic confirms every render/download/reload/whole-DTO check precedes final safety refusal. Counters:1 violation,0 mutations,1 login,0 native downloads,0 passive exports. The refused normalized path is exactly `/api/teams/`, the existing tenant team-list read from the Matter header. | Inconclusive; exact read-dependency repair under verification |
+
+Observation-only diagnostic runs44464522436 and44465040030 use a source distinct
+from servinge564 and cannot certify a release. Their safe receipts retain no
+private response bodies, DOM, media, credentials or tokens. The repair preserves
+the exact original UI-triggered preview status/transport marker, single fetch,
+retained source size/SHA and visible canvas/pixel assertions. A bounded clone of
+that same browser fetch supplies digest metadata in memory when CDP has discarded
+the streamed body. It never substitutes a second API GET or changes application
+stream bytes. Fifteen observer controls include actual offline-browser proof,
+wrong-source bytes, duplicate admission, body bounds, stream failure and the
+unchanged ten-second deadline. The draft boundary adds only the marked team-list
+read; team writes, other team records and unmarked reads remain refused.
+
+Current focused evidence:45 frontend cases pass, including the real offline
+browser; actual web component compilation passes. Original thirteen upload
+closure checks pass; the new independent closure control and all complete
+replacement/source/CI/deployed desktop+phone gates remain due. Every new unit
+and its root helper must be committed and included in the builder COPY closure,
+both cloud/context allowlists and the deploy dirty-input fence.
+
+Projection cadence remains **PAUSED**. Document-processing, court-sync and18:00
+case-tracking schedules are enabled. Resume requires a successful complete
+exact-serving canonical QA run, then two later clean serial maintenance
+executions with the second rebuild count0 and the guarded inventory command.
+No direct projection resume is allowed. Owner/provider credentials/consents,
+Mac/APK sign-in and approved governed-renewal fixture configuration remain
+explicitly unverified; no synthetic legal approvals or identity substitutions.
+
+PR625 independent review found an overlapping-observer failure-latch defect in
+the first candidate. The controlled negative test retained a complete status
+where duplicate refusal must remain failed. The corrected observer preserves
+that refusal while the first fetch resolves, never substitutes a second GET,
+and cancels only its owned cloned reader. All45 focused cases pass. The native
+offline control now uses the public browser-server process handle, verifies
+native exit0 and exact owned temporary-profile ENOENT after close. An attempted
+cleanup of the earlier synthetic profile was rejected by automatic policy before
+execution; that scratch remains retained, not falsely recorded as removed.
+
+Observation-only diagnostic44467426442 subsequently passed all14 original
+Batch5 desktop/phone bodies against still-servinge564 using the23fd helper
+subset (diagnostic sourcefdebcf44). Both original-record Contract controls/PDF
+and retained Draft READ_ONLY_PARITY_VERIFIED receipts passed with zero retries
+or skips. This is actual desktop/phone workflow evidence, but not canonical
+whole-release acceptance or a transfer to the later failure-latch candidate.
+
+The first full-frontend replacement preflight on4275875 refused before compile
+or Vitest: source-bound CI44467998092/APIruff135370451073 correctly rejected an
+unreviewed web Dockerfile change. The builder-only helper review is now recorded
+in DATA_GOVERNANCE_MAP.yaml; the canonical generator, runtime projection and
+human map renderer were replayed without changing classes or policy approval.
+The original refused gate/log remain retained; complete replacement validation
+and a new source-bound green CI are still required.
+
+Complete frozen frontend02 on2215463 executed all3226 cases/314 files with
+component compilation0,3224 passes and exactly two failures in the independent
+fixed-phase source inventories. No tests were skipped; source and remote refs
+remained unchanged and the controller was reaped with exit1. Hosted Web CI
+135374106536 has the same two failures. The repair adds only the exact new fixed
+phase labels to those independent literal arrays; equality, AST privacy checks,
+original UI assertions and deadlines remain intact. The complete three affected
+frontend files now pass55 cases. A fresh full3226-case replacement remains due.
+
+Source831 local acceptance additionally completed ten whole affected API/source
+modules:1681 passes/five explicit POSIX-only Windows skips, native exit0 and
+retained JUnit. E2E TypeScript compilation passes. Later CI shard7/13 correctly
+rejects the inline HTTP probes in ContractPreviewReceipt.test.ts through the
+unchanged cross-language deadline inventory; the API aggregate failure is a
+consequence of that shard. The repair moves mock and real offline-browser
+transport into the explicit repository fixture contract-preview-probe.ts. Real
+transport rejects production/foreign targets before dispatch and retains a
+five-second whole-body/64KiB bound. All11 mock probe call sites also leave web
+source. No inventory exclusion or assertion/deadline relaxation is added.
+All55 affected frontend cases and both unchanged deadline-inventory cases pass
+on the working repair; complete fresh source, closure, compilation, frontend,
+CI/main/deployment and production verification remain due.
+
+Final fixture review preserves two additional negative controls. An unrelated
+mock forwarded the preview before binding repair; the replacement refuses both
+an unrelated mock and a subsequently replaced installed transport. Removing
+redirect:error from the repaired offline probe reproduces a foreign request
+attempt on a synthetic302; restored redirect refusal produces zero foreign
+request events. Real-DOM mock dispatch is also refused without a request.
+These controls remain inside the existing15 observer identities. The complete
+three affected frontend files pass96 cases (51 source inventory,30 Draft
+policy,15 observer), including owned native browser exit/profile cleanup.
+
+Full frontend03 on831 executed3226 passes/314 files, component compilation0,
+zero skipped/failed cases and unchanged source/remote refs. Its original
+controller exit1 is retained:18 unchanged fixture titles embed their checkout
+root. A separate strict verifier proves the exact18 declared root relocations
+from byte-identical source and complete3226 identity equality without replaying
+or altering native results. This scoped success does not waive the later
+fixture changes or current-head required replacement gates.
+
+Currentc691 hosted Mobile source gate135410758918 rejects the new preview
+fixture missing from native web-image fingerprint closure. Both failed Node
+cases and the complete1909-case log are retained (1904P,2F,3 declared Linux
+skips). The repair adds exactly that fixture to WEB_PATHS, both workflow
+triggers and the independent finite trigger/fingerprint inventories. Python
+controls additionally omit the new input and change its actual snapshot bytes;
+whole-tree admission remains rejected. Both preview helper paths are also added
+to the existing independent deploy omission and nativeGit dirty-input layouts,
+adding four pytest cases that must stop before any fake cloud invocation.
+
+Complete frontend04 onc691 again executes3226 passes/314 files, compilation0,
+zero skips/failures and unchanged source/remote refs. Its post-run controller
+hits a variable-name error (OLD_head), retained as exit1; a separate strict
+verifier checks every native result, source hash, exact18 checkout-title
+relocations and complete original3210-plus16 identity equality without rerun
+or result rewriting. Currentc691 CodeQL has three successful analyses and zero
+open PR-ref alerts; this is not complete release readiness while Mobile fails.
+The closure repair is isolated while the old complete rehearsal finishes; new
+source-bound CI, complete local validation and production proof remain required.
+
+The expanded Linux mobile source inventories were additionally invoked on
+Windows and are retained as failed unsupported-host evidence: Node1909 cases
+(1449P,416F,42 cancelled,2 existing skips) and Python126 cases (6 failures,
+4 errors,5 existing skips). The failures expose POSIX path/UID/O_NOFOLLOW,
+symlink privilege and permission-mode assumptions in fixtures; they do not
+certify Windows execution of those Linux/macOS controls. No assertions or
+skip declarations are weakened. All four changed Node source-trigger controls
+and the complete11-case Python BootstrapTests class pass on Windows. Complete
+43-module Node and126-case Python Linux CI remain required on the new head.
+
+An uncommitted prepared-patch writer also introduced CRLF into five source
+files. Before tests/publication, exact intended literal changes were reapplied
+to canonicalGitblob bytes; every other byte and all reviewed fingerprints are
+preserved. The original diff-check failure is retained outside the repository.

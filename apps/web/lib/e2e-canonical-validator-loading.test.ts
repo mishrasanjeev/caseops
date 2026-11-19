@@ -201,9 +201,12 @@ it("emits only the bounded reported-Draft annotation after final source and read
 it.each([
   { label: "reported Draft", file: "draft_pdf_production_20261111.ts", prefix: "reported-draft:",
     stages: ["release-before-login", "reporter-login", "authorized-persisted-version", "initial-preview",
-      "export-http-<status>", "citation-review-guard", "auto-profile-parity", "selected-profile-parity", "reload-parity"] },
+      "export-http-<status>", "citation-review-guard", "auto-profile-parity", "selected-profile-parity", "reload-parity",
+      "whole-dto-unchanged", "read-only-boundary"] },
   { label: "reported contract", file: "bugs5_contract_reported_20261111.ts", prefix: "reported-contract:",
-    stages: ["identity", "original-metadata-controls", "original-indexed-pdf-preview", "original-manual-term-controls", "unchanged-source"] },
+    stages: ["identity", "original-metadata-controls", "original-indexed-pdf-preview",
+      "original-preview-observer-admission", "original-preview-request", "original-preview-browser-digest",
+      "original-preview-visible-canvas", "original-preview-visible-ink", "original-manual-term-controls", "unchanged-source"] },
 ])("keeps $label failure phases bounded and separate from successful evidence", ({ file, prefix, stages }) => {
   const source = ts.createSourceFile(file, readFileSync(
     new URL(`../../../tests/e2e/support/${file}`, import.meta.url), "utf8",
