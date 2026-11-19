@@ -608,3 +608,18 @@ or result rewriting. Currentc691 CodeQL has three successful analyses and zero
 open PR-ref alerts; this is not complete release readiness while Mobile fails.
 The closure repair is isolated while the old complete rehearsal finishes; new
 source-bound CI, complete local validation and production proof remain required.
+
+The expanded Linux mobile source inventories were additionally invoked on
+Windows and are retained as failed unsupported-host evidence: Node1909 cases
+(1449P,416F,42 cancelled,2 existing skips) and Python126 cases (6 failures,
+4 errors,5 existing skips). The failures expose POSIX path/UID/O_NOFOLLOW,
+symlink privilege and permission-mode assumptions in fixtures; they do not
+certify Windows execution of those Linux/macOS controls. No assertions or
+skip declarations are weakened. All four changed Node source-trigger controls
+and the complete11-case Python BootstrapTests class pass on Windows. Complete
+43-module Node and126-case Python Linux CI remain required on the new head.
+
+An uncommitted prepared-patch writer also introduced CRLF into five source
+files. Before tests/publication, exact intended literal changes were reapplied
+to canonicalGitblob bytes; every other byte and all reviewed fingerprints are
+preserved. The original diff-check failure is retained outside the repository.
