@@ -863,3 +863,24 @@ See [dated evidence and remaining gates](mobile/NATIVE_V1_SETUP_2026-11-14.md#20
 Full current-candidate native acceptance remains0/83 per platform; no earlier
 native pass is transferred, and earlier unclassified network refusals stay
 incomplete. Fresh full source gates and native builds/execution remain due.
+
+
+## November 19 — Teams initial-list creation race
+
+**Partially fixed; production verification pending.** J14 / M13 / US-040 /
+FT-059, FT-061, AI-TEAM-01. The unchanged page reproduces a lost newly created
+row when initial-list invalidation coalesces an older request. Cancel that
+read after creation acknowledgement, then refresh. Focused Windows56 and
+compilation pass; complete release and forced-race desktop/phone production
+proof remain required. Historical120s incident cause remains unknown. See
+[the evidence and remaining gates](security/teams-initial-list-race-2026-11-19.md).
+
+
+## November 19 - Registry shared-version settlement
+
+**Partially fixed; release NO-GO.** J08/M08, IP UJ-07, BUG-012. Full
+production44519464549 failed at Retire. A separate deterministic regression
+proves the sibling-write window while the new workspace version is pending.
+The initial shared write/read fence passes19 page cases; adjacent writers,
+complete browser/release/production proof remain required. Preserve backend
+409 and prohibit automatic write replay. See [evidence and remaining work](security/registry-link-settlement-2026-11-19.md).

@@ -1773,7 +1773,7 @@ def test_complete_native_reporter_pre_disk_privacy_contracts(tmp_path, record_pr
         r"^# (tests|pass|fail|skipped|cancelled|todo) (\d+)$", result.stdout, re.MULTILINE
     )}
     assert counts.keys() == {"tests", "pass", "fail", "skipped", "cancelled", "todo"}
-    assert counts["tests"] > 0 and counts["pass"] == counts["tests"]
+    assert counts["tests"] == 43 and counts["pass"] == counts["tests"]
     assert all(counts[key] == 0 for key in ("fail", "skipped", "cancelled", "todo"))
     native_ids = [int(value) for value in re.findall(r"^ok (\d+) - ", result.stdout, re.MULTILINE)]
     assert native_ids == list(range(1, counts["tests"] + 1))
@@ -3443,6 +3443,37 @@ def test_app_native_known_fields_preserve_sanitized_locations_errors_and_network
     before = copy.deepcopy(document)
     evidence._app_native_fields(document)
     assert document == before
+
+
+@pytest.mark.parametrize("route", ["team/list", "team/record", "team/members", "team/member-lead"])
+def test_app_team_network_categories_preserve_metadata_and_reject_private_paths(app_capture, route):
+    document = copy.deepcopy(app_capture.app_documents["app-mobile"][1])
+    document.update(
+        release_sha=BASE, invocation="ci-app-mobile", phase="execution", status="passed"
+    )
+    attempt = next(iter(_app_specs(document)))["tests"][0]["results"][0]
+    row = {
+        "route": route,
+        "method": "GET",
+        "startedAt": "2026-11-03T00:00:00.000Z",
+        "finishedAt": "2026-11-03T00:00:00.001Z",
+        "outcome": "response_completed",
+        "status": 200,
+        "requestId": None,
+        "problemType": None,
+    }
+    attempt["networkEvidence"] = {
+        "status": "retained",
+        "name": "sanitized-network-evidence",
+        "contentType": "application/json",
+        "snapshot": {"schemaVersion": 1, "drainTimedOut": False, "omitted": 0, "records": [row]},
+    }
+    before = copy.deepcopy(document)
+    evidence._app_native_fields(document)
+    assert document == before
+    row["route"] += "/PRIVATE-TEAM?token=PRIVATE-TOKEN"
+    with pytest.raises(evidence.EvidenceError, match="app_raw_native_value_mismatch"):
+        evidence._app_native_fields(document)
 
 
 @pytest.mark.parametrize("damage", ["missing", "duplicate", "legacy", "unknown"])

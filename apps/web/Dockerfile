@@ -107,6 +107,7 @@ COPY tests/e2e/support/draft_pdf_production_20261111.ts /app/tests/e2e/support/d
 COPY tests/e2e/support/draft_pdf_render_proof_20261111.ts /app/tests/e2e/support/draft_pdf_render_proof_20261111.ts
 COPY tests/e2e/ram-2026-10-22-drafting.prod.spec.ts /app/tests/e2e/ram-2026-10-22-drafting.prod.spec.ts
 COPY tests/e2e/support/prod-diagnostic-test.ts /app/tests/e2e/support/prod-diagnostic-test.ts
+COPY tests/e2e/support/team-initial-read.ts /app/tests/e2e/support/team-initial-read.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 

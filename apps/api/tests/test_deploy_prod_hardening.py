@@ -4679,6 +4679,7 @@ _WEB_DIRTY_CLOSURE_REGRESSIONS = (
     ("draft-pdf-production-journey", "tests/e2e/support/draft_pdf_production_20261111.ts"),
     ("draft-pdf-render-proof", "tests/e2e/support/draft_pdf_render_proof_20261111.ts"),
     ("production-diagnostic-test", "tests/e2e/support/prod-diagnostic-test.ts"),
+    ("team-initial-read", "tests/e2e/support/team-initial-read.ts"),
     ("contract-preview-observer", "tests/e2e/support/bugs5_contract_reported_20261111.ts"),
     ("contract-preview-probe", "tests/fixtures/contract-preview-probe.ts"),
 )
@@ -4839,6 +4840,7 @@ def test_deploy_fixture_stops_before_launch_if_any_fake_cli_is_missing(
          "modify", True),
         *((case, path, "modify", True) for case, path in _WEB_DIRTY_CLOSURE_REGRESSIONS),
         ("new-upstream", "license-policy/upstream/new-package/LICENSE.txt", "new", True),
+        ("team-initial-read-new", "tests/e2e/support/team-initial-read.ts", "new", True),
         ("deleted-review", "docs/security/js-license-compliance-review-2026-10-12.md",
          "delete", True),
     ],
@@ -4897,6 +4899,9 @@ def test_deploy_prod_native_git_filters_complete_uploaded_build_context(
     }
     initial_paths.update(_web_npm_tooling_inputs(REPO_ROOT))
     initial_paths.update(path for _, path in _WEB_DIRTY_CLOSURE_REGRESSIONS)
+    if mutation == "new":
+        assert mutation_path is not None
+        initial_paths.discard(mutation_path)
     for relative in initial_paths:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)

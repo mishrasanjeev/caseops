@@ -78,7 +78,7 @@ BUILDER_INPUTS = {
         "draft_pdf_production_policy_20261111",
         "bugs5_contract_reported_20261111",
         "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",
-        "prod-diagnostic-test",
+        "prod-diagnostic-test", "team-initial-read",
         "env", "ram-bugs4", "canonical-api-validators",
         "local-python-fixture", "local-python-file-fixture",
     )),
@@ -277,6 +277,20 @@ class NativeUploadTests(unittest.TestCase):
                 self.assertIn(helper, (ROOT / "scripts/deploy-prod.sh").read_text(encoding="utf-8"))
                 for name in (".dockerignore", ".gcloudignore"):
                     self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
+
+    def test_team_initial_read_fixture_has_finite_builder_and_dirty_admission(self):
+        helper = "tests/e2e/support/team-initial-read.ts"
+        unit = (ROOT / "apps/web/lib/team-initial-read-fixture.test.ts").read_text(encoding="utf-8")
+        self.assertIn('from "../../../tests/e2e/support/team-initial-read"', unit)
+        self.assertIn(helper, BUILDER_INPUTS)
+        builder, runner = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8").split(
+            "FROM trusted-base AS runner", 1
+        )
+        self.assertIn(f"COPY {helper} /app/{helper}", builder.splitlines())
+        self.assertNotIn(helper, runner)
+        for name in (".dockerignore", ".gcloudignore"):
+            self.assertIn(f"!{helper}", (ROOT / name).read_text(encoding="utf-8").splitlines())
+        self.assertIn(f'  "{helper}" \\', (ROOT / "scripts/deploy-prod.sh").read_text(encoding="utf-8"))
 
     def test_original_draft_proof_unit_inputs_have_explicit_builder_admission(self):
         unit = (ROOT / "apps/web/lib/e2e-canonical-validator-loading.test.ts").read_text(

@@ -1,5 +1,9 @@
 const routes: Array<[RegExp, string]> = [
   [/^\/api\/auth\/(?:login|refresh)$/, "auth/session"],
+  [/^\/api\/teams\/?$/, "team/list"],
+  [/^\/api\/teams\/[^/]+$/, "team/record"],
+  [/^\/api\/teams\/[^/]+\/members(?:\/[^/]+)?$/, "team/members"],
+  [/^\/api\/teams\/[^/]+\/members\/[^/]+\/lead$/, "team/member-lead"],
   [/^\/api\/matters\/bulk-update\/(?:preview|apply)$/, "matter/bulk-update"],
   [/^\/api\/matters\/[^/]+\/attachments$/, "matter/attachment"],
   [/^\/api\/notices\/[^/]+\/attachments$/, "notice/attachment"],

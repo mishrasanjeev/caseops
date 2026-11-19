@@ -22,7 +22,7 @@
  * first, 55 newer dockets and one newer Madrid record) is seeded through the
  * API: creating dockets is not the workflow under test.
  */
-import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response, type Route } from "@playwright/test";
 
 import {
   deadSelects, expectNoPageOverflow, expectOnScreen, json, markPositive, prepareTester, stamp, type TesterRuntime,
@@ -155,6 +155,47 @@ async function internalFields(page: Page): Promise<string[]> {
   }, INTERNAL_FIELD.source);
 }
 
+
+/** Hold one original browser GET; preserve its headers, body, TLS and single transport. */
+async function holdRegistryWorkspaceRead(page: Page, api: URL, docketId: string) {
+  const matches = (url: URL) => url.origin === api.origin && url.pathname === "/api/ip/registry-links"
+    && url.searchParams.get("docket_id") === docketId && url.searchParams.get("offset") === "0";
+  let arrived!: () => void;
+  const captured = new Promise<void>((resolve) => { arrived = resolve; });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let request: ReturnType<Route["request"]> | undefined;
+  let handling: Promise<void> | undefined;
+  let disposal: Promise<void> | undefined;
+  const handler = async (route: Route) => {
+    if (request || route.request().method() !== "GET") { await route.continue(); return; }
+    request = route.request();
+    handling = (async () => { arrived(); await gate; await route.continue(); })();
+    // ready/release/dispose retain this exact operation. No request is replayed.
+    await handling.catch(() => {});
+  };
+  await page.route(matches, handler);
+  return {
+    async ready() {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([captured, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Registry current workspace read was not observed.")), 15_000);
+      })]); } finally { if (timer !== undefined) clearTimeout(timer); }
+      if (!request) throw new Error("Missing held registry read.");
+      expect(request.headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      return request;
+    },
+    async release() { release(); await handling; },
+    dispose(): Promise<void> { return disposal ??= (async () => {
+      release(); const errors: unknown[] = [];
+      try { await handling; } catch (error) { errors.push(error); }
+      try { await page.unroute(matches, handler); } catch (error) { errors.push(error); }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length > 1) throw new AggregateError(errors, "Registry read and unroute failures retained separately");
+    })(); },
+  };
+}
+
 async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime, target: Target, info: Parameters<typeof markPositive>[0], mobile: boolean) {
   const main = page.locator("main");
   const firstList = page.waitForResponse(response => isDocketList(response));
@@ -178,7 +219,7 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
   await search.fill(target.number);
   const found = await (await searched).json();
   expect(found.dockets.map((row: { id: string }) => row.id)).toContain(target.docketId);
-  const core = page.waitForResponse(response => response.url().endsWith(`/api/ip/dockets/${target.docketId}/core-records`));
+  const core = page.waitForResponse(response => response.request().method() === "GET" && response.url().endsWith(`/api/ip/dockets/${target.docketId}/core-records`));
   await picker.selectOption(target.docketId);
   expect((await core).status()).toBe(200);
   await expect(page).toHaveURL(new RegExp(`[?&]docket=${target.docketId}`));
@@ -191,7 +232,7 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
   const other = listed.dockets[0];
   await search.fill("");
   await expect(picker.locator(`option[value="${other.id}"]`)).toHaveCount(1);
-  const otherCore = page.waitForResponse(response => response.url().endsWith(`/api/ip/dockets/${other.id}/core-records`));
+  const otherCore = page.waitForResponse(response => response.request().method() === "GET" && response.url().endsWith(`/api/ip/dockets/${other.id}/core-records`));
   await picker.selectOption(other.id);
   expect((await otherCore).status()).toBe(200);
   await expect(page).toHaveURL(new RegExp(`[?&]docket=${other.id}`));
@@ -219,8 +260,17 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
   await add.click();
   const linkResponse = await created;
   expect(linkResponse.status()).toBe(201);
+  expect(await linkResponse.finished()).toBeNull();
   const link = await linkResponse.json();
+  expect(link.id).toMatch(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i);
+  expect(link.version).toBe(1);
+  const isWorkspaceRead = (response: Response) => {
+    const url = new URL(response.url());
+    return url.origin === rt.api.origin && url.pathname === "/api/ip/registry-links"
+      && url.searchParams.get("docket_id") === target.docketId && response.request().method() === "GET";
+  };
   let liveLinkId: string | null = link.id;
+  const workflowErrors: unknown[] = [];
   try {
     expect(link).toMatchObject({ docket_id: target.docketId, application_id: target.applicationId, proceeding_id: null, raw_identifier: identity, match_status: "candidate" });
 
@@ -232,9 +282,12 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     await expect(heading).toBeVisible();
 
     await main.getByLabel("Reason", { exact: true }).fill(`${identity}: identifier and office match the register page.`);
-    const confirmed = page.waitForResponse(response => response.url().endsWith(`/api/ip/registry-links/${link.id}/match-decision`));
+    const confirmed = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/api/ip/registry-links/${link.id}/match-decision`));
     await main.getByRole("button", { name: "Confirm", exact: true }).click();
-    expect((await confirmed).status()).toBe(200);
+    const confirmedResponse = await confirmed;
+    expect(confirmedResponse.status()).toBe(200);
+    expect(await confirmedResponse.finished()).toBeNull();
+    expect((await confirmedResponse.json()).version).toBe(2);
 
     const mark = main.getByLabel("Mark as shown on the register");
     await expect(mark).toBeEnabled();
@@ -247,11 +300,18 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     await recordEvidence.scrollIntoViewIfNeeded();
     await expectOnScreen(recordEvidence, "Record register evidence is reachable");
     if (mobile) await expectNoPageOverflow(page);
-    const snapshot = page.waitForResponse(response => response.url().endsWith(`/api/ip/registry-links/${link.id}/snapshots/manual`));
+    const snapshotWorkspace = page.waitForResponse(isWorkspaceRead);
+    const snapshot = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/api/ip/registry-links/${link.id}/snapshots/manual`));
     await recordEvidence.click();
     const snapshotResponse = await snapshot;
     expect(snapshotResponse.status()).toBe(201);
+    expect(await snapshotResponse.finished()).toBeNull();
     const evidence = await snapshotResponse.json();
+    expect(evidence.link.version).toBe(3);
+    const snapshotRead = await snapshotWorkspace;
+    expect(snapshotRead.status()).toBe(200); expect(await snapshotRead.finished()).toBeNull();
+    const snapshotView = await snapshotRead.json();
+    expect(snapshotView.items.find((item: { link: { id: string } }) => item.link.id === link.id)?.link.version).toBe(3);
     expect(evidence.attempt.external_call).toBe(false);
     expect(evidence.snapshot.raw_json).toMatchObject({ capture_method: "manual_register_form", source_text: expect.stringContaining(identity) });
     expect(evidence.diffs).toEqual([expect.objectContaining({ field_path: "/mark_name", change_kind: "added", after_value_json: identity })]);
@@ -273,38 +333,76 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
 
     // Retire the test evidence: reject the queued change, then the identity.
     await main.locator("#review-reason").fill(`${identity}: test evidence, not a register change.`);
-    const rejected = page.waitForResponse(response => /\/api\/ip\/registry-diffs\/[^/]+\/resolve$/.test(new URL(response.url()).pathname));
+    const rejected = page.waitForResponse(response => response.request().method() === "POST" && /\/api\/ip\/registry-diffs\/[^/]+\/resolve$/.test(new URL(response.url()).pathname));
     const reject = row.getByRole("button", { name: "Reject" });
     // The confirmation toast (top-right, auto-dismissed) has been read before the next decision.
     await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 });
     await reject.scrollIntoViewIfNeeded();
     await expectOnScreen(reject, "Reject is on screen next to the change");
-    await reject.click();
-    expect((await rejected).status()).toBe(200);
-    await expect(main.getByText("No field changes are awaiting a decision.")).toBeVisible();
     await main.getByLabel("Reason", { exact: true }).fill(`${identity}: retiring the tester's verification identity.`);
-    const retired = page.waitForResponse(response => response.url().endsWith(`/api/ip/registry-links/${link.id}/match-decision`));
+    const retire = main.getByRole("button", { name: "Retire", exact: true });
+    await expect(retire).toBeEnabled(); await expect(recordEvidence).toBeEnabled();
+    await reject.scrollIntoViewIfNeeded();
+    await expectOnScreen(reject, "Reject is still on screen beside the proposed change");
+    const currentRead = await holdRegistryWorkspaceRead(page, rt.api, target.docketId);
+    const reviewErrors: unknown[] = [];
+    try {
+      await reject.click();
+      const rejection = await rejected;
+      expect(rejection.status()).toBe(200); expect(await rejection.finished()).toBeNull();
+      expect((await rejection.json()).resolution_status).toBe("rejected");
+      const heldRequest = await currentRead.ready();
+      await expect(main.getByText("No field changes are awaiting a decision.")).toBeVisible();
+      await expect(retire, "A diff's empty state does not authorize a write using its older parent version").toBeDisabled();
+      await expect(recordEvidence, "Sibling evidence writes wait for the same current version").toBeDisabled();
+      const delivered = page.waitForResponse((response) => response.request() === heldRequest);
+      await currentRead.release();
+      const refreshed = await delivered;
+      expect(refreshed.status()).toBe(200); expect(await refreshed.finished()).toBeNull();
+      const refreshedView = await refreshed.json();
+      expect(refreshedView.items.find((item: { link: { id: string } }) => item.link.id === link.id)?.link.version).toBe(4);
+      await expect(retire).toBeEnabled();
+    } catch (error) { reviewErrors.push(error); }
+    try { await currentRead.dispose(); } catch (error) { reviewErrors.push(error); }
+    if (reviewErrors.length === 1) throw reviewErrors[0];
+    if (reviewErrors.length > 1) throw new AggregateError(reviewErrors, "Registry review and read cleanup failures retained separately");
+    const retired = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/api/ip/registry-links/${link.id}/match-decision`));
     await main.getByRole("button", { name: "Retire", exact: true }).click();
     const retiredResponse = await retired;
-    expect(retiredResponse.status()).toBe(200);
-    expect((await retiredResponse.json()).match_status).toBe("retired");
+    expect(retiredResponse.request().postDataJSON().expected_version).toBe(4);
+    expect(retiredResponse.status()).toBe(200); expect(await retiredResponse.finished()).toBeNull();
+    expect(await retiredResponse.json()).toMatchObject({ id: link.id, version: 5, match_status: "retired" });
     liveLinkId = null;
-  } finally {
+  } catch (error) { workflowErrors.push(error); }
+  finally {
     if (liveLinkId) {
-      // Cleanup only (the assertion already failed): never leave a live test identity.
-      const current = await request.get(`${rt.api.origin}/api/ip/registry-links?limit=25&offset=0&docket_id=${target.docketId}`, { headers: rt.headers });
-      const items = current.ok() ? (await current.json()).items ?? [] : [];
-      const live = items.find((row: { link: { id: string } }) => row.link.id === liveLinkId);
-      if (live && live.link.match_status !== "retired") {
-        await request.post(`${rt.api.origin}/api/ip/registry-links/${liveLinkId}/match-decision`, {
-          headers: rt.headers, data: { expected_version: live.link.version, decision: "retire", reason: "B4 cleanup after a failed verification run." },
-        });
-      }
+      // Re-read the acknowledged identity: an error response is not rollback proof.
+      try {
+        const current = await request.get(`${rt.api.origin}/api/ip/registry-links?limit=25&offset=0&docket_id=${target.docketId}`, { headers: rt.headers });
+        expect(current.status(), "Read only this execution's acknowledged identity before cleanup").toBe(200);
+        const items = (await current.json()).items;
+        const live = items.find((row: { link: { id: string } }) => row.link.id === liveLinkId);
+        expect(live, "Cleanup must observe its exact admitted identity").toBeTruthy();
+        if (live.link.match_status !== "retired") {
+          const cleanup = await request.post(`${rt.api.origin}/api/ip/registry-links/${liveLinkId}/match-decision`, {
+            headers: rt.headers, data: { expected_version: live.link.version, decision: "retire", reason: "B4 cleanup after a failed verification run." },
+          });
+          expect(cleanup.status(), "Retire only this execution's acknowledged identity").toBe(200);
+          expect((await cleanup.json()).match_status).toBe("retired");
+        }
+      } catch (error) { workflowErrors.push(error); }
     }
   }
+  if (workflowErrors.length === 1) throw workflowErrors[0];
+  if (workflowErrors.length > 1) throw new AggregateError(workflowErrors, "Registry workflow and identity cleanup failures retained separately");
 
-  // The deep link reopens the docket beyond the first page.
+  // The deep link reopens the docket beyond the first page and its persisted identity.
+  const reopenedWorkspace = page.waitForResponse(isWorkspaceRead);
   await page.goto(`${rt.web.origin}/app/ip/registry?docket=${target.docketId}`);
+  const reopened = await reopenedWorkspace;
+  expect(reopened.status()).toBe(200); expect(await reopened.finished()).toBeNull();
+  const retained = (await reopened.json()).items.find((item: { link: { id: string } }) => item.link.id === link.id);
+  expect(retained?.link).toMatchObject({ id: link.id, version: 5, match_status: "retired" });
   await expect(main.getByRole("combobox", { name: "IP docket" })).toHaveValue(target.docketId);
   await expect(main.getByRole("combobox", { name: "Legal record" })).toBeEnabled();
 
@@ -334,7 +432,7 @@ test("[local-only] BUG-012 an application-less docket says it cannot take an ide
     data: { title: stamp("B4 EMPTY DOCKET"), primary_identifier: stamp("EMPTY"), restricted: false, particulars: particulars("EMPTY") },
   }), "Local application-less docket", 201);
   const main = page.locator("main");
-  const core = page.waitForResponse(response => response.url().endsWith(`/api/ip/dockets/${empty.id}/core-records`));
+  const core = page.waitForResponse(response => response.request().method() === "GET" && response.url().endsWith(`/api/ip/dockets/${empty.id}/core-records`));
   await page.goto(`${rt.web.origin}/app/ip/registry?docket=${empty.id}`);
   const records = await (await core).json();
   expect([records.applications.length, records.proceedings.length]).toEqual([0, 0]);

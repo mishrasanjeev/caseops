@@ -275,6 +275,9 @@ function NewTeamDialog() {
         kind: values.kind,
       }),
     onSuccess: async () => {
+      // An unresolved first read has no cached data, so invalidation alone can
+      // reuse its pre-create promise instead of requesting the committed list.
+      await queryClient.cancelQueries({ queryKey: ["teams", "list"] });
       await queryClient.invalidateQueries({ queryKey: ["teams", "list"] });
       toast.success("Team created.");
       form.reset();
