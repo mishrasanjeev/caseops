@@ -409,6 +409,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   .dockerignore .gcloudignore "license-policy" \
   "scripts/mobile/npm-tooling.mjs" "scripts/mobile/npm-registry.mjs" \
   "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz" \
+  "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz" \
   "docs/security/js-license-compliance-review-2026-10-12.md" \
   "scripts/deploy-prod.sh" "scripts/pre_migration_backup.py" "scripts/scheduler_inventory.py" \
   "scripts/qa_manual_ip_grant_release.py" "scripts/release_security_gate.py" \
@@ -424,6 +425,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "tests/e2e/support/ip-import-acknowledgements.ts" \
   "tests/e2e/support/public-release-identity.ts" \
   "tests/e2e/support/ip-portfolio-export-completion.ts" \
+  "tests/e2e/support/ip18-owned-view-cleanup.ts" \
   "tests/e2e/ram-2026-11-11-bugs.spec.ts" \
   "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts" \
   "tests/e2e/drafting-formats20261115.spec.ts" \

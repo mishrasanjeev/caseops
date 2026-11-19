@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -490,6 +490,69 @@ describe("IP journal watch page", () => {
     expect(await page.findByRole("button", { name: "Create profile" })).toBeVisible();
   });
 
+  it.each([
+    { action: "Pause", before: "active", after: "paused", beforeCount: 1, confirmedCount: 0 },
+    { action: "Resume", before: "paused", after: "active", beforeCount: 0, confirmedCount: 3 },
+  ])("keeps $action intake availability stable while the authoritative refetch notification is pending", async scenario => {
+    const user = userEvent.setup();
+    const initial = { ...WORKSPACE, limit: 1, profile_total: 6,
+      profiles: [{ ...PROFILE, poll_status: scenario.before }], intake_profile_count: scenario.beforeCount };
+    const confirmed = { ...initial,
+      profiles: [{ ...PROFILE, poll_status: scenario.after, version: 2 }], intake_profile_count: scenario.confirmedCount };
+    let finishRead!: (value: typeof confirmed) => void;
+    const held = new Promise<typeof confirmed>(resolve => { finishRead = resolve; });
+    workspaceMock.mockReset().mockResolvedValueOnce(initial).mockImplementation(() => held);
+    statusMock.mockResolvedValue({ ...PROFILE, poll_status: scenario.after, version: 2,
+      intake_profile_count: scenario.confirmedCount });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const notifications: Array<() => void> = [];
+    const view = render(<QueryClientProvider client={client}><IpJournalWatchPage /></QueryClientProvider>);
+    const page = within(view.container);
+    try {
+      await user.click(await page.findByRole("button", { name: /^Profiles$/ }));
+      const card = await page.findByTestId("watch-profile-profile-1");
+      await user.click(within(card).getByRole("button", { name: new RegExp(`^${scenario.action}$`) }));
+      await waitFor(() => expect(within(card).getByText(scenario.after, { exact: true })).toBeVisible());
+      expect(workspaceMock).toHaveBeenCalledTimes(2);
+      const key = ["ip", "watch", ""];
+      expect(client.getQueryState(key)?.fetchStatus).toBe("fetching");
+      await user.click(page.getByRole("button", { name: /^Journal intake$/ }));
+      const assertAvailability = () => {
+        expect(page.getByTestId("journal-entry-publication-zero")).toHaveTextContent("ZQXV TRIAGE PROBE");
+        if (scenario.confirmedCount === 0) {
+          expect(page.getByText("No active watch profile to compare with")).toBeVisible();
+          expect(page.queryByRole("button", { name: /^Record and compare$/ })).toBeNull();
+        } else {
+          expect(page.getByRole("heading", { name: /^Manual official-journal intake$/ })).toBeVisible();
+          expect(page.getByText(/compared with 3 active watch profiles across every docket/)).toBeVisible();
+        }
+      };
+      assertAvailability();
+      const query = client.getQueryCache().find({ queryKey: key, exact: true });
+      expect(query?.promise).toBeDefined();
+      notifyManager.setScheduler(callback => {
+        expect(notifications.length).toBeLessThan(8);
+        notifications.push(callback);
+      });
+      await act(async () => { finishRead(confirmed); await query!.promise; });
+      expect(client.getQueryState(key)?.status).toBe("success");
+      expect(client.getQueryState(key)?.fetchStatus).toBe("idle");
+      expect(notifications.length).toBeGreaterThan(0);
+      assertAvailability();
+      await act(async () => { notifications.splice(0).forEach(callback => callback()); });
+      assertAvailability();
+    } finally {
+      try { view.unmount(); } finally {
+        finishRead(confirmed);
+        try { client.clear(); } finally {
+          notifications.length = 0;
+          notifyManager.setScheduler(defaultScheduler);
+        }
+      }
+    }
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+  });
+
   it("BUG-014 shows recorded entries to a reader whose role cannot capture", async () => {
     const user = userEvent.setup();
     capabilityMock.mockImplementation((capability: string) => capability !== "ip:watch_manage");
@@ -585,8 +648,8 @@ describe("IP journal watch page", () => {
     decideHitMock.mockResolvedValue({ ...hit, disposition: "not_relevant", disposition_reason: "Different goods.", version: 3 });
     const paused = { ...PROFILE, poll_status: "paused", pause_reason: "Paused by an authorized journal-watch operator.", version: 2 };
     statusMock
-      .mockResolvedValueOnce(paused)
-      .mockResolvedValueOnce({ ...paused, poll_status: "active", pause_reason: null, version: 3 });
+      .mockResolvedValueOnce({ ...paused, intake_profile_count: 0 })
+      .mockResolvedValueOnce({ ...paused, poll_status: "active", pause_reason: null, version: 3, intake_profile_count: 1 });
     const page = renderWatchPage();
 
     await user.selectOptions(await page.findByLabelText("Disposition"), "not_relevant");

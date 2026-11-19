@@ -1,3 +1,43 @@
+## 2026-11-18 — local Docker04 failures remain release blockers
+
+PR624 head7c6c has green hosted checks but its complete local Docker04 failed.
+All4202 PostgreSQL tests/12606 phases passed. Desktop728 retained712 passes,
+13 explicit skips and three failures; mobile64 was not executed. The failures
+are the journal entry moving out of view after profile pause and two assistant
+history fixtures failing on Windows filenames inside Linux. Exact owned
+container/volume/network absence and retained artifact bytes are verified.
+
+The separate repair candidate is **Partially fixed / Inconclusive; NO-GO**.
+It returns the existing actor-visible intake count with a confirmed status,
+before commit, and updates that count with the profile. It maps bundled source
+filenames only after the existing Docker ownership fence. Five wrapper controls,
+92 focused frontend cases and the complete68-case SQLite family pass; two
+subtests pass. Five PostgreSQL cases, actual affected Docker journeys, full
+replacement/frontend/source/CI and production acceptance remain required.
+OpenAPI is regenerated. No merge/deployment or projection-resume credit.
+See [the dated record](security/production-verification-2026-11-17.md).
+
+## 2026-11-17 — production QA follow-up
+
+PRs612,621 and623 are merged and mainacff is live. Release certification remains
+incomplete: exact production44011493757 has four IP reference setup failures,
+and a fresh audit requires patched Next16.4.6. The source repair moves the
+four cases into the existing serialized reporting role. Current CI,
+complete native/browser gates and production
+replay are still required. Three operational schedules resumed; private
+projection maintenance remains paused behind its original QA/recovery guard.
+The older Windows full-suite failure also remains incomplete. Historical
+entries below retain their dated evidence rather than superseding these facts.
+See [the November17 record](security/production-verification-2026-11-17.md).
+
+Later November17: head6967 CI is green, while its complete Windows frontend
+replacement still fails three native checks. The candidate preserves all
+deadlines and assertions, fences/joins cancelled native children, and adds
+independent complete Windows CI coverage. The owner-approved two-view IP18
+cleanup is completed with48 unchanged preferences and audited fresh readback;
+the journey now cleans up its own acknowledged view. Final source/platform,
+Docker and production replay remain pending; projection cadence stays held.
+
 ## 2026-11-14 — disposable native V1 setup gateway remains unverified
 
 J20/M22, US-MOB-01/02/08 and SOURCE-01/03/04/06: **Partially implemented**;
@@ -4208,3 +4248,61 @@ private repacks, strict negative and all17 positive compatibility checks; it
 grants no app/native/store credit. Fresh final source/CI/build acceptance and
 complete83 cases per platform, physical checks and signing/promotion remain
 required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
+
+
+## 2026-11-18 — PR624 dependency security blocker
+
+Partially implemented / Inconclusive / NO-GO. Newly reviewed picomatch
+advisory data rejects b28. The private parser backport, exact installer
+compatibility, native negative controls and preserved failures require fresh
+complete source/platform/frontend/Docker/CI acceptance before merge. Full
+exact-serving production QA and the guarded projection resume remain pending.
+See [current evidence and boundaries](security/picomatch-security-2026-11-18.md).
+
+
+## 2026-11-18 — PR624 pruned inventory and bounded matcher follow-up
+
+Partially implemented / Inconclusive / NO-GO. Exact head92 source checks pass
+871 cases with five declared POSIX skips; native frontend passes3203/313,
+with the original stale-count wrapper refusal retained. The corrected actual
+pruned musl licence audit covers127 identities/161 copies and native Sharp
+pixels;151 offline regressions keep copied GPL and shared required paths
+closed. Matcher startup retains inherited trust while matching keeps its
+one-second bound. The successor restores unrelated native SDK identities
+and rebinds canonical source bytes. Fresh final CI, full Docker, exact-serving
+production QA and guarded projection recovery remain required. See the
+[source-bound follow-up](security/dependency-release-followup-2026-11-18.md).
+
+### November18 PR624: separate CodeQL verdict still NO-GO
+
+Headcd13 passed full frontend3203/313 and Windows release harness871P/5
+explicit POSIX skips, but alert879 exposes quadratic backslash removal and
+note880 a duplicate unittest import. Retain the successful analysis jobs and
+failed separate alert verdict. The isolated replacement has native original/
+repaired controls and exact-output coverage; full current-head security,
+source, Docker, production QA and guarded scheduler recovery remain pending.
+See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
+projection resume, scanner exception or completed release is claimed.
+### November18 PR624: independent matcher P1, replacement required
+
+Partially fixed / NO-GO. The configured reviewer found that25ab loses the
+original safe refusal for `aa|aaa`; native Node22/24 controls confirm entered
+backtracking under the unchanged1s budget. The repair preserves the old guard
+and covers the adjacent non-divisible repeated-word case. Its archives and
+held-source pins are regenerated; complete installed/locked/source/frontend/
+Docker/CI and exact-serving production acceptance remain due. Docker05 is
+interrupted after one complete526-case group and276 partial bodies, not a
+whole pass. Projection remains paused. See
+[the overlap handoff](security/matcher-overlap-2026-11-18.md).
+
+## November18 - hosted Windows discovery remains a release blocker
+
+**Partially implemented; NO-GO.** Local frozen frontend13 passes3208/313 on
+cb734abf, but hosted CI44307961816/job134814523691 times out the complete App
+metadata constructor and skips its seven dependent cases. Neither result
+erases the other. The replacement preserves15s/8s limits, introduces no cache
+or retry and places the complete source oracle in its own first project.
+Precommit native discovery proves the disjoint1+312 file partition; actual
+component compilation and all51 source cases pass. Full3210/313 coverage,
+native temporal/identity proof, hosted CI and release gates remain pending.
+See [bounded native inventory scheduling](security/frontend-inventory-scheduling-2026-11-18.md).

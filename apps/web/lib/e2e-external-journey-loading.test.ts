@@ -59,13 +59,35 @@ it("keeps literal native requires without proxy, fallback or copied implementati
 it("runs actual ZIP, QR and accessibility libraries in a native offline Playwright worker", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "caseops-external-worker-"));
   const pw = path.join(root, "node_modules/@playwright/test");
-  const executablePath = ["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe", "C:/Program Files/Google/Chrome/Application/chrome.exe"].find(file => existsSync(file));
-  writeFileSync(path.join(dir, "playwright.config.cjs"), `module.exports = { testDir: __dirname, testMatch: 'external.spec.ts', workers: 1, retries: 0, repeatEach: 1, timeout: 5000, reporter: [['json']], outputDir: ${JSON.stringify(path.join(dir, "results"))}, use: { launchOptions: ${JSON.stringify(executablePath ? { executablePath } : {})}, offline: true, serviceWorkers: 'block', trace: 'off', screenshot: 'off', video: 'off', extraHTTPHeaders: { 'X-CaseOps-Automated-Test': 'no-paid-providers' } } };`);
+  writeFileSync(path.join(dir, "stages.cjs"), `const fs=require('node:fs'); module.exports=class { record(stage, title) { fs.appendFileSync(${JSON.stringify(path.join(dir, "stages.jsonl"))},JSON.stringify({stage,title,at:Date.now()})+'\\n'); } onBegin(){this.record('begin')} onTestBegin(test){this.record('test-begin',test.title)} onTestEnd(test,result){this.record('test-end',test.title+':'+result.status)} onEnd(result){this.record('end',result.status)} };`);
+  writeFileSync(path.join(dir, "playwright.config.cjs"), `module.exports = { testDir: __dirname, testMatch: 'external.spec.ts', workers: 1, retries: 0, repeatEach: 1, timeout: 5000, reporter: [['json']], outputDir: ${JSON.stringify(path.join(dir, "results"))}, use: { offline: true, serviceWorkers: 'block', trace: 'off', screenshot: 'off', video: 'off', extraHTTPHeaders: { 'X-CaseOps-Automated-Test': 'no-paid-providers' } } };`);
+  const configPath = path.join(dir, "playwright.config.cjs");
+  writeFileSync(configPath, readFileSync(configPath, "utf8").replace("reporter: [['json']]", `reporter: [['json'], [${JSON.stringify(path.join(dir, "stages.cjs"))}]]`));
   writeFileSync(path.join(dir, "external.spec.ts"), `
-import { test, expect } from ${JSON.stringify(pw)};
+import { test as base, expect, chromium, type Page } from ${JSON.stringify(pw)};
 import { loadAxeBuilder, loadJsQR, loadJSZip } from ${JSON.stringify(path.join(root, "tests/e2e/support/external-journey-loaders.ts"))};
 import { renderedTotpSecret } from ${JSON.stringify(path.join(root, "tests/e2e/support/platform-report-qr.ts"))};
 const fromRoot = require('node:module').createRequire(${JSON.stringify(path.join(root, "package.json"))});
+const stage = (value: string) => require('node:fs').appendFileSync(${JSON.stringify(path.join(dir, "stages.jsonl"))}, JSON.stringify({stage:value,at:Date.now()})+'\\n');
+// Reuse one controlled offline page. Persistent launch creates its initial
+// renderer with the browser instead of starting a renderer for each scene.
+// Startup and each test keep five seconds; the whole native child keeps fifteen.
+const test = process.platform === 'win32' ? base.extend<{}, { offlinePage: Page }>({ offlinePage: [async ({}, use) => {
+  stage('browser-start');
+  const context = await chromium.launchPersistentContext(${JSON.stringify(path.join(dir, "profile"))}, {
+    timeout: 5000,
+    headless: true, offline: true, serviceWorkers: 'block',
+    extraHTTPHeaders: { 'X-CaseOps-Automated-Test': 'no-paid-providers' },
+  });
+  try {
+    stage('browser-ready');
+    expect(context.pages()).toHaveLength(1);
+    await use(context.pages()[0]);
+  } finally { await context.close(); }
+}, { scope: 'worker', timeout: 5000 }] }) : base.extend<{ offlinePage: Page }>({
+  // Preserve the original non-Windows headless-shell/browser fixture path.
+  offlinePage: async ({ page }, use) => { await use(page); },
+});
 test.beforeAll(() => {
   const deny = () => { throw new Error('Network forbidden in external loader regression'); };
   for (const name of ['node:http', 'node:https']) { const transport = require(name); transport.request = deny; transport.get = deny; }
@@ -87,20 +109,24 @@ test('native ZIP constructor and loadAsync preserve real XLSX and synthetic DOCX
   expect(await (await loadJSZip().loadAsync(await book.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }))).file('xl/worksheets/sheet1.xml').async('string')).toContain('Synthetic worker mark');
   await expect(loadJSZip().loadAsync(Buffer.from('not a ZIP'))).rejects.toThrow();
 });
-test('native QR pixels round-trip the real helper and reject a mismatched enrollment', async ({ page }) => {
+test('native QR pixels round-trip the real helper and reject a mismatched enrollment', async ({ offlinePage: page }) => {
+  stage('qr-body');
   await page.route('**/*', route => route.abort('blockedbyclient'));
   expect(require.cache[fromRoot.resolve('jsqr')]).toBeUndefined();
   const account = 'synthetic@example.invalid', secret = 'JBSWY3DPEHPK3PXP';
   const url = 'otpauth://totp/' + encodeURIComponent('CaseOps Reports:' + account) + '?algorithm=SHA1&digits=6&issuer=CaseOps%20Reports&period=30&secret=' + secret;
   const React = fromRoot('react'); const render = fromRoot('react-dom/server').renderToStaticMarkup;
+  stage('qr-libraries-ready');
   const svg = render(React.createElement(fromRoot('qrcode.react').QRCodeSVG, { value: url, size: 256, marginSize: 4, level: 'M', role: 'img', 'aria-label': 'Authenticator setup QR code' }));
   await page.setContent(svg);
+  stage('qr-rendered');
   expect(await renderedTotpSecret(page, { secret, otpauth_url: url }, account)).toBe(secret);
+  stage('qr-decoded');
   expect(loadJsQR()).toBe(fromRoot('jsqr'));
   await expect(renderedTotpSecret(page, { secret: 'AAAAAAAAAAAAAAAA', otpauth_url: url }, account)).rejects.toThrow();
   expect(loadJsQR()(new Uint8ClampedArray(256 * 256 * 4).fill(255), 256, 256)).toBeNull();
 });
-test('native accessibility builder retains its instance and detects a real unnamed button', async ({ page }) => {
+test('native accessibility builder retains its instance and detects a real unnamed button', async ({ offlinePage: page }) => {
   await page.route('**/*', route => route.abort('blockedbyclient'));
   expect(require.cache[fromRoot.resolve('@axe-core/playwright')]).toBeUndefined();
   const AxeBuilder = loadAxeBuilder(); expect(AxeBuilder).toBe(fromRoot('@axe-core/playwright').default);
@@ -120,6 +146,12 @@ test('native accessibility builder retains its instance and detects a real unnam
   mkdirSync(retained, { recursive: true });
   writeFileSync(path.join(retained, "native.json"), result.stdout ?? "");
   writeFileSync(path.join(retained, "stderr.json"), JSON.stringify({ stderr: result.stderr ?? "" }));
+  if (existsSync(path.join(dir, "stages.jsonl"))) {
+    // Preserve a final partial line after termination without hiding the
+    // original constructor failure behind a diagnostic JSON decoder error.
+    const stages = { jsonl: readFileSync(path.join(dir, "stages.jsonl"), "utf8") };
+    writeFileSync(path.join(retained, "stages.json"), JSON.stringify(stages));
+  }
   expect(readFileSync(path.join(retained, "native.json"), "utf8")).toBe(result.stdout);
   expect(result.error, dir).toBeUndefined();
   expect(result.status, result.stderr + dir + (result.stdout ?? "").slice(0, 12000)).toBe(0);

@@ -39,7 +39,8 @@ WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support
              "tests/fixtures/statutes/structured-schedule-api.json",
              "tests/fixtures/node-default-tls-probe.cjs", ".dockerignore", ".gcloudignore",
              "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
-             "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz", "license-policy", "docs/security"]
+             "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
+             "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz", "license-policy", "docs/security"]
 
 
 def _load_local_transport():

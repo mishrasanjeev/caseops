@@ -337,14 +337,14 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
     services:
       postgres:
-        # pgvector-on-pg17 image — same backend version as prod Cloud SQL.
+        # pgvector-on-pg17 image â€” same backend version as prod Cloud SQL.
         # CI-only: POSTGRES_HOST_AUTH_METHOD=trust skips password auth
         # for in-network clients. The container is ephemeral + only
-        # listens on the runner's localhost — no real-world exposure.
+        # listens on the runner's localhost â€” no real-world exposure.
         # The earlier md5-auth setup (POSTGRES_PASSWORD=caseops_test)
         # worked for psql but psycopg failed with "password
         # authentication failed for user caseops" via the SQLAlchemy
-        # URL — likely an interaction with how psycopg negotiates
+        # URL â€” likely an interaction with how psycopg negotiates
         # auth methods against this image's pg_hba.conf. trust mode
         # sidesteps the negotiation entirely.
         image: pgvector/pgvector:pg17
@@ -379,13 +379,13 @@ jobs:
         run: |
           # The pgvector image preinstalls the extension binary but each
           # database has to opt-in with CREATE EXTENSION. Idempotent.
-          # No password needed — POSTGRES_HOST_AUTH_METHOD=trust above.
+          # No password needed â€” POSTGRES_HOST_AUTH_METHOD=trust above.
           #
           # This used to `apt-get install postgresql-client` to get one psql
           # invocation. That put an Ubuntu mirror on the critical path of a job
           # that does not otherwise need one, and azure.archive.ubuntu.com
           # blackholes often enough to have failed this step three times in a
-          # day — apt burns the whole step budget retrying before falling back.
+          # day â€” apt burns the whole step budget retrying before falling back.
           # The service container already contains psql, so run it there and
           # depend on no mirror at all.
           CID=$(docker ps --filter "ancestor=pgvector/pgvector:pg17" --format '{{.ID}}' | head -1)
@@ -403,7 +403,7 @@ jobs:
           # alembic/env.py reads CASEOPS_DATABASE_URL via
           # get_settings().database_url and overwrites whatever the
           # alembic Config object had set. Both must point at the
-          # same DB — otherwise alembic upgrade head connects to a
+          # same DB â€” otherwise alembic upgrade head connects to a
           # different URL than the test fixtures (and either fails or
           # migrates the wrong database).
           # Trust auth on the service container removes the password
@@ -467,6 +467,130 @@ jobs:
         run: >-
           uv run --python 3.13 python -m tests.postgres_sharding postgres-evidence
           --total 32 --require-native-exit
+
+  web-windows:
+    name: Windows web (typecheck + complete coverage)
+    runs-on: windows-2025-vs2026
+    # Match the existing Windows full-frontend verification window. This new
+    # job includes provisioning; all per-test and native deadlines stay fixed.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up metadata fixture Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        id: metadata_python
+        with:
+          python-version: "3.13.14"
+      - name: Create candidate-owned stdlib metadata environment
+        shell: pwsh
+        timeout-minutes: 1
+        env:
+          CASEOPS_METADATA_PYTHON: ${{ steps.metadata_python.outputs.python-path }}
+        run: |
+          if (Test-Path -LiteralPath apps/api/.venv) { throw 'Metadata environment already exists' }
+          & $env:CASEOPS_METADATA_PYTHON -m venv --without-pip apps/api/.venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./apps/api/.venv/Scripts/python.exe -c "import sys; assert sys.version_info[:3] == (3, 13, 14); print('CASEOPS_METADATA_PYTHON_READY')"
+          exit $LASTEXITCODE
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: ./.github/actions/node-trust
+        id: node_trust
+      - env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm ci
+      - name: Web typecheck
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm run typecheck:web
+      - name: Browser test and configuration typecheck
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm run typecheck:e2e
+      - name: Install Chromium for native offline loader regressions
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npx --no-install playwright install chromium
+      - name: Verify PowerShell metadata fixture runtime
+        timeout-minutes: 1
+        run: pwsh -NoProfile -NonInteractive -File tests/e2e/fixtures/metadata-marker-runtime.ps1
+      - name: Vitest with coverage (AQ-002 reliability + threshold ratchet)
+        env:
+          NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
+          SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
+          SSL_CERT_DIR: ${{ steps.node_trust.outputs.SSL_CERT_DIR }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_FILE: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_FILE }}
+          CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: ${{ steps.node_trust.outputs.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 }}
+          NPM_CONFIG_USERCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_USERCONFIG }}
+          NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
+          NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
+          NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
+        run: npm run test:coverage --workspace @caseops/web
+      - name: Upload web coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-web-coverage
+          path: 'apps/web/coverage/coverage-summary.json
+
+            apps/web/coverage/lcov.info
+
+            '
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Retain native offline worker results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-web-native-worker-evidence
+          path: test-results/native-loader/**/*.json
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: false
+      - name: Retain native trust lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-trust-evidence
+          path: test-results/native-trust/**/*.json
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: false
 
   web:
     name: Web (typecheck + vitest + build)
@@ -580,7 +704,7 @@ jobs:
         # AQ-002 (2026-04-25): replaced the bare `test:web` step with
         # the coverage variant. testTimeout=15_000 + thresholds wired
         # in apps/web/vitest.config.ts make this stable on Linux
-        # runners. Failing this step is the gate — do not weaken
+        # runners. Failing this step is the gate â€” do not weaken
         # thresholds to make CI green; raise them only when real tests
         # cover more lines.
         run: npm run test:coverage --workspace @caseops/web
@@ -740,7 +864,7 @@ jobs:
         # NEXT_PUBLIC_* are baked at build time. Playwright opens pages on
         # http://127.0.0.1:3100 and the e2e API runs on http://127.0.0.1:8000.
         # Without this env, Next defaults the client bundle to
-        # http://localhost:8000 — which means Set-Cookie scopes to host
+        # http://localhost:8000 â€” which means Set-Cookie scopes to host
         # `localhost` and JS on host `127.0.0.1` cannot read the
         # caseops_csrf cookie, so every mutating request fails CSRF.
         # Locally the same bug is masked by apps/web/.env.local.

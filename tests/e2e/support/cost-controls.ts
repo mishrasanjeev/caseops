@@ -1,4 +1,4 @@
-import { expect, type APIResponse } from "@playwright/test";
+import { expect, request, type APIResponse } from "@playwright/test";
 
 export const noPaidProviderHeaders = {
   "X-CaseOps-Automated-Test": "no-paid-providers",
@@ -9,6 +9,11 @@ export function localTransportHeaders(baseUrl: string): Record<string, string> {
   const local = origin.protocol === "http:"
     && ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname);
   return { ...noPaidProviderHeaders, ...(local ? { Connection: "close" } : {}) };
+}
+
+/** Standalone API contexts do not inherit a browser project's headers. */
+export function createNoPaidApiContext(baseUrl: string) {
+  return request.newContext({ extraHTTPHeaders: localTransportHeaders(baseUrl) });
 }
 
 /**

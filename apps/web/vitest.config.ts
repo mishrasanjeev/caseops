@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 import { hostTrustedForks } from "./lib/vitest-host-pool";
 
@@ -18,9 +18,33 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     css: false,
-    include: ["components/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
     // Bound coverage fan-out without extending child collection or UI deadlines.
     maxWorkers: 2,
+    // Native Playwright discovery owns its bounded cold-collection interval.
+    // Run that complete source oracle before competing coverage workers;
+    // the constructor's 15s/8s limits and every inventory assertion stay fixed.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "source-inventory",
+          include: ["lib/prod-tester-source-inventory.test.ts"],
+          fileParallelism: false,
+          // Vitest4.1.12 appends isolated single-worker order0 files last.
+          // A positive order keeps this complete oracle ahead of coverage.
+          sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "web",
+          include: ["components/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
+          exclude: [...configDefaults.exclude, "lib/prod-tester-source-inventory.test.ts"],
+          sequence: { groupOrder: 2 },
+        },
+      },
+    ],
     // AQ-002 (2026-04-25): default per-test timeout was 5000ms.
     // Form / dialog tests that type ~30+ characters with userEvent
     // sit under 2 s on a bare run but cross 5 s under v8 coverage

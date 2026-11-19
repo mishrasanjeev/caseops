@@ -44,6 +44,9 @@ apps/mobile/vendor/*
 !apps/mobile/vendor/npm-11.12.1-caseops-security/
 apps/mobile/vendor/npm-11.12.1-caseops-security/*
 !apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz
+!apps/mobile/vendor/picomatch-4.0.7-caseops.1/
+apps/mobile/vendor/picomatch-4.0.7-caseops.1/*
+!apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz
 !scripts/
 scripts/*
 !scripts/mobile/
@@ -70,6 +73,7 @@ scripts/mobile/*
 !tests/e2e/support/public-release-identity.ts
 !tests/e2e/support/ip-import-acknowledgements.ts
 !tests/e2e/support/ip-portfolio-export-completion.ts
+!tests/e2e/support/ip18-owned-view-cleanup.ts
 !tests/e2e/support/run-id.ts
 !tests/e2e/support/retained-assistant-evidence.ts
 !tests/e2e/support/draft_pdf_oracle_20261111.ts

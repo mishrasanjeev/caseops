@@ -12729,7 +12729,7 @@ export async function updateIpWatchProfileStatus(input: {
   expectedVersion: number;
   pollStatus: "active" | "paused" | "disabled";
   reason: string;
-}): Promise<IpWatchProfile> {
+}): Promise<IpWatchProfile & { intake_profile_count: number }> {
   return apiRequest(`/api/ip/watch/profiles/${encodeURIComponent(input.profileId)}/status`, {
     method: "POST",
     body: {

@@ -2008,7 +2008,7 @@ def _nov14_fixture_rows(production=False):
     for ordinal, (project, file, title) in enumerate(NOV14_REVIEWED_CASES):
         if production and file == "draft-quality20261114.spec.ts":
             continue
-        owner = "tester-prod-chromium" if production else project
+        owner = "test-legal-write-prod-chromium" if production else project
         rows.append({"id": f"nov14-{ordinal}:{owner}:0", "native_spec_id": f"nov14-{ordinal}",
                      "file": file, "title_path": [file, title], "project_id": owner,
                      "project_name": owner, "expected_status": "passed", "status": "expected",
@@ -2106,7 +2106,9 @@ def _tester_canonical_rows():
         if file != "ram-2026-11-14-prod.spec.ts":
             continue
         row = copy.deepcopy(rows[0])
-        row.update(id=f"nov14-{ordinal}:tester-prod-chromium:0",
+        row.update(id=f"nov14-{ordinal}:test-legal-write-prod-chromium:0",
+                   project_id="test-legal-write-prod-chromium",
+                   project_name="test-legal-write-prod-chromium",
                    native_spec_id=f"nov14-{ordinal}", file=file,
                    title_path=[file, title], line=ordinal + 1)
         rows.append(row)
@@ -2115,8 +2117,8 @@ def _tester_canonical_rows():
 
 def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 101, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 15,
     }
     assert evidence.OCT13_FILES == {
         "ram-2026-10-13-hearings.spec.ts": 2,
@@ -2133,8 +2135,8 @@ def test_reviewed_tester_inventory_includes_all_breakpoint_and_guard_cases():
 
 def test_tester_budget_split_keeps_original_project_and_complete_case_counts():
     assert evidence.TESTER_PARTITION_COUNTS == {
-        "tester": 101, "tester-catalog": 18,
-        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 11,
+        "tester": 97, "tester-catalog": 18,
+        "tester-index": 6, "test-legal-write-oct13-a": 40, "test-legal-write-oct13-b": 15,
     }
     assert evidence.TESTER_PARTITIONS["tester-catalog"] == "tester-prod-chromium"
 
@@ -2308,7 +2310,10 @@ def test_oct15_ip_file_cannot_disappear_behind_unchanged_partition_total(file):
     replacement["title_path"][-1] += " substitute"
     rows.append(replacement)
     project = evidence.OCT13_PROJECT
-    assert sum(row["project_name"] == project for row in rows) == 51
+    reporting = [row for row in rows if row["project_name"] == project]
+    assert len(reporting) == 55
+    assert sum(row["file"] != "ram-2026-11-14-prod.spec.ts" for row in reporting) == 51
+    assert sum(row["file"] == "ram-2026-11-14-prod.spec.ts" for row in reporting) == 4
     with pytest.raises(
         evidence.EvidenceError, match="mandatory_tester_partition_inventory_mismatch"
     ):
@@ -2874,26 +2879,29 @@ OCT13_EXPECTED_PARTS = {
         "ram-2026-10-17-ip-reminders.spec.ts": 4,
         "ram-2026-10-17-ip-tracker.spec.ts": 2,
         "ram-2026-10-22-prod.spec.ts": 1,
+        "ram-2026-11-14-prod.spec.ts": 4,
     },
 }
 
 
-def test_oct13_v2_preserves_independent_contiguous40_11_and_original51_oracle():
+def test_oct13_preserves_original51_and_four_references_in_independent40_15_groups():
     canonical = {"tests": _tester_canonical_rows()}
     assert evidence.TESTER_PARTITION_CONTRACT == 3
     assert evidence.OCT13_PROJECT == "test-legal-write-prod-chromium"
     assert evidence.OCT13_PARTITION_FILES == {
         part: tuple(files) for part, files in OCT13_EXPECTED_PARTS.items()
     }
-    old51 = [row for row in canonical["tests"]
-             if row["project_name"] == "test-legal-write-prod-chromium"]
+    reporting = [row for row in canonical["tests"]
+                 if row["project_name"] == "test-legal-write-prod-chromium"]
+    old51 = [row for row in reporting if row["file"] != "ram-2026-11-14-prod.spec.ts"]
     assert len(old51) == 51
+    assert len(reporting) == 55
     selected = [evidence._tester_selected_rows(canonical, part) for part in OCT13_EXPECTED_PARTS]
-    assert [len(rows) for rows in selected] == [40, 11]
+    assert [len(rows) for rows in selected] == [40, 15]
     for part, rows in zip(OCT13_EXPECTED_PARTS, selected, strict=True):
         assert Counter(row["file"] for row in rows) == Counter(OCT13_EXPECTED_PARTS[part])
         assert all(row["project_name"] == "test-legal-write-prod-chromium" for row in rows)
-    assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in old51]
+    assert [row["id"] for row in selected[0] + selected[1]] == [row["id"] for row in reporting]
     assert not set(row["id"] for row in selected[0]).intersection(row["id"] for row in selected[1])
     assert len(evidence._tester_inventory(canonical)) == 176
 

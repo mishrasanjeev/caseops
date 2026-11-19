@@ -187,6 +187,117 @@ class InventoryTests(LicenseFixture):
         with self.assertRaises(OSError):
             self.prepared()
 
+    def optional_ancestry(self):
+        self.packages["node_modules/a"]["optionalDependencies"] = {"native": "1.0.0"}
+        self.add_package("a", "1.0.0", "MIT")
+        self.packages["node_modules/native"] = {
+            "version": "1.0.0", "optional": True, "os": ["foreign-os"],
+            "dependencies": {"layer": "1.0.0"},
+        }
+        self.packages["node_modules/layer"] = {
+            "version": "1.0.0", "optional": True, "dependencies": {"runtime": "1.0.0"},
+        }
+        self.packages["node_modules/runtime"] = {"version": "1.0.0", "optional": True}
+
+    def test_absent_unconstrained_descendants_need_the_exact_inactive_platform_ancestor(self):
+        self.optional_ancestry()
+        result = self.prepared()
+        self.assertEqual(set(result["expected"]), {"a@1.0.0"})
+        inherited = [row for row in result["platform_exclusions"]
+                     if row["reason"] == "optional ancestor platform mismatch"]
+        self.assertEqual(inherited, [
+            {"path": "node_modules/layer", "reason": "optional ancestor platform mismatch",
+             "ancestors": ["node_modules/native"]},
+            {"path": "node_modules/runtime", "reason": "optional ancestor platform mismatch",
+             "ancestors": ["node_modules/native"]},
+        ])
+
+    def test_required_shared_path_prevents_an_inherited_platform_exclusion(self):
+        self.optional_ancestry()
+        self.packages["node_modules/a"]["dependencies"] = {"runtime": "1.0.0"}
+        self.add_package("a", "1.0.0", "MIT")
+        with self.assertRaises(FileNotFoundError):
+            self.prepared()
+
+    def test_required_shared_peer_prevents_an_inherited_platform_exclusion(self):
+        self.optional_ancestry()
+        self.packages["node_modules/a"]["peerDependencies"] = {"runtime": "1.0.0"}
+        self.add_package("a", "1.0.0", "MIT")
+        with self.assertRaises(FileNotFoundError):
+            self.prepared()
+
+    def test_copied_foreign_parent_requires_its_transitive_runtime(self):
+        self.optional_ancestry()
+        self.add_package("native", "1.0.0", "MIT")
+        with self.assertRaises(FileNotFoundError):
+            self.prepared()
+
+    def test_copied_intermediate_cannot_hide_an_absent_runtime(self):
+        self.optional_ancestry()
+        self.add_package("layer", "1.0.0", "MIT")
+        with self.assertRaisesRegex(ValueError, "Required dependency target excluded"):
+            self.prepared()
+
+    def test_disconnected_foreign_metadata_cannot_excuse_a_missing_optional_package(self):
+        self.optional_ancestry()
+        del self.packages["node_modules/a"]["optionalDependencies"]
+        self.add_package("a", "1.0.0", "MIT")
+        with self.assertRaises(FileNotFoundError):
+            self.prepared()
+
+    def test_optional_flag_is_required_even_below_an_inactive_platform_branch(self):
+        self.optional_ancestry()
+        del self.packages["node_modules/runtime"]["optional"]
+        with self.assertRaises(FileNotFoundError):
+            self.prepared()
+
+    def test_two_platform_ancestors_reconcile_the_complete_shared_descendant_identity(self):
+        self.optional_ancestry()
+        self.packages["node_modules/a"]["optionalDependencies"]["native2"] = "1.0.0"
+        self.add_package("a", "1.0.0", "MIT")
+        self.packages["node_modules/native2"] = {
+            "version": "1.0.0", "optional": True, "cpu": ["foreign-cpu"],
+            "dependencies": {"layer": "1.0.0"},
+        }
+        result = self.prepared()
+        inherited = [row for row in result["platform_exclusions"]
+                     if row["reason"] == "optional ancestor platform mismatch"]
+        self.assertEqual([row["path"] for row in inherited],
+                         ["node_modules/layer", "node_modules/runtime"])
+        self.assertEqual([row["ancestors"] for row in inherited],
+                         [["node_modules/native", "node_modules/native2"]] * 2)
+
+    def test_a_cycle_below_an_inactive_branch_keeps_the_exact_complete_inventory(self):
+        self.optional_ancestry()
+        self.packages["node_modules/runtime"]["dependencies"] = {"layer": "1.0.0"}
+        self.assertEqual(set(self.prepared()["expected"]), {"a@1.0.0"})
+
+    def test_every_copied_descendant_is_covered_even_when_its_ancestor_is_inactive(self):
+        self.optional_ancestry()
+        self.add_package("runtime", "1.0.0", "GPL-3.0-only")
+        result = self.prepared()
+        self.assertEqual(set(result["expected"]), {"a@1.0.0", "runtime@1.0.0"})
+        self.assertEqual(result["expected"]["runtime@1.0.0"][0]["license"], "GPL-3.0-only")
+        verdict = self.verify({**self.report(), "runtime@1.0.0": {
+            "licenses": "GPL-3.0-only", "path": str(self.root / "node_modules/runtime"),
+        }}, result)
+        self.assertEqual(verdict["denied"],
+                         [{"identity": "runtime@1.0.0", "license": "GPL-3.0-only"}])
+        output = self.root / "evidence"
+        output.mkdir()
+        (output / "inventory.json").write_text(json.dumps(result), encoding="utf-8")
+        (output / "license-report.json").write_text(json.dumps({
+            **self.report(), "runtime@1.0.0": {
+                "licenses": "GPL-3.0-only", "path": str(self.root / "node_modules/runtime"),
+            },
+        }), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            status = coverage.main(["verify", "--root", str(self.root), "--output", str(output),
+                                    "--scanner-package", str(self.scanner())])
+        self.assertEqual(status, 1)
+        self.assertEqual(json.loads((output / "verification.json").read_text(encoding="utf-8"))["denied"],
+                         [{"identity": "runtime@1.0.0", "license": "GPL-3.0-only"}])
+
     def test_required_foreign_platform_is_not_ignored(self):
         self.packages["node_modules/a"]["os"] = ["foreign-os"]
         with self.assertRaisesRegex(ValueError, "Required production package incompatible"):

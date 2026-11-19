@@ -41,6 +41,7 @@ WORKDIR /app
 # stage copies a separately pruned dependency tree.
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
+COPY apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz /app/apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs ci --no-audit --no-fund
 
 FROM deps AS prod-deps
@@ -76,6 +77,7 @@ COPY tests/e2e/support/cost-controls.ts /app/tests/e2e/support/cost-controls.ts
 COPY tests/e2e/support/public-release-identity.ts /app/tests/e2e/support/public-release-identity.ts
 COPY tests/e2e/support/ip-import-acknowledgements.ts /app/tests/e2e/support/ip-import-acknowledgements.ts
 COPY tests/e2e/support/ip-portfolio-export-completion.ts /app/tests/e2e/support/ip-portfolio-export-completion.ts
+COPY tests/e2e/support/ip18-owned-view-cleanup.ts /app/tests/e2e/support/ip18-owned-view-cleanup.ts
 # The communications contract unit parses its dated journey as an AST input.
 # Retain that source and its exact transitive imports in the builder only.
 COPY tests/e2e/ram-2026-11-11-bugs.spec.ts /app/tests/e2e/ram-2026-11-11-bugs.spec.ts

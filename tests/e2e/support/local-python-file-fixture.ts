@@ -16,12 +16,17 @@ const programs = ["draft_pdf_fixture_20261111.py", "ram_batch3_draft_fixture.py"
 const wrapper = `def _caseops_file_fixture():
     import io, json, sys, types
     bundle = json.load(sys.stdin)
+    predicate = globals().get('__caseops_is_owned_fixture_database__')
+    if callable(predicate):
+        from pathlib import PureWindowsPath
+        bundle['main_file'] = '/app/tests/e2e/support/' + PureWindowsPath(bundle['main_file']).name
+        for item in bundle['modules']:
+            item['file'] = '/app/tests/e2e/support/' + PureWindowsPath(item['file']).name
     try:
         modules = [(item, compile(item['source'], item['file'], 'exec')) for item in bundle['modules']]
         main = compile(bundle['main_source'], bundle['main_file'], 'exec')
     except (SyntaxError, ValueError, TypeError):
         raise SystemExit('Invalid local fixture source.') from None
-    predicate = globals().get('__caseops_is_owned_fixture_database__')
     sys.stdin = io.StringIO(bundle['original_stdin'])
     sys.argv[:] = [bundle['main_file']]
     for item, code in modules:

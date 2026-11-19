@@ -1,5 +1,16 @@
 # CaseOps agent instructions
 
+- A server-confirmed profile status and its derived intake availability must
+  reach the UI together. A badge update with an old global count can collapse
+  a form after a reader scrolls. Return actor-visible counts under the existing
+  writer fences before commit; never infer them from a loaded page. Prove
+  cross-docket/tenant scope, quota eligibility and a failed read's actual rollback.
+- A bundled fixture's host filename is not a Linux execution path. Preserve
+  inspected source bytes and host execution identities; map virtual filenames
+  only after the core helper proves its owned Docker interpreter/database.
+  Regress Windows and POSIX callers, module/main identity, stdin and the real
+  affected journeys without loosening ownership, expiry or provider fences.
+
 - Receiving a complete HTTP response does not prove the server handler has
   finished its cleanup or journal publication. Test fixtures that inspect those
   effects must await actual handler completion within the existing request
@@ -4436,3 +4447,36 @@ requirements when using the fallback.
   pin. Preserve frozen/hash-locked dependency and source-layer ordering tests;
   run every affected deployment and packaging module together before certifying
   the release. Publishing a pending branch is not a passing verification claim.
+- A matcher hang witness must acknowledge readiness and actual match entry.
+  Preserve inherited trust startup in its existing bounded preparation phase,
+  then start the unchanged matching budget from the admitted trigger. A cold
+  startup refusal is unentered evidence. Never remove inherited trust or
+  increase the matching deadline to turn that refusal into a green result.
+- A package without platform constraints can inherit an inactive optional
+  ancestor's constraints. Excuse its absence only with complete production
+  reachability proof; a shared required or peer path keeps it required. Every
+  physically copied package still needs exact licence coverage and policy
+  admission. A disconnected foreign ancestor or optional flag alone proves
+  nothing, and a copied ancestor cannot hide a missing required child.
+- A targeted dependency repair must preserve unrelated reviewed native SDK
+  identities. Reconcile every held-source pin, launcher and archive catalogue
+  after legitimate input changes. Pin hash-bound manifest/lock line endings,
+  reproduce canonical installer bytes and keep a same-length stale-source
+  negative control; a checkout-normalized digest is not source admission.
+- A licence catalogue update must reconcile the independent literal browser
+  component and notice inventories as well as page units and image checks.
+  Replay the complete public-content browser file before freezing another
+  expensive release gate. A count failure leaves all later byte, keyboard,
+  download and responsive assertions unverified; retain the original failure.
+- Extending matcher safety must retain every upstream safe refusal. Regress
+  non-divisible repeated-character and repeated-word alternatives, alongside
+  ordinary non-overlapping forms, on the actual supported runtimes. Preserve
+  the rejected backport's acknowledged match-entry failure and the original
+  matching budget; clean advisory scans do not prove this runtime property.
+
+- Native discovery limits include cold startup and complete collection. Keep
+  their bounds unchanged and isolate the inventory's execution group from
+  competing coverage files. Inline inherited include arrays can concatenate:
+  prove the actual disjoint file union before running the full gate, then
+  prove native group ordering and every original identity. Preserve an earlier
+  source-identical hosted failure even when a local complete run passed.

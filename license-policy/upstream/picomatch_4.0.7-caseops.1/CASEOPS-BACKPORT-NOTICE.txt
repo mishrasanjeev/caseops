@@ -1,0 +1,19 @@
+picomatch 4.0.7-caseops.1: private CaseOps security backport, not an upstream release.
+Original picomatch 4.0.7: https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz
+Original MIT licence/copyright in LICENSE is retained byte-for-byte.
+
+GHSA-fc5q-39xc-vjpf / CVE-2026-112366 remains open upstream, with no
+published patched version. This package extends the existing repeated-extglob
+safety policy: branches containing an unescaped, unquoted glob star outside
+character classes, and repeated literal alternatives such as ab|abab, use the
+existing literalization path. Common non-overlapping extglobs remain functional.
+The backslash-removal helper uses monotonic linear lookahead instead of an
+ambiguous unanchored bracket regex. Bracket, escape and line-break output is
+preserved. All other runtime files and public APIs are unchanged. The existing explicitly
+unsafe maxExtglobRecursion:false opt-out remains for trusted patterns only.
+This is not a guarantee that arbitrary user-supplied regex/glob programs are safe.
+
+The distinct private version identifies modified source, not an upstream fix or
+a scanner waiver. Retain the original failed audits and bounded native negative
+controls. Installation, upstream-input hashes, deterministic rebuilding and
+real consumer/runtime regressions are required separately from audit results.

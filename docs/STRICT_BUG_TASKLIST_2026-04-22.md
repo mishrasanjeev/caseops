@@ -1,3 +1,50 @@
+## November18 — journal availability and Docker fixture filename failures
+
+**Partially fixed / Inconclusive; NO-GO.** Exact7c6c Docker04 passes4202
+PostgreSQL cases and12606 phases, but desktop728 has712 passes/13 skips/3
+failures and mobile64 is unexecuted. Preserve all native/std reports, the
+original15-second viewport rejection and both pre-UI IndexErrors.
+
+UJ-21/IP-WATCH-01/02: the profile badge changes before the stale intake count.
+The repair returns a count from the existing actor-visible intake predicate
+under writer locks, resolves the response before commit, and updates profile
+and count together. SQLite checks cover global counts across dockets, foreign
+principals, quota-paused eligibility and fresh persisted rollback/audit reads.
+Two controlled frontend cases reject the exact old page and pass the repair
+while the refetch notification is held. The original browser assertions and
+deadlines remain unchanged and still require a complete native replay.
+
+IPLF-062/J14/M14: the bundled fixture's Windows __file__ is not a Linux path.
+The guarded adapter now gives owned Docker execution a canonical virtual path;
+host identities, exact source bytes, stdin, module fences and budgets remain.
+Five actual-wrapper controls retain3 red assertions and pass after repair;
+both actual retained-history browser bodies remain pending. Full affected
+SQLite coverage passes68 cases/two subtests; five PostgreSQL cases remain due.
+See [the evidence record](security/production-verification-2026-11-17.md).
+
+## November17 — production reference fixture and dependency verification
+
+**Partially fixed / Inconclusive; NO-GO for complete release certification.**
+Mainacff is live and three operational schedules resumed. Production run44011493757
+retains84 tester passes,13 skips and four setup failures: the new official IP
+reference cases call a test-legal-only helper with the QA-bot suite's account.
+The IP page assertions were not reached. Move these four cases into the
+existing serialized reporting role, preserving the helper, tenant fence,
+all original UI checks and complete176-case semantic union. The earlier
+credential-binding alternative and its interrupted gate remain incomplete. Fresh audit also flags
+Next16.4.2; the replacement pins16.4.6 and must reconcile its complete runtime,
+compiler, license and TLS fixture closure. Complete CI, source/native/browser
+replay and production QA remain required. Projection cadence stays held.
+See [retained evidence and remaining checks](security/production-verification-2026-11-17.md).
+
+Windows follow-up remains **Partially fixed / Inconclusive**. Head6967 hosted
+CI is green; its full workstation run retains3181passes/three native failures.
+Preserve that evidence. The candidate cancels and joins failed native work,
+keeps all startup/TLS/browser budgets, and adds whole Windows CI coverage.
+The exact approved two-view cleanup is completed and audited; other48 views
+are unchanged. The IP18 journey's own cleanup is source-covered but full
+deployed replay is pending. No complete release or scheduler-resume credit.
+
 ## November14 — CI optional notice audit consumer
 
 Partially fixed / NO-GO. CI43556303195/shard4 failed the optional telemetry notice test's old --extra observability expectation after main moved to --all-extras. The complete five-case red module reproduces4pass/1failure. Update only the exact expected command; all eight related modules then pass149cases without skips, with notices, strict installed auditing and negative guards preserved. Hosted replacement and full native acceptance remain due. See the dated native V1 setup document for exact evidence.
@@ -7377,3 +7424,86 @@ private repacks, strict negative and all17 positive compatibility checks; it
 grants no app/native/store credit. Fresh final source/CI/build acceptance and
 complete83 cases per platform, physical checks and signing/promotion remain
 required. See [dated evidence and boundaries](mobile/NATIVE_FILES_CANCEL_CAPACITY_2026-11-15.md).
+
+### 2026-11-18 — PR624 browser gate and independent transport repair
+
+**Inconclusive; release NO-GO.** The complete Windows PostgreSQL inventory at
+head9a89 passes4202tests/12606phases. The following browser shard records
+360passes/8declared skips/one Admin navigation timeout; later desktop/mobile
+shards are unverified. Preserve this failure and the unidentified historical
+cause, including26 diagnostic probes that did not reproduce it.
+Separately, actual loopback HTTP receipts reproduce missing no-paid headers
+on original standalone app-spine API contexts. All four constructors now use
+the shared marked context; two new units prove real happy/failed/retried
+requests without changing authentication, payloads, assertions or deadlines.
+This transport repair is not a causal claim about Admin navigation. Complete
+replacement source-bound gates and deployed QA remain required; projection
+maintenance stays paused. See
+[dated evidence](security/production-verification-2026-11-17.md).
+
+
+## 2026-11-18 — PR624 dependency security blocker
+
+Partially implemented / Inconclusive / NO-GO. Newly reviewed picomatch
+advisory data rejects b28. The private parser backport, exact installer
+compatibility, native negative controls and preserved failures require fresh
+complete source/platform/frontend/Docker/CI acceptance before merge. Full
+exact-serving production QA and the guarded projection resume remain pending.
+See [current evidence and boundaries](security/picomatch-security-2026-11-18.md).
+
+
+## 2026-11-18 — PR624 pruned inventory and bounded matcher follow-up
+
+Partially implemented / Inconclusive / NO-GO. Exact head92 source checks pass
+871 cases with five declared POSIX skips; native frontend passes3203/313,
+with the original stale-count wrapper refusal retained. The corrected actual
+pruned musl licence audit covers127 identities/161 copies and native Sharp
+pixels;151 offline regressions keep copied GPL and shared required paths
+closed. Matcher startup retains inherited trust while matching keeps its
+one-second bound. The successor restores unrelated native SDK identities
+and rebinds canonical source bytes. Fresh final CI, full Docker, exact-serving
+production QA and guarded projection recovery remain required. See the
+[source-bound follow-up](security/dependency-release-followup-2026-11-18.md).
+
+### November18 PR624: separate CodeQL verdict still NO-GO
+
+Headcd13 passed full frontend3203/313 and Windows release harness871P/5
+explicit POSIX skips, but alert879 exposes quadratic backslash removal and
+note880 a duplicate unittest import. Retain the successful analysis jobs and
+failed separate alert verdict. The isolated replacement has native original/
+repaired controls and exact-output coverage; full current-head security,
+source, Docker, production QA and guarded scheduler recovery remain pending.
+See docs/security/dependency-release-followup-2026-11-18.md. No deployment,
+projection resume, scanner exception or completed release is claimed.
+
+### November18 PR624: public notice browser inventory correction
+
+Inconclusive / NO-GO. Head6c09 CI retained706P/20 explicit skips/2 failures:
+both public-content viewport journeys expected12/15 instead of the catalogue
+and page units'14 components/18 notices. Only the two literal browser counts
+are corrected; the full original per-notice byte/hash/keyboard/responsive
+journey still requires replay. Docker03 retained1577 completed PostgreSQL
+cases and an interrupted fourth group; all local browser shards remain
+unverified. Complete replacement gates and exact-serving production QA are
+pending. See docs/security/dependency-release-followup-2026-11-18.md.
+### November18 PR624: independent P1 matcher review
+
+Verdict: Partially fixed; NO-GO. GitHub comment4613399770 reports25ab's loss
+of the old `aa|aaa` safety guard. Real native controls reproduce acknowledged
+entry and the original1s deadline refusal; the isolated repair passes the
+full security cases8+8 and producer12 while preserving the original controls.
+Installed closure and all complete current-source release/production gates
+remain unverified. Docker05's complete526 cases and partial276 bodies are
+scoped history; no whole pass or deployment is claimed. See
+[the overlap handoff](security/matcher-overlap-2026-11-18.md).
+
+## November18 - bounded Windows App inventory constructor
+
+**Partially fixed / Inconclusive; NO-GO.** Preserve native hosted cb734abf
+failure ETIMEDOUT at the15-second App collector:3201 passes/seven unreached
+cases/one failed suite across313 files. Local3208/313 does not supersede it.
+The repair isolates the complete51-case source file before the unchanged312
+ordinary files, keeps existing worker trust and every deadline, and adds two
+single-attempt failure controls. Native partition and focused51 cases pass;
+complete new grouped coverage, hosted Windows/Linux and production evidence
+remain required. See [bounded native inventory scheduling](security/frontend-inventory-scheduling-2026-11-18.md).

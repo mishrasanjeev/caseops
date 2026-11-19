@@ -3460,8 +3460,9 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  // Includes the explicit Chromium install before the web native-worker tests.
-  assert.equal(setupCount, 19); assert.equal(commandCount, 201);
+  // Includes the explicit Chromium install and the five independently scoped
+  // commands in the complete Windows frontend gate; every old command remains.
+  assert.equal(setupCount, 20); assert.equal(commandCount, 208);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');
@@ -3687,7 +3688,7 @@ function iosProjectionFixture() {
   const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
     podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
   const npmRoot = policy.nodeNpm.parent + '/caseops-npm-ABC123';
-  admitted.npmRuntime = { root: npmRoot, files: 2149, inventory: { entries: 2600, observations: 7800 },
+  admitted.npmRuntime = { root: npmRoot, files: 2154, inventory: { entries: 2605, observations: 7815 },
     environment: { CASEOPS_PINNED_NPM_NODE: policy.tools.node.path, CASEOPS_PINNED_NPM_ROOT: npmRoot,
       CASEOPS_PINNED_NPM_ENTRY: npmRoot + '/caseops-entry.mjs', CASEOPS_PINNED_NPM_BOOTSTRAP: 'SYNTHETIC-REVIEWED-NPM-BOOTSTRAP',
       CASEOPS_PINNED_NPM_CLI_SHA256: '4'.repeat(64), CASEOPS_PINNED_NPX_CLI_SHA256: '5'.repeat(64), CASEOPS_PINNED_NPM_DEADLINE: String(policy.deadlineEpochMs),
@@ -6332,7 +6333,9 @@ test('iOS npm version uses the actual held public constructor and deregisters it
     const held = readIosHostInput(f.policy.helper, { maxBytes: 131072 }); let m;
     try { m = await import('data:text/javascript;base64,' + held.bytes.toString('base64')); } finally { held.bytes.fill(0); }
     f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
-    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2600, observations: 7800, bytesRead: 31910612 });
+    // Both full payload reads include the archive, registry entry and two POSIX shims.
+    // 2 * (16023946 + 8542 + 113 + 113); archive-only bytes are not the complete inventory.
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2605, observations: 7815, bytesRead: 32065428 });
     assert.equal(registered, 1); assert.equal(deregistered, 1);
     const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
     fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');
@@ -6380,15 +6383,23 @@ test('iOS local archive admission accepts the current full lock and refuses stal
   Object.assign(old.packages['node_modules/node-forge'], { version: '1.4.1',
     resolved: 'https://registry.npmjs.org/node-forge/-/node-forge-1.4.1.tgz',
     integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
+  const staleForgeBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
+  assert.equal(staleForgeBytes.length, bytes.length);
+  assert.equal(createHash('sha256').update(staleForgeBytes).digest('hex'), '34022fda1a86525457ee5486661b06fa5dbfe82dc89c7de0f7d5b272d65b0858');
+  // Retain the earlier exact stale-lock witness as well as the current lock
+  // with only node-forge reverted. A matcher repair must not relabel history.
+  old.packages['node_modules/picomatch'].integrity = 'sha512-kf1q+F+yNl2zOpKF1y8Ly4RMctOJ16lEmH8qPJKKh1HkSnGWx+JToOcBOu+5C4T7aNk6Gk7dv+o8b/wq563ASw==';
   const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
   assert.equal(oldBytes.length, bytes.length);
-  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), 'd15da4b402622883d58f0c61cd5b8fd7bc95cb36bb8ead1b3cc46b1b596c5def');
-  try {
-    fs.writeFileSync(lock, oldBytes);
-    fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
-    assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
-  } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
-  assert.equal(archiveOpens, 0);
+  assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '53c67dc370ed29978716f044794098ef3f67ad16cb888eab02c3618a7df72cdc');
+  for (const rejectedBytes of [oldBytes, staleForgeBytes]) {
+    try {
+      fs.writeFileSync(lock, rejectedBytes);
+      fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
+      assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
+    } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
+    assert.equal(archiveOpens, 0);
+  }
   try { fs.writeFileSync(lock, Buffer.concat([bytes, Buffer.from('\n')]));
     fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
     assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_FILE_IDENTITY/);

@@ -111,7 +111,8 @@ describe("finite local Python file fixture adapter", () => {
     const wrapper = vi.mocked(runLocalPythonFixture).mock.calls[0][1][1];
     expect(wrapper.indexOf("main = compile(bundle['main_source']")).toBeLessThan(wrapper.indexOf("exec(code,"));
     expect(wrapper).toContain("predicate = globals().get('__caseops_is_owned_fixture_database__')");
-    expect(wrapper.match(/if callable\(predicate\):/g)).toHaveLength(2);
+    // One owned-container filename mapping plus the two namespace fences.
+    expect(wrapper.match(/if callable\(predicate\):/g)).toHaveLength(3);
     expect(wrapper.match(/module\.__dict__\['__caseops_is_owned_fixture_database__'\] = predicate/g)).toHaveLength(2);
     expect(wrapper).toContain("types.ModuleType(item['name'])");
     expect(wrapper).toContain("sys.modules[item['name']] = module");

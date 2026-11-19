@@ -6,6 +6,7 @@ import { expect, test } from "./support/prod-diagnostic-test";
 import { localTransportHeaders } from "./support/cost-controls";
 import { prepareIp15Workspace, type Ip15Workspace } from "./support/ip15-workspace";
 import { type PortfolioExportCompletion, waitForPortfolioExport } from "./support/ip-portfolio-export-completion";
+import { cleanupOwnedIp18View, type Ip18CleanupView, type OwnedIp18View } from "./support/ip18-owned-view-cleanup";
 
 test.use({ extraHTTPHeaders: async ({ baseURL }, use) => {
   if (!baseURL) throw new Error("IP15 requires a configured baseURL.");
@@ -80,149 +81,185 @@ for (const width of [1280, 393]) {
     async ({ page, request, baseURL }) => {
       test.setTimeout(240_000);
       const workspace = await prepareIp15Workspace(page, request, baseURL, width);
-      const fixture = await sourceFixture(workspace, request);
-      // B4-ADJ-42: the same filters without the search reach every retained source in the
-      // tenant. test-legal keeps every run's fixtures, and filtering the unanalyzed fact
-      // columns planned a per-docket rescan that grew toward the 60 s statement timeout.
-      const unnarrowed = { application_date_from: "2020-01-01", application_date_to: "2020-12-31" };
-      const reads: Array<[string, string, Record<string, string | number>]> = [
-        ["tracker", "/api/ip/portfolio", { ...unnarrowed, renewal_tracker_state: "missing", limit: 50 }],
-        ["tracker-families", "/api/ip/portfolio/families", { ...unnarrowed, renewal_tracker_state: "missing" }],
-        ["dates", "/api/ip/portfolio", { ...unnarrowed, limit: 50 }],
-      ];
-      const readMs: Record<string, number> = {};
-      for (const [label, path, params] of reads) {
-        const started = performance.now();
-        const response = await request.get(`${workspace.api.origin}${path}`, { headers: workspace.headers, params, timeout: 60_000 });
-        readMs[label] = Math.round(performance.now() - started);
-        const body = await json<{ counts?: { total: number } }>(response);
-        if (body.counts) expect(body.counts.total).toBeGreaterThanOrEqual(fixture.missingIds.length);
+      let ownedView: OwnedIp18View | undefined;
+      let bodyFailed = false;
+      let bodyFailure: unknown;
+      const cleanupFailures: unknown[] = [];
+      try {
+        const fixture = await sourceFixture(workspace, request);
+        // B4-ADJ-42: the same filters without the search reach every retained source in the
+        // tenant. test-legal keeps every run's fixtures, and filtering the unanalyzed fact
+        // columns planned a per-docket rescan that grew toward the 60 s statement timeout.
+        const unnarrowed = { application_date_from: "2020-01-01", application_date_to: "2020-12-31" };
+        const reads: Array<[string, string, Record<string, string | number>]> = [
+          ["tracker", "/api/ip/portfolio", { ...unnarrowed, renewal_tracker_state: "missing", limit: 50 }],
+          ["tracker-families", "/api/ip/portfolio/families", { ...unnarrowed, renewal_tracker_state: "missing" }],
+          ["dates", "/api/ip/portfolio", { ...unnarrowed, limit: 50 }],
+        ];
+        const readMs: Record<string, number> = {};
+        for (const [label, path, params] of reads) {
+          const started = performance.now();
+          const response = await request.get(`${workspace.api.origin}${path}`, { headers: workspace.headers, params, timeout: 60_000 });
+          readMs[label] = Math.round(performance.now() - started);
+          const body = await json<{ counts?: { total: number } }>(response);
+          if (body.counts) expect(body.counts.total).toBeGreaterThanOrEqual(fixture.missingIds.length);
+        }
+        await test.info().attach("b4-adj-42-unnarrowed-read-ms", { body: JSON.stringify(readMs), contentType: "application/json" });
+        expect(Math.max(...Object.values(readMs)), JSON.stringify(readMs)).toBeLessThan(15_000);
+        await page.goto(`${workspace.web.origin}/app/ip/portfolio`);
+        const columns = page.getByRole("button", { name: "Choose portfolio columns", exact: true });
+        await columns.click();
+        const menu = page.getByRole("menu");
+        const labels = menu.locator("label");
+        expect(await labels.count()).toBeGreaterThanOrEqual(3);
+        // Mark is pinned (always shown, first column), so its option is checked and cannot be cleared.
+        const pinnedMark = menu.getByRole("checkbox", { name: "Mark (always shown)", exact: true });
+        await expect(pinnedMark).toBeChecked();
+        await expect(pinnedMark).toBeDisabled();
+        for (const label of await labels.all()) {
+          const name = (await label.innerText()).trim();
+          if (name === "Mark (always shown)") continue;
+          const checkbox = label.getByRole("checkbox");
+          if (["Application Date", "Renewal Due Date"].includes(name)) await checkbox.check();
+          else await checkbox.uncheck();
+        }
+        await page.keyboard.press("Escape");
+        await expect(menu).toHaveCount(0);
+        await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
+        const tracker = page.getByRole("region", { name: "Deadline tracker", exact: true });
+        await tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true }).fill(fixture.prefix);
+        await tracker.getByRole("button", { name: "Search renewal tracker", exact: true }).click();
+        await tracker.getByLabel("Application Date from", { exact: true }).fill("2020-01-01");
+        await tracker.getByLabel("Application Date to", { exact: true }).fill("2020-12-31");
+        await select(page, "Renewal tracker category", "Missing Renewal Date");
+        await expect(tracker.locator("tbody tr")).toHaveCount(50);
+        await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
+        await expect(tracker.locator("tbody tr")).toHaveCount(51);
+        expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
+        await expect(tracker.getByRole("button", { name: "Load more renewal records" })).toHaveCount(0);
+        await expect(tracker.getByText("Verified", { exact: true })).toHaveCount(0);
+        const filters = { query: fixture.prefix, application_date_from: "2020-01-01",
+          application_date_to: "2020-12-31", renewal_tracker_state: ["missing"] };
+        const apiPage = await json<TrackerPage>(await request.get(`${workspace.api.origin}/api/ip/portfolio/renewal-tracker`, {
+          headers: workspace.headers, params: { query: fixture.prefix, application_date_from: "2020-01-01",
+            application_date_to: "2020-12-31", category: "missing", limit: 50 },
+        }));
+        expect(apiPage.rows).toHaveLength(50);
+        expect(apiPage.next_cursor).toBeTruthy();
+        expect(apiPage.counts.missing).toBe(51);
+        expect(apiPage.rows.every(row => row.source_application_state === "imported_unverified"
+          && row.source_renewal_state === "missing")).toBe(true);
+        await page.getByRole("button", { name: "Family view", exact: true }).click();
+        const families = page.getByRole("region", { name: "Application families", exact: true });
+        await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(25);
+        for (const count of [50, 51]) {
+          await families.getByRole("button", { name: "Load more families", exact: true }).click();
+          await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(count);
+        }
+        expect((await docketIds(families)).sort()).toEqual([...fixture.missingIds].sort());
+        await expect(families.getByRole("button", { name: "Load more families", exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
+        await expect(tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true })).toHaveValue(fixture.prefix);
+        await expect(tracker.getByLabel("Application Date from", { exact: true })).toHaveValue("2020-01-01");
+        await expect(tracker.getByLabel("Application Date to", { exact: true })).toHaveValue("2020-12-31");
+        const viewName = `IP18 dates ${workspace.run}`;
+        await page.getByRole("button", { name: "Save view", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Save current view", exact: true });
+        await dialog.getByLabel("View name", { exact: true }).fill(viewName);
+        const saved = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/views"
+          && response.request().method() === "POST");
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
+        const savedResponse = await saved;
+        expect(savedResponse.status()).toBe(201);
+        const savedView = await savedResponse.json();
+        // Capture only an acknowledged, uniquely named server ID; never search by
+        // a prefix or infer an identity from the submitted name during cleanup.
+        expect(savedView.id).toMatch(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+        expect(savedView.name).toBe(viewName);
+        expect(savedView.version).toBe(1);
+        ownedView = { id: savedView.id, name: savedView.name, version: savedView.version };
+        expect(savedView.filters).toMatchObject(filters);
+        expect(savedView.columns).toEqual(["mark", "application_date", "renewal_due_date"]);
+        await expect(dialog).toHaveCount(0);
+        await tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true }).fill("IP18 deliberately no matching source");
+        await tracker.getByRole("button", { name: "Search renewal tracker", exact: true }).click();
+        await expect(tracker.getByText("No matching renewal records", { exact: true })).toBeVisible();
+        await page.reload();
+        await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
+        await select(page, "Saved view", viewName);
+        await expect(tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true })).toHaveValue(fixture.prefix);
+        await expect(tracker.getByLabel("Application Date from", { exact: true })).toHaveValue("2020-01-01");
+        await expect(tracker.locator("tbody tr")).toHaveCount(50);
+        await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
+        await expect(tracker.locator("tbody tr")).toHaveCount(51);
+        expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
+        const previewed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports/preview"
+          && response.request().method() === "POST");
+        await page.getByRole("button", { name: "Export", exact: true }).click();
+        const previewResponse = await previewed;
+        expect(previewResponse.status()).toBe(200);
+        const preview = await previewResponse.json();
+        expect(preview.row_count).toBe(51);
+        expect(preview.truncated).toBe(false);
+        const exportDialog = page.getByRole("dialog", { name: "Confirm portfolio export", exact: true });
+        await expect(exportDialog).toContainText("51 accessible records");
+        const queued = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports"
+          && response.request().method() === "POST");
+        let exportRequests = 0;
+        const countEnqueues = (request: Request) => {
+          const url = new URL(request.url());
+          if (url.origin === workspace.api.origin && url.pathname === "/api/ip/portfolio/exports"
+            && request.method() === "POST") exportRequests++;
+        };
+        page.on("request", countEnqueues);
+        await exportDialog.getByRole("button", { name: "Queue export", exact: true }).click();
+        const queuedResponse = await queued;
+        expect(queuedResponse.status()).toBe(202);
+        const exportJob = await queuedResponse.json();
+        const completed = await waitForPortfolioExport(exportJob.id, async timeout => json<PortfolioExportCompletion>(await request.get(
+          `${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}`, { headers: workspace.headers, timeout })));
+        expect(completed.row_count).toBe(51);
+        expect(exportRequests).toBe(1);
+        page.off("request", countEnqueues);
+        const csv = await request.get(`${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}/download`, { headers: workspace.headers });
+        expect(csv.status()).toBe(200);
+        expect(csv.headers()["cache-control"]).toBe("private, no-store");
+        const lines = (await csv.text()).replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+        expect(lines[0]).toBe("Mark,Application Date,Renewal Due Date");
+        // All controlled fixture cells exclude commas/newlines, so compare exact CSV records.
+        expect(lines.slice(1).sort()).toEqual(fixture.names.map(name => `${name},2020-01-15,`).sort());
+        await expect(exportDialog).toHaveCount(0);
+        await select(page, "Renewal tracker category", "Upcoming Renewals");
+        await tracker.getByLabel("Renewal Due Date from", { exact: true }).fill(fixture.due);
+        await tracker.getByLabel("Renewal Due Date to", { exact: true }).fill(fixture.due);
+        await expect(tracker.locator("tbody tr")).toHaveCount(1);
+        await expect(tracker.getByRole("link", { name: fixture.dueName, exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+        await workspace.release();
+      } catch (error) {
+        bodyFailed = true;
+        bodyFailure = error;
+      } finally {
+        if (ownedView) {
+          try {
+            const receipt = await cleanupOwnedIp18View(ownedView, {
+              release: workspace.release,
+              list: async () => (await json<{ views: Ip18CleanupView[] }>(
+                await request.get(`${workspace.api.origin}/api/ip/portfolio/views`, { headers: workspace.headers, timeout: 10_000 }))).views,
+              remove: async id => {
+                const response = await request.delete(`${workspace.api.origin}/api/ip/portfolio/views/${id}`, { headers: workspace.headers, timeout: 10_000 });
+                expect(response.status(), "Owned IP18 preference cleanup rejected; private response omitted.").toBe(204);
+              },
+            });
+            await test.info().attach("IP18-owned-view-cleanup", { body: JSON.stringify(receipt), contentType: "application/json" });
+          } catch (error) {
+            cleanupFailures.push(error);
+            test.info().annotations.push({ type: "ip18-cleanup-failure", description: "Owned saved-view cleanup incomplete; no automatic replay." });
+          }
+        }
       }
-      await test.info().attach("b4-adj-42-unnarrowed-read-ms", { body: JSON.stringify(readMs), contentType: "application/json" });
-      expect(Math.max(...Object.values(readMs)), JSON.stringify(readMs)).toBeLessThan(15_000);
-      await page.goto(`${workspace.web.origin}/app/ip/portfolio`);
-      const columns = page.getByRole("button", { name: "Choose portfolio columns", exact: true });
-      await columns.click();
-      const menu = page.getByRole("menu");
-      const labels = menu.locator("label");
-      expect(await labels.count()).toBeGreaterThanOrEqual(3);
-      // Mark is pinned (always shown, first column), so its option is checked and cannot be cleared.
-      const pinnedMark = menu.getByRole("checkbox", { name: "Mark (always shown)", exact: true });
-      await expect(pinnedMark).toBeChecked();
-      await expect(pinnedMark).toBeDisabled();
-      for (const label of await labels.all()) {
-        const name = (await label.innerText()).trim();
-        if (name === "Mark (always shown)") continue;
-        const checkbox = label.getByRole("checkbox");
-        if (["Application Date", "Renewal Due Date"].includes(name)) await checkbox.check();
-        else await checkbox.uncheck();
-      }
-      await page.keyboard.press("Escape");
-      await expect(menu).toHaveCount(0);
-      await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
-      const tracker = page.getByRole("region", { name: "Deadline tracker", exact: true });
-      await tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true }).fill(fixture.prefix);
-      await tracker.getByRole("button", { name: "Search renewal tracker", exact: true }).click();
-      await tracker.getByLabel("Application Date from", { exact: true }).fill("2020-01-01");
-      await tracker.getByLabel("Application Date to", { exact: true }).fill("2020-12-31");
-      await select(page, "Renewal tracker category", "Missing Renewal Date");
-      await expect(tracker.locator("tbody tr")).toHaveCount(50);
-      await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
-      await expect(tracker.locator("tbody tr")).toHaveCount(51);
-      expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
-      await expect(tracker.getByRole("button", { name: "Load more renewal records" })).toHaveCount(0);
-      await expect(tracker.getByText("Verified", { exact: true })).toHaveCount(0);
-      const filters = { query: fixture.prefix, application_date_from: "2020-01-01",
-        application_date_to: "2020-12-31", renewal_tracker_state: ["missing"] };
-      const apiPage = await json<TrackerPage>(await request.get(`${workspace.api.origin}/api/ip/portfolio/renewal-tracker`, {
-        headers: workspace.headers, params: { query: fixture.prefix, application_date_from: "2020-01-01",
-          application_date_to: "2020-12-31", category: "missing", limit: 50 },
-      }));
-      expect(apiPage.rows).toHaveLength(50);
-      expect(apiPage.next_cursor).toBeTruthy();
-      expect(apiPage.counts.missing).toBe(51);
-      expect(apiPage.rows.every(row => row.source_application_state === "imported_unverified"
-        && row.source_renewal_state === "missing")).toBe(true);
-      await page.getByRole("button", { name: "Family view", exact: true }).click();
-      const families = page.getByRole("region", { name: "Application families", exact: true });
-      await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(25);
-      for (const count of [50, 51]) {
-        await families.getByRole("button", { name: "Load more families", exact: true }).click();
-        await expect(families.locator('[data-testid^="ip-family-"]')).toHaveCount(count);
-      }
-      expect((await docketIds(families)).sort()).toEqual([...fixture.missingIds].sort());
-      await expect(families.getByRole("button", { name: "Load more families", exact: true })).toHaveCount(0);
-      await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
-      await expect(tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true })).toHaveValue(fixture.prefix);
-      await expect(tracker.getByLabel("Application Date from", { exact: true })).toHaveValue("2020-01-01");
-      await expect(tracker.getByLabel("Application Date to", { exact: true })).toHaveValue("2020-12-31");
-      const viewName = `IP18 dates ${workspace.run}`;
-      await page.getByRole("button", { name: "Save view", exact: true }).click();
-      const dialog = page.getByRole("dialog", { name: "Save current view", exact: true });
-      await dialog.getByLabel("View name", { exact: true }).fill(viewName);
-      const saved = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/views"
-        && response.request().method() === "POST");
-      await dialog.getByRole("button", { name: "Save", exact: true }).click();
-      const savedResponse = await saved;
-      expect(savedResponse.status()).toBe(201);
-      const savedView = await savedResponse.json();
-      expect(savedView.filters).toMatchObject(filters);
-      expect(savedView.columns).toEqual(["mark", "application_date", "renewal_due_date"]);
-      await expect(dialog).toHaveCount(0);
-      await tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true }).fill("IP18 deliberately no matching source");
-      await tracker.getByRole("button", { name: "Search renewal tracker", exact: true }).click();
-      await expect(tracker.getByText("No matching renewal records", { exact: true })).toBeVisible();
-      await page.reload();
-      await page.getByRole("button", { name: "Deadline tracker view", exact: true }).click();
-      await select(page, "Saved view", viewName);
-      await expect(tracker.getByRole("textbox", { name: "Search renewal tracker", exact: true })).toHaveValue(fixture.prefix);
-      await expect(tracker.getByLabel("Application Date from", { exact: true })).toHaveValue("2020-01-01");
-      await expect(tracker.locator("tbody tr")).toHaveCount(50);
-      await tracker.getByRole("button", { name: "Load more renewal records", exact: true }).click();
-      await expect(tracker.locator("tbody tr")).toHaveCount(51);
-      expect((await docketIds(tracker)).sort()).toEqual([...fixture.missingIds].sort());
-      const previewed = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports/preview"
-        && response.request().method() === "POST");
-      await page.getByRole("button", { name: "Export", exact: true }).click();
-      const previewResponse = await previewed;
-      expect(previewResponse.status()).toBe(200);
-      const preview = await previewResponse.json();
-      expect(preview.row_count).toBe(51);
-      expect(preview.truncated).toBe(false);
-      const exportDialog = page.getByRole("dialog", { name: "Confirm portfolio export", exact: true });
-      await expect(exportDialog).toContainText("51 accessible records");
-      const queued = page.waitForResponse(response => new URL(response.url()).pathname === "/api/ip/portfolio/exports"
-        && response.request().method() === "POST");
-      let exportRequests = 0;
-      const countEnqueues = (request: Request) => {
-        const url = new URL(request.url());
-        if (url.origin === workspace.api.origin && url.pathname === "/api/ip/portfolio/exports"
-          && request.method() === "POST") exportRequests++;
-      };
-      page.on("request", countEnqueues);
-      await exportDialog.getByRole("button", { name: "Queue export", exact: true }).click();
-      const queuedResponse = await queued;
-      expect(queuedResponse.status()).toBe(202);
-      const exportJob = await queuedResponse.json();
-      const completed = await waitForPortfolioExport(exportJob.id, async timeout => json<PortfolioExportCompletion>(await request.get(
-        `${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}`, { headers: workspace.headers, timeout })));
-      expect(completed.row_count).toBe(51);
-      expect(exportRequests).toBe(1);
-      page.off("request", countEnqueues);
-      const csv = await request.get(`${workspace.api.origin}/api/ip/portfolio/exports/${exportJob.id}/download`, { headers: workspace.headers });
-      expect(csv.status()).toBe(200);
-      expect(csv.headers()["cache-control"]).toBe("private, no-store");
-      const lines = (await csv.text()).replace(/^\uFEFF/, "").trim().split(/\r?\n/);
-      expect(lines[0]).toBe("Mark,Application Date,Renewal Due Date");
-      // All controlled fixture cells exclude commas/newlines, so compare exact CSV records.
-      expect(lines.slice(1).sort()).toEqual(fixture.names.map(name => `${name},2020-01-15,`).sort());
-      await expect(exportDialog).toHaveCount(0);
-      await select(page, "Renewal tracker category", "Upcoming Renewals");
-      await tracker.getByLabel("Renewal Due Date from", { exact: true }).fill(fixture.due);
-      await tracker.getByLabel("Renewal Due Date to", { exact: true }).fill(fixture.due);
-      await expect(tracker.locator("tbody tr")).toHaveCount(1);
-      await expect(tracker.getByRole("link", { name: fixture.dueName, exact: true })).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
-      await workspace.release();
+      // Preserve the original workflow failure even when independent cleanup fails.
+      if (bodyFailed) throw bodyFailure;
+      if (cleanupFailures.length) throw cleanupFailures[0];
     });
 }

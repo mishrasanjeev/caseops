@@ -24,6 +24,22 @@ NODE_MATERIALS = {
     "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt",
     "license-policy/upstream/node_22.23.4/LICENSE",
 }
+NEXT_MATERIALS = {
+    "apps/web/public/third-party-notices/next-16.4.6-LICENSE.txt",
+    "license-policy/upstream/next_16.4.6/LICENSE.md",
+}
+PICOMATCH_MATERIALS = {
+    "apps/web/public/third-party-notices/picomatch-4.0.7-caseops.1-MIT-LICENSE.txt",
+    "apps/web/public/third-party-notices/picomatch-4.0.7-caseops.1-BACKPORT-NOTICE.txt",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/LICENSE",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/CASEOPS-BACKPORT-NOTICE.txt",
+    "license-policy/upstream/picomatch_4.0.7-caseops.1/package.json",
+}
+ARBORIST_MATERIALS = {
+    "apps/web/public/third-party-notices/npm-arborist-9.9.3-ISC-LICENSE.txt",
+    "license-policy/upstream/_npmcli_arborist_9.9.3/LICENSE.md",
+    "license-policy/upstream/_npmcli_arborist_9.9.3/package.json",
+}
 NPM_TOOLING_INPUTS = {
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
@@ -45,6 +61,7 @@ PDF_PUBLIC_NOTICES = {
 }
 BUILDER_INPUTS = {
     "package.json", "package-lock.json", "apps/web/Dockerfile", "apps/web/package.json",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/picomatch-4.0.7-caseops.1.tgz",
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
@@ -55,7 +72,7 @@ BUILDER_INPUTS = {
         "prod-failure-diagnostics", "bounded-network-evidence",
         "prod-api-response-evidence", "cost-controls",
         "public-release-identity", "ip-import-acknowledgements",
-        "ip-portfolio-export-completion", "run-id", "retained-assistant-evidence",
+        "ip-portfolio-export-completion", "ip18-owned-view-cleanup", "run-id", "retained-assistant-evidence",
         "draft_pdf_oracle_20261111",
         "draft_pdf_production_policy_20261111",
         "draft_pdf_production_20261111", "draft_pdf_render_proof_20261111",
@@ -72,6 +89,11 @@ BUILDER_INPUTS = {
 }
 SAFE_WEB_INPUTS = {"apps/web/app/page.tsx", "apps/web/public/fake-safe.txt"}
 SIBLING_CANARIES = {
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/unlisted.txt",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/private/canary.tgz",
+    "apps/mobile/vendor/picomatch-4.0.7-caseops.1/upstream/picomatch-4.0.7.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/arborist-9.9.3.tgz",
+    "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/npm-11.12.1-caseops-security-20261028.tgz",
     "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/src/private-sibling.txt",
     "apps/api/tests/private-sibling.txt", "apps/other-private/canary.txt",
     "apps/api/src/caseops_api/private-sibling.txt",
@@ -119,10 +141,13 @@ class NativeUploadTests(unittest.TestCase):
         if self.evidence:
             self.evidence.mkdir(parents=True, exist_ok=False)
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
-        self.required = {REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *PDF_PUBLIC_NOTICES, *(
-            value["path"] for entry in record["packages"] for value in entry["materials"]
-        )}
-        self.assertEqual(len(self.required), 72)
+        self.required = {
+            REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *NEXT_MATERIALS,
+            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS,
+            *PDF_PUBLIC_NOTICES,
+            *(value["path"] for entry in record["packages"] for value in entry["materials"]),
+        }
+        self.assertEqual(len(self.required), 82)
 
     def files(self, paths):
         for relative in paths:
@@ -161,7 +186,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 57)
+        self.assertEqual(len(operator), 63)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",
@@ -203,7 +228,9 @@ class NativeUploadTests(unittest.TestCase):
 
     def test_colocated_retained_evidence_helper_has_explicit_builder_admission(self):
         helper = "tests/e2e/support/retained-assistant-evidence.ts"
-        test_source = (ROOT / "apps/web/lib/retained-assistant-evidence.test.ts").read_text(encoding="utf-8")
+        test_source = (ROOT / "apps/web/lib/retained-assistant-evidence.test.ts").read_text(
+            encoding="utf-8",
+        )
         self.assertIn('from "../../../tests/e2e/support/retained-assistant-evidence"', test_source)
         self.assertIn(helper, BUILDER_INPUTS)
         dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
@@ -277,7 +304,9 @@ class NativeUploadTests(unittest.TestCase):
             "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts",
             "tests/e2e/support/prod-diagnostic-test.ts",
         ):
-            self.assertTrue(any(source == scope or source.startswith(scope + "/") for scope in scopes))
+            self.assertTrue(
+                any(source == scope or source.startswith(scope + "/") for scope in scopes),
+            )
         canary = "tests/e2e/unlisted.spec.ts"
         self.assertFalse(any(canary == scope or canary.startswith(scope + "/") for scope in scopes))
 
@@ -386,13 +415,18 @@ class NativeUploadTests(unittest.TestCase):
         self.files(safe | SIBLING_CANARIES)
         original = (ROOT / ".dockerignore").read_text(encoding="utf-8")
         controls = {
-            "apps/**": {name for name in SIBLING_CANARIES if name.startswith("apps/other-private/")},
+            "apps/**": {
+                name for name in SIBLING_CANARIES if name.startswith("apps/other-private/")
+            },
             "apps/api/**": {
-                "apps/api/.env", "apps/api/private-sibling.txt", "apps/api/tests/private-sibling.txt",
+                "apps/api/.env", "apps/api/private-sibling.txt",
+                "apps/api/tests/private-sibling.txt",
             },
             "apps/api/src/**": {"apps/api/src/private-sibling.txt"},
             "apps/api/src/caseops_api/**": {"apps/api/src/caseops_api/private-sibling.txt"},
-            "apps/api/src/caseops_api/assets/**": {"apps/api/src/caseops_api/assets/private-sibling.txt"},
+            "apps/api/src/caseops_api/assets/**": {
+                "apps/api/src/caseops_api/assets/private-sibling.txt",
+            },
             "apps/api/src/caseops_api/assets/pdf_fonts/**": {
                 "apps/api/src/caseops_api/assets/pdf_fonts/private-sibling.txt",
                 "apps/api/src/caseops_api/assets/pdf_fonts/LiberationSans-Regular.ttf",
@@ -402,7 +436,9 @@ class NativeUploadTests(unittest.TestCase):
                 "apps/api/vendor/pdf-fonts-20261104/private-sibling.txt",
                 "apps/api/vendor/pdf-fonts-20261104/liberation-fonts-ttf-2.1.5.tar.gz",
             },
-            "apps/api/vendor/uharfbuzz-0.57.0/**": {"apps/api/vendor/uharfbuzz-0.57.0/private-sibling.txt"},
+            "apps/api/vendor/uharfbuzz-0.57.0/**": {
+                "apps/api/vendor/uharfbuzz-0.57.0/private-sibling.txt",
+            },
             "apps/mobile/**": {"apps/mobile/unlisted.txt", "apps/mobile/private/canary.txt"},
             "apps/mobile/vendor/**": {
                 "apps/mobile/vendor/unlisted.txt", "apps/mobile/vendor/other/canary.tgz",
@@ -410,6 +446,13 @@ class NativeUploadTests(unittest.TestCase):
             "apps/mobile/vendor/npm-11.12.1-caseops-security/**": {
                 "apps/mobile/vendor/npm-11.12.1-caseops-security/unlisted.txt",
                 "apps/mobile/vendor/npm-11.12.1-caseops-security/private/canary.tgz",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/npm-11.12.1-caseops-security-20261028.tgz",
+                "apps/mobile/vendor/npm-11.12.1-caseops-security/upstream/arborist-9.9.3.tgz",
+            },
+            "apps/mobile/vendor/picomatch-4.0.7-caseops.1/**": {
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/unlisted.txt",
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/private/canary.tgz",
+                "apps/mobile/vendor/picomatch-4.0.7-caseops.1/upstream/picomatch-4.0.7.tgz",
             },
             "scripts/**": {"scripts/unlisted.txt", "scripts/other-private/canary.txt"},
             "scripts/mobile/**": {

@@ -592,7 +592,10 @@ function ProfilesView({
   });
   const status = useMutation({
     mutationFn: updateIpWatchProfileStatus,
-    onSuccess: async (profile) => { toast.success("Watch profile status updated."); await onConfirmed({ profile }); },
+    onSuccess: async ({ intake_profile_count, ...profile }) => {
+      toast.success("Watch profile status updated.");
+      await onConfirmed({ profile, intakeProfileCount: intake_profile_count });
+    },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update watch profile.")),
   });
   const [profileDocketId, setProfileDocketId] = useState(scopeDocketId);

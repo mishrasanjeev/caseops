@@ -56,7 +56,9 @@ def test_every_playwright_config_blocks_paid_provider_requests() -> None:
 def test_oct13_production_mutations_own_test_legal_credentials_and_release_code() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     selected = [
         step
         for job in workflow["jobs"].values()
@@ -81,9 +83,12 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
     )
     assert "test -f tests/e2e/ram-2026-10-13-ip-portfolio.spec.ts" in step["run"]
     assert "--project=test-legal-write-prod-chromium --workers=1 --retries=0" in step["run"]
-    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     project = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
-    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in project
+    assert (
+        "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC]" in project
+    )
     assert "storageState: { cookies: [], origins: [] }" in project
     evidence_step = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                      if step.get("name") == "Reconcile required native Playwright evidence"]
@@ -100,17 +105,23 @@ def test_oct13_production_mutations_own_test_legal_credentials_and_release_code(
 def test_notes22_production_case_uses_its_required_tenant_project() -> None:
     import yaml
 
-    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     tester = config.split('name: "tester-prod-chromium"', 1)[1].split("name:", 1)[0]
     writer = config.split('name: "test-legal-write-prod-chromium"', 1)[1].split("name:", 1)[0]
     assert (
-        "testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS]"
+        "testIgnore: [RETAINED_INDEX_PROD_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC, WORKSPACE_REQUIREMENTS_SPECS]"
         in tester
     )
-    assert "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC]" in writer
-    source = (REPO_ROOT / "tests/e2e/ram-2026-10-22-prod.spec.ts").read_text()
+    assert (
+        "testMatch: [OCT13_PORTFOLIO_CALENDAR_SPECS, NOTES22_PROD_SPEC, "
+        "OFFICIAL_REFERENCE_PROD_SPEC]" in writer
+    )
+    source = (REPO_ROOT / "tests/e2e/ram-2026-10-22-prod.spec.ts").read_text(encoding="utf-8")
     assert 'if (!local && credentials.company_slug !== "test-legal")' in source
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     step = next(
         item for item in workflow["jobs"]["prod-playwright-shards"]["steps"]
         if item.get("name") == "Run release-owned test-legal portfolio and Calendar regressions"
@@ -128,7 +139,9 @@ def test_notes22_production_case_uses_its_required_tenant_project() -> None:
 def test_batch3_production_gate_owns_source_credentials_and_all_three_native_roles() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     name = "Run release-owned Batch3 client and retained drafting acceptance"
     step = next(item for item in steps if item.get("name") == name)
@@ -153,7 +166,7 @@ def test_batch3_production_gate_owns_source_credentials_and_all_three_native_rol
                      if item.get("name") == "Reconcile required native Playwright evidence")
     required = "required+=(batch3-clients-desktop batch3-clients-mobile batch3-drafts-readonly)"
     assert required in reconcile["run"]
-    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     for project in roles.values():
         block = config.split(f'name: "{project}"', 1)[1].split("name:", 1)[0]
         assert "retries: 0" in block and "dependencies: []" in block
@@ -184,7 +197,9 @@ GOVERNANCE_STATE = {
 def _shard_step(name: str) -> dict:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     matches = [step for step in workflow["jobs"]["prod-playwright-shards"]["steps"]
                if step.get("name") == name]
     assert len(matches) == 1
@@ -194,7 +209,9 @@ def _shard_step(name: str) -> dict:
 def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     names = [step.get("name") for step in steps]
     assert names.index(BATCH4_STEP) == names.index(
@@ -228,7 +245,7 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
         },
     }
     # Every variable the Batch4 production runtime requires is supplied by the step.
-    support = (REPO_ROOT / "tests/e2e/support/ram-bugs4.ts").read_text()
+    support = (REPO_ROOT / "tests/e2e/support/ram-bugs4.ts").read_text(encoding="utf-8")
     for key in ("PROD_API_BASE_URL", "CASEOPS_EXPECTED_RELEASE_SHA", "CASEOPS_RAM_PROD_EMAIL",
                 "CASEOPS_RAM_PROD_PASSWORD"):
         assert f'required("{key}")' in support
@@ -252,7 +269,7 @@ def test_batch4_production_gate_owns_tester_credentials_and_governance_split() -
     assert "batch4-governance)" not in reconcile["run"]
     assert step["run"].count("python scripts/prod_rule_governance_live.py") == 1
     assert 'echo "governance=$governance" >> "$GITHUB_OUTPUT"' in step["run"]
-    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     assert "const BATCH4_GOVERNANCE_SPEC = /ram-2026-10-31-governance-ui\\.spec\\.ts$/;" in config
     for project in BATCH4_ROLES.values():
         block = config.split(f'name: "{project}"', 1)[1].split("name:", 1)[0]
@@ -375,9 +392,11 @@ def _run_offline_step(
         [_git_bash(), "-c", shims + script], cwd=root, env=environment,
         capture_output=True, text=True, timeout=60, check=False,
     )
-    invoked = [line.split() for line in calls.read_text().splitlines()] if calls.exists() else []
-    required = validated.read_text().split() if validated.exists() else []
-    recorded = outputs.read_text().split() if outputs.exists() else []
+    invoked = [line.split() for line in calls.read_text(
+        encoding="utf-8",
+    ).splitlines()] if calls.exists() else []
+    required = validated.read_text(encoding="utf-8").split() if validated.exists() else []
+    recorded = outputs.read_text(encoding="utf-8").split() if outputs.exists() else []
     return result, invoked, required, recorded
 
 
@@ -535,7 +554,9 @@ def test_historical_provider_uat_explicitly_selects_legacy_qa_project() -> None:
 
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/release-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     step = next(item for item in workflow["jobs"]["release-playwright"]["steps"]
                 if item.get("name") == "Run release-mode Playwright (CASEOPS_RELEASE_MODE=true)")
     calls = [shlex.split(line.strip()) for line in step["run"].splitlines()
@@ -805,7 +826,9 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
 def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_gate() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     jobs = workflow["jobs"]
     original = jobs["prod-playwright-shards"]
     assert original["strategy"]["matrix"]["suite"] == [
@@ -874,7 +897,9 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
 def test_tester_budget_split_requires_release_owned_contract_before_either_partition() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     job = workflow["jobs"]["prod-playwright-shards"]
     assert job["strategy"]["matrix"]["suite"][:2] == ["tester", "tester-catalog"]
     steps = {step.get("name"): step for step in job["steps"]}
@@ -927,12 +952,12 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
     assert not (tmp_path / "test-results").exists()
     if release_contract == "current":
         assert result.returncode == 0, result.stderr
-        # Nov7 remains in B5; four Nov14 official-reference cases belong to tester.
+        # Nov7 remains in B5; Nov14 references use the serialized reporting role.
         assert json.loads(result.stdout) == {
             "tester_partition_contract": 3,
-            "partitions": {"tester": 101, "tester-catalog": 18,
+            "partitions": {"tester": 97, "tester-catalog": 18,
                            "tester-index": 6, "test-legal-write-oct13-a": 40,
-                           "test-legal-write-oct13-b": 11},
+                           "test-legal-write-oct13-b": 15},
             "catalog_file": "ram-2026-09-05-bugs.spec.ts",
         }
     else:
@@ -943,7 +968,9 @@ def test_release_owned_tester_split_contract_cli_fails_closed_before_browser(
 def test_public_claims_attestation_requires_exact_release_nonmutating_browser_evidence() -> None:
     import yaml
 
-    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     job = parsed["jobs"]["prod-playwright-shards"]
     assert "public-pages" in job["strategy"]["matrix"]["suite"]
     steps = {step.get("name"): step for step in job["steps"]}
@@ -966,7 +993,7 @@ def test_public_claims_attestation_requires_exact_release_nonmutating_browser_ev
     assert steps["Reconcile required native Playwright evidence"]["env"][
         "PLATFORM_REPORT_READY"
     ] == "${{ steps.platform-report-prerequisites.outputs.ready }}"
-    config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.public-seo.config.ts").read_text(encoding="utf-8")
     assert "public-content\\.spec\\.ts" in config
     assert "seo_demo_20261009\\.spec\\.ts" in config
     assert "marketing\\.spec\\.ts" in config
@@ -986,7 +1013,7 @@ def test_public_claims_attestation_requires_exact_release_nonmutating_browser_ev
 def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     steps = {step.get("name"): step for step in workflow["jobs"]["e2e-projects"]["steps"]}
     execute = steps["Playwright (app config)"]
     assert execute["id"] == "app-playwright"
@@ -1025,7 +1052,9 @@ def test_app_ci_retains_the_complete_native_browser_inventory() -> None:
 def test_web_ci_initializes_only_the_powershell_sdk_before_unchanged_metadata_tests() -> None:
     import yaml
 
-    job = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["web"]
+    job = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(
+        encoding="utf-8",
+    ))["jobs"]["web"]
     steps = job["steps"]
     ready = next(
         step for step in steps if step.get("name") == "Verify PowerShell metadata fixture runtime"
@@ -1043,7 +1072,9 @@ def test_web_ci_initializes_only_the_powershell_sdk_before_unchanged_metadata_te
             "tests/e2e/fixtures/metadata-marker-runtime.ps1"
         ),
     }
-    source = (REPO_ROOT / "tests/e2e/fixtures/metadata-marker-runtime.ps1").read_text()
+    source = (REPO_ROOT / "tests/e2e/fixtures/metadata-marker-runtime.ps1").read_text(
+        encoding="utf-8",
+    )
     for required in (
         "Parser]::ParseInput(", "AssignmentStatementAst",
         "[ScriptBlock]::Create('6 * 7')", "ConvertTo-Json",
@@ -1054,10 +1085,14 @@ def test_web_ci_initializes_only_the_powershell_sdk_before_unchanged_metadata_te
         "Get-Content", "ReadAllText", "scripts/verify-", "Start-Sleep",
     ):
         assert forbidden not in source
-    probe = (REPO_ROOT / "apps/web/lib/verification-metadata-markers.test.ts").read_text()
+    probe = (REPO_ROOT / "apps/web/lib/verification-metadata-markers.test.ts").read_text(
+        encoding="utf-8",
+    )
     assert '"-File", path.join(fixtures, "metadata-marker-probes.ps1"), "-RepoRoot", root' in probe
     assert 'timeout: 30000' in probe
-    assert 'testTimeout: 15_000' in (REPO_ROOT / "apps/web/vitest.config.ts").read_text()
+    assert 'testTimeout: 15_000' in (REPO_ROOT / "apps/web/vitest.config.ts").read_text(
+        encoding="utf-8",
+    )
     assert coverage["run"] == "npm run test:coverage --workspace @caseops/web"
     assert "continue-on-error" not in coverage and "if" not in coverage
 
@@ -1068,7 +1103,7 @@ def test_web_ci_initializes_only_the_powershell_sdk_before_unchanged_metadata_te
 def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_code, project):
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     name = (
         "Playwright (app config)" if stage == "execute"
         else "Reconcile app native Playwright evidence"
@@ -1088,7 +1123,7 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
         env={**os.environ, "OFFLINE_EXIT": str(exit_code)},
     )
     assert result.returncode == exit_code
-    arguments = (tmp_path / "native-arguments").read_text().splitlines()
+    arguments = (tmp_path / "native-arguments").read_text(encoding="utf-8").splitlines()
     assert arguments[:7] == [
         "run", "--project", "apps/api", "--python", "3.13", "python",
         "scripts/prod_playwright_evidence.py",
@@ -1105,7 +1140,9 @@ def test_app_ci_native_commands_preserve_failures_offline(tmp_path, stage, exit_
 def test_public_claims_shell_cannot_run_unreleased_tests_or_hide_native_failure(tmp_path, mode):
     import yaml
 
-    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    parsed = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     step = next(
         step for step in parsed["jobs"]["prod-playwright-shards"]["steps"]
         if step.get("name") == "Run exact-release public SEO read-only acceptance"
@@ -1130,7 +1167,7 @@ def test_public_claims_shell_cannot_run_unreleased_tests_or_hide_native_failure(
     assert (result.returncode == 0) is (mode == "ready")
     assert called.exists() is (mode in {"ready", "failed-wrapper"})
     if called.exists():
-        assert called.read_text().splitlines() == [
+        assert called.read_text(encoding="utf-8").splitlines() == [
             "public-pages", "--config=playwright.public-seo.config.ts", "--workers=1",
             "--retries=0", "--reporter=list", "--output=test-results/public-pages",
         ]
@@ -1178,7 +1215,9 @@ def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
 def test_patent_and_statute_production_phases_are_release_owned_and_bounded() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     by_name = {step.get("name"): step for step in steps}
     check = by_name["Check release-owned patent and statute acceptance"]
@@ -1201,10 +1240,35 @@ def test_patent_and_statute_production_phases_are_release_owned_and_bounded() ->
     assert steps.index(check) < steps.index(patent) < steps.index(statutes)
 
 
+def test_reference_journeys_keep_the_existing_serialized_reporting_credentials() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
+    step = next(item for item in steps if item.get("name") == (
+        "Run release-owned test-legal portfolio and Calendar regressions"
+    ))
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
+    assert step["env"]["CASEOPS_RAM_PROD_PASSWORD"] == (
+        "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}"
+    )
+    assert step["if"] == (
+        "matrix.suite == 'test-legal-write-oct13-a' || "
+        "matrix.suite == 'test-legal-write-oct13-b'"
+    )
+    assert "--workers=1 --retries=0" in step["run"]
+    assert not any("CASEOPS_IP_REFERENCE_PROD_" in key for key in step["env"])
+
+
 def test_notice_acceptance_is_in_the_exact_release_tester_inventory() -> None:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     tester = next(
         step for step in steps
@@ -1223,9 +1287,9 @@ def test_notice_acceptance_is_in_the_exact_release_tester_inventory() -> None:
     )
     assert "--project=tester-prod-chromium --workers=1 --retries=0" in tester["run"]
     for name in ("playwright.app.config.ts", "playwright.prod-ram.config.ts"):
-        config = (REPO_ROOT / name).read_text()
+        config = (REPO_ROOT / name).read_text(encoding="utf-8")
         assert r"/ram-2026-10-08-notices\.spec\.ts$/" in config
-    spec = (REPO_ROOT / "tests/e2e/ram-2026-10-08-notices.spec.ts").read_text()
+    spec = (REPO_ROOT / "tests/e2e/ram-2026-10-08-notices.spec.ts").read_text(encoding="utf-8")
     assert "noPaidProviderHeaders" in spec
     assert "for (const width of [1280, 393])" in spec
     assert "test.skip" not in spec
@@ -1241,7 +1305,9 @@ _INDEX_FIXTURE_KEYS = (
 def _index_fixture_step() -> dict:
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     matches = [
         step for step in workflow["jobs"]["prod-tester-index"]["steps"]
         if step.get("name") == "Run retained indexing and Contract AI production regressions"
@@ -1265,12 +1331,12 @@ def test_every_selected_index_dated_consumer_has_its_required_fixture_keys() -> 
 
     step = _index_fixture_step()
     _assert_index_fixture_environment(step)
-    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     declaration = re.search(r"const RETAINED_INDEX_PROD_SPECS = /(.+)/;", config)
     assert declaration is not None
     pattern = re.compile(declaration.group(1))
     consumers = {
-        path.name: path.read_text()
+        path.name: path.read_text(encoding="utf-8")
         for path in (REPO_ROOT / "tests/e2e").glob("*.spec.ts")
         if pattern.fullmatch(path.name)
     }
@@ -1340,7 +1406,7 @@ def test_index_fixture_guard_admits_all_present_keys_without_printing_values() -
 
 
 def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None:
-    helper = (REPO_ROOT / "tests/e2e/support/patent-acceptance.ts").read_text()
+    helper = (REPO_ROOT / "tests/e2e/support/patent-acceptance.ts").read_text(encoding="utf-8")
     assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in helper
     assert "`${apiBaseUrl}/api/build`" in helper
     assert '/api/release-identity`' in helper
@@ -1360,7 +1426,9 @@ def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None
 
 
 def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
-    spec = (REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts").read_text()
+    spec = (REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts").read_text(
+        encoding="utf-8",
+    )
     assert 'scope: "worker"' in spec
     assert "async ({ sourceApi: api })" in spec
     assert "test.beforeAll" not in spec
@@ -1371,7 +1439,7 @@ def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
 
 
 BROWSER_WORKFLOW_JOBS = {
-    "ci.yml": ("web", "e2e-projects"),
+    "ci.yml": ("web", "e2e-projects", "web-windows"),
     "prod-verify.yml": (
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
@@ -1424,9 +1492,15 @@ def _assert_browser_workflow_runners(workflows: dict, scripts: dict) -> None:
         if any(_browser_command(step.get("run", ""), scripts) for step in job.get("steps", []))
     }
     assert set(actual) == expected, "Complete browser-job inventory changed; review every caller"
-    invalid = [(name, job, value.get("runs-on")) for (name, job), value in actual.items()
-               if value.get("runs-on") != "ubuntu-24.04"]
-    assert not invalid, f"Locked Playwright browser jobs require literal ubuntu-24.04: {invalid}"
+    for (name, job), value in actual.items():
+        runner = (
+            "windows-2025-vs2026" if (name, job) == ("ci.yml", "web-windows")
+            else "ubuntu-24.04"
+        )
+        assert value.get("runs-on") == runner, (
+            f"Locked Playwright browser job {name}/{job} requires literal {runner}: "
+            f"{value.get('runs-on')}"
+        )
 
 
 def test_browser_workflow_jobs_pin_the_locked_playwright_supported_runner() -> None:
@@ -1444,8 +1518,37 @@ def test_browser_runner_contract_rejects_floating_unsupported_or_dynamic_labels(
     workflows, scripts = _browser_workflows()
     for name, jobs in BROWSER_WORKFLOW_JOBS.items():
         for job_id in jobs:
-            workflows[name]["jobs"][job_id]["runs-on"] = "ubuntu-24.04"
+            workflows[name]["jobs"][job_id]["runs-on"] = (
+                "windows-2025-vs2026" if (name, job_id) == ("ci.yml", "web-windows")
+                else "ubuntu-24.04"
+            )
     workflows[workflow]["jobs"][job]["runs-on"] = runner
+    required = (
+        "windows-2025-vs2026" if (workflow, job) == ("ci.yml", "web-windows")
+        else "ubuntu-24.04"
+    )
+    with pytest.raises(AssertionError, match=f"literal {required}"):
+        _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("runner", ["windows-latest", "windows-2022", "ubuntu-24.04",
+                                    "${{ matrix.os }}"])
+def test_windows_browser_runner_refuses_floating_foreign_or_dynamic_labels(runner: str) -> None:
+    workflows, scripts = _browser_workflows()
+    workflows["ci.yml"]["jobs"]["web-windows"]["runs-on"] = runner
+    with pytest.raises(AssertionError, match="literal windows-2025-vs2026"):
+        _assert_browser_workflow_runners(workflows, scripts)
+
+
+@pytest.mark.parametrize("workflow,job", [
+    (name, job) for name, jobs in BROWSER_WORKFLOW_JOBS.items() for job in jobs
+    if (name, job) != ("ci.yml", "web-windows")
+])
+def test_windows_browser_runner_is_not_admitted_for_any_existing_linux_job(
+    workflow: str, job: str,
+) -> None:
+    workflows, scripts = _browser_workflows()
+    workflows[workflow]["jobs"][job]["runs-on"] = "windows-2025-vs2026"
     with pytest.raises(AssertionError, match="literal ubuntu-24.04"):
         _assert_browser_workflow_runners(workflows, scripts)
 
@@ -1508,7 +1611,9 @@ SPLIT_QA_JOBS = (
 
 def test_capacity_split_requires_v2_before_all_five_consumers_and_final_union():
     import yaml
-    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())["jobs"]
+    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))["jobs"]
     steps = jobs["prod-playwright-shards"]["steps"]
     guard = next(
         step for step in steps
@@ -1613,7 +1718,9 @@ def test_final_claim_requires_all_owned_batch_roles_and_governance_receipts(
     tmp_path, governance, extra,
 ):
     import yaml
-    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())["jobs"]
+    jobs = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))["jobs"]
     claim = jobs["record-release-evidence"]
     for job, _, _ in SPLIT_QA_JOBS:
         assert job in claim["needs"] and f"needs.{job}.result == 'success'" in claim["if"]
@@ -1639,7 +1746,7 @@ def test_final_claim_requires_all_owned_batch_roles_and_governance_receipts(
 def test_final_claim_has_no_empty_or_unknown_batch4_governance_waiver(tmp_path, governance):
     import yaml
     job = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text()
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
     )["jobs"]["record-release-evidence"]
     step = next(step for step in job["steps"]
                 if step.get("name") == (
@@ -1702,7 +1809,9 @@ def test_late_split_jobs_continue_after_individual_cancellation_but_not_workflow
 ):
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     selected = workflow["jobs"][job]
     assert selected["needs"] == ["resolve-release", predecessor]
     actual = _split_condition(selected["if"], predecessor, result,
@@ -1717,7 +1826,9 @@ def test_late_split_continuation_keeps_resolver_and_manual_dispatch_fences(
 ):
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
     actual = _split_condition(workflow["jobs"][job]["if"], predecessor, "cancelled",
                               whole_cancelled=False, resolve=resolve, event=event)
     assert actual is False
@@ -1806,7 +1917,7 @@ def _historical_classifier_step():
     import yaml
 
     job = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text()
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
     )["jobs"]["record-release-evidence"]
     return job, next(step for step in job["steps"]
                      if step.get("name") == HISTORICAL_BATCH4_CLASSIFIER)
@@ -2003,9 +2114,9 @@ def _assert_app_project_workflow(workflow):
 def test_app_project_matrix_keeps_isolated_original_budgets_and_complete_native_aggregate():
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     _assert_app_project_workflow(workflow)
-    config = (REPO_ROOT / "playwright.app.config.ts").read_text()
+    config = (REPO_ROOT / "playwright.app.config.ts").read_text(encoding="utf-8")
     for policy in (
         "fullyParallel: false",
         "workers: 1",
@@ -2047,7 +2158,7 @@ def test_app_project_matrix_keeps_isolated_original_budgets_and_complete_native_
 def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(damage):
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     browser, aggregate = workflow["jobs"]["e2e-projects"], workflow["jobs"]["e2e"]
     steps = {step.get("name"): step for step in browser["steps"]}
     if damage in {"omit_project", "duplicate_project", "unknown_project"}:
@@ -2115,7 +2226,7 @@ def test_app_project_workflow_contract_rejects_partial_or_mixed_native_evidence(
 def test_app_aggregate_native_guard_rejects_every_non_successful_matrix(tmp_path, result):
     import yaml
 
-    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     command = workflow["jobs"]["e2e"]["steps"][0]["run"]
     bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
     assert bash and Path(bash).is_file()

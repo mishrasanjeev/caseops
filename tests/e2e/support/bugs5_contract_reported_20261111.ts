@@ -118,6 +118,8 @@ export async function verifyReportedContractControls(
     await rt.release();
     info.annotations.push({ type: "caseops-b5-reported-record", description: "original-contract-readonly-controls-and-pdf; no record changes or retained private media" });
   } catch {
+    // Fixed local phase labels survive native error redaction without legal data.
+    info.annotations.push({ type: "caseops-b5-failure-stage", description: `reported-contract:${stage}` });
     throw new Error(`B5 original-contract read-only acceptance failed at ${stage}; private values omitted.`);
   } finally {
     await page.unroute(matcher, guard);

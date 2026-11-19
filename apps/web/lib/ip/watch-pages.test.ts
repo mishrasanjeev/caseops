@@ -86,4 +86,17 @@ describe("watch workspace pages", () => {
     expect((pages[0].profiles[0] as { poll_status: string }).poll_status).toBe("active");
     expect(withConfirmedRows(pages, {})).toEqual(pages);
   });
+
+  it.each([0, 7, 12])("uses the server's global intake count %i rather than counting loaded profiles", count => {
+    const pages = [page(0, { profiles: ["p0"], hits: [], publications: [] }),
+      page(5, { profiles: ["p5"], hits: [], publications: [] }),
+      page(10, { profiles: ["p10"], hits: [], publications: [] })];
+    const before = structuredClone(pages);
+    const confirmed = withConfirmedRows(pages, { intakeProfileCount: count });
+    expect(confirmed.map(value => value.intake_profile_count)).toEqual([count, count, count]);
+    expect(mergeWatchPages(confirmed)?.intake_profile_count).toBe(count);
+    expect(mergeWatchPages(confirmed)?.profiles).toHaveLength(3);
+    expect(confirmed.map(value => value.profile_total)).toEqual([12, 12, 12]);
+    expect(pages).toEqual(before);
+  });
 });

@@ -39,6 +39,7 @@ from caseops_api.schemas.ip_watch import (
     IpWatchHandoffResponse,
     IpWatchHitResponse,
     IpWatchProfileResponse,
+    IpWatchProfileStatusResponse,
     IpWatchWorkspaceResponse,
 )
 from caseops_api.schemas.matters import MatterCreateRequest
@@ -363,7 +364,7 @@ def update_watch_profile_status(
     context: SessionContext,
     profile_id: str,
     payload: IpWatchProfileUpdateRequest,
-) -> IpWatchProfile:
+) -> IpWatchProfileStatusResponse:
     locked = _lock_ip_writer_context(
         session, context=context, required_capability="ip:watch_manage"
     )
@@ -387,9 +388,16 @@ def update_watch_profile_status(
         ip_docket_id=profile.docket_id,
         metadata={"poll_status": profile.poll_status, "reason": payload.reason},
     )
+    # Count after our own write, under the existing writer/context fences.
+    # Resolve the whole receipt before commit: a failed count read must not
+    # report a failed save after the profile and its audit were committed.
+    session.flush()
+    result = IpWatchProfileStatusResponse(
+        **IpWatchProfileResponse.model_validate(profile).model_dump(),
+        intake_profile_count=_intake_profile_count(session, context=locked),
+    )
     session.commit()
-    session.refresh(profile)
-    return profile
+    return result
 
 
 def _publication_fingerprint(provider_key: str, payload: IpJournalPublicationCreate) -> str:
@@ -457,6 +465,16 @@ def _intake_profiles_statement(session: Session, *, context: SessionContext) -> 
             visible_ip_dockets_filter(session, context=context),
         )
     )
+
+
+def _intake_profile_count(session: Session, *, context: SessionContext) -> int:
+    return session.scalar(
+        select(func.count()).select_from(
+            _intake_profiles_statement(session, context=context)
+            .with_only_columns(IpWatchProfile.id)
+            .subquery()
+        )
+    ) or 0
 
 
 # A viewer's own recent captures stay visible to them without a hit. Bounded so
@@ -1776,13 +1794,7 @@ def list_watch_workspace(
         key=lambda item: (item.journal_date, item.created_at),
         reverse=True,
     )
-    intake_profile_count = session.scalar(
-        select(func.count()).select_from(
-            _intake_profiles_statement(session, context=context)
-            .with_only_columns(IpWatchProfile.id)
-            .subquery()
-        )
-    )
+    intake_profile_count = _intake_profile_count(session, context=context)
     run_statement = select(IpJournalIngestionRun).where(
         IpJournalIngestionRun.company_id == context.company.id,
         _visible_runs_condition(

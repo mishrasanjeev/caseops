@@ -163,3 +163,59 @@ original workstation repository. This document binds the scoped engineering
 decision and obligations; separate release evidence records executed gates.
 No provider-cost, financial-baseline, model-consent, security or legal-source
 fence is weakened. Nothing here claims production release completion.
+
+## November 18: private matcher backport and installer compatibility
+
+The high-severity GHSA-fc5q-39xc-vjpf advisory has no published upstream
+patched version at review time. CaseOps retains the original picomatch4.0.7
+MIT text and source archive and identifies its modified parser explicitly as
+private picomatch4.0.7-caseops.1. The modification notice is included in the
+archive, retained operator materials and public credits. This is source
+remediation with bounded native negative controls, not a scanner exception or
+a claim that arbitrary untrusted glob programs are safe.
+
+The npm11.12.1 dependency rebundle also includes official Arborist9.9.3 for
+the upstream workspace-override propagation repair. Its runtime source and
+ISC text remain unchanged; only the previously reviewed minimatch11 manifest
+compatibility field is retained. The parent npm dependency is pinned to9.9.3.
+The original Arborist package metadata and ISC text are retained separately
+and its complete attribution is downloadable from the public credits page.
+Tinyglobby pins the private matcher, and fdir retains its original peer ranges
+while admitting only the exact private version. Npm's own CLI code is unchanged.
+
+These MIT/ISC materials use the base licence policy. All19 historical package
+exception records remain byte-equivalent as data. The complete retained source
+inventory is62 files; public credits contain14 components and18 notice texts.
+Source-only baseline archives are excluded from Docker/cloud upload. Current
+Windows/Linux installed inventories, complete source and image scans, actual
+builder context checks and exact-serving production acceptance remain required.
+
+The November18 follow-up corrects the installed-platform inventory for absent
+transitive children of platform-only optional branches. A child without its
+own platform fields is absent only when all production paths are blocked by
+the exact absent incompatible optional ancestors. An active required or peer
+path, any physically copied package, a copied ancestor, an absent optional
+flag or a disconnected foreign-parent claim remains fail-closed. Original
+own-platform exclusions keep their existing classification. No allow-list or
+historical package exception is added or changed.
+
+The complete151-case offline module passes, including exact copied-GPL denial
+and actual CLI refusal. The original Security audit program passes on the
+actual pruned Linux x64 musl dependency image:127 package identities,
+161 physical copies, zero denied licences and complete physical coverage.
+Only the absent @img/sharp-wasm32 and @emnapi/runtime children inherit the
+documented FreeBSD/Webcontainers ancestor exclusions. Native Sharp also
+produces and independently decodes the exact expected2x2 RGBA pixels. These
+are scoped engineering proofs, not a completed application release. The
+earlier failed image audit and unentered operator-shell attempt stay retained.
+
+### November18 separate CodeQL backslash-removal repair
+
+The unreleased private matcher also replaces its upstream ambiguous bracket
+regex with a linear helper. The exact MIT licence and every historical19
+exception object remain unchanged. Its explicit modification notice now binds
+this second source change, public text, retained text and image inventory.
+Current matcher825c8fd9 and npm rebundled2c67621 require fresh complete native
+licence, deterministic-source, dependency, alert, Docker and deployed proof.
+See dependency-release-followup-2026-11-18.md; prior green analysis jobs with
+open high alert879 are retained as a rejected release, not an exception.
