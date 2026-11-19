@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { createHash, webcrypto } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -92,6 +92,24 @@ it("fails duplicate preview admission instead of hiding an extra application req
   expect(original).toHaveBeenCalledTimes(2);
 });
 
+it("keeps a duplicate refusal latched when the first fetch resolves after the second", async () => {
+  let finishFirst!: (value: Response) => void;
+  original.mockImplementationOnce(() => new Promise<Response>(resolve => { finishFirst = resolve; }))
+    .mockImplementationOnce(() => Promise.resolve(response()));
+  installContractPreviewReceipt(binding);
+  const first = window.fetch(url);
+  await (await window.fetch(url)).arrayBuffer();
+  expect(receipt().failure).toBe("duplicate");
+  finishFirst(response());
+  expect(new Uint8Array(await (await first).arrayBuffer())).toEqual(bytes);
+  await vi.waitFor(() => expect(receipt().status).not.toBe("reading"));
+  expect(receipt().status).toBe("failed");
+  expect(receipt().failure).toBe("duplicate");
+  expect(receipt().sha256).toBeNull();
+  expect(receipt().requests).toBe(2);
+  expect(original).toHaveBeenCalledTimes(2);
+});
+
 it("retains a stream failure separately from a successful digest", async () => {
   original.mockImplementation(() => Promise.resolve(new Response(new ReadableStream({ start(controller) {
     controller.error(new Error("Synthetic stream refusal"));
@@ -145,14 +163,33 @@ it("keeps one exact binding and rejects unsafe or oversized observation setup", 
 it("proves the observer in an offline browser, including transport-injected headers and wrong-source bytes", async () => {
   vi.unstubAllGlobals();
   const { chromium } = await import("@playwright/test");
-  const profile = mkdtempSync(path.join(os.tmpdir(), "caseops-preview-receipt-"));
-  const context = await chromium.launchPersistentContext(profile, {
-    headless: true, timeout: 5_000, offline: true, serviceWorkers: "block",
-    extraHTTPHeaders: { "X-CaseOps-Automated-Test": "no-paid-providers" },
-  });
+  // The public server API owns its temporary profile and exposes the native child.
+  const server = await chromium.launchServer({ headless: true, timeout: 5_000 });
+  const child = server.process();
+  let ownedProfile: string | undefined;
   let sourceChanged = false;
   const received: string[] = [];
   try {
+    expect(child.pid).toBeGreaterThan(0);
+    expect(child.exitCode).toBeNull();
+    const profiles = child.spawnargs.filter(arg => arg.startsWith("--user-data-dir="));
+    expect(profiles).toHaveLength(1);
+    const profile = profiles[0].slice("--user-data-dir=".length);
+    const root = realpathSync(os.tmpdir());
+    const resolved = realpathSync(profile);
+    const relative = path.relative(root, resolved);
+    expect(relative).not.toMatch(/^\.\.(?:[\\/]|$)/);
+    expect(path.isAbsolute(relative)).toBe(false);
+    expect(path.basename(resolved)).toMatch(/^playwright_chromiumdev_profile-/);
+    expect(lstatSync(profile).isSymbolicLink()).toBe(false);
+    ownedProfile = resolved;
+    const browser = await chromium.connect(server.wsEndpoint(), {
+      timeout: 5_000, headers: { "X-CaseOps-Automated-Test": "no-paid-providers" },
+    });
+    const context = await browser.newContext({
+      offline: true, serviceWorkers: "block",
+      extraHTTPHeaders: { "X-CaseOps-Automated-Test": "no-paid-providers" },
+    });
     await context.route("**/*", async route => {
       const request = route.request(), target = new URL(request.url());
       if (target.origin !== binding.origin || request.method() !== "GET") return route.abort("blockedbyclient");
@@ -164,8 +201,7 @@ it("proves the observer in an offline browser, including transport-injected head
       if (sourceChanged) body[body.length - 2] ^= 1;
       return route.fulfill({ contentType: "application/pdf", body });
     });
-    expect(context.pages()).toHaveLength(1);
-    const page = context.pages()[0];
+    const page = await context.newPage();
     await page.goto(binding.origin, { timeout: 5_000 });
     for (const changed of [false, true]) {
       sourceChanged = changed;
@@ -187,5 +223,17 @@ it("proves the observer in an offline browser, including transport-injected head
       expect(observed.sha256 === digest).toBe(!changed);
     }
     expect(received).toEqual(["no-paid-providers", "no-paid-providers"]);
-  } finally { await context.close(); }
+  } finally {
+    await server.close();
+    expect(child.exitCode, "Owned native browser has actually exited").toBe(0);
+    if (ownedProfile) {
+      let absent = false;
+      try { lstatSync(ownedProfile); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        absent = true;
+      }
+      expect(absent, "Owned temporary browser profile is absent").toBe(true);
+    }
+  }
 });

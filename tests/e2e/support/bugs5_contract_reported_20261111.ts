@@ -54,7 +54,13 @@ export function installContractPreviewReceipt(binding: { origin: string; pathnam
     }
     let response: Response;
     try { response = await original.call(this, input, init); }
-    catch (error) { receipt.status = "failed"; receipt.failure = "stream"; throw error; }
+    catch (error) {
+      receipt.status = "failed";
+      if (receipt.failure === "none") receipt.failure = "stream";
+      throw error;
+    }
+    // Another invocation can refuse this observation while the first fetch waits.
+    if (observationFailed()) return response;
     receipt.mime = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? null;
     const declared = response.headers.get("content-length");
     if (response.status !== 200 || receipt.mime !== "application/pdf"
@@ -68,7 +74,7 @@ export function installContractPreviewReceipt(binding: { origin: string; pathnam
     receipt.status = "reading";
     const chunks: Uint8Array[] = [];
     const timer = setTimeout(() => {
-      receipt.status = "failed"; receipt.failure = "deadline";
+      if (!observationFailed()) { receipt.status = "failed"; receipt.failure = "deadline"; }
       void reader.cancel().catch(() => {});
     }, 10_000);
     void (async () => {
@@ -101,6 +107,7 @@ export function installContractPreviewReceipt(binding: { origin: string; pathnam
       } finally {
         clearTimeout(timer);
         for (const chunk of chunks) chunk.fill(0);
+        void reader.cancel().catch(() => {});
         reader.releaseLock();
       }
     })();

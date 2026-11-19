@@ -503,12 +503,12 @@ the exact original UI-triggered preview status/transport marker, single fetch,
 retained source size/SHA and visible canvas/pixel assertions. A bounded clone of
 that same browser fetch supplies digest metadata in memory when CDP has discarded
 the streamed body. It never substitutes a second API GET or changes application
-stream bytes. Fourteen observer controls include actual offline-browser proof,
+stream bytes. Fifteen observer controls include actual offline-browser proof,
 wrong-source bytes, duplicate admission, body bounds, stream failure and the
 unchanged ten-second deadline. The draft boundary adds only the marked team-list
 read; team writes, other team records and unmarked reads remain refused.
 
-Current focused evidence:44 frontend cases pass, including the real offline
+Current focused evidence:45 frontend cases pass, including the real offline
 browser; actual web component compilation passes. Original thirteen upload
 closure checks pass; the new independent closure control and all complete
 replacement/source/CI/deployed desktop+phone gates remain due. Every new unit
@@ -522,3 +522,13 @@ executions with the second rebuild count0 and the guarded inventory command.
 No direct projection resume is allowed. Owner/provider credentials/consents,
 Mac/APK sign-in and approved governed-renewal fixture configuration remain
 explicitly unverified; no synthetic legal approvals or identity substitutions.
+
+PR625 independent review found an overlapping-observer failure-latch defect in
+the first candidate. The controlled negative test retained a complete status
+where duplicate refusal must remain failed. The corrected observer preserves
+that refusal while the first fetch resolves, never substitutes a second GET,
+and cancels only its owned cloned reader. All45 focused cases pass. The native
+offline control now uses the public browser-server process handle, verifies
+native exit0 and exact owned temporary-profile ENOENT after close. An attempted
+cleanup of the earlier synthetic profile was rejected by automatic policy before
+execution; that scratch remains retained, not falsely recorded as removed.
