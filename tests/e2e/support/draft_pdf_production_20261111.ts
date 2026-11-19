@@ -65,10 +65,6 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     if (!["GET", "HEAD", "OPTIONS"].includes(method) && decision !== "login") attemptedMutations++;
     if (decision === "external") { blockedExternal++; return route.abort("blockedbyclient"); }
     if (decision === "blocked" || (decision === "login" && ++logins > 1)) {
-      if (info.annotations.filter(row => row.type === "caseops-b5-diagnostic-refusal").length < 16) {
-        const normalized = url.pathname.replace(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/gi, ":uuid");
-        info.annotations.push({ type: "caseops-b5-diagnostic-refusal", description: `method-${method}:origin-${url.origin === settings.api ? "api" : "web"}:normalized-path-sha256-${hash(normalized)}` });
-      }
       violations.add("prohibited-operation-or-missing-marker");
       return route.abort("blockedbyclient");
     }
@@ -181,32 +177,22 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
     await memoryDownload(selected, 2, "generic");
     stage = "reload-parity";
     pdfActionAllowed = false;
-    stage = "reload-text-tab";
     await page.getByRole("tab", { name: "Draft text" }).click();
-    stage = "reload-text-no-download";
     await expect(page.getByTestId("draft-download-pdf")).toBeDisabled();
-    stage = "reload-response-waiter";
     const reloadedPdf = receipt();
-    stage = "reload-navigation";
     await page.reload();
     await expect(page.getByTestId("draft-current-revision")).toHaveText(`Revision ${version.revision}`);
-    stage = "reload-source-body";
     expect(await page.getByTestId("draft-body-readonly").textContent() === version.body, "Reload preserves source content").toBe(true);
-    stage = "reload-passive-exports";
     expect(passiveExports, "Reloaded Draft text view must not export").toBe(0);
     pdfActionAllowed = true;
     await page.getByRole("tab", { name: "PDF preview" }).click();
-    stage = "reload-auto-pdf-bytes";
     expect((await checkedPdf(await reloadedPdf)).hash === auto.hash, "Reload preserves automatic-profile bytes").toBe(true);
-    stage = "reload-rendered-page-parity";
     expect(await assertDraftPdfRender(page, profileFor(auto.profile), { ...source, pdfTitle: auto.pdfTitle }, hasTouch)).toBe(autoPages);
-    stage = "reload-page-overflow";
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "No page-width overflow").toBe(true);
-    stage = "reload-whole-dto-unchanged";
+    stage = "whole-dto-unchanged";
     await unchanged();
     await release();
-    stage = "reload-read-only-boundary";
-    info.annotations.push({ type: "caseops-b5-diagnostic-counters", description: `violations-${violations.size}:attempts-${attemptedMutations}:logins-${logins}:native-downloads-${nativeDownloads}:passive-exports-${passiveExports}` });
+    stage = "read-only-boundary";
     expect(violations.size === 0 && attemptedMutations === 0 && logins === 1 && nativeDownloads === 0, "Read-only production boundary").toBe(true);
     await info.attach("bug001-production-parity", { body: JSON.stringify({ outcome: "READ_ONLY_PARITY_VERIFIED", sha: settings.sha,
       autoHash: auto.hash, selectedHash: selected.hash, autoPages, selectedPages, blockedExternal,
@@ -217,13 +203,7 @@ export async function productionDraftPdfJourney(browser: Browser, baseURL: strin
       draft_id: settings.draftId, version_id: version.id, body_sha256: hash(version.body),
       unchanged: true, attempted_mutations: attemptedMutations,
     }) });
-  } catch (error) {
-    const stack = error instanceof Error ? error.stack ?? "" : "";
-    for (const basename of ["bugs5_contract_reported_20261111.ts", "draft_pdf_production_20261111.ts", "draft_pdf_render_proof_20261111.ts"]) {
-      const escaped = basename.replaceAll(".", "\\.");
-      const position = new RegExp(`${escaped}:(\\d+):(\\d+)`).exec(stack);
-      if (position) info.annotations.push({ type: "caseops-b5-diagnostic-line", description: `${basename}:${position[1]}:${position[2]}` });
-    }
+  } catch {
     // Stage contains only fixed phase labels or the observed HTTP status.
     info.annotations.push({ type: "caseops-b5-failure-stage", description: `reported-draft:${stage}` });
     failure = parityUnverified ? "BUG001 PARITYUNVERIFIED: the existing citation/review guard blocks export; no production record was changed."

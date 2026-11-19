@@ -13,9 +13,9 @@ concurrency:
 cache-mode: none
 jobs:
   diagnostic:
-    name: Three original desktop failures; diagnostic source distinct
+    name: Desktop and phone with repaired observer; diagnostic source only
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 30
     env:
       CASEOPS_EXPECTED_RELEASE_SHA: e56437b8672d89e5eeb2a1642be4e759c3c6d2ef
       PROD_BASE_URL: https://caseops.ai
@@ -59,7 +59,7 @@ jobs:
       env: *id001
       timeout-minutes: 5
       run: npx playwright install chromium
-    - name: Run original three desktop bodies with fixed step labels; diagnostic only
+    - name: Run all original B5 desktop and phone bodies; diagnostic only
       env:
         NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
         SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}
@@ -73,37 +73,20 @@ jobs:
         CASEOPS_RAM_PROD_SLUG: test-legal
         CASEOPS_RAM_PROD_EMAIL: ram@testfirm.com
         CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}
-        CASEOPS_PW_EVIDENCE_INVOCATION: b5-diagnostic-desktop
         CASEOPS_PW_EVIDENCE_PHASE: execution
-      timeout-minutes: 10
-      run: 'set -euo pipefail
-
-        test -n "$CASEOPS_RAM_PROD_PASSWORD"
-
-        export CASEOPS_PW_EVIDENCE_JSON_FILE="$PWD/test-results/prod-native-evidence/b5-diagnostic-desktop/native-results.json"
-
-        export CASEOPS_PW_EVIDENCE_JUNIT_FILE="$PWD/test-results/prod-native-evidence/b5-diagnostic-desktop/native-results.xml"
-
-        mkdir -p "$(dirname "$CASEOPS_PW_EVIDENCE_JSON_FILE")"
-
-        set +e
-
-        node node_modules/@playwright/test/cli.js test --config=playwright.prod-ram.config.ts --project=batch5-prod-chromium
-        --workers=1 --retries=0 --reporter=./scripts/prod_playwright_reporter.cjs --output="$RUNNER_TEMP/b5-private-diagnostic"
-        --grep=''AI-TEAM-01|B5-CON-005|BUG001 2026-11-11 desktop'' >/dev/null 2>/dev/null
-
-        result=$?
-
-        set -e
-
-        printf ''{"scope":"DIAGNOSTIC ONLY; not release acceptance","diagnostic_source":"%s","serving_source":"%s","exit":%s}\n''
-        "$GITHUB_SHA" "$CASEOPS_EXPECTED_RELEASE_SHA" "$result" > test-results/prod-native-evidence/b5-diagnostic-desktop/diagnostic-exit.json
-
-        echo "Original diagnostic bodies exit=$result; sanitized native artifact retained. No release acceptance credit."
-
-        exit "$result"
-
-        '
+      timeout-minutes: 24
+      run: "set -euo pipefail\ntest -n \"$CASEOPS_RAM_PROD_PASSWORD\"\naggregate=0\nfor role in desktop mobile; do\n  project=batch5-prod-chromium\n\
+        \  if [[ \"$role\" == mobile ]]; then project=batch5-prod-mobile; fi\n  export CASEOPS_PW_EVIDENCE_INVOCATION=\"b5-diagnostic-$role\"\
+        \n  export CASEOPS_PW_EVIDENCE_JSON_FILE=\"$PWD/test-results/prod-native-evidence/$CASEOPS_PW_EVIDENCE_INVOCATION/native-results.json\"\
+        \n  export CASEOPS_PW_EVIDENCE_JUNIT_FILE=\"$PWD/test-results/prod-native-evidence/$CASEOPS_PW_EVIDENCE_INVOCATION/native-results.xml\"\
+        \n  mkdir -p \"$(dirname \"$CASEOPS_PW_EVIDENCE_JSON_FILE\")\"\n  set +e\n  node node_modules/@playwright/test/cli.js\
+        \ test --config=playwright.prod-ram.config.ts --project=\"$project\" --workers=1 --retries=0 --reporter=./scripts/prod_playwright_reporter.cjs\
+        \ --output=\"$RUNNER_TEMP/b5-private-diagnostic-$role\" >/dev/null 2>/dev/null\n  result=$?\n  set -e\n  printf '{\"\
+        scope\":\"DIAGNOSTIC ONLY; never release acceptance\",\"diagnostic_source\":\"%s\",\"candidate_source\":\"23fdb4c9ea07b34cb1d9f3fbe4e51578fc938c1e\"\
+        ,\"serving_source\":\"%s\",\"role\":\"%s\",\"exit\":%s}\\n' \"$GITHUB_SHA\" \"$CASEOPS_EXPECTED_RELEASE_SHA\" \"$role\"\
+        \ \"$result\" > \"test-results/prod-native-evidence/$CASEOPS_PW_EVIDENCE_INVOCATION/diagnostic-exit.json\"\n  echo\
+        \ \"Diagnostic $role native exit=$result; no release acceptance credit.\"\n  if [[ \"$result\" != 0 ]]; then aggregate=1;\
+        \ fi\ndone\nexit \"$aggregate\"\n"
     - name: Recheck exact serving release
       if: always()
       run: python scripts/verify_deployed_release.py --expected-sha "$CASEOPS_EXPECTED_RELEASE_SHA" --wait-seconds 30 --interval-seconds
@@ -113,6 +96,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: b5-diagnostic-only
-        path: test-results/prod-native-evidence/b5-diagnostic-desktop/
+        path: test-results/prod-native-evidence/
         if-no-files-found: error
         retention-days: 7
