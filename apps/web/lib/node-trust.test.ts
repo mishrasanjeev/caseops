@@ -21,7 +21,9 @@ const denied = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b
 const fingerprint = (pem: string) => createHash("sha256").update(new X509Certificate(pem).raw).digest("hex");
 let temp: string;
 let trust: string;
-const nativeTimings: Array<{ index: number; elapsedMs: number; code: unknown; signal: unknown }> = [];
+type NativeTiming = { index: number; executable: string; operation: string; budgetMs: number; elapsedMs: number; code: unknown; signal: unknown; timedOut: boolean };
+const nativeTimings: NativeTiming[] = [];
+let nativeOpenSsl: { executable: string; code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string } | undefined;
 type NativeScope = { signal: AbortSignal; closed: boolean; children: Set<ChildProcess>; closings: Set<Promise<unknown>> };
 const nativeScope = new AsyncLocalStorage<NativeScope>();
 
@@ -62,8 +64,9 @@ async function child(args: string[], env = cleanEnv(), options?: { file: string;
   const scope = activeScope();
   const started = performance.now();
   const index = nativeTimings.length;
-  nativeTimings.push({ index, elapsedMs: -1, code: null, signal: null });
   const budget = options?.timeout ?? 8_000;
+  const timing = { index, executable: path.basename(options?.file ?? process.execPath), operation: args[0].startsWith("-") ? args[0] : path.basename(args[0]), budgetMs: budget };
+  nativeTimings.push({ ...timing, elapsedMs: -1, code: null, signal: null, timedOut: false });
   const proc = spawn(options?.file ?? process.execPath, args, { env, cwd: options?.cwd, signal: scope.signal, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   scope.children.add(proc);
   let stdout = "";
@@ -83,7 +86,7 @@ async function child(args: string[], env = cleanEnv(), options?: { file: string;
     // Abort emits error before close. Await physical closure before releasing
     // fixture files, including on a timed-out test or a failed spawn.
     const { code, signal } = await closed;
-    nativeTimings[index] = { index, elapsedMs: Math.round(performance.now() - started), code, signal };
+    nativeTimings[index] = { ...timing, elapsedMs: Math.round(performance.now() - started), code, signal, timedOut };
     if (failure) throw failure;
     if (timedOut || performance.now() - started > budget || signal !== null || code === null) throw new Error("Native trust child did not finish inside its original deadline.");
     return { code, signal, stdout, stderr };
@@ -129,6 +132,7 @@ afterAll(() => {
   const retained = path.join(web, "../../test-results/native-trust", path.basename(temp));
   fs.mkdirSync(retained, { recursive: true });
   fs.writeFileSync(path.join(retained, "timings.json"), JSON.stringify(nativeTimings));
+  if (nativeOpenSsl) fs.writeFileSync(path.join(retained, "openssl.json"), JSON.stringify(nativeOpenSsl));
   fs.rmSync(temp, { recursive: true, force: true });
 });
 
@@ -404,7 +408,17 @@ test("actual fetch and https enforce selected CA and hostname verification offli
   });
   const fixture = path.join(temp, "tls");
   fs.mkdirSync(fixture);
-  const openssl = process.env.CASEOPS_TEST_OPENSSL ?? (process.platform === "win32" ? "C:/Program Files/Git/usr/bin/openssl.exe" : "openssl");
+  // Git's usr/bin executable starts the MSYS compatibility runtime. Its first
+  // two concurrent req processes exceeded 5s in Windows CI before any TLS
+  // assertion ran. Use Git's native Windows build, with the same 5s budget.
+  const openssl = process.env.CASEOPS_TEST_OPENSSL ?? (process.platform === "win32" ? "C:/Program Files/Git/mingw64/bin/openssl.exe" : "openssl");
+  if (process.platform === "win32") {
+    const version = await child(["version", "-a"], cleanEnv(), { file: openssl, cwd: fixture, timeout: 5000 });
+    nativeOpenSsl = { executable: openssl, ...version };
+    expect(version.code, version.stderr).toBe(0);
+    expect(version.stdout).toMatch(/^OpenSSL \d+\.\d+\.\d+ /);
+    expect(version.stdout).toMatch(/^platform: (?:mingw64|VC-WIN64A)\r?$/m);
+  }
   const run = (args: string[]) => {
     return child(args, cleanEnv(), { file: openssl, cwd: fixture, timeout: 5000 }).then(result => {
       expect(result.code, result.stderr).toBe(0);

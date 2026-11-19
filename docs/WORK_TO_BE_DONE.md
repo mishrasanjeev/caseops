@@ -4344,3 +4344,13 @@ proves the sibling-write window while the new workspace version is pending.
 The initial shared write/read fence passes19 page cases; adjacent writers,
 complete browser/release/production proof remain required. Preserve backend
 409 and prohibit automatic write replay. See [evidence and remaining work](security/registry-link-settlement-2026-11-19.md).
+
+
+## November 19 - Windows native TLS preparation
+
+**Partially fixed; release NO-GO.** J14/M14. PR627's fresh Windows CI
+retains3247 passes and one OpenSSL5s preparation failure; actual TLS checks were
+unreached. Use Git's native Windows executable with actual platform validation.
+All21 focused native trust cases pass and the real MSYS override is rejected;
+original deadlines and TLS controls remain. Complete replacement gates and
+production proof are pending. See [evidence and remaining acceptance](security/windows-native-tls-fixture-2026-11-19.md).
