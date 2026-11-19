@@ -13,6 +13,21 @@ fences and original deadlines. Focused44 cases and component compilation pass;
 complete replacement/source/CI/deployed desktop+phone verification remain due.
 The earlier team timeout remains unidentified, despite two diagnostic passes.
 Projection remains paused behind complete QA and two later clean executions.
+See [the dated evidence](security/production-verification-2026-11-17.md).
+
+## November19 — deployed PR624, production Batch5 acceptance still open
+
+**Inconclusive / NO-GO for complete certification.** Main e564 is live and all70
+combined-main jobs plus complete Docker07/Windows replacement gates passed.
+Exact-serving QA44446805801 fails Batch5 desktop; phone is unexecuted. Its20
+other native invocations independently reconcile459 passes/17 declared skips.
+The bounded repair addresses a discarded CDP streamed response body and the
+Draft read-only harness's omitted, ordinary tenant teams-list GET. It preserves
+single-fetch byte/hash/pixel proof, whole Draft DTO equality, all write/marker
+fences and original deadlines. Focused44 cases and component compilation pass;
+complete replacement/source/CI/deployed desktop+phone verification remain due.
+The earlier team timeout remains unidentified, despite two diagnostic passes.
+Projection remains paused behind complete QA and two later clean executions.
 See [the evidence and exact scopes](security/production-verification-2026-11-17.md#november19--pr624-merged-and-deployed-complete-production-acceptance-remains-failed).
 
 PR624 head7c6c has green hosted checks but its complete local Docker04 failed.
