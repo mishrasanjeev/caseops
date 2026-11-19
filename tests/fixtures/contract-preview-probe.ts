@@ -1,10 +1,15 @@
 /** Mock-only transport; this fixture must never forward a real browser request. */
 export function requestMockContractPreview(
-  input: RequestInfo | URL, init: RequestInit | undefined, mockTransport: unknown,
+  input: RequestInfo | URL, init: RequestInit | undefined = undefined, mockTransport?: unknown,
 ): Promise<Response> {
   if (typeof document !== "undefined" || typeof window === "undefined"
     || Object.getPrototypeOf(window) !== Object.prototype
     || typeof mockTransport !== "function" || Reflect.get(mockTransport, "_isMockFunction") !== true) {
+    throw new Error("Contract preview mock fixture requires its owned mock window.");
+  }
+  const observation = Reflect.get(window, "__caseopsContractPreview");
+  if (!observation || observation.originalTransport !== mockTransport
+    || observation.installedTransport !== window.fetch) {
     throw new Error("Contract preview mock fixture requires its owned mock window.");
   }
   return window.fetch(input, init);
@@ -26,7 +31,7 @@ export async function readOfflineContractPreview(target: string): Promise<number
   try {
     // Omit headers in JavaScript init deliberately: the real browser transport's
     // received-header assertion proves that the observer cannot infer them here.
-    const response = await fetch(url.href, { signal: controller.signal });
+    const response = await fetch(url.href, { signal: controller.signal, redirect: "error" });
     if (response.status !== 200 || response.headers.get("content-type")?.split(";", 1)[0] !== "application/pdf") {
       throw new Error("Offline contract preview fixture response refused.");
     }

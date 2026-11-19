@@ -570,3 +570,21 @@ source. No inventory exclusion or assertion/deadline relaxation is added.
 All55 affected frontend cases and both unchanged deadline-inventory cases pass
 on the working repair; complete fresh source, closure, compilation, frontend,
 CI/main/deployment and production verification remain due.
+
+Final fixture review preserves two additional negative controls. An unrelated
+mock forwarded the preview before binding repair; the replacement refuses both
+an unrelated mock and a subsequently replaced installed transport. Removing
+redirect:error from the repaired offline probe reproduces a foreign request
+attempt on a synthetic302; restored redirect refusal produces zero foreign
+request events. Real-DOM mock dispatch is also refused without a request.
+These controls remain inside the existing15 observer identities. The complete
+three affected frontend files pass96 cases (51 source inventory,30 Draft
+policy,15 observer), including owned native browser exit/profile cleanup.
+
+Full frontend03 on831 executed3226 passes/314 files, component compilation0,
+zero skipped/failed cases and unchanged source/remote refs. Its original
+controller exit1 is retained:18 unchanged fixture titles embed their checkout
+root. A separate strict verifier proves the exact18 declared root relocations
+from byte-identical source and complete3226 identity equality without replaying
+or altering native results. This scoped success does not waive the later
+fixture changes or current-head required replacement gates.

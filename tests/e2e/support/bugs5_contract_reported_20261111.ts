@@ -113,6 +113,10 @@ export function installContractPreviewReceipt(binding: { origin: string; pathnam
     })();
     return response;
   };
+  Object.defineProperties(state.__caseopsContractPreview, {
+    originalTransport: { value: original },
+    installedTransport: { value: window.fetch },
+  });
 }
 
 /** Production original-record proof is read-only; all writes use the run's separate fixture. */

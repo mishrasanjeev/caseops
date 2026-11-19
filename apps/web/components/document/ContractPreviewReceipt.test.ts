@@ -160,6 +160,18 @@ it("keeps one exact binding and rejects unsafe or oversized observation setup", 
   expect(window.fetch).toBe(fetch);
   expect(() => installContractPreviewReceipt({ ...binding, maxBytes: bytes.length - 1 })).toThrow();
   expect(original).not.toHaveBeenCalled();
+  original.mockImplementation(() => Promise.resolve(response()));
+  const unrelated = vi.fn();
+  const rejected = await Promise.resolve().then(() => requestMockContractPreview(url, undefined, unrelated)).then(async value => {
+    await value.arrayBuffer(); return "forwarded";
+  }, error => (error as Error).message);
+  expect(rejected).toBe("Contract preview mock fixture requires its owned mock window.");
+  expect(original).not.toHaveBeenCalled();
+  const rogue = vi.fn().mockImplementation(() => Promise.resolve(response()));
+  window.fetch = rogue;
+  expect(() => request(url)).toThrow("Contract preview mock fixture requires its owned mock window.");
+  expect(rogue).not.toHaveBeenCalled();
+  window.fetch = fetch;
   const unadmitted = vi.fn();
   vi.stubGlobal("fetch", unadmitted);
   for (const target of ["https://api.caseops.ai" + binding.pathname, url + "?other=1",
@@ -177,7 +189,9 @@ it("proves the observer in an offline browser, including transport-injected head
   const child = server.process();
   let ownedProfile: string | undefined;
   let sourceChanged = false;
+  let redirectSource = false;
   const received: string[] = [];
+  const foreignRequests: string[] = [];
   try {
     expect(child.pid).toBeGreaterThan(0);
     expect(child.exitCode).toBeNull();
@@ -199,6 +213,9 @@ it("proves the observer in an offline browser, including transport-injected head
       offline: true, serviceWorkers: "block",
       extraHTTPHeaders: { "X-CaseOps-Automated-Test": "no-paid-providers" },
     });
+    context.on("request", request => {
+      if (new URL(request.url()).origin !== binding.origin) foreignRequests.push(request.url());
+    });
     await context.route("**/*", async route => {
       const request = route.request(), target = new URL(request.url());
       if (target.origin !== binding.origin || request.method() !== "GET") return route.abort("blockedbyclient");
@@ -206,6 +223,7 @@ it("proves the observer in an offline browser, including transport-injected head
       if (target.pathname === "/") return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Owned offline observer control</title>" });
       if (target.pathname !== binding.pathname) return route.abort("blockedbyclient");
       received.push(request.headers()["x-caseops-automated-test"]);
+      if (redirectSource) return route.fulfill({ status: 302, headers: { location: "https://external.example/never-requested" } });
       const body = Buffer.from(bytes);
       if (sourceChanged) body[body.length - 2] ^= 1;
       return route.fulfill({ contentType: "application/pdf", body });
@@ -232,6 +250,13 @@ it("proves the observer in an offline browser, including transport-injected head
       expect(observed.sha256 === digest).toBe(!changed);
     }
     expect(received).toEqual(["no-paid-providers", "no-paid-providers"]);
+    await expect(page.evaluate(requestMockContractPreview, url)).rejects.toThrow("Contract preview mock fixture requires its owned mock window.");
+    expect(received).toHaveLength(2);
+    await page.reload({ timeout: 5_000 });
+    redirectSource = true;
+    await expect(page.evaluate(readOfflineContractPreview, url)).rejects.toThrow();
+    expect(received).toEqual(["no-paid-providers", "no-paid-providers", "no-paid-providers"]);
+    expect(foreignRequests).toEqual([]);
   } finally {
     await server.close();
     expect(child.exitCode, "Owned native browser has actually exited").toBe(0);
