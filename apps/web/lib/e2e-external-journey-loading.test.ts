@@ -136,7 +136,10 @@ test('native accessibility builder retains its instance and detects a real unnam
   expect(result.violations.some(row => row.id === 'button-name')).toBe(true);
 });
 `);
-  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1", TEMP: dir, TMP: dir };
+  // Playwright retains worker API timing in native results. Keep the actual
+  // operation that exhausted a deadline; a post-timeout closed page is not
+  // sufficient to distinguish injection, analysis and finish-page creation.
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1", TEMP: dir, TMP: dir, DEBUG: "pw:api" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "HOME", "USERPROFILE"]) if (process.env[key]) env[key] = process.env[key];
   const result = spawnSync(process.execPath, [path.join(pw, "cli.js"), "test", "--config", path.join(dir, "playwright.config.cjs")],
     { cwd: root, env, encoding: "utf8", windowsHide: true, timeout: 15_000, maxBuffer: 4 * 1024 * 1024 });
