@@ -14,16 +14,20 @@ const targets = [
   ["ram-2026-10-13-ip-portfolio.spec.ts", "loadJSZip"],
   ["ram-2026-11-07-contracts.spec.ts", "loadJSZip"],
   ["ram-2026-11-11-contracts.spec.ts", "loadJSZip"],
+  ["iplf-079b-domain-availability-2026-09-06.spec.ts", "loadDomainCatalogue", 2],
+  ["platform-report-admin-2026-10-20.owner.prod.spec.ts", "loadPlatformSchemas"],
+  ["platform-report-admin-2026-10-21.prod.spec.ts", "loadPlatformSchemas"],
 ] as const;
-const external = new Set(["@axe-core/playwright", "jsqr", "jszip"]);
+const external = new Set(["@axe-core/playwright", "jsqr", "jszip", "zod",
+  "../../apps/web/lib/ip/domain-catalog", "../../apps/web/lib/platform/schemas"]);
 
-it.each(targets)("keeps %s external pure dependencies inside journey-time calls", (file, loader) => {
+it.each(targets)("keeps %s external pure dependencies inside journey-time calls", (file, loader, expectedCalls = 1) => {
   const source = ts.createSourceFile(file, readFileSync(path.join(root, "tests/e2e", file), "utf8"), ts.ScriptTarget.Latest, true);
   const nodes: ts.Node[] = [];
   function visit(node: ts.Node) { nodes.push(node); ts.forEachChild(node, visit); }
   visit(source);
   expect(nodes.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
-    && external.has(node.moduleSpecifier.text))).toBe(false);
+    && !node.importClause?.isTypeOnly && external.has(node.moduleSpecifier.text))).toBe(false);
   const imports = nodes.filter(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
     && node.moduleSpecifier.text.endsWith("/external-journey-loaders"));
   expect(imports).toHaveLength(1);
@@ -31,7 +35,7 @@ it.each(targets)("keeps %s external pure dependencies inside journey-time calls"
   expect(declaration.importClause?.isTypeOnly).toBe(false);
   expect(declaration.importClause?.namedBindings?.getText(source)).toBe(`{ ${loader} }`);
   const calls = nodes.filter(node => ts.isCallExpression(node) && node.expression.getText(source) === loader);
-  expect(calls).toHaveLength(1);
+  expect(calls).toHaveLength(expectedCalls);
   for (const call of calls) {
     let parent = call.parent;
     while (parent && !ts.isFunctionLike(parent)) parent = parent.parent;
@@ -41,10 +45,12 @@ it.each(targets)("keeps %s external pure dependencies inside journey-time calls"
 
 it("keeps literal native requires without proxy, fallback or copied implementations", () => {
   const source = ts.createSourceFile("loader.ts", readFileSync(path.join(root, "tests/e2e/support/external-journey-loaders.ts"), "utf8"), ts.ScriptTarget.Latest, true);
-  expect(source.statements).toHaveLength(3);
+  expect(source.statements).toHaveLength(5);
   for (const [index, [name, returned]] of [
     ["loadAxeBuilder", 'require("@axe-core/playwright").default'],
     ["loadJsQR", 'require("jsqr")'], ["loadJSZip", 'require("jszip")'],
+    ["loadDomainCatalogue", 'require("../../../apps/web/lib/ip/domain-catalog")'],
+    ["loadPlatformSchemas", 'require("../../../apps/web/lib/platform/schemas")'],
   ].entries()) {
     const node = source.statements[index];
     if (!ts.isFunctionDeclaration(node) || !node.body) throw new Error("Only journey-time loader functions are admitted.");
@@ -65,7 +71,7 @@ it("runs actual ZIP, QR and accessibility libraries in a native offline Playwrig
   writeFileSync(configPath, readFileSync(configPath, "utf8").replace("reporter: [['json']]", `reporter: [['json'], [${JSON.stringify(path.join(dir, "stages.cjs"))}]]`));
   writeFileSync(path.join(dir, "external.spec.ts"), `
 import { test as base, expect, chromium, type Page } from ${JSON.stringify(pw)};
-import { loadAxeBuilder, loadJsQR, loadJSZip } from ${JSON.stringify(path.join(root, "tests/e2e/support/external-journey-loaders.ts"))};
+import { loadAxeBuilder, loadJsQR, loadJSZip, loadDomainCatalogue, loadPlatformSchemas } from ${JSON.stringify(path.join(root, "tests/e2e/support/external-journey-loaders.ts"))};
 import { renderedTotpSecret } from ${JSON.stringify(path.join(root, "tests/e2e/support/platform-report-qr.ts"))};
 const fromRoot = require('node:module').createRequire(${JSON.stringify(path.join(root, "package.json"))});
 const stage = (value: string) => require('node:fs').appendFileSync(${JSON.stringify(path.join(dir, "stages.jsonl"))}, JSON.stringify({stage:value,at:Date.now()})+'\\n');
@@ -94,6 +100,7 @@ test.beforeAll(() => {
   const net = require('node:net'); net.connect = deny; net.createConnection = deny;
   require('node:dns').lookup = deny; globalThis.fetch = deny;
   for (const name of ['@axe-core/playwright', 'jsqr', 'jszip']) expect(require.cache[fromRoot.resolve(name)]).toBeUndefined();
+  for (const name of ['./apps/web/lib/ip/domain-catalog.ts', './apps/web/lib/platform/schemas.ts', 'zod']) expect(require.cache[fromRoot.resolve(name)]).toBeUndefined();
 });
 test('native ZIP constructor and loadAsync preserve real XLSX and synthetic DOCX bytes', async () => {
   const JSZip = loadJSZip();
@@ -135,6 +142,22 @@ test('native accessibility builder retains its instance and detects a real unnam
   const result = await builder.withTags(['wcag2a']).analyze();
   expect(result.violations.some(row => row.id === 'button-name')).toBe(true);
 });
+test('native application schema loaders preserve real validation after deferred loading', () => {
+  const domain = loadDomainCatalogue(), platform = loadPlatformSchemas();
+  expect(domain).toBe(fromRoot('./apps/web/lib/ip/domain-catalog.ts'));
+  expect(platform).toBe(fromRoot('./apps/web/lib/platform/schemas.ts'));
+  expect(loadDomainCatalogue()).toBe(domain); expect(loadPlatformSchemas()).toBe(platform);
+  const row = { domain: 'patent', label: 'Patent', stage: 'ga', contract_version: 'synthetic',
+    jurisdictions: ['IN'], offices: ['IPO'], intake_available: true,
+    authoritative_automation_available: true, blockers: [], required_journeys: ['synthetic'] };
+  expect(domain.ipDomainCatalogueSchema.safeParse({ catalogue_version: 'synthetic', domains: [row] }).success).toBe(true);
+  expect(domain.ipDomainCatalogueSchema.safeParse({ catalogue_version: 'synthetic', domains: [row, row] }).success).toBe(false);
+  expect(domain.ipDomainCatalogueSchema.safeParse({ catalogue_version: 'synthetic', domains: [{ ...row, stage: 'unavailable' }] }).success).toBe(false);
+  expect(platform.consoleManagedAdminsResponse.safeParse({ items: [], next_cursor: null }).success).toBe(true);
+  expect(platform.consoleManagedAdminsResponse.safeParse({ items: 'invalid', next_cursor: null }).success).toBe(false);
+  expect(platform.consoleNamedOverview).toBe(fromRoot('./apps/web/lib/platform/schemas.ts').consoleNamedOverview);
+  expect(platform.consoleNamedReportPage).toBe(fromRoot('./apps/web/lib/platform/schemas.ts').consoleNamedReportPage);
+});
 `);
   // Playwright retains worker API timing in native results. Keep the actual
   // operation that exhausted a deadline; a post-timeout closed page is not
@@ -160,5 +183,19 @@ test('native accessibility builder retains its instance and detects a real unnam
   expect(result.status, result.stderr + dir + (result.stdout ?? "").slice(0, 12000)).toBe(0);
   const report = JSON.parse(result.stdout);
   expect(report.errors).toEqual([]);
-  expect(report.stats).toMatchObject({ expected: 3, unexpected: 0, skipped: 0, flaky: 0 });
+  expect(report.stats).toMatchObject({ expected: 4, unexpected: 0, skipped: 0, flaky: 0 });
+  expect(report.suites).toHaveLength(1);
+  const specs = report.suites[0].specs;
+  expect(specs.map((spec: { title: string }) => spec.title)).toEqual([
+    "native ZIP constructor and loadAsync preserve real XLSX and synthetic DOCX bytes",
+    "native QR pixels round-trip the real helper and reject a mismatched enrollment",
+    "native accessibility builder retains its instance and detects a real unnamed button",
+    "native application schema loaders preserve real validation after deferred loading",
+  ]);
+  for (const spec of specs) {
+    expect(spec.tests).toHaveLength(1);
+    expect(spec.tests[0]).toMatchObject({ timeout: 5000, expectedStatus: "passed", status: "expected" });
+    expect(spec.tests[0].results).toHaveLength(1);
+    expect(spec.tests[0].results[0]).toMatchObject({ status: "passed", retry: 0, errors: [] });
+  }
 }, 20_000);

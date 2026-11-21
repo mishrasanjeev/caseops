@@ -75,7 +75,7 @@ def test_windows_runs_the_complete_frontend_inventory_with_original_budgets() ->
         encoding="utf-8"
     )
     assert "timeout: 15_000" in source and "timeout: 5000" in source
-    assert "expected: 3, unexpected: 0, skipped: 0, flaky: 0" in source
+    assert "expected: 4, unexpected: 0, skipped: 0, flaky: 0" in source
 
 
 def test_windows_retains_failure_phases_and_trust_lifecycle_without_media() -> None:

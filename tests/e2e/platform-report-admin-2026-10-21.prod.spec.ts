@@ -7,7 +7,7 @@ import { CONSOLE, CSRF_COOKIE, CSRF_HEADER, assertRelease, controlBounds, noOver
 import { AUTHENTICATOR_QR_LABEL, renderedTotpSecret } from "./support/platform-report-qr";
 import type { BrowserContext, Page } from "@playwright/test";
 import { activityFixture } from "../../apps/web/lib/platform/activity-fixture.test-data";
-import { consoleManagedAdminsResponse, consoleNamedOverview, consoleNamedReportPage } from "../../apps/web/lib/platform/schemas";
+import { loadPlatformSchemas } from "./support/external-journey-loaders";
 
 test.use({ storageState: { cookies: [], origins: [] }, extraHTTPHeaders: noPaidProviderHeaders,
   trace: "off", screenshot: "off", video: "off", serviceWorkers: "block" });
@@ -28,10 +28,6 @@ const revokedViewer = { ...pendingViewer, id: "00000000-0000-4000-8000-000000000
   email: "revoked-renderer@example.com", full_name: "Revoked renderer viewer", status: "revoked", version: 3 };
 const protectedViewer = { ...pendingViewer, id: "00000000-0000-4000-8000-000000000031",
   email: "protected-renderer@example.com", full_name: "Protected renderer viewer", can_manage: false };
-const managedDirectory = consoleManagedAdminsResponse.parse({ items: [
-  { ...fakeAccount, status: "active", created_at: createdAt, version: 1, removed_at: null, can_manage: false },
-  pendingViewer, revokedViewer, protectedViewer,
-], next_cursor: null });
 const account = { company_id: "00000000-0000-4000-8000-000000000045",
   company_name: "Synthetic international account renderer " + "UnbrokenSyntheticCompanyLabel".repeat(3) };
 const amounts = { ...account, gross_revenue_minor: 100, recognized_revenue_minor: 100,
@@ -39,25 +35,34 @@ const amounts = { ...account, gross_revenue_minor: 100, recognized_revenue_minor
   llm_cost_minor: 0, embedding_cost_minor: 0, case_refresh_cost_minor: 0, document_processing_cost_minor: 0,
   storage_cost_minor: 0, manual_support_cost_minor: 0, manual_research_cost_minor: 0,
   total_variable_cost_minor: 137, gross_profit_minor: -37, gross_margin_bps: -3700 };
-const report = (items: unknown[], coverage: string) => consoleNamedReportPage.parse({
-  items, coverage, generated_at: createdAt, has_more: false, next_cursor: null,
-});
-const namedReports = {
-  usage: report([{ ...account, feature_key: "synthetic_renderer", quantity: 2, credits: 0,
-    estimated_internal_cost_minor: 37 }], "recorded_usage"),
-  revenue: report([{ ...account, paid_at: createdAt, merchant_reference: "SYNTHETIC-RENDERER",
-    amount_paid_minor: 37, tax_amount_minor: 37 }], "recorded_payments"),
-  profit: report([{ ...amounts, tax_collected_minor: 0, discount_minor: 0,
-    period_start: createdAt, period_end: "2026-10-23T00:00:00Z", status: "estimated" }], "recorded_rollups"),
-  "company-profitability": report([{ ...amounts, rollup_count: 1, loss_risk: true }], "recorded_rollups"),
-};
-const namedOverview = consoleNamedOverview.parse({ generated_at: createdAt, coverage: "recorded_rollups",
-  rollup_count: 1, mrr_minor: 0, arr_minor: 0, active_subscriptions: 0, trial_count: 0, failed_payments: 0,
-  gross_revenue_minor: 100, recognized_revenue_minor: 100, total_variable_cost_minor: 137,
-  gross_profit_minor: -37, gross_margin_bps: -3700, margin_alerts: [{ ...account,
-    gross_profit_minor: -37, gross_margin_bps: -3700 }], margin_alerts_has_more: false });
+function rendererFixtures() {
+  const { consoleManagedAdminsResponse, consoleNamedOverview, consoleNamedReportPage } = loadPlatformSchemas();
+  const managedDirectory = consoleManagedAdminsResponse.parse({ items: [
+    { ...fakeAccount, status: "active", created_at: createdAt, version: 1, removed_at: null, can_manage: false },
+    pendingViewer, revokedViewer, protectedViewer,
+  ], next_cursor: null });
+  const report = (items: unknown[], coverage: string) => consoleNamedReportPage.parse({
+    items, coverage, generated_at: createdAt, has_more: false, next_cursor: null,
+  });
+  const namedReports = {
+    usage: report([{ ...account, feature_key: "synthetic_renderer", quantity: 2, credits: 0,
+      estimated_internal_cost_minor: 37 }], "recorded_usage"),
+    revenue: report([{ ...account, paid_at: createdAt, merchant_reference: "SYNTHETIC-RENDERER",
+      amount_paid_minor: 37, tax_amount_minor: 37 }], "recorded_payments"),
+    profit: report([{ ...amounts, tax_collected_minor: 0, discount_minor: 0,
+      period_start: createdAt, period_end: "2026-10-23T00:00:00Z", status: "estimated" }], "recorded_rollups"),
+    "company-profitability": report([{ ...amounts, rollup_count: 1, loss_risk: true }], "recorded_rollups"),
+  };
+  const namedOverview = consoleNamedOverview.parse({ generated_at: createdAt, coverage: "recorded_rollups",
+    rollup_count: 1, mrr_minor: 0, arr_minor: 0, active_subscriptions: 0, trial_count: 0, failed_payments: 0,
+    gross_revenue_minor: 100, recognized_revenue_minor: 100, total_variable_cost_minor: 137,
+    gross_profit_minor: -37, gross_margin_bps: -3700, margin_alerts: [{ ...account,
+      gross_profit_minor: -37, gross_margin_bps: -3700 }], margin_alerts_has_more: false });
+  return { managedDirectory, namedReports, namedOverview };
+}
 
 async function mockConsole(context: BrowserContext, target: Origins, initial: ConsoleAuth["state"] | "anonymous") {
+  const { managedDirectory, namedReports, namedOverview } = rendererFixtures();
   let state = initial;
   let role: "manager" | "viewer" = "manager";
   const reads: string[] = [];

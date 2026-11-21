@@ -248,6 +248,8 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
   });
 }
 
+const eagerSchemaModule = /\bload ["'][^\r\n]*[\\/]+node_modules[\\/]+zod(?:[\\/]+|["'])/;
+
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
   // The retained774-case baseline is checked apart from the old eight plus two B5 additions.
   // Keep the15s constructor/20s hooks and units. The
@@ -259,6 +261,7 @@ function collectAppProject(project?: keyof typeof appSourceProjects, execute: Me
   Object.assign(env, {
     CI: "1", CASEOPS_EXPECTED_RELEASE_SHA: "a".repeat(40), CASEOPS_RELEASE_SHA: "a".repeat(40),
     CASEOPS_WEB_BASE_URL: "http://127.0.0.1:3100",
+    NODE_DEBUG: "module",
     NOTICE_QA_SLUG: "source-inventory-fixture", NOTICE_QA_OWNER_EMAIL: "qa@fixture.invalid",
     NOTICE_QA_OWNER_PASSWORD: "fixture-only-not-used",
   });
@@ -269,6 +272,7 @@ function collectAppProject(project?: keyof typeof appSourceProjects, execute: Me
   ], { cwd: root, env, encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
   expect(result.error).toBeUndefined();
   expect(result.status, result.stderr).toBe(0);
+  expect(result.stderr, "App metadata must defer runtime application schemas").not.toMatch(eagerSchemaModule);
   const native = JSON.parse(result.stdout) as {
     errors: unknown[]; suites: NativeSuite[];
     config: { projects: { id: string; name: string; retries: number; repeatEach: number }[] };
@@ -420,6 +424,37 @@ describe("complete independent App CI project inventory", () => {
 });
 
 describe("App metadata constructor and source-order controls", () => {
+  it.each([
+    ["Windows", 'MODULE 1234: load "C:\\\\owned\\\\node_modules\\\\zod\\\\v4\\\\index.cjs" for module "schema"'],
+    ["POSIX", 'MODULE 1234: load "/owned/node_modules/zod/v4/index.cjs" for module "schema"'],
+  ])("rejects eager application schemas in native %s metadata without retry", (_platform, stderr) => {
+    let calls = 0;
+    const execute: MetadataConstructor = (_command, args, options) => {
+      calls++;
+      expect(args).toContain("--list");
+      expect(options.timeout).toBe(15_000);
+      expect(options.env?.NODE_DEBUG).toBe("module");
+      return { status: 0, stderr, stdout: JSON.stringify({ errors: [], suites: [], config: { projects:
+        Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+      } }) };
+    };
+    expect(() => collectAppProject(undefined, execute)).toThrow("App metadata must defer runtime application schemas");
+    expect(calls).toBe(1);
+  });
+
+  it("retains successful native module diagnostics without treating stderr as failure", () => {
+    let calls = 0;
+    const execute: MetadataConstructor = () => {
+      calls++;
+      return { status: 0, stderr: 'MODULE 1234: load "/owned/node_modules/playwright/lib/common/index.js" for module "runner"',
+        stdout: JSON.stringify({ errors: [], suites: [], config: { projects:
+          Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+        } }) };
+    };
+    expect(collectAppProject(undefined, execute)).toEqual([]);
+    expect(calls).toBe(1);
+  });
+
   it.each(["timeout", "nonzero"] as const)(
     "rejects native App discovery %s without retry or accepting a JSON prefix", failure => {
       let calls = 0;

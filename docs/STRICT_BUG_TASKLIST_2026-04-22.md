@@ -7557,3 +7557,22 @@ Independent cryptography parsing/signature/extension checks also pass.
 Full input closure, replacement3249-case frontend/1704 affected API
 inventories, current CI/Docker and production acceptance remain pending.
 See [evidence and remaining gates](security/windows-native-tls-fixture-2026-11-19.md).
+
+## November 21 — offline accessibility worker deadline
+
+**Inconclusive; release NO-GO.** J14/M14, PRA-09. Main `6260`'s
+Windows job `136777905480` failed one of 3,249 cases when its real native
+accessibility worker exceeded the unchanged five-second limit. Preserve
+that failed whole run and its native artifact. A successful one-off
+diagnostic is not a repair or release pass. Draft PR629 retains passive
+operation timing; root cause, complete replacement coverage and current
+CI/production acceptance remain open. This does not invalidate separately
+passed product journeys. See
+[the investigation](security/windows-offline-worker-a11y-2026-11-21.md).
+
+The complete local replacement failed separately at App metadata discovery:
+3,242 passed and seven checks unexecuted. The original failure and this
+replacement both remain retained. A trace identifies eager application
+schema imports; deferral and native module-load regressions are now prepared.
+Expected full frontend inventory is 3,255 cases in 316 files. No new repair,
+deployment or production closure is claimed before its replacement proof.

@@ -3,7 +3,7 @@ import type { APIResponse, BrowserContext } from "@playwright/test";
 
 import { expect, test } from "./support/prod-diagnostic-test";
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { consoleManagedAdminsResponse, consoleNamedOverview, consoleNamedReportPage } from "../../apps/web/lib/platform/schemas";
+import { loadPlatformSchemas } from "./support/external-journey-loaders";
 import {
   CONSOLE, SESSION_COOKIE, assertRelease, newApi, noOverflow, productionTarget,
   readOnlyWireGuard, required, safeGet, type ConsoleAuth, type ReadOnlyWireGuard,
@@ -54,6 +54,7 @@ test("PRA owner acceptance: actual tenant session cannot enter the report realm"
 });
 
 test("PRA owner acceptance: authorized MFA-complete session reads all six reports without mutations", async ({ page, baseURL }) => {
+  const { consoleManagedAdminsResponse, consoleNamedOverview, consoleNamedReportPage } = loadPlatformSchemas();
   const target = productionTarget(baseURL);
   if (process.env.CASEOPS_PRA_PROD_READS_AUTHORIZED !== "1") {
     throw new Error("PROD_OPEN: actual owner setup/MFA and separate read authorization required; no authenticated request attempted.");

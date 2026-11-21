@@ -51,3 +51,99 @@ The candidate adds that same passive API timing to the native worker's retained
 JSON. No loader, library, selected case, assertion, rule, page mode, worker count,
 retry or deadline changes. CI diagnosis and a subsequent repair remain pending;
 this observation change alone must not be merged as a timeout fix.
+
+Follow-up source correlation: the retained stack's `dist/index.js:236:16`
+maps to the first `await page.evaluate(this.script())` in the lock-selected
+`@axe-core/playwright` 4.11.3 distribution. The later `finishRun` new-page
+path therefore must not be called the observed failure's cause. This narrows
+the awaited call site, but does not establish why it failed to complete within
+the remaining test budget. The next native timing receipt must distinguish
+time before injection from time spent waiting on injection. No dependency
+upgrade is justified by this source correlation alone.
+
+## Diagnostic closeout and candidate admission repair
+
+The first PR629 diagnostic commit, `3f3feacf82959a8d7ea5b0ecc0862d99ab61b5ef`,
+passes the complete hosted Windows run: 3,249 tests in 316 files. The actual
+three-case child passes once, with ZIP 79 ms, QR 315 ms and accessibility
+514 ms. Native timing records first source injection at 125 ms and the later
+finish-page injection at 126 ms. The retained artifact and job log are in
+external `pr629-native302*`. This successful diagnostic does not explain or
+erase the original main failure.
+
+The configuration still admits this nested browser worker alongside ordinary
+coverage workers. The candidate now gives its complete eight-case file an
+exclusive ordered project after the complete source-inventory project and
+before all ordinary files. The normal two-worker limit remains unchanged.
+Resource contention is a working diagnosis; no historical CPU profile has
+been recovered. The measured defect addressed here is the lack of exclusive
+admission for the bounded native phase, not a proven operating-system cause
+for the earlier delayed injection.
+
+`scripts/tests/frontend-phase-scheduling.test.mjs` uses the actual production
+configuration and installed Vitest discovery/worker implementation with four
+small synthetic files. It must retain the exact file union, reject the pooled
+counterfactual's admission mapping, run every candidate case, and prove source
+then native then ordinary execution from both visible markers and native
+timestamps. It is a scheduling regression, not a simulated reproduction of
+the original accessibility timeout. Windows and Linux CI run it separately
+before complete coverage and retain its native evidence.
+
+The real library regression also requires the exact three child identities,
+one passed zero-retry attempt each and their original five-second limits.
+All test bodies, accessibility rules, library loading, browser modes and
+5 s startup/test, 15 s child and 20 s parent limits remain unchanged. Complete
+Vitest remains 3,249 cases in 316 files; the separate scheduling regression
+is one Node test executing four synthetic Vitest cases, not additional product
+journeys. The new candidate has not yet been executed. Complete native file
+discovery, compilation, replacement coverage with exact identities and phase
+timings, affected source contracts and fresh CI remain pending. No release
+or scheduler recovery is authorized by this document's provisional change.
+
+## Complete local replacement and schema-import follow-up
+
+The actual canonical host replacement `pr629-frontend311` completed all 316
+files with 3,242 passed cases and seven unexecuted cases. It remains failed.
+The isolated native-library file passed all eight cases; its three-case child
+passed with accessibility at 670 ms. Component and browser compilation,
+both migration preflights, the real scheduling regression and exact native
+file discovery also passed. All 4,324 frozen source hashes remained unchanged.
+
+The separate source-inventory setup failed at its original 15-second App
+discovery constructor with `ETIMEDOUT`. Its seven dependent checks did not
+execute. The whole failed report, original deadline and all identities are
+retained; a passing native-library phase does not clear this failure.
+
+After physical closeout, one source-derived diagnostic ran the same App
+constructor once with `NODE_DEBUG=module`. It completed metadata discovery
+in 13.48 seconds with exactly 792 cases. Its native module trace proves that
+collection eagerly loaded 95 Zod modules through the domain catalogue and
+platform-report schema imports. It does not provide per-module timings or
+a historical CPU profile explaining the earlier deadline miss.
+
+The candidate defers those real application modules to their actual journeys.
+Domain assertions still use the same catalogue schema and label map. Report
+renderer fixtures are still parsed by the same schemas, now at the start of
+their mock-context setup. The separate owner-acceptance spec retains all
+authorization, MFA and read-only guards. No parser is copied or replaced,
+and fixture data, UI assertions, case titles and deadlines remain unchanged.
+
+The App constructor now retains native module diagnostics and rejects an
+actual Zod load during metadata discovery. Windows/POSIX negative controls
+and an ordinary diagnostic-stderr positive control cover that boundary.
+The existing native library proof gains a fourth real schema-validation case;
+its original three cases and 5 s / 15 s / 20 s limits remain unchanged. Three
+new source guards cover the affected schema consumers. Expected complete
+Vitest inventory is now 3,255 cases in 316 files: source 54, native-library
+11, and 3,190 ordinary cases. Browser metadata remains exactly 792 cases.
+Compilation, actual cold metadata/no-Zod proof, full replacement coverage,
+affected source contracts, CI, deployment and production replay are pending.
+
+Fresh-host preparation `305` stopped at the existing 30-second npm security
+preparation bound before installation. It is retained as incomplete. The
+replacement reused the previously qualified physical host and exact Node
+22.23.4 runtime with unchanged installed dependencies and lock semantics.
+An erroneous checkout-line-ending transfer was caught before tests; every
+unchanged file was restored to exact stored Git bytes, and the complete
+intended full-index patch was independently reconciled in `310`. No Git
+configuration, pinned document fingerprint or security deadline was changed.

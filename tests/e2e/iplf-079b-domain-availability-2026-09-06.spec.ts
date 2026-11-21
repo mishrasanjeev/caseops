@@ -1,7 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { apiBaseUrl, assertPatentRelease, existingPatentQa } from "./support/patent-acceptance";
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { DOMAIN_STAGE_LABELS, ipDomainCatalogueSchema } from "../../apps/web/lib/ip/domain-catalog";
+import type { IpDomainCapability } from "../../apps/web/lib/ip/domain-catalog";
+import { loadDomainCatalogue } from "./support/external-journey-loaders";
 import {
   bootstrapPatentTenant,
   enablePatentWorkspace,
@@ -11,7 +12,8 @@ import {
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 test.beforeEach(async ({ request }) => { await assertPatentRelease(request); });
 
-async function assertRows(page: Page, rows: ReturnType<typeof ipDomainCatalogueSchema.parse>["domains"]) {
+async function assertRows(page: Page, rows: IpDomainCapability[]) {
+  const { DOMAIN_STAGE_LABELS } = loadDomainCatalogue();
   const region = page.getByRole("region", { name: "IP domain availability" });
   await expect(region).toBeVisible();
   for (const row of rows) {
@@ -48,6 +50,7 @@ async function assertRows(page: Page, rows: ReturnType<typeof ipDomainCatalogueS
 
 for (const width of [360, 768, 1280]) {
   test(`IPLF-079B public claims match the server at ${width}px`, async ({ page, request }, testInfo) => {
+    const { ipDomainCatalogueSchema } = loadDomainCatalogue();
     await page.setViewportSize({ width, height: 900 });
     const response = await request.get(`${apiBaseUrl}/api/ip-domains`, { headers: noPaidProviderHeaders });
     expect(response.status()).toBe(200);
