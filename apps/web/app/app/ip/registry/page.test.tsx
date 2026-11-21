@@ -1,8 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { defaultScheduler, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { ApiError } from "@/lib/api/config";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   bookmarksMock,
@@ -12,10 +14,12 @@ const {
   createReferenceMock,
   decideMatchMock,
   diffsMock,
+  resolveDiffMock,
   docketMock,
   docketsMock,
   readinessMock,
   recordSnapshotMock,
+  recordFailureMock,
   referencesMock,
   workspacesMock,
 } = vi.hoisted(() => ({
@@ -26,10 +30,12 @@ const {
   createReferenceMock: vi.fn(),
   decideMatchMock: vi.fn(),
   diffsMock: vi.fn(),
+  resolveDiffMock: vi.fn(),
   docketMock: vi.fn(),
   docketsMock: vi.fn(),
   readinessMock: vi.fn(),
   recordSnapshotMock: vi.fn(),
+  recordFailureMock: vi.fn(),
   referencesMock: vi.fn(),
   workspacesMock: vi.fn(),
 }));
@@ -66,9 +72,9 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpTrackedCaseReferences: referencesMock,
   fetchIpWorkspaceReadiness: readinessMock,
   listCaseTrackingBookmarks: bookmarksMock,
-  recordIpRegistryFailure: vi.fn(),
+  recordIpRegistryFailure: recordFailureMock,
   recordIpRegistryManualSnapshot: recordSnapshotMock,
-  resolveIpRegistryDiff: vi.fn(),
+  resolveIpRegistryDiff: resolveDiffMock,
 }));
 
 import IpRegistryPage from "@/app/app/ip/registry/page";
@@ -176,6 +182,85 @@ function wrapper() {
   return function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   };
+}
+
+
+const ownedRegistrySettlements = new Set<() => Promise<void>>();
+const ownedRegistryNotifications = new Set<() => Promise<void>>();
+afterEach(async () => {
+  const errors: unknown[] = [];
+  for (const cleanup of [...ownedRegistryNotifications, ...ownedRegistrySettlements]) {
+    try { await cleanup(); } catch (error) { errors.push(error); }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, "Independent registry cleanup failures");
+});
+
+
+function holdRegistryNotifications() {
+  const pending: Array<() => void> = [];
+  const flush = async () => {
+    let rounds = 0;
+    while (pending.length) {
+      expect(rounds++).toBeLessThan(16);
+      await act(async () => { pending.splice(0).forEach((callback) => callback()); });
+    }
+  };
+  let completion: Promise<void> | undefined;
+  const restore = (): Promise<void> => completion ??= (async () => {
+    try { await flush(); }
+    finally { notifyManager.setScheduler(defaultScheduler); ownedRegistryNotifications.delete(restore); }
+  })();
+  ownedRegistryNotifications.add(restore);
+  notifyManager.setScheduler((callback) => { expect(pending.length).toBeLessThan(32); pending.push(callback); });
+  return { pending, flush, restore };
+}
+
+function deferredRegistry<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((accept, refuse) => { resolve = accept; reject = refuse; });
+  return { promise, resolve, reject };
+}
+
+async function withRegistrySettlement(release: () => void,
+  body: (owned: { client: QueryClient; page: ReturnType<typeof within>; user: ReturnType<typeof userEvent.setup>; view: ReturnType<typeof render> }) => Promise<void>) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false }, mutations: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}><IpRegistryPage /></QueryClientProvider>);
+  let completion: Promise<void> | undefined;
+  const cleanup = (): Promise<void> => completion ??= (async () => {
+    try {
+      await act(async () => { release(); });
+      await waitFor(() => expect(client.isMutating()).toBe(0));
+    } finally { view.unmount(); client.clear(); ownedRegistrySettlements.delete(cleanup); }
+  })();
+  ownedRegistrySettlements.add(cleanup);
+  const errors: unknown[] = [];
+  try { await body({ client, page: within(view.container), user: userEvent.setup(), view }); }
+  catch (error) { errors.push(error); }
+  try { await cleanup(); } catch (error) { errors.push(error); }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1) throw new AggregateError(errors, "Registry workflow and cleanup failures retained separately");
+}
+
+
+type RegistryCaseLink = Omit<typeof LINK, "match_status"> & { match_status: "candidate" | "confirmed" | "retired" };
+function registrySettlementFixture() {
+  const current: RegistryCaseLink = { ...LINK, match_status: "confirmed", version: 3 };
+  const newer = { ...current, version: 4 };
+  const retired: RegistryCaseLink = { ...newer, match_status: "retired", version: 5 };
+  const workspace = (link: RegistryCaseLink) => ({ items: [{ link, attempts: [], snapshots: [] }], total: 1, limit: 25, offset: 0 });
+  const held = deferredRegistry<ReturnType<typeof workspace>>();
+  const diff = { id: "settlement-diff", version: 1, field_path: "/mark_name", mapped_field_path: null,
+    change_kind: "added", before_value_json: null, after_value_json: "ASTER", risk_level: "low",
+    resolution_status: "pending", deadline_recalculation_state: "not_required" };
+  return { current, newer, retired, workspace, held, diff, key: ["ip", "registry", "workspaces", "", 0] };
+}
+async function registryText(user: ReturnType<typeof userEvent.setup>, view: ReturnType<typeof render>, id: string, value: string) {
+  expect(view.container.isConnected).toBe(true);
+  const field = view.container.querySelector<HTMLInputElement>(`#${id}`)!;
+  expect(field).toBeInTheDocument();
+  await user.clear(field); expect(field).toHaveFocus(); await user.paste(value);
 }
 
 function docketPicker() {
@@ -617,5 +702,193 @@ describe("IP registry reconciliation page", () => {
     expect(Array.from(trackedCase.options).find((option) => option.value === "tracked-1")?.disabled).toBe(true);
     expect(screen.getByText(/already referenced for this proceeding/i, { selector: "p" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Add reference" })).toBeDisabled();
+  });
+
+  it("BUG-012 blocks a sibling link decision until the rejected diff's new workspace version is delivered", async () => {
+    const current = { ...LINK, match_status: "confirmed" as const, version: 3 };
+    const newer = { ...current, version: 4 };
+    const retired = { ...newer, match_status: "retired" as const, version: 5 };
+    const workspace = (link: typeof current | typeof retired) => ({ items: [{ link, attempts: [], snapshots: [] }], total: 1, limit: 25, offset: 0 });
+    const held = deferredRegistry<ReturnType<typeof workspace>>();
+    const diff = { id: "settlement-diff", version: 1, field_path: "/mark_name", mapped_field_path: null,
+      change_kind: "added", before_value_json: null, after_value_json: "ASTER", risk_level: "low",
+      resolution_status: "pending", deadline_recalculation_state: "not_required" };
+    workspacesMock.mockReset().mockResolvedValueOnce(workspace(current)).mockReturnValueOnce(held.promise).mockResolvedValue(workspace(retired));
+    diffsMock.mockReset().mockResolvedValueOnce({ items: [diff], total: 1, limit: 50, offset: 0 }).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    resolveDiffMock.mockReset().mockResolvedValue({ ...diff, version: 2, resolution_status: "rejected" });
+    decideMatchMock.mockReset().mockResolvedValue(retired);
+    await withRegistrySettlement(() => held.resolve(workspace(newer)), async ({ client, page, user, view }) => {
+      const decisions = await page.findByTestId("registry-diff-decisions");
+      const review = view.container.querySelector<HTMLInputElement>("#review-reason")!;
+      await user.click(review); expect(review).toHaveFocus(); await user.paste("Reviewed source; reject this proposed change.");
+      expect(view.container.isConnected).toBe(true);
+      const reason = view.container.querySelector<HTMLInputElement>("#match-reason")!;
+      await user.click(reason); expect(reason).toHaveFocus(); await user.paste("Retiring this verified synthetic identity.");
+      expect(page.getByRole("button", { name: /^Retire$/ })).toBeEnabled();
+      const [change] = await within(decisions).findAllByRole("listitem");
+      await user.click(within(change).getByRole("button", { name: /^Reject$/ }));
+      await page.findByText("No field changes are awaiting a decision.");
+      expect(resolveDiffMock).toHaveBeenCalledTimes(1);
+      expect(client.isMutating()).toBe(1);
+      const key = ["ip", "registry", "workspaces", "", 0];
+      expect(client.getQueryState(key)?.fetchStatus).toBe("fetching");
+      const retire = page.getByRole("button", { name: /^Retire$/ });
+      expect(retire).toBeDisabled();
+      expect(page.getByRole("button", { name: /^Confirm$/ })).toBeDisabled();
+      expect(page.getByRole("button", { name: /^Mismatch$/ })).toBeDisabled();
+      expect(decideMatchMock).not.toHaveBeenCalled();
+      expect(vi.isFakeTimers()).toBe(false);
+      const notifications = holdRegistryNotifications();
+      try {
+        const query = client.getQueryCache().find({ queryKey: key, exact: true });
+        expect(query?.promise).toBeDefined();
+        await act(async () => { held.resolve(workspace(newer)); await query!.promise; });
+        expect(client.getQueryState(key)?.status).toBe("success");
+        expect(client.getQueryData(key)).toMatchObject({ items: [{ link: { version: 4 } }] });
+        expect(notifications.pending.length).toBeGreaterThan(0);
+        await notifications.flush();
+      } finally { await notifications.restore(); }
+      await waitFor(() => expect(retire).toBeEnabled());
+      await user.click(retire);
+      await waitFor(() => expect(decideMatchMock).toHaveBeenCalledExactlyOnceWith({ linkId: LINK.id,
+        expectedVersion: 4, decision: "retire", reason: "Retiring this verified synthetic identity." }));
+      await waitFor(() => expect(client.isMutating()).toBe(0));
+    });
+  });
+
+  it.each(["manual snapshot", "failure evidence"] as const)("BUG-012 serializes %s with every sibling writer through current-version refresh", async (writer) => {
+    const f = registrySettlementFixture();
+    const write = deferredRegistry<{ link: RegistryCaseLink; no_change: boolean; diffs: unknown[] }>();
+    workspacesMock.mockReset().mockResolvedValueOnce(f.workspace(f.current)).mockReturnValueOnce(f.held.promise).mockResolvedValue(f.workspace(f.retired));
+    diffsMock.mockReset().mockResolvedValue({ items: [f.diff], total: 1, limit: 50, offset: 0 });
+    recordSnapshotMock.mockReset().mockReturnValue(write.promise);
+    recordFailureMock.mockReset().mockReturnValue(write.promise);
+    resolveDiffMock.mockReset(); decideMatchMock.mockReset().mockResolvedValue(f.retired);
+    await withRegistrySettlement(() => { write.resolve({ link: f.newer, no_change: false, diffs: [] }); f.held.resolve(f.workspace(f.newer)); }, async ({ client, page, user, view }) => {
+      await page.findByTestId("registry-diff-decisions");
+      await registryText(user, view, "match-reason", "Retiring the verified synthetic identity.");
+      await registryText(user, view, "review-reason", "Reviewed register source and change.");
+      await registryText(user, view, "failure-message", "Synthetic unavailable register observation.");
+      const snapshot = page.getByRole("button", { name: /^Record register evidence$/ });
+      const failure = page.getByRole("button", { name: /^Record failure$/ });
+      expect(snapshot).toBeEnabled(); expect(failure).toBeEnabled();
+      if (writer === "manual snapshot") {
+        const status = page.getByLabelText("Status on the register");
+        await user.clear(status); expect(status).toHaveFocus(); await user.paste("Registered");
+        await user.click(snapshot);
+        await waitFor(() => expect(recordSnapshotMock).toHaveBeenCalledTimes(1));
+        expect(recordSnapshotMock.mock.calls[0][0].expectedLinkVersion).toBe(3);
+      } else {
+        await user.click(failure);
+        await waitFor(() => expect(recordFailureMock).toHaveBeenCalledTimes(1));
+        expect(recordFailureMock.mock.calls[0][0].expectedLinkVersion).toBe(3);
+      }
+      const blocked = () => {
+        for (const name of ["Confirm", "Mismatch", "Retire", "Record failure", "Record register evidence"]) {
+          expect(page.getByRole("button", { name: new RegExp(`^${name}$`) })).toBeDisabled();
+        }
+        for (const reject of page.getAllByRole("button", { name: /^Reject$/ })) expect(reject).toBeDisabled();
+      };
+      blocked(); expect(client.isMutating()).toBe(1);
+      const form = view.container.querySelector("#snapshot-source")!.closest("form")!;
+      fireEvent.submit(form);
+      expect(recordSnapshotMock).toHaveBeenCalledTimes(writer === "manual snapshot" ? 1 : 0);
+      expect(recordFailureMock).toHaveBeenCalledTimes(writer === "failure evidence" ? 1 : 0);
+      expect(decideMatchMock).not.toHaveBeenCalled(); expect(resolveDiffMock).not.toHaveBeenCalled();
+      await act(async () => { write.resolve({ link: f.newer, no_change: false, diffs: [] }); });
+      await waitFor(() => expect(workspacesMock).toHaveBeenCalledTimes(2));
+      expect(client.getQueryState(f.key)?.fetchStatus).toBe("fetching"); blocked();
+      await act(async () => { f.held.resolve(f.workspace(f.newer)); });
+      const retire = page.getByRole("button", { name: /^Retire$/ });
+      await waitFor(() => expect(retire).toBeEnabled());
+      await user.click(retire);
+      await waitFor(() => expect(decideMatchMock).toHaveBeenCalledExactlyOnceWith({ linkId: LINK.id,
+        expectedVersion: 4, decision: "retire", reason: "Retiring the verified synthetic identity." }));
+    });
+  });
+
+  it("BUG-012 keeps a confirmed write unavailable after failed workspace refresh and retries only its read", async () => {
+    const f = registrySettlementFixture();
+    workspacesMock.mockReset().mockResolvedValueOnce(f.workspace(f.current)).mockReturnValueOnce(f.held.promise).mockResolvedValueOnce(f.workspace(f.newer)).mockResolvedValue(f.workspace(f.retired));
+    diffsMock.mockReset().mockResolvedValueOnce({ items: [f.diff], total: 1, limit: 50, offset: 0 }).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    resolveDiffMock.mockReset().mockResolvedValue({ ...f.diff, version: 2, resolution_status: "rejected" });
+    decideMatchMock.mockReset().mockResolvedValue(f.retired);
+    await withRegistrySettlement(() => f.held.resolve(f.workspace(f.newer)), async ({ client, page, user, view }) => {
+      const decisions = await page.findByTestId("registry-diff-decisions");
+      await registryText(user, view, "review-reason", "Reviewed source; reject the proposed change.");
+      const [change] = await within(decisions).findAllByRole("listitem");
+      await user.click(within(change).getByRole("button", { name: /^Reject$/ }));
+      await waitFor(() => expect(workspacesMock).toHaveBeenCalledTimes(2));
+      await act(async () => { f.held.reject(new Error("Synthetic workspace read unavailable")); });
+      await page.findByText("Could not load registry identities");
+      expect(page.queryByRole("button", { name: /^Retire$/ })).not.toBeInTheDocument();
+      expect(client.getQueryState(f.key)?.status).toBe("error");
+      expect(resolveDiffMock).toHaveBeenCalledTimes(1); expect(decideMatchMock).not.toHaveBeenCalled();
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Registry field decision recorded.");
+      expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+      await user.click(page.getByRole("button", { name: /^Try again$/ }));
+      await page.findByRole("heading", { name: /^TM-1234567$/ });
+      expect(workspacesMock).toHaveBeenCalledTimes(3); expect(resolveDiffMock).toHaveBeenCalledTimes(1);
+      await registryText(user, view, "match-reason", "Retire after fresh authorized read.");
+      await user.click(page.getByRole("button", { name: /^Retire$/ }));
+      await waitFor(() => expect(decideMatchMock).toHaveBeenCalledExactlyOnceWith({ linkId: LINK.id,
+        expectedVersion: 4, decision: "retire", reason: "Retire after fresh authorized read." }));
+    });
+  });
+
+  it("BUG-012 retains a genuine 409, refreshes current state, and requires an explicit new decision", async () => {
+    const f = registrySettlementFixture();
+    workspacesMock.mockReset().mockResolvedValueOnce(f.workspace(f.current)).mockReturnValueOnce(f.held.promise).mockResolvedValue(f.workspace(f.retired));
+    diffsMock.mockReset().mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    const conflict = new ApiError(409, "Registry link changed; reload.", { detail: "Registry link changed; reload." });
+    decideMatchMock.mockReset().mockRejectedValueOnce(conflict).mockResolvedValue(f.retired);
+    resolveDiffMock.mockReset(); recordSnapshotMock.mockReset(); recordFailureMock.mockReset();
+    await withRegistrySettlement(() => f.held.resolve(f.workspace(f.newer)), async ({ client, page, user, view }) => {
+      await page.findByRole("heading", { name: /^TM-1234567$/ });
+      await registryText(user, view, "match-reason", "Retire the reviewed synthetic identity.");
+      await user.click(page.getByRole("button", { name: /^Retire$/ }));
+      await waitFor(() => expect(workspacesMock).toHaveBeenCalledTimes(2));
+      expect(decideMatchMock).toHaveBeenCalledTimes(1);
+      expect(decideMatchMock.mock.calls[0][0].expectedVersion).toBe(3);
+      expect(page.getByRole("button", { name: /^Retire$/ })).toBeDisabled();
+      expect(vi.mocked(toast.error)).toHaveBeenCalledExactlyOnceWith("Registry link changed; reload.");
+      expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+      await act(async () => { f.held.resolve(f.workspace(f.newer)); });
+      await waitFor(() => expect(client.isMutating()).toBe(0));
+      expect(decideMatchMock).toHaveBeenCalledTimes(1);
+      expect(client.getMutationCache().getAll()[0].state.status).toBe("error");
+      expect(client.getQueryData(f.key)).toMatchObject({ items: [{ link: { version: 4 } }] });
+      const retire = page.getByRole("button", { name: /^Retire$/ }); await waitFor(() => expect(retire).toBeEnabled());
+      expect(recordSnapshotMock).not.toHaveBeenCalled(); expect(recordFailureMock).not.toHaveBeenCalled(); expect(resolveDiffMock).not.toHaveBeenCalled();
+      await user.click(retire);
+      await waitFor(() => expect(decideMatchMock).toHaveBeenCalledTimes(2));
+      expect(decideMatchMock.mock.calls[1][0]).toEqual({ linkId: LINK.id, expectedVersion: 4,
+        decision: "retire", reason: "Retire the reviewed synthetic identity." });
+    });
+  });
+
+  it("BUG-012 creates an identity before the first workspace read ends without reusing its older empty snapshot", async () => {
+    window.history.replaceState(null, "", `/app/ip/registry?docket=${DOCKET.id}`);
+    const initial = deferredRegistry<{ items: unknown[]; total: number; limit: number; offset: number }>();
+    const empty = { items: [], total: 0, limit: 25, offset: 0 };
+    const fresh = { items: [{ link: LINK, attempts: [], snapshots: [] }], total: 1, limit: 25, offset: 0 };
+    workspacesMock.mockReset().mockReturnValueOnce(initial.promise).mockResolvedValue(fresh);
+    createLinkMock.mockReset().mockResolvedValue(LINK);
+    diffsMock.mockReset().mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    await withRegistrySettlement(() => initial.resolve(empty), async ({ client, page, user, view }) => {
+      const record = await page.findByRole("combobox", { name: /^Legal record$/ });
+      await waitFor(() => expect(record).toBeEnabled());
+      await user.selectOptions(record, "application:application-1");
+      const source = page.getByLabelText("Official source URL");
+      await user.click(source); expect(source).toHaveFocus(); await user.paste("https://tmrsearch.ipindia.gov.in/eregister/1");
+      expect(view.container.isConnected).toBe(true);
+      await user.click(page.getByRole("button", { name: /^Add identity$/ }));
+      await page.findByRole("heading", { name: /^TM-1234567$/ });
+      expect(createLinkMock).toHaveBeenCalledTimes(1); expect(workspacesMock).toHaveBeenCalledTimes(2);
+      await act(async () => { initial.resolve(empty); });
+      expect(page.getByRole("heading", { name: /^TM-1234567$/ })).toBeVisible();
+      expect(client.getQueryData(["ip", "registry", "workspaces", DOCKET.id, 0])).toMatchObject({ items: [{ link: { id: LINK.id } }] });
+      expect(createLinkMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

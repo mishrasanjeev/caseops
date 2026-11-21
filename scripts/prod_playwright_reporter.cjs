@@ -20,6 +20,7 @@ const reportedDraftProof = Object.freeze({
   attempted_mutations: 0,
 });
 const routes = new Set(["auth/session", "matter/bulk-update", "matter/attachment", "notice/attachment",
+  "team/list", "team/record", "team/members", "team/member-lead",
   "ip/title-interest", "ip/application", "calendar/events", "ip/renewal-tracker",
   "ip/madrid-list", "ip/madrid-workspace", "ip/foreign-associate-list",
   "ip/foreign-associate-workspace", "ip/recordal-list", "ip/recordal-workspace",

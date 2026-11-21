@@ -4,6 +4,23 @@ import { diagnosticProblem, diagnosticRequestId, diagnosticRoute, diagnosticTran
 import { createPatentApplicationWithEvidence } from "../../../tests/e2e/support/prod-api-response-evidence";
 
 describe("production failure metadata minimization", () => {
+  it("categorizes Teams reads and writes without names, membership IDs or query values", () => {
+    const origin = "https://api.caseops.ai";
+    for (const [path, category] of [
+      ["/api/teams", "team/list"], ["/api/teams/", "team/list"],
+      ["/api/teams/PRIVATE-TEAM", "team/record"],
+      ["/api/teams/PRIVATE-TEAM/members", "team/members"],
+      ["/api/teams/PRIVATE-TEAM/members/PRIVATE-MEMBERSHIP", "team/members"],
+      ["/api/teams/PRIVATE-TEAM/members/PRIVATE-ROW/lead", "team/member-lead"],
+    ]) {
+      expect(diagnosticRoute(`${origin}${path}?expected_team_membership_id=PRIVATE-ROW&token=SECRET`, [origin]))
+        .toBe(category);
+      expect(diagnosticRoute(`https://foreign.invalid${path}?token=SECRET`, [origin])).toBeNull();
+    }
+    for (const path of ["/api/teams-private", "/api/teams/PRIVATE-TEAM/unknown", "/api/teams/PRIVATE-TEAM/members/PRIVATE-ROW/lead/history"]) {
+      expect(diagnosticRoute(origin + path, [origin])).toBeNull();
+    }
+  });
   it("categorizes IP list and workspace reads without record IDs or query values", () => {
     const origin = "https://api.caseops.ai";
     for (const [base, category] of [

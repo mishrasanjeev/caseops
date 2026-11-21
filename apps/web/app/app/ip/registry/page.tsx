@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -163,6 +163,8 @@ function fieldProps(id: string, errors: Record<string, string>, extra?: string) 
   } as const;
 }
 
+const registryLinkWriteKey = (linkId: string) => ["ip", "registry", "link-write", linkId] as const;
+
 export default function IpRegistryPage() {
   const canRead = useCapability("ip:read");
   const canSync = useCapability("ip:registry_sync");
@@ -178,6 +180,7 @@ export default function IpRegistryPage() {
     setSelectedDocketId(docketParam);
   }, [docketParam]);
   const [workspaceOffset, setWorkspaceOffset] = useState(0);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   const docket = useQuery({
     queryKey: ["ip", "dockets", selectedDocketId],
@@ -240,12 +243,15 @@ export default function IpRegistryPage() {
   }
 
   async function refreshAll() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["ip", "registry"] }),
-      queryClient.invalidateQueries({ queryKey: ["ip", "core-records", selectedDocketId] }),
-      queryClient.invalidateQueries({ queryKey: ["ip", "tracked-case-references"] }),
-      queryClient.invalidateQueries({ queryKey: ["case-tracking", "bookmarks"] }),
-    ]);
+    const keys = [["ip", "registry"], ["ip", "core-records", selectedDocketId],
+      ["ip", "tracked-case-references"], ["case-tracking", "bookmarks"]];
+    setRefreshCount((count) => count + 1);
+    try {
+      // Each acknowledged write needs a new read, including an unresolved
+      // first request whose older snapshot must not satisfy invalidation.
+      await Promise.all(keys.map((queryKey) => queryClient.cancelQueries({ queryKey })));
+      await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+    } finally { setRefreshCount((count) => count - 1); }
   }
 
   if (!canRead) {
@@ -426,6 +432,7 @@ export default function IpRegistryPage() {
           {selectedWorkspace ? (
             <RegistryWorkspace
               workspace={selectedWorkspace}
+              refreshing={refreshCount > 0 || workspaces.isFetching}
               canSync={canSync}
               membershipId={session.context?.membership.id ?? null}
               onChanged={refreshAll}
@@ -721,16 +728,29 @@ function LegalRecordStatus({ core, empty }: { core: UseQueryResult<IpCoreRecords
 
 function RegistryWorkspace({
   workspace,
+  refreshing,
   canSync,
   membershipId,
   onChanged,
 }: {
   workspace: IpRegistryWorkspace;
+  refreshing: boolean;
   canSync: boolean;
   membershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
   const { link } = workspace;
+  const queryClient = useQueryClient();
+  const mutationKey = registryLinkWriteKey(link.id);
+  const pendingWrites = useIsMutating({ mutationKey });
+  const busy = refreshing || pendingWrites > 0;
+  const startWrite = (write: () => void) => {
+    if (!refreshing && queryClient.isMutating({ mutationKey }) === 0) write();
+  };
+  const recoverConflict = async (error: unknown, fallback: string) => {
+    toast.error(apiErrorMessage(error, fallback));
+    if (isApiErrorShape(error) && error.status === 409) await onChanged();
+  };
   const [diffOffset, setDiffOffset] = useState(0);
   const [matchReason, setMatchReason] = useState("");
   const [failureClass, setFailureClass] = useState<"authentication" | "rate_limit" | "parse_error" | "provider_outage" | "configuration" | "policy" | "unknown">("parse_error");
@@ -759,17 +779,20 @@ function RegistryWorkspace({
   }, [diffOffset, diffs.data]);
 
   const decideMatch = useMutation({
+    mutationKey,
     mutationFn: (decision: "confirm" | "mismatch" | "retire") =>
       decideIpRegistryMatch({ linkId: link.id, expectedVersion: link.version, decision, reason: matchReason }),
     onSuccess: async () => { toast.success("Registry match decision recorded."); setMatchReason(""); await onChanged(); },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record the match decision.")),
+    onError: (error) => recoverConflict(error, "Could not record the match decision."),
   });
   const addFailure = useMutation({
+    mutationKey,
     mutationFn: () => recordIpRegistryFailure({ linkId: link.id, expectedLinkVersion: link.version, idempotencyKey: randomKey("manual-failure"), responseClass: failureClass, error: failureMessage, externalCall: false }),
     onSuccess: async () => { toast.success("Failure evidence recorded; accepted legal state was preserved."); setFailureMessage(""); await onChanged(); },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record failure evidence.")),
+    onError: (error) => recoverConflict(error, "Could not record failure evidence."),
   });
   const resolveDiff = useMutation({
+    mutationKey,
     mutationFn: ({ diff, decision }: { diff: IpRegistryDiff; decision: "accept" | "reject" | "map" | "defer" }) => resolveIpRegistryDiff({
       diffId: diff.id,
       expectedVersion: diff.version,
@@ -780,11 +803,11 @@ function RegistryWorkspace({
       responsibleMembershipId: decision === "accept" ? membershipId : null,
     }),
     onSuccess: async () => { toast.success("Registry field decision recorded."); setReviewReason(""); setMappedPath(""); await onChanged(); },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not resolve the registry change.")),
+    onError: (error) => recoverConflict(error, "Could not resolve the registry change."),
   });
 
   // Phones get one entry per change so the decision buttons stay on screen; wider screens keep the table.
-  const diffActions = (diff: NonNullable<typeof diffs.data>["items"][number]) => canSync ? <div className="flex flex-wrap gap-1"><Button size="sm" disabled={!membershipId || reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "accept" })}>Accept</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "reject" })}>Reject</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || !mappedPath || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "map" })}>Map</Button><Button size="sm" variant="ghost" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "defer" })}>Defer</Button></div> : null;
+  const diffActions = (diff: NonNullable<typeof diffs.data>["items"][number]) => canSync ? <div className="flex flex-wrap gap-1"><Button size="sm" disabled={!membershipId || reviewReason.trim().length < 5 || busy || resolveDiff.isPending} onClick={() => startWrite(() => resolveDiff.mutate({ diff, decision: "accept" }))}>Accept</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || busy || resolveDiff.isPending} onClick={() => startWrite(() => resolveDiff.mutate({ diff, decision: "reject" }))}>Reject</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || !mappedPath || busy || resolveDiff.isPending} onClick={() => startWrite(() => resolveDiff.mutate({ diff, decision: "map" }))}>Map</Button><Button size="sm" variant="ghost" disabled={reviewReason.trim().length < 5 || busy || resolveDiff.isPending} onClick={() => startWrite(() => resolveDiff.mutate({ diff, decision: "defer" }))}>Defer</Button></div> : null;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -802,10 +825,12 @@ function RegistryWorkspace({
         </CardContent>
       </Card>
 
+      {busy ? <p role="status" className="text-sm text-[var(--color-mute)]">Updating this registry identity. Please wait.</p> : null}
+
       {canSync ? (
         <Card>
           <CardHeader><CardTitle as="h3">Match decision</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-3"><Label htmlFor="match-reason">Reason</Label><Input id="match-reason" value={matchReason} onChange={(event) => setMatchReason(event.target.value)} placeholder="Evidence supporting this decision" /><div className="flex flex-wrap gap-2"><Button size="sm" disabled={matchReason.trim().length < 5 || decideMatch.isPending} onClick={() => decideMatch.mutate("confirm")}><Check className="h-4 w-4" />Confirm</Button><Button size="sm" variant="outline" disabled={matchReason.trim().length < 5 || decideMatch.isPending} onClick={() => decideMatch.mutate("mismatch")}><Unlink className="h-4 w-4" />Mismatch</Button><Button size="sm" variant="ghost" disabled={matchReason.trim().length < 5 || decideMatch.isPending} onClick={() => decideMatch.mutate("retire")}>Retire</Button></div></CardContent>
+          <CardContent className="flex flex-col gap-3"><Label htmlFor="match-reason">Reason</Label><Input id="match-reason" value={matchReason} onChange={(event) => setMatchReason(event.target.value)} placeholder="Evidence supporting this decision" /><div className="flex flex-wrap gap-2"><Button size="sm" disabled={matchReason.trim().length < 5 || busy || decideMatch.isPending} onClick={() => startWrite(() => decideMatch.mutate("confirm"))}><Check className="h-4 w-4" />Confirm</Button><Button size="sm" variant="outline" disabled={matchReason.trim().length < 5 || busy || decideMatch.isPending} onClick={() => startWrite(() => decideMatch.mutate("mismatch"))}><Unlink className="h-4 w-4" />Mismatch</Button><Button size="sm" variant="ghost" disabled={matchReason.trim().length < 5 || busy || decideMatch.isPending} onClick={() => startWrite(() => decideMatch.mutate("retire"))}>Retire</Button></div></CardContent>
         </Card>
       ) : null}
 
@@ -817,7 +842,7 @@ function RegistryWorkspace({
       </Card>
 
       {canSync ? (
-        <RegisterEvidenceForm key={`${link.id}:${link.version}`} workspace={workspace} onChanged={onChanged} />
+        <RegisterEvidenceForm key={`${link.id}:${link.version}`} workspace={workspace} refreshing={busy} onChanged={onChanged} />
       ) : null}
 
       <Card>
@@ -828,7 +853,7 @@ function RegistryWorkspace({
       {canSync ? (
         <Card>
           <CardHeader><CardTitle as="h3">Record failed attempt</CardTitle><p className="text-sm text-[var(--color-mute)]">Failure evidence updates freshness and history without changing accepted legal state.</p></CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)_auto]"><div><Label htmlFor="failure-class">Failure class</Label><select id="failure-class" className="mt-1 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={failureClass} onChange={(event) => setFailureClass(event.target.value as typeof failureClass)}>{["authentication", "rate_limit", "parse_error", "provider_outage", "configuration", "policy", "unknown"].map((value) => <option value={value} key={value}>{value.replaceAll("_", " ")}</option>)}</select></div><div><Label htmlFor="failure-message">Redactable operator detail</Label><Input id="failure-message" className="mt-1" value={failureMessage} onChange={(event) => setFailureMessage(event.target.value)} /></div><div className="flex items-end"><Button variant="outline" disabled={failureMessage.trim().length < 2 || addFailure.isPending} onClick={() => addFailure.mutate()}><FileClock className="h-4 w-4" />Record failure</Button></div></CardContent>
+          <CardContent className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)_auto]"><div><Label htmlFor="failure-class">Failure class</Label><select id="failure-class" className="mt-1 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={failureClass} onChange={(event) => setFailureClass(event.target.value as typeof failureClass)}>{["authentication", "rate_limit", "parse_error", "provider_outage", "configuration", "policy", "unknown"].map((value) => <option value={value} key={value}>{value.replaceAll("_", " ")}</option>)}</select></div><div><Label htmlFor="failure-message">Redactable operator detail</Label><Input id="failure-message" className="mt-1" value={failureMessage} onChange={(event) => setFailureMessage(event.target.value)} /></div><div className="flex items-end"><Button variant="outline" disabled={failureMessage.trim().length < 2 || busy || addFailure.isPending} onClick={() => startWrite(() => addFailure.mutate())}><FileClock className="h-4 w-4" />Record failure</Button></div></CardContent>
         </Card>
       ) : null}
     </div>
@@ -861,8 +886,10 @@ function registerFieldId(path: string) {
  * change to review; the text they copied from the register page is kept with
  * it as the source evidence.
  */
-function RegisterEvidenceForm({ workspace, onChanged }: { workspace: IpRegistryWorkspace; onChanged: () => Promise<void> }) {
+function RegisterEvidenceForm({ workspace, refreshing, onChanged }: { workspace: IpRegistryWorkspace; refreshing: boolean; onChanged: () => Promise<void> }) {
   const { link } = workspace;
+  const queryClient = useQueryClient();
+  const mutationKey = registryLinkWriteKey(link.id);
   const form = useMemo(() => registerFormFromState(link.accepted_state_json ?? {}), [link.accepted_state_json]);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(form.fields.map((field) => [field.path, field.value])),
@@ -881,6 +908,7 @@ function RegisterEvidenceForm({ workspace, onChanged }: { workspace: IpRegistryW
   );
 
   const addSnapshot = useMutation({
+    mutationKey,
     mutationFn: (input: { normalized: Record<string, unknown>; retrievedAt: string }) => recordIpRegistryManualSnapshot({
       linkId: link.id,
       expectedLinkVersion: link.version,
@@ -902,16 +930,18 @@ function RegisterEvidenceForm({ workspace, onChanged }: { workspace: IpRegistryW
       toast.success(result.no_change ? "No-change observation recorded." : `${result.diffs.length} registry change${result.diffs.length === 1 ? "" : "s"} queued for review.`);
       await onChanged();
     },
-    onError: (error) => {
+    onError: async (error) => {
       const fields = apiFieldErrors(error, SNAPSHOT_FIELD_MAP);
       const message = apiErrorMessage(error, "Could not record the register evidence.");
       setErrors(Object.keys(fields).length > 0 ? fields : { [API_FORM_ERROR_KEY]: message });
       toast.error(message);
+      if (isApiErrorShape(error) && error.status === 409) await onChanged();
     },
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (refreshing || queryClient.isMutating({ mutationKey }) > 0) return;
     const next: Record<string, string> = {};
     const normalized = normalizedRegisterRecord(form, values, parties);
     if (Object.keys(normalized).length === 0) next[API_FORM_ERROR_KEY] = "Enter at least one detail shown on the register.";
@@ -925,7 +955,7 @@ function RegisterEvidenceForm({ workspace, onChanged }: { workspace: IpRegistryW
     addSnapshot.mutate({ normalized, retrievedAt: viewed.toISOString() });
   }
 
-  const disabled = !confirmed || addSnapshot.isPending;
+  const disabled = !confirmed || refreshing || addSnapshot.isPending;
   return (
     <Card>
       <CardHeader>

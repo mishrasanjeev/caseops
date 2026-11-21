@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { expect, type Page } from "@playwright/test";
 import { loadJsQR } from "./external-journey-loaders";
 
@@ -22,11 +23,16 @@ export async function renderedTotpSecret(page: Page,
       if (!context) throw new Error("Authenticator pixel canvas unavailable.");
       context.fillStyle = "white"; context.fillRect(0, 0, 256, 256);
       context.drawImage(image, 0, 0, 256, 256);
-      return Array.from(context.getImageData(0, 0, 256, 256).data);
+      const bytes = context.getImageData(0, 0, 256, 256).data;
+      let binary = "";
+      for (let offset = 0; offset < bytes.length; offset += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+      }
+      return btoa(binary);
     } finally { URL.revokeObjectURL(source); }
   });
   // Decode only rasterized pixels; never read a DOM otpauth value or retain media.
-  const decoded = loadJsQR()(Uint8ClampedArray.from(pixels), 256, 256)?.data;
+  const decoded = loadJsQR()(new Uint8ClampedArray(Buffer.from(pixels, "base64")), 256, 256)?.data;
   expect(Boolean(decoded && decoded === enrollment.otpauth_url),
     "Rendered QR must decode to the exact canonical enrollment URL; private values omitted.").toBe(true);
   let url: URL;

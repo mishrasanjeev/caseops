@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/prod-diagnostic-test";
 
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 import { runId } from "./support/run-id";
+import { holdInitialTeamList } from "./support/team-initial-read";
 
 test.use({ trace: "off", screenshot: "off", video: "off" });
 
@@ -66,18 +67,39 @@ for (const mobile of [false, true]) {
     await page.locator("#password").fill(credentials.password);
     await page.getByRole("button", { name: /^Sign in$/ }).click();
     await page.waitForURL(/\/app(?:[/?]|$)/);
+    const initialList = await holdInitialTeamList(page, api.origin);
+    const workflowErrors: unknown[] = [];
     try {
+      const initialRequest = page.waitForRequest((candidate) => candidate.url() === `${api.origin}/api/teams/`
+        && candidate.method() === "GET");
       await page.goto(`${web.origin}/app/admin/teams`);
+      const originalRead = await initialRequest;
+      expect(originalRead.headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      await initialList.ready();
       await page.getByTestId("new-team-trigger").first().click();
       const create = page.getByRole("dialog", { name: "Create a team" });
       await create.getByLabel("Name", { exact: true }).fill(teamName);
       await create.getByLabel("Slug", { exact: true }).fill(teamSlug);
       const created = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/teams/" && response.request().method() === "POST");
+      const freshList = page.waitForResponse((response) => response.url() === `${api.origin}/api/teams/`
+        && response.request().method() === "GET" && response.request() !== originalRead);
       await create.getByRole("button", { name: "Create team", exact: true }).click();
       const createdResponse = await created;
       expect(createdResponse.status(), "UI-created team").toBe(201);
       teamId = (await createdResponse.json() as { id: string }).id;
       expect(teamId).toMatch(/^[a-f0-9-]{36}$/);
+      const refreshed = await freshList;
+      expect(refreshed.status(), "Creation refreshes an unresolved initial list with a new read").toBe(200);
+      expect(await refreshed.finished()).toBeNull();
+      const currentList = await refreshed.json() as { teams: Array<{ id: string }> };
+      expect(currentList.teams.some((team) => team.id === teamId)).toBe(true);
+      await expect(page.getByRole("button", { name: `Manage members of ${teamName}` })).toBeVisible();
+      const oldResponse = page.waitForResponse((response) => response.request() === originalRead);
+      await initialList.release();
+      const deliveredOld = await oldResponse;
+      expect(await deliveredOld.finished()).toBeNull();
+      const originalList = await deliveredOld.json() as { teams: Array<{ id: string }> };
+      expect(originalList.teams.some((team) => team.id === teamId)).toBe(false);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "Teams row stays within its available width").toBe(true);
       await page.getByRole("button", { name: `Manage members of ${teamName}` }).click();
       let dialog = page.getByRole("dialog", { name: `Members of ${teamName}` });
@@ -202,11 +224,19 @@ for (const mobile of [false, true]) {
       await page.getByRole("button", { name: `Manage members of ${teamName}` }).click();
       await expect(page.getByRole("dialog", { name: `Members of ${teamName}` }).getByText("No members yet.", { exact: true })).toBeVisible();
       await release();
+    } catch (error) {
+      workflowErrors.push(error);
     } finally {
+      try { await initialList.dispose(); }
+      catch (error) { if (!workflowErrors.includes(error)) workflowErrors.push(error); }
       if (teamId) {
-        const cleanup = await request.delete(`${api.origin}/api/teams/${teamId}`, { headers });
-        expect(cleanup.status(), "Remove only the team created by this execution").toBe(204);
+        try {
+          const cleanup = await request.delete(`${api.origin}/api/teams/${teamId}`, { headers });
+          expect(cleanup.status(), "Remove only the team created by this execution").toBe(204);
+        } catch (error) { workflowErrors.push(error); }
       }
     }
+    if (workflowErrors.length === 1) throw workflowErrors[0];
+    if (workflowErrors.length > 1) throw new AggregateError(workflowErrors, "Team workflow and cleanup failures are retained separately");
   });
 }

@@ -604,6 +604,19 @@ test("IP list and workspace categories retain reads without private identities",
   }
 });
 
+test("Team categories retain status and timing while rejecting private path additions", async () => {
+  for (const [route, method, status] of [["team/list", "POST", 201], ["team/record", "DELETE", 204],
+    ["team/members", "POST", 200], ["team/member-lead", "PATCH", 409]]) {
+    const data = snapshot();
+    data.records = [{ ...data.records[0], route, method, status }];
+    const { evidence } = await diagnostic(attach(data));
+    assert.equal(evidence.status, "retained");
+    assert.deepEqual(evidence.snapshot, data);
+    data.records[0].route = `${route}/PRIVATE-TEAM?expected_team_membership_id=${sentinel}`;
+    assert.equal((await diagnostic(attach(data))).evidence.status, "rejected");
+  }
+});
+
 test("same-name malicious extra keys or private enum/correlator values rejected before any write", async () => {
   const bad = [];
   const extra = snapshot(); extra.rawBody = sentinel; bad.push(extra);

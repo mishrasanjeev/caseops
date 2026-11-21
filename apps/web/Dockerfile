@@ -68,6 +68,7 @@ COPY apps/web ./
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
 COPY tests/fixtures/node-default-tls-probe.cjs /app/tests/fixtures/node-default-tls-probe.cjs
+COPY tests/fixtures/node-local-tls-certificates.cjs /app/tests/fixtures/node-local-tls-certificates.cjs
 COPY tests/fixtures/contract-preview-probe.ts /app/tests/fixtures/contract-preview-probe.ts
 # Colocated diagnostic units require their direct and transitive support imports.
 # Admit this explicit closure in both root ignore files; keep it out of the runner.
@@ -107,6 +108,7 @@ COPY tests/e2e/support/draft_pdf_production_20261111.ts /app/tests/e2e/support/d
 COPY tests/e2e/support/draft_pdf_render_proof_20261111.ts /app/tests/e2e/support/draft_pdf_render_proof_20261111.ts
 COPY tests/e2e/ram-2026-10-22-drafting.prod.spec.ts /app/tests/e2e/ram-2026-10-22-drafting.prod.spec.ts
 COPY tests/e2e/support/prod-diagnostic-test.ts /app/tests/e2e/support/prod-diagnostic-test.ts
+COPY tests/e2e/support/team-initial-read.ts /app/tests/e2e/support/team-initial-read.ts
 
 RUN node /opt/caseops/scripts/mobile/npm-tooling.mjs run build
 
