@@ -38,6 +38,7 @@ WEB_PATHS = ["apps/web", "package.json", "package-lock.json", "tests/e2e/support
              "apps/api/vendor/uharfbuzz-0.57.0/harfbuzz-COPYING",
              "tests/fixtures/statutes/structured-schedule-api.json",
              "tests/fixtures/node-default-tls-probe.cjs",
+             "tests/fixtures/node-local-tls-certificates.cjs",
              "tests/fixtures/contract-preview-probe.ts", ".dockerignore", ".gcloudignore",
              "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
              "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",

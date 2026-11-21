@@ -62,6 +62,7 @@ scripts/mobile/*
 !tests/fixtures/statutes/
 !tests/fixtures/statutes/structured-schedule-api.json
 !tests/fixtures/node-default-tls-probe.cjs
+!tests/fixtures/node-local-tls-certificates.cjs
 !tests/fixtures/contract-preview-probe.ts
 !tests/e2e/
 !tests/e2e/ram-2026-11-11-bugs.spec.ts
@@ -84,6 +85,7 @@ scripts/mobile/*
 !tests/e2e/support/draft_pdf_render_proof_20261111.ts
 !tests/e2e/ram-2026-10-22-drafting.prod.spec.ts
 !tests/e2e/support/prod-diagnostic-test.ts
+!tests/e2e/support/team-initial-read.ts
 !tests/e2e/support/env.ts
 !tests/e2e/support/ram-bugs4.ts
 !tests/e2e/support/canonical-api-validators.ts
