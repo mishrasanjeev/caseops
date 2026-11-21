@@ -3442,10 +3442,11 @@ test('CI preparation refuses to complete when a project config appears during th
 }));
 test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
   let setupCount = 0, commandCount = 0;
+  const nativePhaseCommands = [];
   for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
     const workflow = ciTrustYaml.load(readFileSync(new URL('../../.github/workflows/' + name, import.meta.url), 'utf8'));
     assert.ok(ciTrustKeys.every(key => !Object.hasOwn(workflow.env ?? {}, key)));
-    for (const job of Object.values(workflow.jobs)) {
+    for (const [jobId, job] of Object.entries(workflow.jobs)) {
       assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
       let setup, trust;
       for (const step of job.steps ?? []) {
@@ -3453,6 +3454,26 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
         if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
         const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
         if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
+        if (step.run === 'node --test scripts/tests/frontend-phase-scheduling.test.mjs') {
+          nativePhaseCommands.push(name + ':' + jobId);
+          assert.equal(step['timeout-minutes'], 2);
+          const steps = job.steps ?? [];
+          const installIndex = steps.findIndex(value => value.run === 'npx --no-install playwright install chromium');
+          const coverageIndex = steps.findIndex(value => value.run === 'npm run test:coverage --workspace @caseops/web');
+          assert.ok(installIndex >= 0 && installIndex < steps.indexOf(step));
+          assert.ok(steps.indexOf(step) < coverageIndex);
+          assert.equal(step.name, 'Verify exclusive native frontend phases');
+          assert.equal(step['timeout-minutes'], 2);
+          const install = job.steps.findIndex(value => value.run === 'npx --no-install playwright install chromium');
+          const coverage = job.steps.findIndex(value => value.run === 'npm run test:coverage --workspace @caseops/web');
+          assert.ok(install >= 0 && install < job.steps.indexOf(step) && job.steps.indexOf(step) < coverage);
+          const evidence = job.steps.filter(value => value.with?.path === 'test-results/frontend-scheduling/**/*.json');
+          assert.equal(evidence.length, 1);
+          assert.equal(evidence[0].if, 'always()');
+          assert.equal(evidence[0].with.name, jobId === 'web-windows' ? 'windows-frontend-phase-evidence' : 'frontend-phase-evidence');
+          assert.equal(evidence[0].with['retention-days'], 14);
+          assert.equal(evidence[0].with['include-hidden-files'], false);
+        }
         for (const key of ciTrustKeys) {
           if (isNode) assert.equal(step.env?.[key], '${{ steps.node_trust.outputs.' + key + ' }}');
           else assert.equal(Object.hasOwn(step.env ?? {}, key), false, 'Non-Node step must keep its own runtime environment');
@@ -3460,9 +3481,12 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  // Includes the explicit Chromium install and the five independently scoped
-  // commands in the complete Windows frontend gate; every old command remains.
-  assert.equal(setupCount, 20); assert.equal(commandCount, 208);
+  // Two explicitly fenced scheduling proofs supplement the unchanged 208
+  // commands and 20 setups; every command still owns all nine trust outputs.
+  assert.deepEqual(nativePhaseCommands.sort(), ['ci.yml:web', 'ci.yml:web-windows']);
+  assert.equal(setupCount, 20);
+  assert.equal(commandCount - nativePhaseCommands.length, 208);
+  assert.equal(commandCount, 210);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');

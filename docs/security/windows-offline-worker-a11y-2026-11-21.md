@@ -147,3 +147,18 @@ An erroneous checkout-line-ending transfer was caught before tests; every
 unchanged file was restored to exact stored Git bytes, and the complete
 intended full-index patch was independently reconciled in `310`. No Git
 configuration, pinned document fingerprint or security deadline was changed.
+
+The first schema-deferral candidate `54bab4a0` stopped in three CI web
+compilation/build jobs: the heterogeneous parameter tuples contextually inferred the
+default call-count argument as literal `2`, rejecting its default `1`
+(`TS2322`). An explicit `number` annotation preserves both intended call
+counts. The failed job log and required-check snapshot remain in external
+`pr629-54bab-failure315*` and `pr629-54bab-required-state316.json`.
+The separate Mobile source job failed its complete CI trust-command inventory:
+the two new scheduling-proof commands made the total 210 rather than 208.
+The repair independently fences those exact two commands, their job identities,
+placement, trust environment and retained evidence, while preserving all 208
+baseline commands and 20 setups. Expected negative-control error logs remain
+successful controls, not additional failures. Replacement compilation, the
+complete affected source suite and every later gate remain pending; no
+execution deadline or existing safety assertion was weakened.

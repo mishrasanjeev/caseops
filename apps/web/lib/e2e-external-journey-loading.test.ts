@@ -21,7 +21,7 @@ const targets = [
 const external = new Set(["@axe-core/playwright", "jsqr", "jszip", "zod",
   "../../apps/web/lib/ip/domain-catalog", "../../apps/web/lib/platform/schemas"]);
 
-it.each(targets)("keeps %s external pure dependencies inside journey-time calls", (file, loader, expectedCalls = 1) => {
+it.each(targets)("keeps %s external pure dependencies inside journey-time calls", (file, loader, expectedCalls: number = 1) => {
   const source = ts.createSourceFile(file, readFileSync(path.join(root, "tests/e2e", file), "utf8"), ts.ScriptTarget.Latest, true);
   const nodes: ts.Node[] = [];
   function visit(node: ts.Node) { nodes.push(node); ts.forEachChild(node, visit); }
