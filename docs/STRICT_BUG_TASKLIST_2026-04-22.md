@@ -7574,5 +7574,5 @@ The complete local replacement failed separately at App metadata discovery:
 3,242 passed and seven checks unexecuted. The original failure and this
 replacement both remain retained. A trace identifies eager application
 schema imports; deferral and native module-load regressions are now prepared.
-Expected full frontend inventory is 3,255 cases in 316 files. No new repair,
+Expected full frontend inventory is 3,256 cases in 316 files. No new repair,
 deployment or production closure is claimed before its replacement proof.

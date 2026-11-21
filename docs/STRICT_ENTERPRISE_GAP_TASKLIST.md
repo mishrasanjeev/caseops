@@ -5943,6 +5943,6 @@ The local replacement retained 3,242 passes and seven unreached App-inventory
 checks after a separate 15-second discovery timeout. Native-library and
 scheduling proofs passed; the whole release remains NO-GO. The follow-up
 defers real application schema imports and adds native module-load guards
-plus real validator proof. Complete replacement coverage now expects 3,255
+plus real validator proof. Complete replacement coverage now expects 3,256
 cases in 316 files, with the same 792 browser metadata identities. All new
 compile, CI, production and recovery evidence remains pending.

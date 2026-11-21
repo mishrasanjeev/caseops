@@ -248,7 +248,16 @@ function flattenApp(suites: NativeSuite[], retries: Record<string, number>, pare
   });
 }
 
-const eagerSchemaModule = /\bload ["'][^\r\n]*[\\/]+node_modules[\\/]+zod(?:[\\/]+|["'])/;
+function hasEagerSchemaModule(stderr: string): boolean {
+  return stderr.split("\n").some(line => {
+    if (!line.startsWith("MODULE ") || (!line.includes(': load "') && !line.includes(": load '"))) return false;
+    // Collapse each separator run once; avoid overlapping path quantifiers
+    // while retaining both native Windows and POSIX diagnostic formats.
+    const normalized = line.replaceAll("\\", "/").replace(/\/+/g, "/").toLowerCase();
+    return normalized.includes("/node_modules/zod/") || normalized.includes('/node_modules/zod"')
+      || normalized.includes("/node_modules/zod'");
+  });
+}
 
 function collectAppProject(project?: keyof typeof appSourceProjects, execute: MetadataConstructor = spawnSync): Case[] {
   // The retained774-case baseline is checked apart from the old eight plus two B5 additions.
@@ -272,7 +281,7 @@ function collectAppProject(project?: keyof typeof appSourceProjects, execute: Me
   ], { cwd: root, env, encoding: "utf8", timeout: 15_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true });
   expect(result.error).toBeUndefined();
   expect(result.status, result.stderr).toBe(0);
-  expect(result.stderr, "App metadata must defer runtime application schemas").not.toMatch(eagerSchemaModule);
+  expect(hasEagerSchemaModule(result.stderr), "App metadata must defer runtime application schemas").toBe(false);
   const native = JSON.parse(result.stdout) as {
     errors: unknown[]; suites: NativeSuite[];
     config: { projects: { id: string; name: string; retries: number; repeatEach: number }[] };
@@ -451,8 +460,26 @@ describe("App metadata constructor and source-order controls", () => {
           Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
         } }) };
     };
-    expect(collectAppProject(undefined, execute)).toEqual([]);
+    const rows = collectAppProject(undefined, execute);
+    expect(rows).toEqual([]);
     expect(calls).toBe(1);
+  });
+
+  it("bounds long native diagnostic paths without overlapping matcher work", () => {
+    let calls = 0;
+    const execute: MetadataConstructor = () => {
+      calls++;
+      return { status: 0, stderr: 'MODULE 1234: load "' + "/".repeat(50_000) + 'unrelated.cjs" for module "runner"',
+        stdout: JSON.stringify({ errors: [], suites: [], config: { projects:
+          Object.keys(appSourceProjects).map(name => ({ id: name, name, retries: 0, repeatEach: 1 })),
+        } }) };
+    };
+    const started = performance.now();
+    const rows = collectAppProject(undefined, execute);
+    const elapsed = performance.now() - started;
+    expect(rows).toEqual([]);
+    expect(calls).toBe(1);
+    expect(elapsed).toBeLessThan(1000);
   });
 
   it.each(["timeout", "nonzero"] as const)(

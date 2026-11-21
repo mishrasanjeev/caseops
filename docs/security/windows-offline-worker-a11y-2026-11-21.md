@@ -134,7 +134,7 @@ and an ordinary diagnostic-stderr positive control cover that boundary.
 The existing native library proof gains a fourth real schema-validation case;
 its original three cases and 5 s / 15 s / 20 s limits remain unchanged. Three
 new source guards cover the affected schema consumers. Expected complete
-Vitest inventory is now 3,255 cases in 316 files: source 54, native-library
+Vitest inventory is now 3,256 cases in 316 files: source 55, native-library
 11, and 3,190 ordinary cases. Browser metadata remains exactly 792 cases.
 Compilation, actual cold metadata/no-Zod proof, full replacement coverage,
 affected source contracts, CI, deployment and production replay are pending.
@@ -162,3 +162,11 @@ baseline commands and 20 setups. Expected negative-control error logs remain
 successful controls, not additional failures. Replacement compilation, the
 complete affected source suite and every later gate remain pending; no
 execution deadline or existing safety assertion was weakened.
+
+Source review also removed overlapping quantifiers from the diagnostic path
+matcher. The guard now uses native load-line markers and linear separator
+normalization. Existing Windows/POSIX and ordinary-stderr controls remain;
+one additional 50,000-separator path regression measures the actual constructor
+control within one second. No browser or constructor deadline is extended.
+This latest source change still needs compilation and complete replacement
+coverage; no security or performance repair is claimed from review alone.
