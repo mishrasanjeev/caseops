@@ -547,12 +547,12 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
-        assert current == "20261112_0001"
-        # The current head refuses on both dialects before touching native upload
-        # provenance. The historical migration is rehearsed separately above.
+        assert current == "20261121_0001"
+        # The current head (the restore-forward sales demo plan) refuses on both
+        # dialects before touching any row. The historical migration is rehearsed
+        # separately above.
         expected_refusal = (
-            "Restore-forward required: removing native attachment provenance could "
-            "reenable third-party processing without consent."
+            "The sales demo plan is restore-forward; restore the reviewed backup."
         )
         command.upgrade(config, "head")
         scope, _, rows, _ = seed_old(engine)
