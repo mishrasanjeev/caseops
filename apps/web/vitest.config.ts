@@ -38,10 +38,21 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: "native-libraries",
+          include: ["lib/e2e-external-journey-loading.test.ts"],
+          fileParallelism: false,
+          // The real offline browser owns its five-second case budgets.
+          // Do not overlap its renderer/script startup with coverage workers.
+          sequence: { groupOrder: 2 },
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: "web",
           include: ["components/**/*.test.{ts,tsx}", "app/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
-          exclude: [...configDefaults.exclude, "lib/prod-tester-source-inventory.test.ts"],
-          sequence: { groupOrder: 2 },
+          exclude: [...configDefaults.exclude, "lib/prod-tester-source-inventory.test.ts", "lib/e2e-external-journey-loading.test.ts"],
+          sequence: { groupOrder: 3 },
         },
       },
     ],

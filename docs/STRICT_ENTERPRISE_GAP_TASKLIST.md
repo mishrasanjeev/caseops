@@ -5925,3 +5925,24 @@ Independent cryptography parsing/signature/extension checks also pass.
 Full input closure, replacement3249-case frontend/1704 affected API
 inventories, current CI/Docker and production acceptance remain pending.
 See [evidence and remaining gates](security/windows-native-tls-fixture-2026-11-19.md).
+
+## November 21 — offline accessibility worker deadline
+
+**Inconclusive; release NO-GO.** QG-REL-003/005/008, J14/M14,
+PRA-09. Main `6260`'s Windows job `136777905480` retains 3,248 passes and
+one native accessibility timeout at the unchanged five-second limit.
+The terminal closed-page stack does not establish the underlying cause.
+One coordinated diagnostic passed; it neither reproduces nor repairs the
+failure. Draft PR629 adds passive operation timing without changing rules,
+libraries, mode, retries or deadlines. Root-cause proof, complete replacement
+coverage, green current-main CI, deployment, full production QA and guarded
+projection recovery remain required. See
+[the investigation](security/windows-offline-worker-a11y-2026-11-21.md).
+
+The local replacement retained 3,242 passes and seven unreached App-inventory
+checks after a separate 15-second discovery timeout. Native-library and
+scheduling proofs passed; the whole release remains NO-GO. The follow-up
+defers real application schema imports and adds native module-load guards
+plus real validator proof. Complete replacement coverage now expects 3,256
+cases in 316 files, with the same 792 browser metadata identities. All new
+compile, CI, production and recovery evidence remains pending.
