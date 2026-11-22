@@ -547,7 +547,7 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
-        assert current == "20261122_0001"
+        assert current == "20261122_0631"
         # The current head refuses before touching retained extraction provenance.
         # The named retained-read migration is rehearsed separately above.
         expected_refusal = (

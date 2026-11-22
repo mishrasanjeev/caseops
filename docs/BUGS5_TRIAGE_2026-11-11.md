@@ -76,6 +76,14 @@ active responsible lawyer. It refuses guessed values and retains the existing
 preview digest for messages that do not use the new fields. The added HTTP and
 desktop/phone cases still need execution. Actual inbox delivery remains open.
 
+On `4eda5599`, hosted API shard 7 retained 1,348 passes, 345 skips and one
+failure. Its read-only overnight workflow test still pinned the pre-Motor
+Vehicles statute spec. The new cases keep the original authenticated GET
+boundary, headers, response assertions and batch size. The new checksum binds
+the reviewed Git bytes, with LF enforced at checkout. The workflow-step
+checksum stays unchanged. Full replacement CI and release acceptance are
+still required.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

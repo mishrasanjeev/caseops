@@ -13,7 +13,7 @@ from tests.test_platform_console_migration import KINDS, fresh_engine, migration
 from tests.test_postgres_validation import _seed_company
 
 PREVIOUS = "20261112_0001"
-REVISION = "20261122_0001"
+REVISION = "20261122_0631"
 CONTENT = {
     "contract_clauses": "notes",
     "contract_obligations": "description",
