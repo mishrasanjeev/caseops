@@ -13,7 +13,7 @@ import type { AssistantAskResponse, AssistantScopeOption, AssistantSessionRecord
 import { localTransportHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
-import { json, signIn, type TesterCredentials } from "./support/ram-bugs4";
+import { json, reportedDevicePress, signIn, type TesterCredentials } from "./support/ram-bugs4";
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
 const loopback = (url: URL) => ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
@@ -61,7 +61,8 @@ type ResearchResponse = Awaited<ReturnType<typeof searchAuthorities>>;
 for (const phone of [false, true]) {
   test(`${phone ? "[mobile] " : ""}BUG-003 communications resolved preview and missing-value guard ${phone ? "phone" : "desktop"}`, {
     annotation: { type: "caseops-b5-proof", description: "preview-no-paid-guard" },
-  }, async ({ page, request, baseURL }) => {
+  }, async ({ page, request, baseURL }, info) => {
+    const press = await reportedDevicePress(page, info, phone);
     const web = new URL(baseURL ?? required("CASEOPS_WEB_BASE_URL"));
     const local = loopback(web);
     const api = new URL(local
@@ -139,7 +140,9 @@ for (const phone of [false, true]) {
       await release();
 
       const templateRow = page.getByTestId(`email-template-${templateId}`);
-      await templateRow.getByRole("button", { name: `Edit ${templateName}`, exact: true }).click();
+      const editTemplate = templateRow.getByRole("button", { name: `Edit ${templateName}`, exact: true });
+      await expect(editTemplate).toBeVisible();
+      await editTemplate[press]();
       await expect(templateRow.getByTestId("email-template-name")).toHaveValue(templateName);
       await expect(templateRow.getByTestId("email-template-subject")).toHaveValue(template.subject_template);
       await expect(templateRow.getByTestId("email-template-body")).toHaveValue(template.body_template);
@@ -147,7 +150,7 @@ for (const phone of [false, true]) {
       await templateRow.getByTestId("email-template-subject").fill(revisedSubject);
       const [patchResponse] = await Promise.all([
         responseFor(`/api/admin/email-templates/${templateId}`, "PATCH"),
-        templateRow.getByTestId("email-template-submit").click(),
+        templateRow.getByTestId("email-template-submit")[press](),
       ]);
       expect(patchResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
       expect(patchResponse.request().postDataJSON()).toEqual({
@@ -184,13 +187,13 @@ for (const phone of [false, true]) {
       const compose = page.getByRole("region", { name: "Compose email" });
       await compose.getByTestId("comm-send-template").selectOption(templateId);
       await expect(compose.getByLabel("Subject", { exact: true })).toHaveValue(revisedSubject);
-      await compose.getByRole("button", { name: "Use as default on this browser", exact: true }).click();
+      await compose.getByRole("button", { name: "Use as default on this browser", exact: true })[press]();
       await expect(compose.getByText(`Browser default: ${templateName}`, { exact: true })).toBeVisible();
       await page.reload();
       await page.getByTestId("comm-send-toggle").click();
       await expect(compose.getByTestId("comm-send-template")).toHaveValue(templateId);
       await expect(compose.getByLabel("Subject", { exact: true })).toHaveValue(revisedSubject);
-      await compose.getByRole("button", { name: "Clear browser default", exact: true }).click();
+      await compose.getByRole("button", { name: "Clear browser default", exact: true })[press]();
       await expect(compose.getByTestId("comm-send-template")).toHaveValue(templateId);
       await compose.getByLabel("Recipient email", { exact: true }).fill("no-delivery@example.com");
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();

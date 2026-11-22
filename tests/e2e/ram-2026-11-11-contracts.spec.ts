@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { loadJSZip } from "./support/external-journey-loaders";
 
-import { expectNoPageOverflow, json, prepareTester } from "./support/ram-bugs4";
+import { expectNoPageOverflow, json, prepareTester, reportedDevicePress } from "./support/ram-bugs4";
 import { repoRoot } from "./support/env";
 import { runId } from "./support/run-id";
 import { verifyReportedContractControls } from "./support/bugs5_contract_reported_20261111";
@@ -25,6 +25,7 @@ for (const mobile of [false, true]) {
     annotation: { type: "caseops-b5-proof", description: "workflow-outcome" },
   }, async ({ page, request, baseURL }, info) => {
     test.setTimeout(240_000);
+    const press = await reportedDevicePress(page, info, mobile);
     const rt = await prepareTester(page, request, baseURL, mobile ? { width: 393, height: 851 } : { width: 1366, height: 900 });
     await verifyReportedContractControls(page, request, rt, info);
     const title = `Synthetic contract B5 ${runId()}`;
@@ -154,7 +155,9 @@ for (const mobile of [false, true]) {
       await page.getByRole("button", { name: "Save suggestion", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Term suggestions (1)", exact: true })).toBeVisible();
       await expect(page.getByText("11 months", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Edit suggestion", exact: true }).click();
+      const editSuggestion = page.getByRole("button", { name: "Edit suggestion", exact: true });
+      await expect(editSuggestion).toBeVisible();
+      await editSuggestion[press]();
       const termEdit = page.getByRole("form", { name: "Edit term suggestion" });
       await expect(termEdit.getByLabel("Suggested effective date", { exact: true })).toHaveValue("2026-11-15");
       await expect(termEdit.getByLabel("Suggested duration (months)", { exact: true })).toHaveValue("11");
@@ -162,7 +165,7 @@ for (const mobile of [false, true]) {
       const [edited] = await Promise.all([
         page.waitForResponse((response) => response.url().startsWith(`${apiPath}/term-suggestions/`)
           && response.request().method() === "PATCH"),
-        termEdit.getByRole("button", { name: "Save suggestion", exact: true }).click(),
+        termEdit.getByRole("button", { name: "Save suggestion", exact: true })[press](),
       ]);
       expect(edited.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
       expect(await json(edited, "Persist reviewed correction to pending term")).toMatchObject({
