@@ -19,7 +19,6 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -74,7 +73,6 @@ from caseops_api.services.assignment_memberships import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.record_access_policy import (
-    _active_wall_window,
     _grant_subject_filter,
     _is_owner,
     _team_scoping_enabled,
@@ -85,6 +83,9 @@ from caseops_api.services.record_access_policy import (
 )
 from caseops_api.services.record_access_policy import (
     visible_matters_filter as visible_matters_filter,
+)
+from caseops_api.services.record_access_policy import (
+    walled_access_manager_target_ids as walled_access_manager_target_ids,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -457,35 +458,6 @@ def _load_ip_docket_for_access_management(
             detail="IP docket record not found.",
         )
     return docket
-
-
-def walled_access_manager_target_ids(
-    session: Session,
-    *,
-    context: SessionContext,
-    target_column: Any,
-    target_ids: set[str],
-) -> set[str]:
-    """Targets (Matter or IP docket ids) the acting manager is walled from.
-
-    Access-management policy: an ethical wall overrides the admin role, and
-    restriction does not. Admins stay the access managers of restricted
-    records they cannot read, but never of a record that walls them out.
-    The wall test is the one every read applies (`_wall_subject_filter` with
-    `_active_wall_window`: an active, unrevoked wall naming the membership or
-    one of its active teams). Owners are exempt.
-    """
-    if context.membership.role == MembershipRole.OWNER or not target_ids:
-        return set()
-    return set(
-        session.scalars(
-            select(target_column).where(
-                target_column.in_(target_ids),
-                _wall_subject_filter(context.membership.id),
-                _active_wall_window(datetime.now(UTC)),
-            )
-        )
-    )
 
 
 def _refuse_walled_matter_access_manager(

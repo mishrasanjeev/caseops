@@ -1548,7 +1548,7 @@ def _actor_hidden_matter_ids(
     follows the Matter access writers' policy: a wall overrides the admin
     role, restriction does not. Owners are exempt.
     """
-    from caseops_api.services.matter_access import walled_access_manager_target_ids
+    from caseops_api.services.record_access_policy import walled_access_manager_target_ids
 
     return walled_access_manager_target_ids(
         session,
