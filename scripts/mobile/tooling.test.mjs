@@ -28,7 +28,7 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
-import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA, HOST_NODE_ROOTS } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
 import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, prepareIosHomeDirectories, iosSimulatorInputEnvironment, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
 import { captureAndroidEmptyMavenRepository, bindAndroidEmptyMavenRepository, ANDROID_EMPTY_MAVEN_ENV } from './android-host-launch.mjs';
@@ -3453,6 +3453,8 @@ test('CI preparation refuses to complete when a project config appears during th
   assert.throws(() => fs.fstatSync(commandFD), { code: 'EBADF' });
 }));
 test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
+  assert.deepEqual(HOST_NODE_ROOTS['22.23.5'], HOST_NODE_ROOTS['22.23.4']);
+  assert.ok(['22.23.4', '24.15.0', '22.14.0'].every(version => Object.hasOwn(HOST_NODE_ROOTS, version)));
   let setupCount = 0, commandCount = 0;
   const nativePhaseCommands = [];
   for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
@@ -3462,7 +3464,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
       let setup, trust;
       for (const step of job.steps ?? []) {
-        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; if (name === 'ci.yml' && ['web', 'web-windows'].includes(jobId)) assert.equal(step.with['node-version'], '22.23.5'); else assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
         if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
         const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
         if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
@@ -4814,8 +4816,8 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
-  assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a'"));
+  assert.ok(helper.includes("const NODE_HELPER = '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '5dfd52600a80d998d5ee6f5e305d2bace317b35efb90ce9aaa468a187fd7c499'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4958,8 +4960,8 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '3f08aeb00815650e61beaa32faf097af0b05602e']]);
-    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'd9e096cf74508700496b85e45c75b5f23dd3ba11'], ['100644', 'f760bbba17aacb26aabefdc5302c1196f52163d4']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29977n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
       let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
@@ -5040,7 +5042,7 @@ test('CI source copy replacement changes no existing replacement mode and closes
 test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
   const trace = ciSourceTrace(); let staged;
   fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
-  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29741); }
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29977); }
   finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
   const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
   try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
@@ -5060,7 +5062,7 @@ test('CI explicit Windows preparation imports copied bytes and scopes child poli
     const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
     const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
     const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
-    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18');
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e');
     const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
     const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
     const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
@@ -6136,6 +6138,7 @@ test('source observer bootstrap generator preserves exact tokens and AST within 
   assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace('const A_SIZE = ' + recorder.length, 'const A_SIZE = 0'))), { code: 'ERR_ASSERTION' });
   const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
   assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
+  assert.deepEqual(first.provenance.compilerNodeVersions, ['22.23.5', '24.15.0']);
   assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.alloc(16385)), /BOOTSTRAP_GENERATOR_INPUT/);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.from([0xff])), /encoded data|UTF-8/);
