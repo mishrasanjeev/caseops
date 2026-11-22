@@ -1536,6 +1536,32 @@ def _ethical_wall_conflict_count(
     )
 
 
+def _actor_hidden_matter_count(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_ids: set[str],
+) -> int:
+    """Affected Matters the acting admin may not open (walled or restricted).
+
+    Offboarding rewrites those Matters' grants and responsibilities, so it
+    obeys the same visibility rule as the Matter access writers. Owners
+    bypass walls through the shared predicate and always count zero.
+    """
+    from caseops_api.services.record_access_policy import visible_matters_filter
+
+    if not matter_ids:
+        return 0
+    visible = session.scalar(
+        select(func.count(Matter.id)).where(
+            Matter.company_id == context.company.id,
+            Matter.id.in_(matter_ids),
+            visible_matters_filter(session, context=context),
+        )
+    )
+    return len(matter_ids) - int(visible or 0)
+
+
 def _build_offboarding_preview(
     session: Session,
     *,
@@ -1712,6 +1738,17 @@ def _build_offboarding_preview(
         )
         if conflicts:
             blockers.append("Replacement employee is ethically walled from affected matters.")
+    hidden = _actor_hidden_matter_count(
+        session, context=context, matter_ids=affected_matter_ids
+    )
+    if hidden:
+        # A count only: naming the Matters would disclose what the wall hides.
+        blockers.append(
+            f"You cannot act on {hidden} affected "
+            f"{'Matter' if hidden == 1 else 'Matters'} that you are walled or "
+            "restricted from. Ask a workspace owner, or an admin who can open "
+            "them, to offboard this employee."
+        )
 
     return EmployeeOffboardingPreviewResponse(
         employee=_employee_record(session, target),

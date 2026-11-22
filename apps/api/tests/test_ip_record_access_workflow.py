@@ -277,8 +277,11 @@ def test_ip_access_preview_apply_revocation_and_delivery_reauthorization(
         headers=member_headers,
         json={**grant_payload, "preview_token": grant_preview["preview_token"]},
     )
-    assert cross_actor_apply.status_code == 409
-    assert "does not match" in cross_actor_apply.text
+    # The reviewer cannot open this restricted record yet, so it cannot
+    # manage its access either: the same not-found as a read, before any
+    # preview-token comparison.
+    assert cross_actor_apply.status_code == 404
+    assert "IP docket record not found." in cross_actor_apply.text
     granted = _apply(
         client,
         headers=owner_headers,

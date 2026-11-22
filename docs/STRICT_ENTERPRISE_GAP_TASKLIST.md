@@ -1,3 +1,36 @@
+## November22 — walled admins and IP docket access, off-boarding grants
+
+**Implemented in code; release proof pending.** These are the two paths that
+PR #634's walled-admin entry listed as Missing (SEC-004, J14/M13). Merge this
+entry with that one when both land.
+
+- IP docket access management: `get_ip_access_panel`,
+  `preview_ip_access_change` and `apply_ip_access_change` (through
+  `_lock_ip_access_responsibility_fence`) now call
+  `_assert_ip_access_manager_can_open`, which applies
+  `assert_ip_docket_access`: an admin who cannot open the docket (IP wall, or a
+  restricted record without a grant) gets the audited "IP docket record not
+  found" 404. Owners are exempt for management only, so a firm can always
+  recover an IP record's access policy; the IP read policy itself still does
+  not exempt owners. Access-review finalization passes `commit_denial=False`.
+  Changed expectation: `test_ip_access_preview_apply_revocation_and_delivery_reauthorization`
+  had a hidden admin reach the preview-token mismatch (409); it now gets 404.
+- Employee off-boarding: `_build_offboarding_preview`, used by preview and
+  commit, adds a blocker when the acting admin cannot open some affected
+  Matters (grants, assignee or other moved work). Chosen behaviour is to refuse
+  the whole off-boarding with the count only, no Matter names. Skipping would
+  leave the leaver's grants and responsibilities on an inactive membership and
+  the replacement without expected access, with no one told. An owner or an
+  admin who can open those Matters completes it.
+
+Tests: `tests/test_20261122_walled_admin_access_management.py` (walled admin
+refused and audited, unwalled admin and owner still work, other tenant 404).
+Mutation probes: removing either new check fails its test.
+
+Still open: the off-boarding preview's `supported_objects` labels still list
+`matter_code - title` for Matters the acting admin cannot open. The blocker
+prevents the change, but the preview discloses the titles.
+
 ## November18 — a green CI does not supersede failed local acceptance
 
 ## November19 — deployed PR624, production Batch5 acceptance still open
