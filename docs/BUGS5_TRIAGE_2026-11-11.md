@@ -132,7 +132,13 @@ assignments and exact coverage. Only four cases move. Projected phase times
 are 460.16 and 422.82 seconds. The complete replacement CI remains pending.
 [Original cancelled job](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903/job/137118098559)
 
-In the replacement run on `ac07460d`, shard 6 passed in 10 minutes 36 seconds.
+In the replacement run on `ac07460d`, shard 6 passed in 10 minutes 36 seconds
+and shard 22 passed in 8 minutes 33 seconds. Both retain 132 passing cases,
+396 passing test phases, the expected transferred cases, and native exit
+zero. Their jobs finished inside the unchanged twelve-minute limit.
+[Shard 6](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140063304) ·
+[Shard 22](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140064349)
+
 The Windows web job reported 3,236 passing tests in 315 files and an
 unexpected worker exit. Comparison against the earlier 316-file report shows
 that `DraftPdfPreview.test.tsx` supplied none of its 23 case results. The
@@ -151,6 +157,14 @@ reported results. The shared log cannot identify the process responsible for
 that line. The observer now distinguishes startup acknowledgment from an
 assigned collect or run request and retains the original unexpected-exit
 behavior. An exact-source complete Windows run must still pass.
+
+The same pool error occurred on PR 639 with three results missing from
+`app/platform/setup/page.test.tsx`. Its 23 PDF preview tests passed, and
+the later run completed all 3,300 cases in 325 files with unchanged setup
+test and trust sources. Both PR 639 logs contain six bootstrap refusals.
+These records confirm a separate worker loss and leave the root of either
+worker exit open. [PR 639 original job](https://github.com/mishrasanjeev/caseops/actions/runs/44988792499/job/137105171972) ·
+[PR 639 later job](https://github.com/mishrasanjeev/caseops/actions/runs/45000524482/job/137140836128)
 
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
