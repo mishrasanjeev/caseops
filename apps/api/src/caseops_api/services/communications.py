@@ -35,6 +35,7 @@ from caseops_api.db.models import (
     CommunicationChannel,
     CommunicationDirection,
     CommunicationStatus,
+    CompanyMembership,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
     EmailTemplate,
@@ -44,6 +45,7 @@ from caseops_api.db.models import (
     MatterNote,
     PortalUser,
     PortalUserRole,
+    User,
 )
 from caseops_api.schemas.communications import (
     CommunicationCreateRequest,
@@ -79,7 +81,11 @@ from caseops_api.services.document_storage import (
     persist_matter_attachment,
     sanitize_filename,
 )
-from caseops_api.services.email_templates import list_email_templates, render_template
+from caseops_api.services.email_templates import (
+    list_email_templates,
+    render_template,
+    template_placeholders,
+)
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matter_write_fence import (
@@ -1017,6 +1023,26 @@ def _render_matter_email(
         "matter_title": matter.title,
         "matter_code": matter.matter_code,
     }
+    # Keep the existing preview digest for messages which do not use these fields.
+    requested = template_placeholders(message.subject_template, message.body_template)
+    if "case_number" in requested:
+        known["case_number"] = matter.case_number or ""
+    if "court_name" in requested:
+        known["court_name"] = matter.court_name or ""
+    if "advocate_name" in requested:
+        name = None
+        if matter.responsible_lawyer_membership_id is not None:
+            name = session.scalar(
+                select(User.full_name)
+                .join(CompanyMembership, CompanyMembership.user_id == User.id)
+                .where(
+                    CompanyMembership.id == matter.responsible_lawyer_membership_id,
+                    CompanyMembership.company_id == matter.company_id,
+                    CompanyMembership.is_active.is_(True),
+                    User.is_active.is_(True),
+                )
+            )
+        known["advocate_name"] = name or ""
     rendered = render_template(template=message, variables={**payload.variables, **known})
     rendered.resolved_variables = known
     return rendered, template

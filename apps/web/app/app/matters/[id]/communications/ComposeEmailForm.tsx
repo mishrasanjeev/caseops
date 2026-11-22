@@ -14,7 +14,10 @@ export type EmailSubmission = MatterEmailMessage & {
   preview_token: string;
 };
 
-const known = new Set(["client_name", "hearing_date", "matter_title", "matter_code"]);
+const known = new Set([
+  "client_name", "hearing_date", "matter_title", "matter_code",
+  "case_number", "court_name", "advocate_name",
+]);
 const field = "min-w-0 w-full rounded-md border border-[var(--color-line)] px-3 py-2 text-sm";
 
 function templatePreferenceKey(): string | null {

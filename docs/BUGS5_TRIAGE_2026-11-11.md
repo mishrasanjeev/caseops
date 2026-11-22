@@ -70,6 +70,12 @@ tracked obligations and records on other contracts. This change does not
 establish legal drafting quality or satisfy the broader editing and review
 criteria. Cross-dialect migration and workflow acceptance remain pending.
 
+BUG-003 also asks for the saved case number, court and lawyer in template
+messages. The candidate resolves these from the authorized Matter and its
+active responsible lawyer. It refuses guessed values and retains the existing
+preview digest for messages that do not use the new fields. The added HTTP and
+desktop/phone cases still need execution. Actual inbox delivery remains open.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

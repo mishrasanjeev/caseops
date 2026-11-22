@@ -181,6 +181,27 @@ for (const phone of [false, true]) {
       expect(uuid.test(matter.id) && matter.matter_code === matterCode && matter.next_hearing_on === null, "Fresh synthetic matter without an invented hearing date").toBe(true);
       await release();
 
+      const caseNumber = `QA-${nonce.slice(0, 8)}/2026`;
+      const courtName = "Delhi High Court";
+      const caseDetails = await json<{
+        id: string;
+        matter_code: string;
+        case_number: string;
+        court_name: string;
+        responsible_lawyer_membership_id: string;
+      }>(await request.patch(`${api.origin}/api/matters/${matterId}`, {
+        headers, maxRetries: 0, maxRedirects: 0,
+        data: {
+          case_number: caseNumber, court_name: courtName,
+          responsible_lawyer_membership_id: actor.membership.id,
+          expected_updated_at: matter.updated_at,
+        },
+      }), "Record case facts on this synthetic matter");
+      expect(caseDetails).toMatchObject({
+        id: matterId, matter_code: matterCode, case_number: caseNumber, court_name: courtName,
+        responsible_lawyer_membership_id: actor.membership.id,
+      });
+
       const communicationsPath = `/api/matters/${matterId}/communications`;
       await page.goto(`${web.origin}/app/matters/${matterId}/communications`);
       await page.getByTestId("comm-send-toggle").click();
@@ -222,9 +243,12 @@ for (const phone of [false, true]) {
 
       await compose.getByTestId("comm-send-template").selectOption("");
       await compose.getByLabel("Subject", { exact: true }).fill("Reviewed update");
-      await compose.getByRole("textbox", { name: "Message", exact: true }).fill("Hi {{client_name}}, no hearing date is confirmed.");
+      await compose.getByRole("textbox", { name: "Message", exact: true }).fill(
+        "Hi {{client_name}}, no hearing date is confirmed. Case {{case_number}} in {{court_name}}. Responsible lawyer: {{advocate_name}}.",
+      );
+      const caseSummary = `Case ${caseNumber} in ${courtName}. Responsible lawyer: ${actor.user.full_name}.`;
       const manual = await preview();
-      expect(manual.body).toBe("Hi QA Client, no hearing date is confirmed.");
+      expect(manual.body).toBe(`Hi QA Client, no hearing date is confirmed. ${caseSummary}`);
       expect(manual.missing_variables).toEqual([]);
       expect(manual.invalid_placeholders).toEqual([]);
       expect(manual.preview_token).toBeTruthy();
@@ -257,7 +281,7 @@ for (const phone of [false, true]) {
       expect(staleProblem.detail).toContain("Email preview expired or changed");
       await expect(page.getByText(staleProblem.detail, { exact: true })).toBeVisible();
       const updated = await preview();
-      expect(updated.body).toBe("Hi Updated QA Client, no hearing date is confirmed.");
+      expect(updated.body).toBe(`Hi Updated QA Client, no hearing date is confirmed. ${caseSummary}`);
       expect(updated.preview_token).toBeTruthy();
       await expect(compose.getByTestId("comm-send-preview-result")).toContainText(updated.body);
       await release();

@@ -357,6 +357,11 @@ function TemplateForm({
               data-testid="email-template-body"
             />
           </label>
+          <p className="text-xs text-[var(--color-mute)]">
+            Use <code>{'{{case_number}}'}</code>, <code>{'{{court_name}}'}</code> and{" "}
+            <code>{'{{advocate_name}}'}</code> to fill the saved case number, court and
+            responsible lawyer from the matter.
+          </p>
           {detectedVars.length > 0 ? (
             <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3 text-xs">
               <div className="font-medium text-[var(--color-ink)]">
@@ -371,7 +376,7 @@ function TemplateForm({
                 ))}
               </div>
               <p className="mt-1 text-[var(--color-mute)]">
-                The Compose dialog will require these at send time.
+                Preview shows any values you still need to supply before sending.
               </p>
             </div>
           ) : null}

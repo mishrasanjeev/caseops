@@ -34,7 +34,14 @@ from caseops_api.services.session_context import SessionContext
 # interchangeably with {{client_name}}.
 _PLACEHOLDER_RE = re.compile(r"(?<!\{)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}(?!\})")
 _UNRESOLVED_RE = re.compile(r"\{\{|\}\}|\{\[|\]\}|\[[A-Za-z_][A-Za-z0-9_]* not set\]")
-MATTER_EMAIL_VARIABLES = frozenset({"client_name", "hearing_date", "matter_title", "matter_code"})
+MATTER_EMAIL_VARIABLES = frozenset({
+    "client_name", "hearing_date", "matter_title", "matter_code",
+    "case_number", "court_name", "advocate_name",
+})
+
+
+def template_placeholders(subject: str, body: str) -> set[str]:
+    return set(_PLACEHOLDER_RE.findall(subject + "\n" + body))
 
 
 def list_email_templates(
@@ -207,7 +214,7 @@ def render_template(
                 declared_names.add(v.name)
             if getattr(v, "required", True) and getattr(v, "name", None):
                 declared_required.append(v.name)
-    tokens = set(_PLACEHOLDER_RE.findall(subject_tpl + "\n" + body_tpl))
+    tokens = template_placeholders(subject_tpl, body_tpl)
     missing = sorted(
         n for n in tokens | set(declared_required)
         if n not in variables or not variables[n].strip()
@@ -231,5 +238,6 @@ __all__ = [
     "get_email_template",
     "list_email_templates",
     "render_template",
+    "template_placeholders",
     "update_email_template",
 ]
