@@ -22703,6 +22703,9 @@ MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
 MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
 from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
 from caseops_api.db import workspace_conduct_models as _conduct_models  # noqa: E402
+from caseops_api.db.ip_official_search_models import (  # noqa: E402, F401
+    IpOfficialSearchImport,
+)
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
     IpPatentProceedingDetail,
     IpPatentProceedingEvent,
