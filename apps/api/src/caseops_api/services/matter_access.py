@@ -2053,8 +2053,9 @@ def attach_visible_matters_filter(
 # ---------------------------------------------------------------------------
 # CRUD helpers for grants / walls / restricted flag.
 #
-# All three require the caller to be owner/admin; that gate lives in the
-# route. These functions assume the caller is authorised.
+# All require the caller to be owner/admin (route capability plus
+# _require_admin) and able to open the Matter (assert_access in the fence and
+# the panel read), so an ethical wall overrides the admin role here too.
 # ---------------------------------------------------------------------------
 
 
@@ -2095,6 +2096,7 @@ def _lock_matter_access_responsibility_fence(
     *,
     context: SessionContext,
     matter_id: str,
+    commit_denial: bool = True,
 ) -> tuple[
     Matter,
     list[IpDocketRecord],
@@ -2106,6 +2108,18 @@ def _lock_matter_access_responsibility_fence(
         session,
         context.company.id,
         matter_id,
+    )
+    # Access managers act only on Matters they may open. A wall overrides the
+    # admin role here exactly as on every read: a walled admin gets the same
+    # audited 404, so it can neither lift its own wall nor change the Matter's
+    # walls or grants. Owners bypass walls through the shared predicate.
+    # Access-policy writers serialize on the Company lock above, so the
+    # decision cannot race another wall or grant change.
+    assert_access(
+        session,
+        context=context,
+        matter=advisory_matter,
+        commit_denial=commit_denial,
     )
     advisory_dockets = list(
         session.scalars(
@@ -2266,6 +2280,8 @@ def list_access_panel(
 ) -> tuple[Matter, list[MatterAccessGrant], list[EthicalWall]]:
     _require_admin(context)
     matter = _load_matter_or_404(session, context.company.id, matter_id)
+    # Same rule as the writers: a walled admin cannot read this Matter's ACL.
+    assert_access(session, context=context, matter=matter)
     grants = list(
         session.scalars(
             select(MatterAccessGrant)
@@ -2512,6 +2528,9 @@ def remove_access_grant(
             session,
             context=context,
             matter_id=matter_id,
+            # Access-review finalization owns its transaction; never commit
+            # part of it while recording a denial.
+            commit_denial=commit,
         )
     )
     grant = session.scalar(

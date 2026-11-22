@@ -484,6 +484,16 @@ def test_wall_directory_never_lists_another_tenants_walls(client: TestClient) ->
         headers=auth_headers(token_b),
     )
     assert rm.status_code == 404
+    # Nor add one, nor read tenant A's access panel.
+    member_b = boot_b.json()["membership"]["id"]
+    add = client.post(
+        f"/api/matters/{matter_a}/access/walls",
+        headers=auth_headers(token_b),
+        json={"excluded_membership_id": member_b},
+    )
+    assert add.status_code == 404
+    panel = client.get(f"/api/matters/{matter_a}/access", headers=auth_headers(token_b))
+    assert panel.status_code == 404
     assert len(_directory(client, token_a)["walls"]) == 1
 
 
@@ -559,3 +569,137 @@ def test_wall_overrides_admin_and_partner_roles_and_hides_directory_rows(
         partner_mid,
         member_mid,
     }
+
+
+# ---------------------------------------------------------------------------
+# A wall also overrides the admin role on the access-management API (SEC-004).
+# ---------------------------------------------------------------------------
+
+
+def _panel(client: TestClient, token: str, matter_id: str) -> dict:
+    resp = client.get(f"/api/matters/{matter_id}/access", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_walled_admin_cannot_read_or_change_that_matters_walls_or_grants(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    company_id = boot["company"]["id"]
+    matter_id = _create_matter(client, owner_token, "ACL-WALLED-ADMIN")
+    admin_mid, admin_token = _invite_member(
+        client, owner_token, "walled-admin@asterlegal.in", role="admin"
+    )
+    member_mid, _ = _invite_member(client, owner_token, "acl-colleague@asterlegal.in")
+
+    own_wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": admin_mid, "reason": "Conflict."},
+    )
+    assert own_wall.status_code == 200, own_wall.text
+    grant = client.post(
+        f"/api/matters/{matter_id}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": member_mid},
+    )
+    assert grant.status_code == 200, grant.text
+    before = _panel(client, owner_token, matter_id)
+    denied_before = len(_audit_rows("access_denied", company_id))
+
+    admin = auth_headers(admin_token)
+    attempts = [
+        client.delete(
+            f"/api/matters/{matter_id}/access/walls/{own_wall.json()['id']}", headers=admin
+        ),
+        client.post(
+            f"/api/matters/{matter_id}/access/walls",
+            headers=admin,
+            json={"excluded_membership_id": member_mid},
+        ),
+        client.post(
+            f"/api/matters/{matter_id}/access/grants",
+            headers=admin,
+            json={"membership_id": admin_mid, "reason": "Let me back in."},
+        ),
+        client.post(
+            f"/api/matters/{matter_id}/access/grants",
+            headers=admin,
+            json={"membership_id": member_mid},
+        ),
+        client.delete(
+            f"/api/matters/{matter_id}/access/grants/{grant.json()['id']}", headers=admin
+        ),
+        client.post(
+            f"/api/matters/{matter_id}/access/restricted",
+            headers=admin,
+            json={"restricted": True},
+        ),
+        client.get(f"/api/matters/{matter_id}/access", headers=admin),
+    ]
+    # Same answer as any read of a walled Matter: not found, no existence leak.
+    assert [r.status_code for r in attempts] == [404] * len(attempts)
+    assert all(r.json()["detail"] == "Matter not found." for r in attempts)
+
+    # Every refusal is audited against the Matter, and nothing changed.
+    denied = _audit_rows("access_denied", company_id)[denied_before:]
+    assert len(denied) == len(attempts)
+    assert {(e.target_id, e.actor_membership_id) for e in denied} == {(matter_id, admin_mid)}
+    assert _panel(client, owner_token, matter_id) == before
+    still_walled = client.get(f"/api/matters/{matter_id}", headers=admin)
+    assert still_walled.status_code == 404
+
+
+def test_unwalled_admin_and_walled_owner_still_manage_walls_and_grants(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    owner_mid = boot["membership"]["id"]
+    matter_id = _create_matter(client, owner_token, "ACL-MANAGERS")
+    _, admin_token = _invite_member(
+        client, owner_token, "free-admin@asterlegal.in", role="admin"
+    )
+    member_mid, _ = _invite_member(client, owner_token, "managed@asterlegal.in")
+
+    def manage(token: str) -> None:
+        headers = auth_headers(token)
+        assert _panel(client, token, matter_id)["matter_id"] == matter_id
+        wall = client.post(
+            f"/api/matters/{matter_id}/access/walls",
+            headers=headers,
+            json={"excluded_membership_id": member_mid},
+        )
+        assert wall.status_code == 200, wall.text
+        lifted = client.delete(
+            f"/api/matters/{matter_id}/access/walls/{wall.json()['id']}", headers=headers
+        )
+        assert lifted.status_code == 204, lifted.text
+        grant = client.post(
+            f"/api/matters/{matter_id}/access/grants",
+            headers=headers,
+            json={"membership_id": member_mid},
+        )
+        assert grant.status_code == 200, grant.text
+        revoked = client.delete(
+            f"/api/matters/{matter_id}/access/grants/{grant.json()['id']}", headers=headers
+        )
+        assert revoked.status_code == 204, revoked.text
+
+    manage(admin_token)
+
+    # Owners bypass walls, including a wall naming themselves.
+    self_wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=auth_headers(owner_token),
+        json={"excluded_membership_id": owner_mid},
+    )
+    assert self_wall.status_code == 200, self_wall.text
+    manage(owner_token)
+    lifted = client.delete(
+        f"/api/matters/{matter_id}/access/walls/{self_wall.json()['id']}",
+        headers=auth_headers(owner_token),
+    )
+    assert lifted.status_code == 204, lifted.text

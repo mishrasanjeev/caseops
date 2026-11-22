@@ -9,9 +9,10 @@ visibility-scoped, 500-row bound) and writes through the existing audited wall
 routes. API, component and desktop/393px journey tests cover listing, creation,
 lifting, denial, tenant isolation and what a walled admin, partner or member
 sees. Still open: team-subject and time-boxed Matter walls have no writer, the
-grants and restricted-access toggle still have no screen, and the existing
-write routes let a walled admin change walls on that Matter by id. Not yet
-deployed or verified in production.
+grants and restricted-access toggle still have no screen. The access panel and
+all wall, grant and restricted-access writers now refuse a walled admin with the
+audited 404 (owners exempt); IP docket access management and off-boarding grant
+reassignment remain open. Not yet deployed or verified in production.
 
 ## 2026-11-18 — local Docker04 failures remain release blockers
 
