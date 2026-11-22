@@ -3085,10 +3085,12 @@ APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
 APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
-        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards", "populated counsel and bench disclosures",
+        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
+        "populated counsel and bench disclosures",
     )),
     ("app-mobile", "matter-compact-cards.spec.ts", (
-        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards", "[mobile] populated counsel and bench disclosures",
+        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
+        "[mobile] populated counsel and bench disclosures",
     )),
 )
 MOTOR_STATUTE_FILE = "ram-2026-09-07-statute-source-data.spec.ts"
@@ -3301,7 +3303,9 @@ def app_capture(capture):
         if project == "app-chromium":
             added += [(MOTOR_STATUTE_FILE, title) for title in MOTOR_STATUTE_CASES]
         added_paths = [(file, (file, title)) for file, title in added]
-        added_paths += [(file, titles) for owner, file, titles in COMPACT_MATTER_CASES if owner == project]
+        added_paths += [
+            (file, titles) for owner, file, titles in COMPACT_MATTER_CASES if owner == project
+        ]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]
