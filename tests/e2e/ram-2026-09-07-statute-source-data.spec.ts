@@ -79,36 +79,43 @@ const test = baseTest.extend<{}, { sourceApi: APIRequestContext }>({
   }, { scope: "worker" }],
 });
 
-// Bound each independent read-only batch instead of increasing request deadlines.
-for (let offset = 0; offset < rows.length; offset += 40) {
-  const batch = rows.slice(offset, offset + 40);
-  test(`BUG-010 source records ${offset + 1}-${offset + batch.length} of ${rows.length}`, async ({ sourceApi: api }) => {
-    for (const expected of batch) {
-      const response = await api.get(
-        `${API}/api/statutes/${expected.statute_id}/sections/${encodeURIComponent(expected.section_number)}`,
-      );
-      expect(response.status(), await response.text()).toBe(200);
-      const actual = (await response.json()).section;
-      for (const field of [
-        "statute_id", "section_label", "section_text_source", "source_publisher", "issuing_body",
-        "source_category", "source_status", "legal_status", "effective_from", "source_locator_type",
-        "link_health_status", "quarantine_reason",
-      ] as const) {
-        expect(actual[field], `${expected.statute_id} ${expected.section_number}: ${field}`).toBe(expected[field]);
+// Keep the original source cases and add separately named batches for Motor Vehicles.
+const motorAct = "motor-vehicles-1988";
+const sourceBatches = [
+  { label: "BUG-010 source records", provisions: rows.filter(row => row.statute_id !== motorAct) },
+  { label: "BUG-018 Motor Vehicles source records", provisions: rows.filter(row => row.statute_id === motorAct) },
+];
+for (const { label, provisions } of sourceBatches) {
+  for (let offset = 0; offset < provisions.length; offset += 40) {
+    const batch = provisions.slice(offset, offset + 40);
+    test(`${label} ${offset + 1}-${offset + batch.length} of ${provisions.length}`, async ({ sourceApi: api }) => {
+      for (const expected of batch) {
+        const response = await api.get(
+          `${API}/api/statutes/${expected.statute_id}/sections/${encodeURIComponent(expected.section_number)}`,
+        );
+        expect(response.status(), await response.text()).toBe(200);
+        const actual = (await response.json()).section;
+        for (const field of [
+          "statute_id", "section_label", "section_text_source", "source_publisher", "issuing_body",
+          "source_category", "source_status", "legal_status", "effective_from", "source_locator_type",
+          "link_health_status", "quarantine_reason",
+        ] as const) {
+          expect(actual[field], `${expected.statute_id} ${expected.section_number}: ${field}`).toBe(expected[field]);
+        }
+        expect(Date.parse(actual.source_retrieved_at)).toBe(Date.parse(expected.source_retrieved_at));
+        expect(actual.section_number).toBe(expected.section_number);
+        expect(actual.verification_status).toBe(expected.verification_status);
+        expect(actual.source_sha256).toBe(expected.source_sha256);
+        expect(actual.section_url).toBe(expected.source_url);
+        expect(actual.exact_source_version).toBe(expected.exact_source_version);
+        expect(actual.editorial_notes).toBe(expected.editorial_notes);
+        if (expected.verification_status === "verified_official") {
+          expect(actual.section_text).toBe(expected.section_text);
+          expect(createHash("sha256").update(actual.section_text).digest("hex")).toBe(expected.source_sha256);
+        } else {
+          expect(actual.section_text).toBeNull();
+        }
       }
-      expect(Date.parse(actual.source_retrieved_at)).toBe(Date.parse(expected.source_retrieved_at));
-      expect(actual.section_number).toBe(expected.section_number);
-      expect(actual.verification_status).toBe(expected.verification_status);
-      expect(actual.source_sha256).toBe(expected.source_sha256);
-      expect(actual.section_url).toBe(expected.source_url);
-      expect(actual.exact_source_version).toBe(expected.exact_source_version);
-      expect(actual.editorial_notes).toBe(expected.editorial_notes);
-      if (expected.verification_status === "verified_official") {
-        expect(actual.section_text).toBe(expected.section_text);
-        expect(createHash("sha256").update(actual.section_text).digest("hex")).toBe(expected.source_sha256);
-      } else {
-        expect(actual.section_text).toBeNull();
-      }
-    }
-  });
+    });
+  }
 }

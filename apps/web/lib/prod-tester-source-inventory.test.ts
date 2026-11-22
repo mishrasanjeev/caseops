@@ -180,6 +180,18 @@ function collectProjects(selectedProjects: Record<string, number>, selectedFiles
 type MetadataConstructor = (command: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) =>
   Pick<SpawnSyncReturns<string>, "error" | "status" | "stdout" | "stderr">;
 const appSourceProjects = { "app-chromium": 719, "app-mobile": 55 };
+const motorStatuteFile = "ram-2026-09-07-statute-source-data.spec.ts";
+const motorStatuteTitles = [
+  "BUG-018 Motor Vehicles source records 1-40 of 259",
+  "BUG-018 Motor Vehicles source records 41-80 of 259",
+  "BUG-018 Motor Vehicles source records 81-120 of 259",
+  "BUG-018 Motor Vehicles source records 121-160 of 259",
+  "BUG-018 Motor Vehicles source records 161-200 of 259",
+  "BUG-018 Motor Vehicles source records 201-240 of 259",
+  "BUG-018 Motor Vehicles source records 241-259 of 259",
+];
+const isMotorStatute = (row: Case) => row.file === motorStatuteFile
+  && Boolean(row.titles.at(-1)?.startsWith("BUG-018 Motor Vehicles source records "));
 const batch5Files = ["statutes", "drafting", "contracts", "bugs"].map(name => `ram-2026-11-11-${name}.spec.ts`);
 const isBatch5 = (row: Case) => batch5Files.includes(row.file.split("/").at(-1)!);
 const nov14Cases = [
@@ -325,6 +337,7 @@ describe("complete independent App CI project inventory", () => {
   let batch5: Case[];
   let nov14: Case[];
   let nov15: Case[];
+  let motorStatutes: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
@@ -332,7 +345,8 @@ describe("complete independent App CI project inventory", () => {
     batch5 = all.filter(isBatch5);
     nov14 = all.filter(isNov14);
     nov15 = all.filter(isNov15);
-    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
+    motorStatutes = all.filter(isMotorStatute);
+    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isMotorStatute(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -363,7 +377,9 @@ describe("complete independent App CI project inventory", () => {
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
     const count = appSourceProjects[project];
     it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
-      const selected = collectAppProject(project).filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
+      const selected = collectAppProject(project).filter(
+        row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isMotorStatute(row),
+      );
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
     }, 20_000);
@@ -391,6 +407,17 @@ describe("complete independent App CI project inventory", () => {
     expect(counts(nov15.map(row => row.project))).toEqual({ "app-chromium": 1, "app-mobile": 1 });
     expect(counts([...canonical, ...batch5, ...nov14, ...nov15].map(row => row.project)))
       .toEqual({ "app-chromium": 728, "app-mobile": 64 });
+  });
+
+  it("keeps all seven Motor Vehicles source batches and every original App case", () => {
+    expect(motorStatutes.map(row => [row.project, row.file, row.titles])).toEqual(
+      motorStatuteTitles.map(title => ["app-chromium", motorStatuteFile, [motorStatuteFile, title]]),
+    );
+    expect(new Set(motorStatutes.map(row => row.id)).size).toBe(7);
+    expect(motorStatutes.every(row => row.retries === 0 && row.repeat === 0
+      && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts([...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes].map(row => row.project)))
+      .toEqual({ "app-chromium": 735, "app-mobile": 64 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

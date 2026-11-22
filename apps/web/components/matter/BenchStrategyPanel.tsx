@@ -140,7 +140,7 @@ export function BenchStrategyPanel({
 
         {data.top_statute_sections.length > 0 ? (
           <details className="rounded-md border border-[var(--color-line)] px-3">
-            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+            <summary tabIndex={0} className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
               <ScrollText className="mr-2 inline h-3 w-3" aria-hidden />
               Top statute sections cited ({data.top_statute_sections.length})
             </summary>
@@ -175,7 +175,7 @@ export function BenchStrategyPanel({
 
         {data.top_authorities.length > 0 ? (
           <details className="rounded-md border border-[var(--color-line)] px-3">
-            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+            <summary tabIndex={0} className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
               <BookOpenCheck className="mr-2 inline h-3 w-3" aria-hidden />
               Top authorities cited ({data.top_authorities.length})
             </summary>

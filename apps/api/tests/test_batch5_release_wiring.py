@@ -191,7 +191,7 @@ def test_batch5_inventory_cannot_infer_unreviewed_counts_or_change_historical_pi
     assert evidence.APP_BASE_PROJECT_COUNTS == {"app-chromium": 719, "app-mobile": 55}
     assert len(evidence.APP_EXPECTED_SKIPS) == 21
     assert evidence.BATCH5_CASE_COUNTS == _reviewed_batch5_counts()
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 728, "app-mobile": 64}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 735, "app-mobile": 64}
     assert sum(evidence.BATCH5_CASE_COUNTS[BATCH5_BUGS_FILE]) == 4
     assert sum(sum(pair) for pair in evidence.BATCH5_CASE_COUNTS.values()) == 8 + 2
     assert evidence.BATCH5_CASE_PROOF_SCOPES == {

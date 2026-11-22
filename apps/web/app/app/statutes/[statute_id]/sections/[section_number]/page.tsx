@@ -354,7 +354,7 @@ export default function StatuteSectionDetailPage() {
               title="Verified statutory text unavailable"
               description={
                 section.verification_status === "quarantined"
-                  ? "A credible source conflict is under legal review. Text and source actions remain disabled."
+                  ? "The reason above explains why the text and section link are unavailable."
                   : "Only independently reviewed official or lawfully licensed section text is displayed here."
               }
             />

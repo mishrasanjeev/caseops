@@ -11,7 +11,7 @@ has no new execution credit until its case results are recorded.
 
 | Open report | What the current evidence establishes | Required follow-up |
 | --- | --- | --- |
-| BUG-001 | Retained original PDF preview and export matched on desktop and phone. The original never changed. The synthetic `ram-2026-10-22-drafting` journey also covers change requests, regeneration, approval, finalization and reload. | DR-T01–05. Review approved court profiles and legal propositions against the exact source and jurisdiction. Keep the original PDF verdict and legal-quality verdict distinct. |
+| BUG-001 | Retained original PDF preview and export matched on desktop and phone. The Delhi preset used 12 pt body text and one-inch margins. [Practice Direction 90/Rules/DHC](https://delhihighcourt.nic.in/files/announcements/publicnotice_gj9mke1bqs0.pdf) specifies 14 pt, 1.5 line spacing, 40 mm side margins and 20 mm top and bottom margins. | DR-T01–05. Candidate aligns these numeric settings. PDF embeds Liberation Serif and formatted Word requests Times New Roman. Validate actual line geometry and export parity, review the bail [affidavit directions](https://delhihighcourt.nic.in/files/2026-05/notifications-and-practice-directions/practice_direction_183_dated_26.05.pdf) and keep legal and filing approval open. |
 | BUG-003 | Baseline admin exposes create and archive. The existing PATCH API supplies the reusable-template write boundary. Earlier guarded composition and stale-send evidence remains valid. | Candidate adds a prefilled, versioned editor and an optional personal default on the current browser. Run the extended desktop/phone journey and SQLite/PostgreSQL checks. Additional automatic fields and verified actual inbox delivery remain open. |
 | BUG-004 | The [Delhi High Court judgment dated 6 November](https://delhihighcourt.nic.in/app/showFileJudgment/68006112026RCR3402024_174221.pdf) confirms the exact CNR and case number and dismisses that High Court revision. Current code distinguishes unavailability, depleted balance, ambiguous match, and verified no-match. | TRK-T01–06. Use the authorized QA scope to verify provider eligibility, the exact match, judgment and disposed status. A verified next hearing belongs to a separate active-case fixture. Keep the underlying eviction proceeding separate from the reported High Court revision. |
 | BUG-007 | Clause extraction and basic tenant playbook rules exist. The reported legal drafting quality is unproven. | CON-T03–05 and J10/FT-051. Use a reviewed Indian-law scenario pack with documented transaction, dates, jurisdiction and independent legal assessment. Verify human editing and review separately. |
@@ -29,6 +29,11 @@ has no new execution credit until its case results are recorded.
 | BUG-019 | Static official IP references and manually recorded registry evidence work in their verified scope. The [10 November CGPDTM notice](https://ipindia.gov.in/storage/uploads/others/n5VgKh9iNvopzN2XoXnRP9yqWPS4wVXbrIPFxwt5.pdf) restricts commercial scraping and substantial extraction of the listed official resources. | REG-T01–04. Use only a supported channel with permission for the intended commercial use. Test exact identity, stale data, changes and fail-closed matching when such a channel is available. |
 | ENH-020 | Reviewed judge mapping exists. The reported prediction page has no positive comparable sample. | J06/J09. Verify source-backed descriptive results and honest low-sample behavior. Unsupported judge favorability and uncalibrated probabilities are excluded by the PRD. |
 
+The official Delhi layout PDF SHA-256 is
+`dc2676f21a8af5b8fd026ab73cbf99246e06fef97e568c648c7c52e9c874bbb1`.
+The separately retained bail directions PDF SHA-256 is
+`adf42117a3aace4c0b36ab5fab02f3a81d05bc332dfaf66f68f053908ed2e85e`.
+
 The local test window is shared. The UAE validation controller currently has
 active jobs. Static Python syntax, bundle checksum, exact manifest counts and
 the retained Motor Vehicles PDF digest are verified. The hosted [Security
@@ -37,6 +42,14 @@ ran the canonical OpenAPI generator. Its clean-diff check detected the expected
 uncommitted client changes. The generated patch was applied and checked against
 the emitted blob identity. The new head still needs the complete green CI run,
 local full Docker and runtime tests, and production acceptance.
+
+The first Linux web run found that combining the statute bundles changed the
+existing case names and increased the reviewed discovery count. The follow-up
+keeps all 113 original statute batches and adds seven named Motor Vehicles
+batches of at most 40 records. The Python and web admission contracts require
+all seven identities and preserve the existing App skip list. The same run
+caught the counsel summary focus failure. The controls now have explicit tab
+stops. Both failures require a complete replacement web run.
 
 ## Evidence Boundary
 

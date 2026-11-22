@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 728, "app-mobile": 64}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 735, "app-mobile": 64}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,6 +3083,16 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
 APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+MOTOR_STATUTE_FILE = "ram-2026-09-07-statute-source-data.spec.ts"
+MOTOR_STATUTE_CASES = (
+    "BUG-018 Motor Vehicles source records 1-40 of 259",
+    "BUG-018 Motor Vehicles source records 41-80 of 259",
+    "BUG-018 Motor Vehicles source records 81-120 of 259",
+    "BUG-018 Motor Vehicles source records 121-160 of 259",
+    "BUG-018 Motor Vehicles source records 161-200 of 259",
+    "BUG-018 Motor Vehicles source records 201-240 of 259",
+    "BUG-018 Motor Vehicles source records 241-259 of 259",
+)
 BATCH5_BUGS_FILE = "ram-2026-11-11-bugs.spec.ts"
 BATCH5_BUGS_CASES = (
     (
@@ -3103,7 +3113,8 @@ BATCH5_BUGS_CASES = (
 
 
 def _app_reviewed_counts():
-    return {project: count + 4 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
+    return {project: count + 4 + (7 if project == "app-chromium" else 0)
+            + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -3179,6 +3190,18 @@ def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
         evidence._app_inventory(canonical)
 
 
+def test_app_inventory_requires_every_motor_vehicles_range_at_unchanged_counts(app_envelopes):
+    canonical = evidence._json(
+        app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
+    )
+    motor = [row for row in canonical["tests"] if row["file"] == MOTOR_STATUTE_FILE]
+    assert [row["title_path"][-1] for row in motor] == list(MOTOR_STATUTE_CASES)
+    motor[-1]["title_path"] = list(motor[-2]["title_path"])
+    assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
+    with pytest.raises(evidence.EvidenceError, match="motor_vehicles_statute_inventory_mismatch"):
+        evidence._app_inventory(canonical)
+
+
 @pytest.mark.parametrize("width", [0, 1])
 @pytest.mark.parametrize("damage", ["renamed", "duplicate_comms", "duplicate_assistant"])
 def test_app_inventory_keeps_both_mixed_b5_semantics_at_unchanged_counts(
@@ -3250,6 +3273,8 @@ def app_capture(capture):
                  for number in range(pair[width])]
         added += [(file, title) for owner, file, title in NOV14_REVIEWED_CASES if owner == project]
         added += [(file, title) for owner, file, title in NOV15_REVIEWED_CASES if owner == project]
+        if project == "app-chromium":
+            added += [(MOTOR_STATUTE_FILE, title) for title in MOTOR_STATUTE_CASES]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]

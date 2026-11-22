@@ -37,7 +37,7 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
   return (
     <li className="min-w-0 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)]">
       <details className="group">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+        <summary tabIndex={0} className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
           <span className="min-w-0 break-words text-sm font-semibold text-[var(--color-ink)]">
             {rec.counsel_name}
           </span>
