@@ -22,7 +22,7 @@ from caseops_api.services.drafting_format_blocks import (
     document_blocks,
 )
 from caseops_api.services.drafting_formats import SOURCE_SHA256, format_manifest
-from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted
+from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted, numbered_pdf_body_pages
 
 
 def _render(body, *, profile=None, reference=None, review_required=False):
@@ -288,22 +288,12 @@ def test_wrapped_caption_is_not_orphaned_above_its_first_body_line(tmp_path):
     ])
     data = _render(body, reference=format_manifest("bail"))
     (tmp_path / "wrapped-caption.pdf").write_bytes(data)
-    with pdfium.PdfDocument(data) as document:
-        assert len(document) >= 2
-        pages = []
-        for index in range(len(document)):
-            page = document[index]
-            text = page.get_textpage()
-            try:
-                pages.append(text.get_text_range())
-            finally:
-                text.close()
-                page.close()
+    pages = numbered_pdf_body_pages(data, "Page {n} of {total}")
+    assert len(pages) >= 2
     heading_page = next(index for index, text in enumerate(pages) if "APPLICATION FOR" in text)
     assert "CAPTION-END" in pages[heading_page]
     assert "BODY-ANCHOR" in pages[heading_page]
-    without_footers = "".join(pages).replace("Page 1 of 2", "").replace("Page 2 of 2", "")
-    assert compact(body) in compact(without_footers)
+    assert compact(body) in compact("".join(pages))
 
 
 def test_new_and_legacy_review_warnings_are_retained_once_in_each_word_document(tmp_path):
@@ -345,19 +335,7 @@ def test_specific_manual_form_particulars_survive_real_word_and_pdf_output(templ
         explicit_key="generic" if template_type == "legal_notice_reply" else "delhi_hc",
     )
     pdf_data = _render(body, profile=profile, reference=reference)
-    pages = []
-    with pdfium.PdfDocument(pdf_data) as pdf:
-        for index in range(len(pdf)):
-            page = pdf[index]
-            text = page.get_textpage()
-            try:
-                footer = profile.page_number_format.format(n=index + 1, total=len(pdf))
-                main_text, separator, page_footer = text.get_text_range().rstrip().rpartition("\n")
-                assert separator and page_footer == footer
-                pages.append(main_text)
-            finally:
-                text.close()
-                page.close()
+    pages = numbered_pdf_body_pages(pdf_data, profile.page_number_format)
     assert compact(body) in compact("".join(pages))
     if template_type == "execution_application":
         assert len(pages) >= 2

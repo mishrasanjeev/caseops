@@ -88,8 +88,9 @@ On `c899efe2`, the retained JUnit records confirm the execution-application
 Word and PDF regression and the email preview case with saved case, court and
 lawyer fields. Browser acceptance remains pending.
 
-PostgreSQL shards 10 and 11 each retained one failure, with 131 and 130
-passes respectively. The named October index-refusal and round-trip cases
+PostgreSQL shards 10, 11 and 12 each retained a failure, with 131, 130 and
+130 passes respectively. The named October index-refusal, round-trip and
+retained downgrade cases
 shared a fixture that used the current ORM to insert historical obligations.
 Its implicit RETURNING clause referenced provenance that the named
 historical schema does not contain. The fixture now inserts the same duties
@@ -97,6 +98,14 @@ through the table reflected at that boundary, with explicit old-shape values.
 The original schema revisions, index checks, complete row snapshots and
 catalog assertions remain. Both inserts compile against the old schema on
 each dialect. The native replay remains pending.
+
+API shard 11 on `c899efe2` retained three full drafting workflow failures.
+Each original assertion compared a continuous body against all extracted
+pages, including the numbered footer between pages. The revised assertions
+verify every exact footer, compare the complete original body across pages,
+and require the decree-holder and advocate labels to stay together. The
+original approval, finalization and persisted-reload checks are unchanged.
+The full workflow replay remains pending.
 
 ## Evidence Boundary
 
