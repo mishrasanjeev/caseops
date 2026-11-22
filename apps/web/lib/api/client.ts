@@ -192,6 +192,15 @@ function isPortalApiPath(path: string): boolean {
   }
 }
 
+function isNativeAuthorizationPath(path: string): boolean {
+  try {
+    return new URL(resolveUrl(path), "https://caseops.invalid").pathname ===
+      "/api/auth/native/authorize";
+  } catch {
+    return false;
+  }
+}
+
 function extractDetail(data: unknown, fallback: string): string {
   if (typeof data === "string") return data;
   if (data && typeof data === "object") {
@@ -240,6 +249,7 @@ export async function apiRequest<TResponse>(
 ): Promise<TResponse> {
   const { method = "GET", body, headers = {}, signal, timeoutMs } = init;
   const portalRequest = isPortalApiPath(path);
+  const nativeAuthorization = isNativeAuthorizationPath(path);
   // EG-001 (2026-04-23): cookie-first auth. We only attach a Bearer
   // header when the caller explicitly passes ``token`` — that path
   // exists for SDK-style usage (tests, scripts, embedded automation)
@@ -348,6 +358,11 @@ export async function apiRequest<TResponse>(
     if (
       !_retry &&
       !portalRequest &&
+      // A native grant belongs to this exact browser session and user gesture.
+      // Refresh can change that session and must never replay this cookie-only
+      // POST with the refresh response's bearer token. Let the normal 401
+      // sign-in recovery below start a new explicit consent instead.
+      !nativeAuthorization &&
       response.status === 401 &&
       problemType !== null &&
       AUTH_REFRESH_TRIGGERS.has(problemType) &&

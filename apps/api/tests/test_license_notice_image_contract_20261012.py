@@ -17,7 +17,7 @@ REVIEW = "docs/security/js-license-compliance-review-2026-10-12.md"
 REGISTRY = "license-policy/reviewed-packages.json"
 QR_SOURCE = "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"
 QR_SOURCE_SHA256 = "ba5a977288ff7463c51ea0cc5bf5a34372707985655c1ccc054f2a0caa3d9bff"
-NODE_SOURCE = "license-policy/upstream/node_22.23.4/LICENSE"
+NODE_SOURCE = "license-policy/upstream/node_22.23.5/LICENSE"
 NODE_SOURCE_SHA256 = "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
 NEXT_SOURCE = "license-policy/upstream/next_16.4.6/LICENSE.md"
 NEXT_SOURCE_SHA256 = "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224"
@@ -93,7 +93,7 @@ def test_compliance_context_is_narrow_and_blocks_hidden_material(name):
 
 def test_runner_retains_public_notices_and_nonpublic_operator_materials():
     dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
-    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.5-alpine AS trusted-base" in dockerfile
     runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
     copies = [shlex.split(line) for line in runner.splitlines() if line.startswith("COPY ")]
     public = [tokens for tokens in copies if tokens[-2:] == ["/app/apps/web/public", "./public"]]
@@ -244,19 +244,19 @@ print(json.dumps({"node_notice_verified": True}), flush=True)
 
 def test_node_runtime_public_notice_matches_retained_immutable_source():
     dockerfile = (ROOT / "apps/web/Dockerfile").read_text(encoding="utf-8")
-    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.5-alpine AS trusted-base" in dockerfile
     notices = json.loads(
         (ROOT / "apps/web/app/third-party-notices/notices.json").read_text(encoding="utf-8")
     )
     component = next(item for item in notices["components"] if item["packageName"] == "node")
-    assert component["version"] == "22.23.4"
+    assert component["version"] == "22.23.5"
     assert len(component["notices"]) == 1
     notice = component["notices"][0]
     assert notice["retainedSource"] == NODE_SOURCE
-    assert notice["sourceUrl"] == "https://raw.githubusercontent.com/nodejs/node/27f213124280b4db4cd1e3dd42f6f8afd01ceff7/LICENSE"
+    assert notice["sourceUrl"] == "https://raw.githubusercontent.com/nodejs/node/v22.23.5/LICENSE"
     assert notice["sha256"] == NODE_SOURCE_SHA256
     source = (ROOT / NODE_SOURCE).read_bytes()
-    public = (ROOT / "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt").read_bytes()
+    public = (ROOT / "apps/web/public/third-party-notices/node-22.23.5-LICENSE.txt").read_bytes()
     assert len(source) == 145485
     assert source == public == notice["text"].encode("utf-8")
     assert hashlib.sha256(source).hexdigest() == NODE_SOURCE_SHA256

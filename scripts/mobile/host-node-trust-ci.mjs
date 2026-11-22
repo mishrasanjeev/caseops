@@ -184,8 +184,8 @@ export function appendCITrustOutputs(file, root, environment, context = undefine
 // Exact reviewed Git blobs computed from these source bytes; public data inputs only.
 // Executed copies must independently pass the unchanged strict owner rule.
 const REVIEWED_RUNTIME_SOURCES = Object.freeze([
-  Object.freeze({ role: 'helper', name: 'host-node-trust.mjs', gitMode: '100644', gitBlobSha1: 'b659d65faca119a0cc78ab12c8d41a224bf6d112', sha256: '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18', sizeBytes: 29741 }),
-  Object.freeze({ role: 'bootstrap', name: 'host-node-trust-start.mjs', gitMode: '100644', gitBlobSha1: '3f08aeb00815650e61beaa32faf097af0b05602e', sha256: '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a', sizeBytes: 6068 }),
+  Object.freeze({ role: 'helper', name: 'host-node-trust.mjs', gitMode: '100644', gitBlobSha1: 'd9e096cf74508700496b85e45c75b5f23dd3ba11', sha256: '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e', sizeBytes: 29977 }),
+  Object.freeze({ role: 'bootstrap', name: 'host-node-trust-start.mjs', gitMode: '100644', gitBlobSha1: 'f760bbba17aacb26aabefdc5302c1196f52163d4', sha256: '5dfd52600a80d998d5ee6f5e305d2bace317b35efb90ce9aaa468a187fd7c499', sizeBytes: 6068 }),
 ]);
 const sha = data => createHash('sha256').update(data).digest('hex');
 function sourceAclFrames(objects, check) {

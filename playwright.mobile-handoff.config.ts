@@ -25,7 +25,7 @@ export default defineConfig({
     trace: 'off',
   },
   projects: [
-    { name: 'handoff-phone-browser', use: { viewport: { width: 390, height: 844 } } },
+    { name: 'handoff-phone-browser', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
     { name: 'handoff-desktop-browser', use: { viewport: { width: 1280, height: 900 } } },
   ],
 });
