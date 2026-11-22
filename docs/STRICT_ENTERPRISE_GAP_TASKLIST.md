@@ -5946,3 +5946,64 @@ defers real application schema imports and adds native module-load guards
 plus real validator proof. Complete replacement coverage now expects 3,256
 cases in 316 files, with the same 792 browser metadata identities. All new
 compile, CI, production and recovery evidence remains pending.
+
+## November 22 — private resume guard bounded control-plane reads
+
+### EH-DEPLOY-05 - The private resume guard's execution and log reads exceeded their per-call deadline
+
+- **Status:** Partially implemented. The fix is on
+  `fix/scheduler-resume-guard-bounded-reads` and is **not yet merged**. It
+  becomes `Implemented` once it is on `main` with CI green and the next guarded
+  `scheduler_inventory.py resume` of
+  `caseops-private-projection-maintenance-cadence` completes from the release
+  workstation without a raised timeout.
+- **Gap found:** on 2026-11-08 the resume failed with "gcloud control-plane
+  deadline exceeded". `_private_resume_evidence` listed executions with
+  `gcloud run jobs executions list --sort-by=~metadata.creationTimestamp
+  --limit=3`, which sorts client-side over the whole retained history (about
+  2,100 executions, about 2m40s), and `_maintenance_execution` read the
+  execution log without a time bound (gcloud's default one-day freshness,
+  66 s). Both ran under `run_gcloud`'s fixed 60 s limit. That release resumed
+  through a disclosed scratch copy with only the two limits raised to 300 s.
+- **Fix:** the newest executions now come from one Cloud Run v2
+  `executions.list` page (`pageSize=3`,
+  `fields=executions(name,job,createTime),nextPageToken`), which the API
+  documents as "sorted by creation time, descending". Later pages are never
+  followed and a page longer than three rows is refused. Each row must carry
+  the job's resource parent, the job name and a creation time. The existing
+  checks are unchanged: two or three rows, the reviewed name pattern, no
+  duplicates, strictly descending creation times, and the newest row equal to
+  the job's `latestCreatedExecution`. The log filter now carries
+  `timestamp>=` (execution start minus 5 minutes) and `timestamp<=`
+  (completion plus 5 minutes) beside the execution-name label, with
+  `--order=desc --limit=3`, and still requires exactly one record. A window
+  that misses the record returns zero rows and refuses. The v2 request
+  transport is shared with the quiesce drain; no timeout was raised.
+- **Tests:** `apps/api/tests/test_private_projection_resume_guard.py` pins
+  the exact v2 URL, page size, fields, bearer token and per-request timeout,
+  the absence of any gcloud `executions list` or `--sort-by` call, newest-first
+  selection with an unfollowed `nextPageToken`, and each log filter's exact
+  window, clauses and limit. Twenty malformed-page cases refuse before any log
+  read or resume: empty, one row, an extra row, out of order, oldest first,
+  duplicate name or time, newest omitted, wrong job or parent, unprefixed or
+  unreviewed name, missing or timezone-free creation time, non-object rows or
+  pages, request failure, invalid JSON and an empty token. Records outside the
+  window, or duplicated, also refuse. Every earlier refusal case still
+  refuses. The new tests fail against `origin/main`'s script.
+- **Live read-only proof (2026-11-22):** a scratch harness imported the
+  worktree script and called `_private_resume_evidence` against
+  `perfect-period-305406`/`asia-south1` for prod-verify `44919885553`
+  (`1b6ba0f6`, serving `caseops-api-00529-bwf`), with an allowlist that
+  refused any gcloud or gh command other than describe, list, view, log read
+  or token print. No scheduler, job or other production resource was changed.
+  The evidence passed twice: 123 s under parallel test load and 66 s quiet.
+  The v2 page took 0.27-0.57 s, and each bounded log read took 4.9-12.7 s
+  (every gcloud call here, including token print, takes 3-15 s). The v2 page
+  and gcloud's sorted listing returned the same three names in the same order.
+  2,012 executions are retained. The old reads did not reproduce the
+  2026-11-08 slowness today: the sorted gcloud listing took 13 s and the
+  unbounded log read 6.6 s. The fix removes the dependence on history size; it
+  does not by itself establish the cause of the 2026-11-08 latency.
+- **Adjacent, not changed:** `inspect_live(..., audit_attempts=True)` (the
+  `audit` command) still lists executions with `--sort-by ... --limit=1`
+  through gcloud and can hit the same client-side sort cost.

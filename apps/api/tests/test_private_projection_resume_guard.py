@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import socket
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -92,6 +93,13 @@ def evidence(monkeypatch):
         "records": {},
         "calls": [],
         "qa_jobs": None,
+        "access_token": "token",
+        # None derives the newest-first v2 page from ``times`` at request time.
+        "v2_executions": None,
+        "v2_next_page_token": "older-history",
+        "v2_requests": [],
+        "log_offsets": {},
+        "duplicate_log": False,
     }
 
     def report(name: str, rebuilds: int) -> dict:
@@ -156,6 +164,9 @@ def evidence(monkeypatch):
         if arguments[:3] == ["scheduler", "jobs", "resume"]:
             assert not expect_json
             return ""
+        if arguments == ["auth", "print-access-token"]:
+            assert not expect_json
+            return state["access_token"]
         assert expect_json
         if arguments[:3] == ["run", "services", "describe"]:
             return {
@@ -175,12 +186,6 @@ def evidence(monkeypatch):
             ]}}
         if arguments[:3] == ["run", "jobs", "describe"]:
             return {"status": {"latestCreatedExecution": {"name": state["latest_execution"]}}}
-        if arguments[:4] == ["run", "jobs", "executions", "list"]:
-            assert "--sort-by=~metadata.creationTimestamp" in arguments
-            assert "--limit=3" in arguments
-            return [{"metadata": {
-                "name": name, "creationTimestamp": stamp(state["times"][name][0]),
-            }} for name in NAMES]
         if arguments[:4] == ["run", "jobs", "executions", "describe"]:
             name = arguments[4]
             start, end = state["times"][name]
@@ -202,12 +207,56 @@ def evidence(monkeypatch):
                 return []
             name = next(name for name in NAMES if f'execution_name"="{name}"' in arguments[2])
             record = state["records"][name]
-            return [{
+            # Honour the filter's time window like Cloud Logging would.
+            low, high = log_window(arguments[2])
+            written = state["times"][name][1] - timedelta(seconds=1)
+            written += state["log_offsets"].get(name, timedelta())
+            if not low <= written <= high:
+                return []
+            entry = {
                 "resource": {"type": "cloud_run_job", "labels": {"job_name": JOB}},
                 "labels": {"run.googleapis.com/execution_name": name},
+                "timestamp": stamp(written),
                 "textPayload": "CASEOPS_PRIVATE_PROJECTION " + guard.json.dumps(record),
-            }]
+            }
+            return [entry, copy.deepcopy(entry)] if state["duplicate_log"] else [entry]
         raise AssertionError(arguments)
+
+    class V2Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return guard.json.dumps(self.payload).encode("utf-8")
+
+    def fake_urlopen(request, *, timeout):
+        state["v2_requests"].append({
+            "url": request.full_url,
+            "authorization": request.get_header("Authorization"),
+            "timeout": timeout,
+        })
+        if callable(state["v2_executions"]):
+            return state["v2_executions"]()
+        rows = state["v2_executions"]
+        if rows is None:
+            parent = (
+                f"projects/{inventory['production_project']}/locations/"
+                f"{inventory['location']}/jobs/{JOB}/executions"
+            )
+            rows = [{
+                "name": f"{parent}/{name}", "job": JOB,
+                "createTime": stamp(state["times"][name][0]),
+            } for name in NAMES]
+        payload = {"executions": rows}
+        if state["v2_next_page_token"]:
+            payload["nextPageToken"] = state["v2_next_page_token"]
+        return V2Response(payload)
 
     monkeypatch.setattr(guard, "_run_gh", fake_gh)
     monkeypatch.setattr(guard, "_run_gh_text", lambda _args: state["release_log"])
@@ -217,15 +266,22 @@ def evidence(monkeypatch):
             [], {"result": "pass", "state": selected["jobs"][0]["desired_state"]}
         ),
     )
-    monkeypatch.setattr(
-        guard.urllib_request, "urlopen",
-        lambda *_args, **_kwargs: pytest.fail("network access is forbidden"),
-    )
+    monkeypatch.setattr(guard.urllib_request, "urlopen", fake_urlopen)
     monkeypatch.setattr(
         socket, "create_connection",
         lambda *_args, **_kwargs: pytest.fail("network access is forbidden"),
     )
     return inventory, state
+
+
+def log_window(log_filter: str) -> tuple[datetime, datetime]:
+    lows = re.findall(r'timestamp>="([^"]+)"', log_filter)
+    highs = re.findall(r'timestamp<="([^"]+)"', log_filter)
+    assert len(lows) == 1 and len(highs) == 1, log_filter
+    return (
+        datetime.fromisoformat(lows[0].replace("Z", "+00:00")),
+        datetime.fromisoformat(highs[0].replace("Z", "+00:00")),
+    )
 
 
 def resume(inventory):
@@ -778,6 +834,191 @@ def test_private_resume_fails_closed_on_unverified_evidence(monkeypatch, failure
     with pytest.raises(guard.InventoryError):
         resume(inventory)
     assert_no_resume(state)
+
+
+def test_private_resume_reads_newest_executions_through_one_bounded_v2_page(monkeypatch):
+    inventory, state = evidence(monkeypatch)
+
+    result = resume(inventory)
+
+    # Newest-first selection: the qualifying pair is the two newest rows, and
+    # the API's nextPageToken (older history) is never followed.
+    assert result["private_resume_evidence"]["maintenance_executions"] == [
+        NAMES[1], NAMES[0]
+    ]
+    assert len(state["v2_requests"]) == 1
+    request = state["v2_requests"][0]
+    parsed = guard.urllib_parse.urlparse(request["url"])
+    assert (parsed.scheme, parsed.netloc, parsed.path) == (
+        "https", "run.googleapis.com",
+        f"/v2/projects/{inventory['production_project']}/locations/"
+        f"{inventory['location']}/jobs/{JOB}/executions",
+    )
+    assert guard.urllib_parse.parse_qs(parsed.query) == {
+        "pageSize": ["3"],
+        "fields": ["executions(name,job,createTime),nextPageToken"],
+    }
+    assert guard.RESUME_EXECUTION_PAGE_SIZE == 3
+    assert request["authorization"] == "Bearer token"
+    assert 0 < request["timeout"] <= 30
+    gcloud = [args for kind, args in state["calls"] if kind == "gcloud"]
+    assert gcloud.count(["auth", "print-access-token"]) == 1
+    assert not any(args[:4] == ["run", "jobs", "executions", "list"] for args in gcloud)
+    assert not any(
+        str(arg).startswith("--sort-by") for args in gcloud for arg in args
+    )
+
+
+def test_private_resume_log_reads_are_time_bounded_to_each_execution(monkeypatch):
+    inventory, state = evidence(monkeypatch)
+
+    resume(inventory)
+
+    reads = [args for kind, args in state["calls"]
+             if kind == "gcloud" and args[:2] == ["logging", "read"]]
+    assert [
+        next(name for name in NAMES if f'execution_name"="{name}"' in args[2])
+        for args in reads
+    ] == [NAMES[0], NAMES[1]]
+    slack = guard.MAINTENANCE_LOG_WINDOW_SLACK
+    assert slack == timedelta(minutes=5)
+    for args, name in zip(reads, (NAMES[0], NAMES[1]), strict=True):
+        start, end = state["times"][name]
+        assert args[3:] == [
+            "--project", inventory["production_project"],
+            "--order=desc", "--limit=3", "--format=json",
+        ]
+        log_filter = args[2]
+        assert f'timestamp>="{stamp(start - slack)}"' in log_filter
+        assert f'timestamp<="{stamp(end + slack)}"' in log_filter
+        assert log_window(log_filter) == (start - slack, end + slack)
+        for clause in (
+            'resource.type="cloud_run_job"',
+            f'resource.labels.job_name="{JOB}"',
+            f'labels."run.googleapis.com/execution_name"="{name}"',
+            f'logName="projects/{inventory["production_project"]}/logs/'
+            'run.googleapis.com%2Fstdout"',
+            'textPayload:"CASEOPS_PRIVATE_PROJECTION"',
+        ):
+            assert clause in log_filter
+
+
+def _v2_row(inventory, name, created):
+    parent = (
+        f"projects/{inventory['production_project']}/locations/"
+        f"{inventory['location']}/jobs/{JOB}/executions"
+    )
+    return {"name": f"{parent}/{name}", "job": JOB, "createTime": created}
+
+
+@pytest.mark.parametrize("damage", [
+    "empty", "missing", "extra", "out_of_order", "oldest_first", "duplicate_name",
+    "duplicate_time", "omitted_newest", "wrong_job", "foreign_parent",
+    "unprefixed_name", "missing_create_time", "timezone_free_create_time",
+    "invalid_name", "non_dict_row", "non_list", "non_object_page",
+    "request_failure", "invalid_json", "empty_token",
+])
+def test_private_resume_refuses_ambiguous_latest_execution_page(monkeypatch, damage):
+    inventory, state = evidence(monkeypatch)
+    times = state["times"]
+    rows = [_v2_row(inventory, name, stamp(times[name][0])) for name in NAMES]
+    if damage == "empty":
+        rows = []
+    elif damage == "missing":
+        rows = rows[:1]
+    elif damage == "extra":
+        rows.append(_v2_row(inventory, f"{JOB}-older", stamp(
+            times[NAMES[2]][0] - timedelta(minutes=5)
+        )))
+    elif damage == "out_of_order":
+        rows[0], rows[1] = rows[1], rows[0]
+    elif damage == "oldest_first":
+        rows.reverse()
+    elif damage == "duplicate_name":
+        rows[1] = _v2_row(inventory, NAMES[0], rows[1]["createTime"])
+    elif damage == "duplicate_time":
+        rows[1]["createTime"] = rows[0]["createTime"]
+    elif damage == "omitted_newest":
+        rows = rows[1:]
+    elif damage == "wrong_job":
+        rows[0]["job"] = "caseops-other-job"
+    elif damage == "foreign_parent":
+        rows[0]["name"] = rows[0]["name"].replace(f"/jobs/{JOB}/", "/jobs/caseops-other/")
+    elif damage == "unprefixed_name":
+        rows[0]["name"] = NAMES[0]
+    elif damage == "missing_create_time":
+        rows[1].pop("createTime")
+    elif damage == "timezone_free_create_time":
+        rows[1]["createTime"] = rows[1]["createTime"].removesuffix("Z")
+    elif damage == "invalid_name":
+        rows[0]["name"] = rows[0]["name"].replace(NAMES[0], "unrelated-execution")
+    elif damage == "non_dict_row":
+        rows[1] = "not-an-execution"
+    elif damage == "non_list":
+        rows = {"name": rows[0]["name"]}
+    elif damage == "empty_token":
+        state["access_token"] = "  "
+    state["v2_executions"] = rows
+    if damage == "non_object_page":
+        state["v2_executions"] = lambda: _RawResponse(b"[]")
+    elif damage == "invalid_json":
+        state["v2_executions"] = lambda: _RawResponse(b"{not json")
+    elif damage == "request_failure":
+        def offline():
+            raise guard.urllib_error.URLError("offline")
+        state["v2_executions"] = offline
+
+    with pytest.raises(guard.InventoryError):
+        resume(inventory)
+    assert len(state["v2_requests"]) == (0 if damage == "empty_token" else 1)
+    assert not any(
+        args[:2] == ["logging", "read"] for kind, args in state["calls"] if kind == "gcloud"
+    )
+    assert_no_resume(state)
+
+
+class _RawResponse:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return self.body
+
+
+@pytest.mark.parametrize("damage", ["before_window", "after_window", "duplicate_log"])
+def test_private_resume_refuses_record_outside_window_or_duplicated(monkeypatch, damage):
+    inventory, state = evidence(monkeypatch)
+    slack = guard.MAINTENANCE_LOG_WINDOW_SLACK
+    start, end = state["times"][NAMES[0]]
+    written = end - timedelta(seconds=1)
+    if damage == "before_window":
+        state["log_offsets"][NAMES[0]] = (start - slack - timedelta(seconds=1)) - written
+    elif damage == "after_window":
+        state["log_offsets"][NAMES[0]] = (end + slack + timedelta(seconds=1)) - written
+    else:
+        state["duplicate_log"] = True
+
+    with pytest.raises(guard.InventoryError, match="one execution-scoped maintenance record"):
+        resume(inventory)
+    assert_no_resume(state)
+
+
+def test_private_resume_accepts_record_at_window_edges(monkeypatch):
+    inventory, state = evidence(monkeypatch)
+    slack = guard.MAINTENANCE_LOG_WINDOW_SLACK
+    for name, edge in ((NAMES[0], "end"), (NAMES[1], "start")):
+        start, end = state["times"][name]
+        written = end - timedelta(seconds=1)
+        target = end + slack if edge == "end" else start - slack
+        state["log_offsets"][name] = target - written
+
+    assert resume(inventory)["state"] == "ENABLED"
 
 
 def test_private_resume_requires_qa_arguments_but_paid_resume_does_not(monkeypatch):
