@@ -7,12 +7,12 @@ import pytest
 from sqlalchemy import MetaData, Table, inspect, select, text
 
 from alembic import command
-from caseops_api.db.models import Contract
+from caseops_api.db.models import CompanyMembership, Contract, NotificationPhoneContact, User
 from caseops_api.db.session import CaseOpsSession
 from tests.test_platform_console_migration import KINDS, fresh_engine, migration_config
 from tests.test_postgres_validation import _seed_company
 
-PREVIOUS = "20261112_0001"
+PREVIOUS = "20261122_0003"
 REVISION = "20261122_0631"
 CONTENT = {
     "contract_clauses": "notes",
@@ -50,13 +50,44 @@ def test_extraction_provenance_preserves_ambiguous_rows_and_accepts_old_writes(
         with CaseOpsSession(bind=engine) as session:
             if engine.dialect.name == "sqlite":
                 session.serialize_sqlite_writer()
+            company_id = _seed_company(session)
             contract = Contract(
-                id=str(uuid4()), company_id=_seed_company(session), title="Retained contract",
+                id=str(uuid4()), company_id=company_id, title="Retained contract",
                 contract_code="RET-631", contract_type="services",
             )
             contract_id = contract.id
-            session.add(contract)
+            membership = CompanyMembership(
+                id=str(uuid4()), company_id=company_id, role="member",
+                user=User(
+                    email="phone-retention@example.test", full_name="Synthetic member",
+                    password_hash="disabled-test-credential",
+                ),
+            )
+            session.add_all([contract, membership])
+            session.flush()
+            session.add(NotificationPhoneContact(
+                company_id=company_id, membership_id=membership.id, phone_number="+12025550117",
+                verified_at=STAMP, whatsapp_consent_at=STAMP, whatsapp_opted_out_at=STAMP,
+                consent_text_version="v1", opt_out_source="webhook",
+            ))
             session.commit()
+
+        phone = Table("notification_phone_contacts", MetaData(), autoload_with=engine)
+        version = text("SELECT version_num FROM alembic_version")
+        phone_select = select(phone)
+        with engine.connect() as connection:
+            [phone_before] = connection.execute(phone_select).all()
+        phone_indexes = inspect(engine).get_indexes(phone.name)
+        assert phone_before.whatsapp_opted_out_at is not None
+        with pytest.raises(RuntimeError) as phone_refused:
+            command.downgrade(config, "20261122_0002")
+        assert str(phone_refused.value) == (
+            "Phone consent and opt-out evidence is retained; restore-forward only."
+        )
+        with engine.connect() as connection:
+            assert connection.scalar(version) == PREVIOUS
+            assert connection.execute(phone_select).all() == [phone_before]
+        assert inspect(engine).get_indexes(phone.name) == phone_indexes
 
         old_tables = {name: Table(name, MetaData(), autoload_with=engine) for name in CONTENT}
 
@@ -105,4 +136,6 @@ def test_extraction_provenance_preserves_ambiguous_rows_and_accepts_old_writes(
         assert _columns(current) == columns
         assert {name: current.get_indexes(name) for name in CONTENT} == indexes
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == REVISION
+            assert connection.scalar(version) == REVISION
+            assert connection.execute(phone_select).all() == [phone_before]
+        assert inspect(engine).get_indexes(phone.name) == phone_indexes

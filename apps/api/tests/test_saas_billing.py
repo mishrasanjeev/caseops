@@ -952,6 +952,11 @@ def test_tenant_owner_is_denied_from_platform_admin_route_surface(
         ),
         (
             "POST",
+            f"/api/platform-admin/companies/{company_id}/subscription/add-ons",
+            {"add_on_code": "addon_ip_workspace", "reason": "Denied route test"},
+        ),
+        (
+            "POST",
             f"/api/platform-admin/companies/{company_id}/credits/grant",
             {"credits": 1, "reason": "Denied route test"},
         ),

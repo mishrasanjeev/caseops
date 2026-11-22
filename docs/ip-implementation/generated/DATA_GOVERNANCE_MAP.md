@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `8cc07a18f3b993298e2df420b33d55db846099fd3c41a5475b2758539579a9fa`
-- SQL tables: `364`
-- SQL columns: `5806`
-- ORM indexes: `1829`
-- Alembic/raw index declarations: `1606`
-- Non-SQL data classes: `16`
+- Canonical map SHA-256: `6d83f1f89578d99a8043acd7d25b0a1e0d7316a3b11967d35da7a7c015db0cb0`
+- SQL tables: `370`
+- SQL columns: `5890`
+- ORM indexes: `1838`
+- Alembic/raw index declarations: `1615`
+- Non-SQL data classes: `17`
 
 ## Boundary
 
@@ -173,6 +173,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
 | `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_journal_feed_settings` | `tenant_operational_record` | 7 | `registry_fail_closed` |
+| `ip_journal_feed_tenant_runs` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `ip_journal_ingestion_runs` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
@@ -196,6 +198,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_post_registration_recordals` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_proceedings` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_public_journal_checks` | `public_or_licensed_legal_reference` | 9 | `registry_fail_closed` |
+| `ip_public_journal_documents` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
+| `ip_public_journal_entries` | `public_or_licensed_legal_reference` | 17 | `registry_fail_closed` |
 | `ip_registry_diffs` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_registry_links` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_registry_snapshots` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
@@ -306,6 +311,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `native_refresh_tokens` | `security_identity_control` | 6 | `registry_fail_closed` |
 | `notification_delivery_events` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `notification_delivery_intents` | `tenant_operational_record` | 46 | `registry_fail_closed` |
+| `notification_phone_contacts` | `tenant_operational_record` | 18 | `registry_fail_closed` |
 | `notification_rules` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `outside_counsel` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `outside_counsel_spend_records` | `billing_provider_evidence` | 19 | `registry_fail_closed` |
@@ -406,6 +412,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `connector-and-payment-provider-held-records` | `provider_held_object` | `registry_fail_closed` |
 | `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
+| `phone-reminder-provider-delivery` | `provider_held_object` | `registry_fail_closed` |
 
 ## Change control
 

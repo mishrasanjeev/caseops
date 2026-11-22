@@ -227,6 +227,14 @@ function expectNov14(rows: Case[], production = false) {
   expect(new Set(selected.map(row => row.id)).size).toBe(selected.length);
   expect(selected.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
 }
+// November 22 release additions, matched by exact identity (one shares an
+// existing file with retained canonical cases).
+const nov22Cases = [
+  ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "desktop November 22 product claims show their limits"]],
+  ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "mobile November 22 product claims show their limits"]],
+] as const;
+const nov22Keys = new Set(nov22Cases.map(([project, titles]) => JSON.stringify([project, titles])));
+const isNov22 = (row: Case) => nov22Keys.has(JSON.stringify([row.project, row.titles]));
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -343,6 +351,7 @@ describe("complete independent App CI project inventory", () => {
   let nov15: Case[];
   let motorStatutes: Case[];
   let compactMatter: Case[];
+  let nov22: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
@@ -352,7 +361,9 @@ describe("complete independent App CI project inventory", () => {
     nov15 = all.filter(isNov15);
     motorStatutes = all.filter(isMotorStatute);
     compactMatter = all.filter(isCompactMatter);
-    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isMotorStatute(row) && !isCompactMatter(row));
+    nov22 = all.filter(isNov22);
+    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
+      && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -386,7 +397,8 @@ describe("complete independent App CI project inventory", () => {
       const native = collectAppProject(project);
       expectAppSelection(native, canonicalAppProject(all, project));
       const selected = native.filter(
-        row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isMotorStatute(row) && !isCompactMatter(row),
+        row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
+          && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row),
       );
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
@@ -436,10 +448,19 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(compactMatter.map(row => row.id)).size).toBe(2);
     expect(compactMatter.every(row => row.retries === 0 && row.repeat === 0
       && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
-    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter];
+    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22];
     expect(new Set(reviewed.map(row => row.id))).toEqual(new Set(all.map(row => row.id)));
     expect(new Set(all.map(row => row.id)).size).toBe(all.length);
-    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 736, "app-mobile": 65 });
+    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 738, "app-mobile": 65 });
+  });
+
+  it("requires every exact Nov22 release identity outside the unchanged prior cohorts", () => {
+    expect(nov22.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov22Keys].sort());
+    expect(new Set(nov22.map(row => row.id)).size).toBe(nov22Cases.length);
+    expect(nov22.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts([...canonical, ...batch5, ...nov14, ...nov15, ...nov22].map(row => row.project)))
+      .toEqual({ "app-chromium": 730, "app-mobile": 64 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

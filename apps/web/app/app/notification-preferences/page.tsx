@@ -5,6 +5,7 @@ import { Bell, Loader2, Save } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PhoneChannelPreferences } from "@/components/app/PhoneChannelPreferences";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -18,7 +19,9 @@ import {
 } from "@/lib/api/endpoints";
 import { apiErrorMessage } from "@/lib/api/config";
 
-const CHANNELS = ["in_app", "email", "sms", "whatsapp"] as const;
+// SMS and WhatsApp are opt-in through a verified number, so they have their
+// own section below instead of a bare toggle here.
+const CHANNELS = ["in_app", "email"] as const;
 
 export default function NotificationPreferencesPage() {
   const queryClient = useQueryClient();
@@ -52,7 +55,7 @@ export default function NotificationPreferencesPage() {
       <PageHeader
         eyebrow="Notifications"
         title="Preferences"
-        description="In-app, email, SMS, and WhatsApp delivery controls."
+        description="In-app and email delivery, plus opt-in text and WhatsApp reminders."
         actions={
           <Button
             type="button"
@@ -90,7 +93,7 @@ export default function NotificationPreferencesPage() {
             <CardHeader>
               <CardTitle as="h2">Channels</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <CardContent className="grid gap-3 md:grid-cols-2">
               {CHANNELS.map((channel) => {
                 const channelPref = prefs.user.channels[channel];
                 const providerReady = prefs.provider_configured[channel] ?? false;
@@ -129,6 +132,8 @@ export default function NotificationPreferencesPage() {
               })}
             </CardContent>
           </Card>
+
+          <PhoneChannelPreferences />
 
           <Card>
             <CardHeader>

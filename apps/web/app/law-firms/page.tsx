@@ -22,6 +22,7 @@ import {
   ScanSearch,
   Search,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Users,
   Wallet,
@@ -38,7 +39,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Matter management software for Indian law firms",
   description:
-    "See how Indian law firms can connect matters, hearings, source-backed drafting, team review, and billing in one CaseOps workspace.",
+    "See how Indian law firms can connect matters, hearings, IP dockets, source-backed drafting, team review, and billing in one CaseOps workspace.",
   alternates: { canonical: "/law-firms" },
   openGraph: {
     type: "website",
@@ -105,6 +106,11 @@ const hearingFlow = [
 
 const platformMoves = [
   {
+    icon: Lock,
+    title: "IP workspace availability",
+    body: "The IP workspace is not part of the self-serve plans; CaseOps adds it to a workspace's plan on request. Registry data is entered or imported by your team with its evidence. There is no live IP India or WIPO feed.",
+  },
+  {
     icon: Gavel,
     title: "IP hearing docket",
     body: "Record exact, session-based or unpublished hearing times without hidden defaults; inspect recipient/channel outcomes and the reminder generation replaced by every reschedule or later time confirmation.",
@@ -127,7 +133,7 @@ const platformMoves = [
   {
     icon: Radar,
     title: "Trademark journal watch",
-    body: "Configure word, phonetic, device, class, proprietor and jurisdiction watches with named recipients, frequency and cost controls. Review source-linked journal hits with advisory similarity evidence, preserve correction and re-advertisement lineage, and send a confirmed hit into opposition, enforcement, task, deadline or client-report work without re-entering the evidence. Live provider polling stays fail-closed until licensing and credentials are approved.",
+    body: "Configure word, phonetic, device, class, proprietor and jurisdiction watches with named recipients, frequency and cost controls. Record each journal entry you want compared through manual intake, then review source-linked hits with advisory similarity evidence, preserve correction and re-advertisement lineage, and send a confirmed hit into opposition, enforcement, task, deadline or client-report work without re-entering the evidence. Live provider polling stays fail-closed until licensing and credentials are approved.",
   },
   {
     icon: Globe2,
@@ -170,14 +176,19 @@ const platformMoves = [
     body: "Generate permission-scoped snapshots for portfolio, application, opposition, deadline, renewal, workload, data quality and integration freshness. Review the exact snapshot hash, then publish or schedule a client-safe artifact only to selected active IP grants; delivery and access remain auditable and version-invalidated data is withheld.",
   },
   {
+    icon: FileText,
+    title: "Controlled IP documents",
+    body: "Upload IP documents under a previewed controlled name with confidentiality and privilege, move them through review, approval, filing and service, and add versions beside the original instead of overwriting it. Retiring a document keeps its file, versions and audit trail; CaseOps first lists every record that still relies on it.",
+  },
+  {
     icon: Sparkles,
     title: "Ask this Workspace",
-    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Users can rate or report an answer into a governed tenant-admin review queue. Proposed tasks, review-required drafts and allowlisted Matter changes show exact before-and-after details and require a separate, expiring confirmation before CaseOps writes anything.",
+    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Users can rate or report an answer into a governed tenant-admin review queue. Proposed tasks, review-required drafts and allowlisted Matter changes show exact before-and-after details and require a separate, expiring confirmation before CaseOps writes anything. Opening a citation rechecks access and source version and is recorded in the audit log. The assistant is off until a workspace owner enables it.",
   },
   {
     icon: FileText,
     title: "Contracts and playbooks",
-    body: "Upload, compare against playbooks, surface deviations, and move obligations back into the matter graph.",
+    body: "Extract clauses and obligations, compare against a playbook, and read a counterparty's Word mark-up in the redline viewer: insertions, deletions, moves counted once and formatting changes by author, with a warning when the file holds tracked changes it cannot display. Accept or reject changes in Word.",
   },
   {
     icon: Search,
@@ -195,9 +206,14 @@ const platformMoves = [
     body: "Review proceeding signals, affidavit gaps, mock-hearing feedback, source-backed bench context, calibrated patterns, and graph links from one matter queue.",
   },
   {
+    icon: Landmark,
+    title: "Court sync for six courts",
+    body: "Run court sync for the Supreme Court of India and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts. Suggested hearing dates arrive with their source for a lawyer to accept or reject; other courts use eCourts case tracking or manual entry.",
+  },
+  {
     icon: Briefcase,
     title: "Outside counsel coordination + portal — shipped",
-    body: "Manage counsel briefs, budgets and spend on the same matter portfolio. Briefed counsel get a magic-link login at /portal/oc — assigned matters, work-product upload, invoice submission, time entries — gated by MatterPortalGrant with audit on every action.",
+    body: "Keep the counsel panel, budgets and logged spend on the same matter portfolio. Briefed counsel sign in to their own portal with an emailed link to see assigned matters, upload work product, submit invoices and log time. Their files are scanned before the firm sees them, and every action is audited.",
   },
   {
     icon: ShieldCheck,
@@ -206,13 +222,18 @@ const platformMoves = [
   },
   {
     icon: Users,
-    title: "Team visibility",
-    body: "Partners, associates and legal ops work from the same matter truth instead of status being rebuilt in meetings.",
+    title: "Teams and matter visibility",
+    body: "Group people into teams, departments or practice areas and mark team leads. With team-scoped visibility on, colleagues see their teams' matters plus firm-wide matters; owners always see everything. The lead flag is recorded and audited but does not yet grant extra permissions.",
   },
   {
     icon: BookOpen,
     title: "Institutional memory",
     body: "Strong prior arguments, preferred clauses and review patterns become reusable assets, not tribal knowledge.",
+  },
+  {
+    icon: Smartphone,
+    title: "Mobile app — development candidate",
+    body: "A native iOS and Android app for today's work, matters, calendar and file upload is a development candidate, not yet in the App Store or Google Play. The web app works in a phone or tablet browser today.",
   },
   {
     icon: Building2,
@@ -224,6 +245,7 @@ const platformMoves = [
 const trustLayers = [
   "Tenant isolation at query and storage layer",
   "Matter-level ethical walls that override broad role access",
+  "Teams with optional team-scoped matter visibility",
   "Audit on sensitive actions, exports and AI runs",
   "Scoped, source-backed review workflows for legal output",
   "Deterministic AI safety release gates and governed human feedback",
@@ -254,7 +276,8 @@ export default function LawFirmPitchPage() {
               </div>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/78">
                 One workspace for matters, research, drafting, hearing preparation, contracts,
-                outside counsel and billing, with control surfaces that legal teams can trust.
+                trade mark and patent dockets, outside counsel and billing, with control
+                surfaces that legal teams can trust.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button href="/demo/law-firms" size="lg">

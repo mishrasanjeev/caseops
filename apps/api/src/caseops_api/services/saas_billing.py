@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
+    AuditActorType,
     AuditResult,
     BillingAccount,
     BillingCheckoutSession,
@@ -65,6 +66,7 @@ from caseops_api.schemas.saas_billing import (
     BillingUsageSnapshot,
     DemoRequest,
     DemoRequestResponse,
+    PlatformAddOnMutation,
     PlatformCouponCreateRequest,
     PlatformGrantCreditsRequest,
     PlatformManualInvoiceCreateRequest,
@@ -74,7 +76,7 @@ from caseops_api.schemas.saas_billing import (
     PlatformSubscriptionMutation,
     TrialStartRequest,
 )
-from caseops_api.services.audit import record_from_context
+from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.billing_demo import admit_demo
 from caseops_api.services.billing_entitlements import (
     ACTIVE_SUBSCRIPTION_STATUSES,
@@ -82,6 +84,7 @@ from caseops_api.services.billing_entitlements import (
     _latest_subscription,
     _plan_entitlements,
     _to_aware,
+    add_on_allowed_on_plan,
     current_entitlements_for_company,
     resolve_entitlements,
     trial_has_ended,
@@ -112,6 +115,7 @@ TERMINAL_ORDER_STATUSES = {
 }
 PLAN_CHECKOUT_TYPES = {"new_subscription", "renewal", "upgrade"}
 TOPUP_CHECKOUT_TYPES = {"topup", "addon"}
+SEGMENT_LABELS = {"solo": "Solo", "firm": "Firm", "gc": "GC"}
 FREE_TRIAL_DOMAIN_EXEMPTIONS = {
     "gmail.com",
     "googlemail.com",
@@ -205,6 +209,7 @@ def _plan_record(row: BillingPlanVersion) -> BillingPlanRecord:
             )
         ],
         entitlements=_plan_entitlements(row),
+        eligible_segments=(row.feature_summary_json or {}).get("eligible_segments"),
     )
 
 
@@ -256,6 +261,43 @@ def _get_plan(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Billing plan not found.")
     return row
+
+
+def _assert_add_on_allowed(add_on: BillingPlanVersion, subscription: BillingSubscription) -> None:
+    if add_on_allowed_on_plan(add_on, subscription.plan_version):
+        return
+    segments = (add_on.feature_summary_json or {}).get("eligible_segments") or []
+    allowed = " and ".join(SEGMENT_LABELS.get(str(segment), str(segment)) for segment in segments)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "add_on_not_available_on_plan",
+            "add_on_code": add_on.plan_code,
+            "detail": f"{add_on.display_name} is available only on {allowed} plans.",
+        },
+    )
+
+
+def _is_feature_add_on(add_on: BillingPlanVersion) -> bool:
+    """A feature add-on only switches entitlements on, so one is all a tenant can use."""
+
+    values = list(_plan_entitlements(add_on).values())
+    return bool(values) and all(isinstance(value, bool) for value in values)
+
+
+def _active_add_on_items(
+    session: Session, *, subscription: BillingSubscription, add_on_code: str
+) -> list[BillingSubscriptionItem]:
+    return list(
+        session.scalars(
+            select(BillingSubscriptionItem).where(
+                BillingSubscriptionItem.subscription_id == subscription.id,
+                BillingSubscriptionItem.item_type == "add_on",
+                BillingSubscriptionItem.item_code == add_on_code,
+                BillingSubscriptionItem.status == "active",
+            )
+        )
+    )
 
 
 def _select_price(plan: BillingPlanVersion, interval: str) -> BillingPlanPrice:
@@ -768,7 +810,7 @@ def create_checkout(
     if isinstance(payload, AddOnCheckoutRequest):
         plan_code = payload.add_on_code
         checkout_type = "topup"
-        interval = "one_time"
+        interval = payload.interval or "month"
         quantity = payload.quantity
         metadata = {}
         success_url = payload.success_url
@@ -788,9 +830,21 @@ def create_checkout(
         cancel_url = payload.cancel_url
     plan = _get_plan(session, plan_code)
     if plan.segment == "add_on":
-        add_on_interval = "one_time" if plan.prices[0].interval == "one_time" else "month"
-        price = _select_price(plan, add_on_interval)
+        one_time = any(price.interval == "one_time" for price in plan.prices)
+        price = _select_price(plan, "one_time" if one_time else interval)
         checkout_type = "topup" if price.interval == "one_time" else "addon"
+        _assert_add_on_allowed(plan, subscription)
+        if _is_feature_add_on(plan):
+            if quantity != 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{plan.display_name} is bought once per workspace.",
+                )
+            if _active_add_on_items(session, subscription=subscription, add_on_code=plan.plan_code):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"{plan.display_name} is already active for this workspace.",
+                )
     else:
         if checkout_type not in PLAN_CHECKOUT_TYPES:
             raise HTTPException(
@@ -1142,19 +1196,35 @@ def _activate_subscription_from_checkout(
                 source_object_id=order.id,
                 expires_at=now + timedelta(days=31 * expiry_months),
             )
-        elif plan.prices and plan.prices[0].interval != "one_time":
-            session.add(
-                BillingSubscriptionItem(
-                    subscription_id=subscription.id,
-                    item_code=plan.plan_code,
-                    item_type="add_on",
-                    quantity=quantity,
-                    amount_minor=checkout.amount_minor,
-                    currency=checkout.currency,
-                    interval=plan.prices[0].interval,
-                    status="active",
-                    provider_item_id=order.provider_order_id,
-                )
+        elif checkout.checkout_type == "addon":
+            interval = str((checkout.metadata_json or {}).get("interval") or "month")
+            item = BillingSubscriptionItem(
+                subscription_id=subscription.id,
+                item_code=plan.plan_code,
+                item_type="add_on",
+                quantity=quantity,
+                amount_minor=checkout.amount_minor,
+                currency=checkout.currency,
+                interval=interval,
+                status="active",
+                provider_item_id=order.provider_order_id,
+            )
+            session.add(item)
+            session.flush()
+            record_audit(
+                session,
+                company_id=checkout.company_id,
+                action="billing.add_on.activated",
+                target_type="billing_subscription_item",
+                target_id=item.id,
+                actor_type=AuditActorType.SYSTEM,
+                actor_label="billing_payment",
+                metadata={
+                    "add_on_code": plan.plan_code,
+                    "interval": interval,
+                    "source": "checkout",
+                    "payment_order_id": order.id,
+                },
             )
 
 
@@ -2436,6 +2506,89 @@ def platform_mutate_subscription(
         company_id=company_id,
         metadata={"reason": payload.reason, "status": payload.status},
     )
+    session.commit()
+    return platform_company_billing_detail(session, company_id)
+
+
+def platform_set_subscription_add_on(
+    session: Session,
+    *,
+    company_id: str,
+    payload: PlatformAddOnMutation,
+    platform_admin: PlatformAdminMembership,
+    context: SessionContext,
+) -> dict[str, Any]:
+    """Activate or end a recurring add-on on a company's subscription.
+
+    This is the invoice-billed path: the platform admin activates what the
+    tenant requested once the invoice is settled, and ends it when it lapses.
+    """
+
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found.")
+    subscription = ensure_grandfathered_subscription(session, company)
+    add_on = _get_plan(session, payload.add_on_code)
+    if add_on.segment != "add_on" or any(price.interval == "one_time" for price in add_on.prices):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only a recurring add-on can be activated on a subscription.",
+        )
+    active = _active_add_on_items(session, subscription=subscription, add_on_code=add_on.plan_code)
+    if payload.status == "active":
+        _assert_add_on_allowed(add_on, subscription)
+        price = _select_price(add_on, payload.billing_interval)
+        if active:
+            item = active[0]
+        else:
+            item = BillingSubscriptionItem(
+                item_code=add_on.plan_code, item_type="add_on", quantity=1, status="active"
+            )
+            # Through the relationship, so this session's loaded subscription
+            # resolves the new item below.
+            subscription.items.append(item)
+        item.interval = price.interval
+        item.amount_minor = price.amount_minor
+        item.currency = price.currency
+        item.metadata_json = {"source": "platform_admin"}
+        items = [item]
+    else:
+        if not active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"{add_on.display_name} is not active for this company.",
+            )
+        for item in active:
+            item.status = "ended"
+        items = active
+    session.flush()
+    verb = "activated" if payload.status == "active" else "ended"
+    metadata = {
+        "add_on_code": add_on.plan_code,
+        "billing_interval": payload.billing_interval,
+        "reason": payload.reason,
+    }
+    for item in items:
+        record_platform_audit(
+            session,
+            context=context,
+            platform_admin=platform_admin,
+            action=f"platform.subscription.add_on_{verb}",
+            target_type="billing_subscription_item",
+            target_id=item.id,
+            company_id=company_id,
+            metadata=metadata,
+        )
+        record_audit(
+            session,
+            company_id=company_id,
+            action=f"billing.add_on.{verb}",
+            target_type="billing_subscription_item",
+            target_id=item.id,
+            actor_type=AuditActorType.SYSTEM,
+            actor_label="platform_admin",
+            metadata={**metadata, "source": "platform_admin"},
+        )
     session.commit()
     return platform_company_billing_detail(session, company_id)
 

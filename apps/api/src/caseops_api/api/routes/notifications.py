@@ -18,7 +18,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import PlainTextResponse
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
@@ -48,6 +49,13 @@ from caseops_api.schemas.calendar import (
 from caseops_api.schemas.notification_preferences import (
     NotificationPreferenceResponse,
     NotificationPreferenceUpdateRequest,
+)
+from caseops_api.schemas.phone_channels import (
+    PhoneChannelAdminResponse,
+    PhoneConsentRequest,
+    PhoneContactStatusResponse,
+    PhoneVerificationConfirmRequest,
+    PhoneVerificationStartRequest,
 )
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
@@ -79,6 +87,15 @@ from caseops_api.services.notification_rules import (
     delete_notification_rule,
     list_notification_rules,
     update_notification_rule,
+)
+from caseops_api.services.phone_notifications import (
+    apply_whatsapp_webhook,
+    confirm_phone_verification,
+    phone_channel_admin_status,
+    phone_contact_status,
+    remove_phone_contact,
+    set_phone_channel_consent,
+    start_phone_verification,
 )
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
@@ -1261,6 +1278,159 @@ async def patch_notification_preferences(
         session,
         context=context,
         payload=payload,
+    )
+
+
+@admin_router.get(
+    "/notification-phone-channels",
+    response_model=PhoneChannelAdminResponse,
+    summary="SMS and WhatsApp readiness, workspace enablement and opted-in members.",
+)
+async def get_admin_phone_channels(
+    context: AdminContext,
+    session: DbSession,
+) -> PhoneChannelAdminResponse:
+    return phone_channel_admin_status(session, context=context)
+
+
+@preferences_router.get(
+    "/phone",
+    response_model=PhoneContactStatusResponse,
+    summary="Read the current user's mobile number, verification and consent state.",
+)
+async def get_phone_contact(
+    context: PreferenceContext,
+    session: DbSession,
+) -> PhoneContactStatusResponse:
+    return phone_contact_status(session, context=context)
+
+
+@preferences_router.post(
+    "/phone/verification",
+    response_model=PhoneContactStatusResponse,
+    summary="Send a one-time code to verify the current user's mobile number.",
+)
+async def start_phone_contact_verification(
+    context: PreferenceContext,
+    session: DbSession,
+    payload: PhoneVerificationStartRequest,
+) -> PhoneContactStatusResponse:
+    return start_phone_verification(session, context=context, payload=payload)
+
+
+@preferences_router.post(
+    "/phone/verification/confirm",
+    response_model=PhoneContactStatusResponse,
+    summary="Confirm the one-time code and mark the mobile number verified.",
+)
+async def confirm_phone_contact_verification(
+    context: PreferenceContext,
+    session: DbSession,
+    payload: PhoneVerificationConfirmRequest,
+) -> PhoneContactStatusResponse:
+    return confirm_phone_verification(session, context=context, payload=payload)
+
+
+@preferences_router.post(
+    "/phone/consent",
+    response_model=PhoneContactStatusResponse,
+    summary="Opt in to, or out of, SMS or WhatsApp reminders.",
+)
+async def set_phone_contact_consent(
+    context: PreferenceContext,
+    session: DbSession,
+    payload: PhoneConsentRequest,
+) -> PhoneContactStatusResponse:
+    return set_phone_channel_consent(session, context=context, payload=payload)
+
+
+@preferences_router.delete(
+    "/phone",
+    response_model=PhoneContactStatusResponse,
+    summary="Remove the current user's mobile number and stop phone reminders.",
+)
+async def delete_phone_contact(
+    context: PreferenceContext,
+    session: DbSession,
+) -> PhoneContactStatusResponse:
+    return remove_phone_contact(session, context=context)
+
+
+def _verify_whatsapp_signature(body: bytes, signature: str | None) -> None:
+    """Meta signs webhook bodies with HMAC-SHA256 of the app secret."""
+
+    import hashlib
+    import hmac
+
+    secret = get_settings().whatsapp_app_secret
+    if not secret:
+        if _is_local_env():
+            logger.warning("WhatsApp webhook signature check SKIPPED in local env.")
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="WhatsApp webhook verification is not configured in this environment.",
+        )
+    expected = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    if not signature or not hmac.compare_digest(expected, signature.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="WhatsApp webhook signature verification failed.",
+        )
+
+
+@webhook_router.get(
+    "/whatsapp",
+    response_class=PlainTextResponse,
+    summary="Meta webhook subscription handshake",
+)
+async def whatsapp_webhook_verify(
+    mode: Annotated[str | None, Query(alias="hub.mode")] = None,
+    token: Annotated[str | None, Query(alias="hub.verify_token")] = None,
+    challenge: Annotated[str | None, Query(alias="hub.challenge", max_length=64)] = None,
+) -> PlainTextResponse:
+    import hmac
+
+    expected = get_settings().whatsapp_webhook_verify_token
+    if (
+        mode != "subscribe"
+        or not expected
+        or not token
+        or not hmac.compare_digest(expected, token)
+        or not challenge
+        or not challenge.isdigit()
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verification refused.")
+    return PlainTextResponse(challenge)
+
+
+@webhook_router.post(
+    "/whatsapp",
+    response_model=WebhookAckResponse,
+    summary="Receive WhatsApp STOP replies and delivery statuses",
+)
+async def whatsapp_webhook(
+    request: Request,
+    session: DbSession,
+    signature: Annotated[str | None, Header(alias="X-Hub-Signature-256")] = None,
+) -> WebhookAckResponse:
+    body = await request.body()
+    _verify_whatsapp_signature(body, signature)
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed webhook payload."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Expected a JSON object."
+        )
+    counts = apply_whatsapp_webhook(session, payload=payload)
+    session.commit()
+    return WebhookAckResponse(
+        accepted=counts["opt_outs"] + counts["statuses"],
+        matched=counts["opt_outs"] + counts["statuses"],
     )
 
 

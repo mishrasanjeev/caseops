@@ -75,6 +75,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateInboundEmailAlias: updateInboundEmailAliasMock,
   updateMicrosoft365TenantConfiguration: updateMicrosoft365TenantConfigurationMock,
   updateUserNotificationPreferences: updateUserNotificationPreferencesMock,
+  // The phone reminder card has its own tests; keep its read pending here.
+  confirmPhoneVerification: vi.fn(),
+  fetchPhoneContact: vi.fn(() => new Promise(() => {})),
+  removePhoneContact: vi.fn(),
+  setPhoneConsent: vi.fn(),
+  startPhoneVerification: vi.fn(),
 }));
 
 import CalendarConflictsPage from "@/app/app/calendar/conflicts/page";
@@ -416,7 +422,10 @@ describe("connector readiness pages", () => {
     renderWithQuery(<NotificationPreferencesPage />);
 
     expect(await screen.findByText("Channels")).toBeInTheDocument();
-    expect(screen.getAllByText("external blocked")).toHaveLength(3);
+    // SMS and WhatsApp left this grid for the verified-number card, so only
+    // email shows the blocked badge here.
+    expect(screen.getAllByText("external blocked")).toHaveLength(1);
+    expect(screen.queryByRole("checkbox", { name: /sms|whatsapp/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

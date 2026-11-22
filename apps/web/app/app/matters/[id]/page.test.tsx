@@ -38,6 +38,8 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchBenchStrategy: fetchBenchStrategyMock,
+  // ScheduleHearingDialog reads workspace phone-channel enablement.
+  fetchNotificationPreferences: vi.fn().mockResolvedValue({ tenant: { channels: {} } }),
   fetchMatterIpLinks: fetchMatterIpLinksMock,
   fetchMatterNextAction: fetchMatterNextActionMock,
   fetchForumCatalog: vi.fn(),

@@ -1,10 +1,10 @@
 """MOD-TS-007 (2026-04-26) — channel-breadth tests for the hearing
 reminder worker.
 
-Covers SMS via Twilio + WhatsApp routing:
+Covers SMS (MSG91) + WhatsApp routing for legacy rows:
 
-- SMS row dispatches through the Twilio adapter when
-  CASEOPS_TWILIO_ENABLED + creds are set.
+- An unlinked SMS row never dispatches through a provider, even when
+  CASEOPS_MSG91_ENABLED and every MSG91 credential/template is set.
 - SMS row stays QUEUED with an actionable last_error when the gate
   is off (default deploy never burns money on a test SMS).
 - WhatsApp row stays QUEUED pointing at Meta-template setup
@@ -34,6 +34,21 @@ from tests.test_hearing_reminders import (
     _mk_hearing_via_api,
     _mk_matter,
 )
+
+# A complete MSG91 configuration (fake values). The legacy worker must report
+# the provider as configured yet still never dispatch an unlinked row.
+MSG91_ENV = {
+    "CASEOPS_PHONE_NOTIFICATION_TRANSPORT": "live",
+    "CASEOPS_MSG91_ENABLED": "true",
+    "CASEOPS_MSG91_AUTH_KEY": "fake-msg91-key",
+    "CASEOPS_MSG91_SENDER_ID": "CSEOPS",
+    "CASEOPS_MSG91_HEARING_TEMPLATE_ID": "tpl-hearing",
+    "CASEOPS_MSG91_HEARING_DLT_TEMPLATE_ID": "1107160000000000001",
+    "CASEOPS_MSG91_ALERT_TEMPLATE_ID": "tpl-alert",
+    "CASEOPS_MSG91_ALERT_DLT_TEMPLATE_ID": "1107160000000000002",
+    "CASEOPS_MSG91_OTP_TEMPLATE_ID": "tpl-otp",
+    "CASEOPS_MSG91_OTP_DLT_TEMPLATE_ID": "1107160000000000003",
+}
 
 
 def _mk_sms_reminder(
@@ -77,18 +92,15 @@ def _mk_whatsapp_reminder(
     return r.id
 
 
-def test_unlinked_sms_row_never_dispatches_through_twilio(
+def test_unlinked_sms_row_never_dispatches_through_msg91(
     client: TestClient,
 ) -> None:
-    """CASEOPS_TWILIO_ENABLED + creds set → worker calls Twilio
-    Messages API and marks the row SENT with provider='twilio'."""
+    """A fully configured MSG91 provider still never receives an unlinked
+    legacy row: dispatch belongs to the canonical durable intent."""
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
-    os.environ["CASEOPS_TWILIO_ENABLED"] = "true"
-    os.environ["CASEOPS_TWILIO_ACCOUNT_SID"] = "ACfaketestSid"
-    os.environ["CASEOPS_TWILIO_AUTH_TOKEN"] = "fake-token"
-    os.environ["CASEOPS_TWILIO_FROM_NUMBER"] = "+15555550000"
+    os.environ.update(MSG91_ENV)
     get_settings.cache_clear()
 
     boot = bootstrap_company(client)
@@ -97,13 +109,13 @@ def test_unlinked_sms_row_never_dispatches_through_twilio(
     matter = _mk_matter(client, token, code="SMS-LIVE")
     hearing = _mk_hearing_via_api(client, token, matter["id"], days_ahead=3)
 
-    class _FakeTwilioResponse:
-        status_code = 201
+    class _FakeProviderResponse:
+        status_code = 200
         headers = {}
         text = ""
 
         def json(self):
-            return {"sid": "SMtest123"}
+            return {"type": "success", "message": "req-123"}
 
     try:
         factory = get_session_factory()
@@ -116,7 +128,7 @@ def test_unlinked_sms_row_never_dispatches_through_twilio(
 
             import httpx
             with patch.object(
-                httpx, "post", return_value=_FakeTwilioResponse(),
+                httpx, "post", return_value=_FakeProviderResponse(),
             ) as provider_post:
                 report = run_reminder_worker(session, mode="auto")
                 assert provider_post.call_count == 0
@@ -132,25 +144,22 @@ def test_unlinked_sms_row_never_dispatches_through_twilio(
             "CASEOPS_HEARING_REMINDERS_ENABLED",
             "CASEOPS_SENDGRID_API_KEY",
             "CASEOPS_SENDGRID_SENDER_EMAIL",
-            "CASEOPS_TWILIO_ENABLED",
-            "CASEOPS_TWILIO_ACCOUNT_SID",
-            "CASEOPS_TWILIO_AUTH_TOKEN",
-            "CASEOPS_TWILIO_FROM_NUMBER",
+            *MSG91_ENV,
         ):
             os.environ.pop(key, None)
         get_settings.cache_clear()
 
 
-def test_sms_row_stays_queued_with_actionable_error_when_twilio_disabled(
+def test_sms_row_stays_queued_with_actionable_error_when_msg91_disabled(
     client: TestClient,
 ) -> None:
-    """Default deployment: CASEOPS_TWILIO_ENABLED=false → SMS rows
+    """Default deployment: CASEOPS_MSG91_ENABLED=false → SMS rows
     NEVER fail and NEVER send. They stay QUEUED with last_error
     pointing the operator at the env vars to set."""
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
-    os.environ.pop("CASEOPS_TWILIO_ENABLED", None)
+    os.environ.pop("CASEOPS_MSG91_ENABLED", None)
     get_settings.cache_clear()
 
     boot = bootstrap_company(client)
@@ -233,10 +242,7 @@ def test_unlinked_sms_row_with_no_recipient_phone_never_dispatches(
     os.environ["CASEOPS_HEARING_REMINDERS_ENABLED"] = "true"
     os.environ["CASEOPS_SENDGRID_API_KEY"] = "SG.fake"
     os.environ["CASEOPS_SENDGRID_SENDER_EMAIL"] = "hearings@caseops.ai"
-    os.environ["CASEOPS_TWILIO_ENABLED"] = "true"
-    os.environ["CASEOPS_TWILIO_ACCOUNT_SID"] = "ACfake"
-    os.environ["CASEOPS_TWILIO_AUTH_TOKEN"] = "tok"
-    os.environ["CASEOPS_TWILIO_FROM_NUMBER"] = "+15555550000"
+    os.environ.update(MSG91_ENV)
     get_settings.cache_clear()
 
     boot = bootstrap_company(client)
@@ -265,10 +271,7 @@ def test_unlinked_sms_row_with_no_recipient_phone_never_dispatches(
             "CASEOPS_HEARING_REMINDERS_ENABLED",
             "CASEOPS_SENDGRID_API_KEY",
             "CASEOPS_SENDGRID_SENDER_EMAIL",
-            "CASEOPS_TWILIO_ENABLED",
-            "CASEOPS_TWILIO_ACCOUNT_SID",
-            "CASEOPS_TWILIO_AUTH_TOKEN",
-            "CASEOPS_TWILIO_FROM_NUMBER",
+            *MSG91_ENV,
         ):
             os.environ.pop(key, None)
         get_settings.cache_clear()

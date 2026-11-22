@@ -359,3 +359,32 @@ def visible_ip_dockets_filter(
             exists(select(active_teams.c.team_id).where(team_grant)),
         ),
     )
+
+
+def walled_access_manager_target_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    target_column: Any,
+    target_ids: set[str],
+) -> set[str]:
+    """Targets (Matter or IP docket ids) the acting manager is walled from.
+
+    Access-management policy: an ethical wall overrides the admin role, and
+    restriction does not. Admins stay the access managers of restricted
+    records they cannot read, but never of a record that walls them out.
+    The wall test is the one every read applies (`_wall_subject_filter` with
+    `_active_wall_window`: an active, unrevoked wall naming the membership or
+    one of its active teams). Owners are exempt.
+    """
+    if context.membership.role == MembershipRole.OWNER or not target_ids:
+        return set()
+    return set(
+        session.scalars(
+            select(target_column).where(
+                target_column.in_(target_ids),
+                _wall_subject_filter(context.membership.id),
+                _active_wall_window(datetime.now(UTC)),
+            )
+        )
+    )

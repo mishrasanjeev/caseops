@@ -93,12 +93,14 @@ def _retain_revoked_policy_rows(connection):
         )
 
 
-def _portfolio_rescans(client, monkeypatch, record_property, requests):
+def _portfolio_rescans(client, monkeypatch, record_property, requests, prepare=None, bodies=None):
     _clock(monkeypatch, datetime(2026, 11, 6, 4, tzinfo=UTC))
     actor = _seed(client)
     engine = get_engine()
     with engine.begin() as connection:
         _retain_revoked_policy_rows(connection)
+        if prepare is not None:
+            prepare(connection)
         connection.exec_driver_sql("ANALYZE")
 
     captured = []
@@ -120,12 +122,14 @@ def _portfolio_rescans(client, monkeypatch, record_property, requests):
             timings[label] = round(perf_counter() - started, 3)
             active["label"] = None
             assert response.status_code == 200, response.text
+            if bodies is not None:
+                bodies[label] = response.json()
     finally:
         event.remove(engine, "before_cursor_execute", before)
     record_property("portfolio_http_seconds", json.dumps(timings))
     assert {label for label, _, _ in captured} == set(requests)
 
-    rescans, shapes = {}, {}
+    rescans, shapes, max_work = {}, {}, {}
     with engine.connect() as connection:
         for index, (label, statement, parameters) in enumerate(captured):
             plan = connection.exec_driver_sql(
@@ -134,6 +138,7 @@ def _portfolio_rescans(client, monkeypatch, record_property, requests):
             offending = False
             for node in _nodes(plan):
                 work = _work(node)
+                max_work[f"{label}-{index}"] = max(max_work.get(f"{label}-{index}", 0), work)
                 if (
                     node["Node Type"] == "Seq Scan"
                     and node.get("Relation Name") in REPEATED_TABLES
@@ -164,6 +169,7 @@ def _portfolio_rescans(client, monkeypatch, record_property, requests):
                     if node.get("Actual Loops", 0) <= 1 or node["Node Type"] == "Seq Scan"
                 ][:40]
         connection.rollback()
+    record_property("portfolio_max_work", json.dumps(max_work))
     record_property("portfolio_rescans", json.dumps(rescans))
     record_property("portfolio_rescan_plans", json.dumps(shapes))
     return rescans

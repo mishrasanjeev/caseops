@@ -281,8 +281,9 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
-        # The current head refuses before any provenance or indexes change.
-        # The historical index's own conflict guard is exercised separately.
+        # The current extraction-provenance head refuses
+        # before any provenance or indexes change. The historical index's own
+        # conflict guard is exercised separately.
         assert str(refused.value) == (
             "Contract extraction provenance is restore-forward. Restore the reviewed backup."
         )

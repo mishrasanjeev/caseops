@@ -79,9 +79,13 @@ def test_every_api_route_returns_json_or_file(client: TestClient) -> None:
         "text/calendar",
         "text/calendar; charset=utf-8",
     }
+    # Meta's webhook verification handshake must echo hub.challenge as plain
+    # text; only that GET may answer text/plain. Its POST stays JSON.
+    plain_text_routes = {("GET", "/api/webhooks/whatsapp")}
     for path, method, op in _iter_operations(schema):
         if not path.startswith("/api/") or path in EXEMPT_PATHS:
             continue
+        allowed = acceptable | ({"text/plain"} if (method, path) in plain_text_routes else set())
         responses = op.get("responses") or {}
         for status_code, body in responses.items():
             if not isinstance(body, dict):
@@ -90,7 +94,7 @@ def test_every_api_route_returns_json_or_file(client: TestClient) -> None:
             if not content:
                 continue
             unexpected = [
-                ctype for ctype in content.keys() if ctype not in acceptable
+                ctype for ctype in content.keys() if ctype not in allowed
             ]
             if unexpected:
                 mis_typed.append(

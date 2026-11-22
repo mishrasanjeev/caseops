@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 736, "app-mobile": 65}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 738, "app-mobile": 65}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3082,7 +3082,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_COUNTS = {"app-chromium": 721, "app-mobile": 55}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3136,6 +3136,14 @@ APP_REQUIRED_NATIVE_CASES = (
         "watch-acl-query-states.spec.ts",
         "Watch removes revoked source evidence from the workspace and report after reload",
     )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "desktop November 22 product claims show their limits",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "mobile November 22 product claims show their limits",
+    )),
 )
 
 
@@ -3180,16 +3188,24 @@ def test_app_required_cases_keep_their_independent_literal_identities():
 
 
 @pytest.mark.parametrize("damage", ["file", "title"])
-@pytest.mark.parametrize("required_file", [item[1] for item in APP_REQUIRED_NATIVE_CASES])
+@pytest.mark.parametrize(
+    "required_case",
+    [
+        pytest.param(APP_REQUIRED_NATIVE_CASES[0], id="control-crawl-contract.spec.ts"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[1], id="watch-acl-query-states.spec.ts"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[2], id="public-content-desktop-claims"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[3], id="public-content-mobile-claims"),
+    ],
+)
 def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
-    app_envelopes, damage, required_file
+    app_envelopes, damage, required_case
 ):
     canonical = evidence._json(
         app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
     )
     required = [
         row for row in canonical["tests"]
-        if row["file"] == required_file
+        if (row["project_name"], row["file"], tuple(row["title_path"])) == required_case
     ]
     assert len(required) == 1
     if damage == "file":
@@ -3419,13 +3435,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all774_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all776_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 774
+    assert sum(APP_COUNTS.values()) == 776
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

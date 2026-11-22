@@ -1163,15 +1163,49 @@ Releases since the November 5 run, all deployed with deploy-prod.sh from
   `ip_docket_records` by sequential scan for each of its 51 rows (linear in
   tenant width, page-bounded; production p50 0.66 s on 00520); tracked as an
   observation, not a defect.
-- B4-ADJ-44 Status: Not fixed (tracked; found by the B4-ADJ-42 review,
-  predates it). The portfolio filter Registry freshness: Unavailable
+- B4-ADJ-44 Status: Inconclusive (fixed in code, release proof pending; branch
+  fix/b4-adj-44-registry-freshness-exists). Found by the B4-ADJ-42 review;
+  predates it. The portfolio filter Registry freshness: Unavailable
   (`registry_sync_state=unavailable`, `ip_portfolio.py`
-  `_registry_state_predicate`) tests `max(ip_docket_events.entered_at)` as
+  `_registry_state_predicate`) tested `max(ip_docket_events.entered_at)` as
   `(scalar subquery) IS NULL`. That is the same 0.5% estimate class as
   B4-ADJ-41. On the 1,000-docket lab copy it rescanned `ip_assets` per docket;
-  on a 5,000-docket copy it planned linearly, so it depends on statistics. The
-  fix shape is `NOT EXISTS` over the same seek. No production timeout is
-  attributed to it.
+  on a 5,000-docket copy it planned linearly, so it depends on statistics. No
+  production timeout is attributed to it.
+  Fix: the three states test the same confirmed `registry_sync` seek
+  (company, docket, source, candidate status) with `EXISTS`: unavailable is
+  no such event, current is one at or after the 24 h threshold, stale is one
+  but none at or after it. `entered_at` is non-null, so this is exactly the
+  old `max` comparison. Provider failures stay an empty `false()` scope, and
+  the `registry_last_success_at` display column renders the same SQL as before.
+  Evidence (local PostgreSQL 17, pgvector image):
+  - `test_ip_portfolio_registry_freshness_estimate_postgres_20261122.py` seeds
+    1,000 dockets and 400 revoked walls and grants, adds fresh, old,
+    unconfirmed and non-registry events, analyzes, and runs the unavailable
+    page and families reads plus stale, current and stale-or-unavailable. On
+    the old predicate it failed: both unavailable reads planned a Hash Join
+    estimated at 2 rows (actual 700) on `(SubPlan) IS NULL`, then a Nested
+    Loop that did 354,818 rows of work against the 250,000 quadratic bound
+    (linear reads: 1,000). With the fix it passes; the largest node in every
+    read does at most 1,000 rows of work. The list totals (700, 150, 150,
+    850) match on both versions.
+  - The two B4-ADJ-41/42 tests in `test_ip_portfolio_policy_estimate_postgres_20261106.py`
+    still pass with the fix (largest node 1,000 rows of work).
+  - `test_ip_portfolio_registry_freshness_20261122.py` (SQLite) seeds seven
+    dockets (no event; old, fresh, old and fresh confirmed syncs; old sync
+    with a fresh candidate; candidate only; non-registry only) and checks all
+    15 state combinations return exactly the expected dockets and row states.
+    It passes on the old and the fixed predicate, and fails for each seeded
+    branch mutation (current or stale widened to any sync, stale keyed on an
+    old event, unavailable keyed on a fresh event, dropped source or status
+    condition, a non-empty failed scope).
+  Caveat: the workstation was CPU-saturated by unrelated containers, and the
+  shared import seed's 90 s commit deadline failed on the first old-code run
+  (118 to 172 s commits). The recorded old-code run lifted only that seed
+  deadline through a scratch plugin (one commit took 106.6 s); the fixed run
+  used the same plugin, but every commit took under 12 s. The plan
+  assertions were unchanged. Closure needs the CI PostgreSQL shard and a
+  production read of the filter after release.
 - B4-ADJ-43 Status: Properly fixed, production-proven on 9b48edc5 and
   d2a172f7 (batch4 BUG-014 desktop and mobile). On 9a61cc18 the watch Pause
   badge changed about 12 s after the server paused the profile, because the

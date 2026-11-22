@@ -155,6 +155,9 @@ import {
   type MailboxMessageReviewResponse,
   type Microsoft365TenantConfigurationResponse,
   type NotificationPreferenceResponse,
+  type PhoneChannel,
+  type PhoneChannelAdminResponse,
+  type PhoneContactStatusResponse,
   type MailboxImportResponse,
   type MailboxStatusResponse,
   type MailboxWatchResponse,
@@ -285,6 +288,8 @@ import {
   mailboxMessageReviewResponse,
   microsoft365TenantConfigurationResponse,
   notificationPreferenceResponse,
+  phoneChannelAdminResponse,
+  phoneContactStatusResponse,
   mailboxImportResponse,
   mailboxStatusResponse,
   mailboxWatchResponse,
@@ -1968,6 +1973,8 @@ export type MatterHearingCreateInput = {
   judge_name?: string | null;
   outcome_note?: string | null;
   status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+  // Omitted means the API default (in-app and email).
+  reminder_channels?: Array<"in_app" | "email" | "sms" | "whatsapp">;
 };
 
 export async function createMatterHearing(
@@ -8004,6 +8011,60 @@ export async function updateTenantNotificationPreferences(input: {
   return notificationPreferenceResponse.parse(data);
 }
 
+export async function fetchPhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone");
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function startPhoneVerification(input: {
+  phoneNumber: string;
+  channel: PhoneChannel;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/verification", {
+    method: "POST",
+    body: { phone_number: input.phoneNumber, channel: input.channel },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function confirmPhoneVerification(
+  code: string,
+): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/notification-preferences/phone/verification/confirm",
+    { method: "POST", body: { code } },
+  );
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function setPhoneConsent(input: {
+  channel: PhoneChannel;
+  optedIn: boolean;
+  consentTextVersion?: string;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/consent", {
+    method: "POST",
+    body: {
+      channel: input.channel,
+      opted_in: input.optedIn,
+      consent_text_version: input.optedIn ? input.consentTextVersion : undefined,
+    },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function removePhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone", {
+    method: "DELETE",
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function fetchAdminPhoneChannels(): Promise<PhoneChannelAdminResponse> {
+  const data = await apiRequest<unknown>("/api/admin/notification-phone-channels");
+  return phoneChannelAdminResponse.parse(data);
+}
+
 async function mutateProviderOperation(
   operationId: string,
   action: "ignore" | "mark-resolved",
@@ -8542,6 +8603,7 @@ export async function fetchBillingAddOns(): Promise<BillingPlansResponse> {
 
 export async function createBillingAddOnCheckout(input: {
   addOnCode: string;
+  interval?: "month" | "year" | null;
   quantity?: number;
   successUrl?: string | null;
   cancelUrl?: string | null;
@@ -8550,6 +8612,7 @@ export async function createBillingAddOnCheckout(input: {
     method: "POST",
     body: {
       add_on_code: input.addOnCode,
+      interval: input.interval ?? null,
       quantity: input.quantity ?? 1,
       success_url: input.successUrl ?? null,
       cancel_url: input.cancelUrl ?? null,
@@ -12729,6 +12792,81 @@ export async function fetchIpWatchWorkspace(
   });
   if (docketId) params.set("docket_id", docketId);
   return apiRequest(`/api/ip/watch?${params.toString()}`);
+}
+
+/** Public source lineage of one Trade Marks Journal PDF the official listing names. */
+export type IpPublicJournalDocument = {
+  id: string;
+  journal_number: string;
+  journal_date: string;
+  available_on: string | null;
+  file_name: string;
+  source_url: string;
+  status: "pending" | "parsed" | "needs_review" | "failed";
+  attempts: number;
+  content_sha256: string | null;
+  byte_size: number | null;
+  page_count: number | null;
+  entry_count: number;
+  review_count: number;
+  parser_version: string | null;
+  error_code: string | null;
+  retrieved_at: string | null;
+  workspace_status: string | null;
+  workspace_entries_compared: number | null;
+};
+
+export type IpPublicJournalReviewItem = {
+  id: string;
+  document_id: string;
+  journal_number: string;
+  journal_date: string;
+  page_start: number;
+  page_end: number;
+  journal_page: string | null;
+  review_reason: string | null;
+  application_number: string | null;
+  source_url: string;
+};
+
+export type IpJournalFeedStatus = {
+  source_key: string;
+  listing_url: string;
+  attribution: string;
+  /** Platform kill switch: false means no IP India request is made at all. */
+  global_enabled: boolean;
+  setting: {
+    enabled: boolean;
+    version: number;
+    run_as_membership_id: string;
+    updated_by_membership_id: string;
+    updated_at: string;
+  } | null;
+  last_check: {
+    status: "succeeded" | "failed" | "refused";
+    reason_code: string | null;
+    http_status: number | null;
+    issues_listed: number;
+    documents_discovered: number;
+    checked_at: string;
+  } | null;
+  documents: IpPublicJournalDocument[];
+  review_items: IpPublicJournalReviewItem[];
+  review_total: number;
+};
+
+export async function fetchIpJournalFeedStatus(): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed");
+}
+
+export async function updateIpJournalFeedSetting(input: {
+  enabled: boolean;
+  expectedVersion: number | null;
+}): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed", {
+    method: "PUT",
+    body: { enabled: input.enabled, expected_version: input.expectedVersion },
+  });
 }
 
 /** Recorded journal entries the viewer may see, searched on the server. */

@@ -30,6 +30,8 @@ class BillingPlanRecord(BaseModel):
     trial_eligible: bool
     prices: list[BillingPriceRecord]
     entitlements: dict[str, Any]
+    # Base-plan segments an add-on is sold on; null means every plan.
+    eligible_segments: list[str] | None = None
 
 
 class BillingPlansResponse(BaseModel):
@@ -104,6 +106,8 @@ class BillingCheckoutRequest(BaseModel):
 
 class AddOnCheckoutRequest(BaseModel):
     add_on_code: str
+    # Recurring add-ons only; omitted means monthly. One-time packs ignore it.
+    interval: Literal["month", "year"] | None = None
     quantity: int = Field(default=1, ge=1, le=1000)
     success_url: str | None = Field(default=None, max_length=1000)
     cancel_url: str | None = Field(default=None, max_length=1000)
@@ -286,6 +290,13 @@ class PlatformSubscriptionMutation(BaseModel):
     plan_code: str | None = None
     billing_interval: str = "month"
     status: str = "manual_active"
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class PlatformAddOnMutation(BaseModel):
+    add_on_code: str = Field(min_length=1, max_length=80)
+    billing_interval: Literal["month", "year"] = "month"
+    status: Literal["active", "ended"] = "active"
     reason: str = Field(min_length=3, max_length=1000)
 
 

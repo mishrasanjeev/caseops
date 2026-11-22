@@ -615,6 +615,17 @@ def test_notification_preferences_keep_external_delivery_disabled(
     assert admin_updated.status_code == 200, admin_updated.text
     assert admin_updated.json()["external_delivery_enabled"] is False
 
+    # Turning a phone channel on is consent and needs a verified number, so
+    # the generic preference write refuses it instead of storing a choice it
+    # cannot honour.
+    refused = client.patch(
+        "/api/notification-preferences",
+        headers=_auth(token),
+        json={"channels": {"sms": True, "whatsapp": True}},
+    )
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "phone_consent_requires_verification"
+
     updated = client.patch(
         "/api/notification-preferences",
         headers=_auth(token),
@@ -622,8 +633,8 @@ def test_notification_preferences_keep_external_delivery_disabled(
             "channels": {
                 "in_app": True,
                 "email": True,
-                "sms": True,
-                "whatsapp": True,
+                "sms": False,
+                "whatsapp": False,
             },
             "digest_frequency": "daily",
             "event_categories": {"connector_failures": True},

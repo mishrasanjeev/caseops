@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 736, "app-mobile": 65}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 738, "app-mobile": 65}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 721, "app-mobile": 55}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -140,6 +140,14 @@ APP_REQUIRED_CASES = (
     ("app-chromium", "watch-acl-query-states.spec.ts", (
         "watch-acl-query-states.spec.ts",
         "Watch removes revoked source evidence from the workspace and report after reload",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "desktop November 22 product claims show their limits",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "mobile November 22 product claims show their limits",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete

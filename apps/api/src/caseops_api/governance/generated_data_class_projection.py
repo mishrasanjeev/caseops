@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "8cc07a18f3b993298e2df420b33d55db846099fd3c41a5475b2758539579a9fa"
-MAP_SCHEMA_FINGERPRINT = "7ceffe65f86af7bea79942e586b686d9060b3d01c3ddef4654c3f4ec3164784c"
+MAP_DOCUMENT_FINGERPRINT = "6d83f1f89578d99a8043acd7d25b0a1e0d7316a3b11967d35da7a7c015db0cb0"
+MAP_SCHEMA_FINGERPRINT = "9289ef49c94d793d578a91238126ba781e5e81318e9cf07e4d2e593673141333"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "a75e7791ac8d11011c53b4e6b2d19e89e7f1891bc2c97ba34460b30acc1998a8"
+ORM_SCHEMA_FINGERPRINT = "c974cf42349af3cd72d3962567e70db0722668bb9449d8a13a1b8ba902df7041"
 
-PROJECTION_ID = "2e1b3d7590139b64b630d705782f94fef64eb37de34f70dcb47d451ef8e52f57"
+PROJECTION_ID = "fb7a9cc07e1a687bcb579ff9edd7ee4387c2481426bdc3e3c53258d80db24c19"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -192,6 +192,8 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_identifiers",
         "ip_import_rows",
         "ip_incident_kill_switches",
+        "ip_journal_feed_settings",
+        "ip_journal_feed_tenant_runs",
         "ip_journal_ingestion_runs",
         "ip_journal_publications",
         "ip_matter_links",
@@ -215,6 +217,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_portfolio_saved_views",
         "ip_post_registration_recordals",
         "ip_proceedings",
+        "ip_public_journal_checks",
+        "ip_public_journal_documents",
+        "ip_public_journal_entries",
         "ip_registry_diffs",
         "ip_registry_links",
         "ip_registry_snapshots",
@@ -325,6 +330,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "native_refresh_tokens",
         "notification_delivery_events",
         "notification_delivery_intents",
+        "notification_phone_contacts",
         "notification_rules",
         "outside_counsel",
         "outside_counsel_spend_records",
@@ -424,6 +430,7 @@ INVENTORIED_NON_SQL_CLASSES = frozenset(
         "llm-and-embedding-provider-held-content",
         "matter-attachment-pgvector-index",
         "operational-activity-report-delivery",
+        "phone-reminder-provider-delivery",
         "platform-console-account-link-delivery",
         "portfolio-export-dispatch-envelope",
         "public-enquiry-reference-notification",
