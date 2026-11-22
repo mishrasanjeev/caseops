@@ -21,10 +21,6 @@ import {
 import { useCapability } from "@/lib/capabilities";
 import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
-function formatScore(score: number): string {
-  return Math.round(score * 100).toString();
-}
-
 function formatMoney(minor: number): string {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -42,8 +38,8 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
             {rec.counsel_name}
           </span>
           <span className="flex shrink-0 items-center gap-2">
-            <span className="tabular text-sm font-semibold text-[var(--color-ink)]" aria-label={`Panel match score ${formatScore(rec.score)}`}>
-              {formatScore(rec.score)}
+            <span className="tabular text-sm font-semibold text-[var(--color-ink)]">
+              {rec.score} pts
             </span>
             <ChevronDown className="h-4 w-4 group-open:rotate-180" aria-hidden />
           </span>
@@ -98,7 +94,7 @@ export function CounselRecommendationsCard({
   }
 
   return (
-    <Card>
+    <Card data-testid="counsel-recommendations-card">
       <CardHeader>
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--color-brand-500)]" aria-hidden />

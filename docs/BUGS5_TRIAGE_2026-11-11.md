@@ -51,6 +51,16 @@ all seven identities and preserve the existing App skip list. The same run
 caught the counsel summary focus failure. The controls now have explicit tab
 stops. Both failures require a complete replacement web run.
 
+The November 22 follow-up on BUG-016 isolated a second defect in the populated
+Suggested Counsel card. The ranking service returns weighted points and the
+card multiplied them by 100. An offline render of the same React component
+and fixture reproduced `800`, `-200` and `125`. The corrected card renders
+`8 pts`, `-2 pts` and `1.25 pts`. The new browser journeys seed an actual local
+counsel panel and verify its returned ranking, check keyboard and touch on the
+two cards, and use a synthetic Bench Strategy response for populated label and
+disclosure checks. The local and hosted browser executions and production
+verification remain pending for this separate follow-up.
+
 On `c441cdaf3`, API shard 6 showed the Delhi layout splitting the decree-holder
 and advocate signature labels across pages. The renderer now keeps consecutive
 signature labels together in PDF and Word. The regression checks the full source

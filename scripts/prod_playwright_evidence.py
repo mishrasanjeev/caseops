@@ -44,8 +44,14 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 735, "app-mobile": 64}
+APP_PROJECT_COUNTS = {"app-chromium": 736, "app-mobile": 65}
 APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
+COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
+COMPACT_MATTER_TITLES = {
+    "app-chromium": "populated counsel and bench disclosures",
+    "app-mobile": "[mobile] populated counsel and bench disclosures",
+}
 MOTOR_STATUTE_FILE = "ram-2026-09-07-statute-source-data.spec.ts"
 MOTOR_STATUTE_TITLE_PREFIX = "BUG-018 Motor Vehicles source records "
 MOTOR_STATUTE_RANGES = ("1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-259")
@@ -439,8 +445,18 @@ def _app_inventory(canonical):
     if (Counter(_app_skip_identity(row) for row in motor) != expected_motor
             or any(row["expected_status"] != "passed" for row in motor)):
         raise EvidenceError("motor_vehicles_statute_inventory_mismatch")
+    compact = [row for row in rows if row["file"] == COMPACT_MATTER_FILE
+               and row["title_path"][1:-1] == [COMPACT_MATTER_SUITE]]
+    expected_compact = Counter(
+        (project, COMPACT_MATTER_FILE, (COMPACT_MATTER_FILE, COMPACT_MATTER_SUITE, title))
+        for project, title in COMPACT_MATTER_TITLES.items()
+    )
+    if (Counter(_app_skip_identity(row) for row in compact) != expected_compact
+            or any(row["expected_status"] != "passed" for row in compact)):
+        raise EvidenceError("compact_matter_inventory_mismatch")
+    additive_ids = motor_ids | {row["id"] for row in compact}
     legacy = [row for row in rows
-              if row["id"] not in motor_ids
+              if row["id"] not in additive_ids
               and row["file"] not in (*BATCH5_FILES, NOV14_REFERENCE_FILE, NOV14_DRAFT_FILE, NOV15_DRAFT_FILE)]
     if batch5 or BATCH5_CASE_COUNTS:
         _batch5_rows(batch5, {"app-chromium": 0, "app-mobile": 1}, include_moved=False)
