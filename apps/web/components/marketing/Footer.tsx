@@ -25,15 +25,6 @@ export function Footer() {
                   {siteConfig.ownership.emails[0]}
                 </a>
               </div>
-              <div>
-                <span className="text-[var(--color-mute-2)]">Alternate · </span>
-                <a
-                  href={`mailto:${siteConfig.ownership.emails[1]}`}
-                  className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-                >
-                  {siteConfig.ownership.emails[1]}
-                </a>
-              </div>
               <p className="pt-2 text-[var(--color-mute)]">
                 Owned by {siteConfig.ownership.legalOwner}. Inventor/Owner:{" "}
                 {siteConfig.ownership.inventorOwner}.

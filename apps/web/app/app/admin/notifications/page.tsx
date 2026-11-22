@@ -22,6 +22,7 @@ import {
   MatterPicker,
   OPERATIONAL_MATTER_STATUSES,
 } from "@/components/app/MatterPicker";
+import { PhoneChannelAdminCard } from "@/components/app/PhoneChannelAdminCard";
 import { Badge } from "@/components/ui/Badge";
 import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { Label } from "@/components/ui/Label";
@@ -282,6 +283,8 @@ export default function AdminNotificationsPage() {
         </CardContent>
       </Card>
 
+      <PhoneChannelAdminCard />
+
       <Card>
         <CardContent className="flex flex-col gap-4 pt-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -418,8 +421,8 @@ export default function AdminNotificationsPage() {
               </p>
             ) : null}
             <div className="text-xs text-[var(--color-mute)] md:col-span-6">
-              Channel: in-app. Email, SMS, and WhatsApp automation remain unavailable
-              until provider policy, credentials, and runbooks are approved.
+              Channel: in-app. Rule-driven email, SMS, and WhatsApp automation remain
+              unavailable; hearing reminders use the text and WhatsApp settings above.
             </div>
           </div>
 

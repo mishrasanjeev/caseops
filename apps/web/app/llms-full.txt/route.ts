@@ -16,7 +16,7 @@ Practical public evaluation checklist: ${siteConfig.url}/resources/legal-matter-
 
 - Product owner: ${siteConfig.ownership.legalOwner}
 - Inventor/Owner: ${siteConfig.ownership.inventorOwner}
-- Owner emails: ${siteConfig.ownership.emails.join(", ")}
+- Owner contact: ${siteConfig.ownership.emails.join(", ")}
 
 ## What CaseOps is
 
@@ -32,7 +32,8 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 - **Indian law firms**: solo to mid-size litigation teams that need matter management, tracked case updates, court-order compliance review, drafting, hearing prep, cause lists, and matter billing.
 - **Corporate legal / General Counsel teams**: intake, contracts, obligation tracking, outside-counsel spend, panel management, and auditable matter review.
-- **Litigation partners**: source-backed AI assistance with lawyer review, no invented facts, no invented authorities, and no unsupported outcome claims.
+- **Litigation partners**: source-backed AI assistance with lawyer review and no outcome predictions; generated text can still contain errors, so cited authorities and facts must be verified.
+- **IP practitioners**: trade mark and patent docketing, renewals, journal watch, Madrid, recordals and client reporting, with registry data entered or imported by the team.
 
 ## Core workflows
 
@@ -123,7 +124,7 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 ### 6. Drafting and research
 
 - Drafting supports bail applications, quashing petitions, civil reviews, arbitration submissions, replies, and escalation drafts
-- Generation rules: no invented facts, no invented authorities, BNS/BNSS disambiguation, and placeholders for missing matter data
+- Generation is instructed not to invent facts or authorities, checks BNS/BNSS attribution, and marks gaps with placeholders such as "[citation needed]"; these checks do not catch every error, so verify each authority and fact
 - Drafts carry inline citations, grounding panels, reviewer findings, version history, and approval audit
 - Research uses indexed shared public Indian authorities, structured extraction, reranking, tenant-private workspace notebook saves, and explicit no-result behavior when grounding is insufficient
 
@@ -164,8 +165,51 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 ### 8. Contracts and outside counsel
 
-- Contracts support clause extraction, playbook comparison, obligation tracking, and parsing/viewing DOCX tracked changes; the current UI does not export a tracked Word redline or claim version lineage
+- Contracts support clause extraction, playbook comparison (matched, deviation or missing), obligation tracking, and a redline viewer
+- The redline viewer reads Word's own tracked changes in one .docx: insertions, deletions, moved passages (counted once, not as a deletion plus an insertion) and formatting changes, with author, time and paragraph
+- When the file holds tracked changes it cannot display (images, table structure, numbering, headers, footers, notes or comments) an amber warning says so; "Clean document" appears only when there are no shown and no hidden changes
+- The viewer does not compare two separate files, accept or reject changes, or export a newly tracked Word document
 - Outside counsel supports panel profiles, contacts, jurisdiction/practice-area coverage, matter assignments, fee/budget fields, spend logging, and payment state where supported; it does not promise generated brief packets, alert enforcement, outcome history, realization, or aging rollups
+
+### 8A. IP workspace
+
+- Availability: not part of the self-serve plans; CaseOps adds it to a workspace's plan on request and a workspace admin completes setup
+- Registry data is entered or imported by the team; there is no live IP India or WIPO feed, and curated IP India source links are references, not live records
+- Trade mark docket and portfolio: one-at-a-time creation or CSV/XLSX import with validation and duplicate decisions; list, grid, family and deadline-tracker views with saved views
+- Deadline control: team workload, escalations, acknowledgement, calendar-copy drift checks and signed control reviews
+- Renewals: client instruction notifications, recorded instructions (renew, do not renew, defer, clarification required) with authority and evidence, and evidence-backed filing, registry acceptance and certificate transitions
+- Journal watch: watch profiles; manual journal intake records each entry to compare; hit review with dispositions and handoff into opposition, enforcement, task, deadline or client report work
+- Madrid international registrations and designations with WIPO evidence the team records; post-registration recordals from draft to registry acceptance; foreign-associate instructions
+- Controlled IP documents: previewed controlled names, confidentiality and privilege labels, review/approval/filing states and versions beside the original; retirement keeps the file, versions and audit trail, lists every record still relying on the document first, cannot be undone, and is blocked for a document already published to a client
+- Reports: portfolio, status, opposition, deadline, renewal, watch and workload reports; selected reports can be published to a client through the IP client portal
+- Patent and specialist IP (designs, copyright, domain names, GI, plant varieties) cover intake and record-keeping
+
+### 8B. Teams and matter visibility
+
+- Admins create teams, departments or practice areas and mark team leads
+- Team-scoped matter visibility, when switched on, limits non-owners to their teams' matters plus firm-wide matters with no team; owners always see every matter
+- The team-lead flag is recorded, audited and carried over during offboarding; it does not yet grant extra permissions
+- Restricted matters and ethical walls are enforced by the server on every list, search and detail view; a walled person gets "not found" and the attempt is audited
+
+### 8C. Workspace assistant
+
+- Answers factual questions about the matters, IP records and documents the user is permitted to see, within an explicit scope, and cites the exact record behind each answer
+- Opening a citation rechecks access and source version and is recorded in the audit log; if either changed, the user is asked to ask again
+- Questions about statutes, judgments, precedent or legality are refused and routed to Research; if no permitted record supports an answer, it says so
+- Proposed drafts, tasks and field changes are written only after the user confirms a reviewed preview
+- Off until a workspace owner enables it under the workspace AI policy; not legal advice
+
+### 8D. Client and outside-counsel portals
+
+- Clients and outside counsel sign in separately from the firm's workspace with an emailed link valid for 30 minutes; email delivery must be configured
+- Clients see only matters shared with them (Overview, Comms, Hearings, KYC) and IP records with approved publications; they can reply, submit KYC and send instructions for the firm's acknowledgement
+- Outside counsel see only assigned matters and can upload work product, submit invoices and log time; files are scanned before they appear to the firm
+
+### 8E. Court sync and the mobile app
+
+- Court sync covers the Supreme Court of India and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts; suggested next-hearing dates arrive with their source for a lawyer to accept or reject
+- Other courts use eCourts case tracking through a paid court-data provider within the workspace budget, or hearings entered by hand
+- The native iOS and Android app is a development candidate and is not yet in the App Store or Google Play; the web app works in phone and tablet browsers
 
 ### 9. Matter billing and invoice PDFs
 
@@ -184,6 +228,7 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 ## Safety and governance
 
 - No captcha/session-gated court-source bypass
+- No live IP India or WIPO connection; IP registry evidence and journal entries are recorded by the team
 - No unapproved external provider calls
 - No live court/provider calls unless configured safe mode or approved provider configuration exists
 - No Pine Labs production payment activation until UAT evidence and founder go/no-go are complete
@@ -206,6 +251,10 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
+- For law firms: ${siteConfig.url}/law-firms
+- For general counsels: ${siteConfig.url}/general-counsels
+- For solo lawyers: ${siteConfig.url}/solo-lawyers
+- Pricing: ${siteConfig.url}/pricing
 - Sign in: ${siteConfig.url}/sign-in
 - Forgot password: ${siteConfig.url}/account/forgot-password
 
@@ -213,7 +262,6 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 - Demo requests: ${siteConfig.url}
 - Direct: ${siteConfig.ownership.emails[0]}
-- Alternate: ${siteConfig.ownership.emails[1]}
 `;
 
 export function GET() {

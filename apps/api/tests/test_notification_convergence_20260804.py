@@ -1147,7 +1147,7 @@ def test_linked_hearing_reminder_sends_once_through_canonical_intent_in_either_o
         legacy_send_forbidden,
     )
     monkeypatch.setattr(
-        "caseops_api.services.hearing_reminders._send_via_twilio_sms",
+        "caseops_api.services.phone_notifications.send_phone_template",
         legacy_send_forbidden,
     )
 

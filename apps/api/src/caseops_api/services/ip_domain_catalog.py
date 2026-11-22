@@ -116,7 +116,7 @@ DOMAIN_DEFINITIONS = (
         ("IN",),
         ("IP India",),
         tuple(f"UJ-{value:02d}" for value in (2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 31, 32)),
-        child_prd_sha256="f5d16609f9836bd4e1f61b518902439c954126134aea73cda1e06f84832ce9a1",
+        child_prd_sha256="8ac61c3dd4813c6561422e955caa6c905a4dde2643c7feecdbbe5c85b5241d31",
         workflow_implemented=True,
     ),
     IpDomainDefinition(

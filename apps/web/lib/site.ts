@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "CaseOps",
   tagline: "The matter-native legal operating system.",
   description:
-    "CaseOps is matter management software for Indian law firms and legal teams, connecting hearings, notices, source-backed drafting, contracts, and billing.",
+    "CaseOps is matter management software for Indian law firms and legal teams, connecting hearings, notices, source-backed drafting, contracts, trade mark and patent dockets, and billing.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://caseops.ai",
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://caseops.ai/app",
   author: "Sanjeev Kumar",
@@ -10,7 +10,7 @@ export const siteConfig = {
   ownership: {
     legalOwner: "Orchestrum Technologies LLP",
     inventorOwner: "Sanjeev Kumar",
-    emails: ["sanjeev@orchestrum.in", "mishra.sanjeev@gmail.com"],
+    emails: ["sanjeev@orchestrum.in"],
   },
   locale: "en_IN",
   contact: {
@@ -18,7 +18,6 @@ export const siteConfig = {
     sales: "sanjeev@orchestrum.in",
     support: "support@caseops.ai",
     founder: "sanjeev@orchestrum.in",
-    alternateOwner: "mishra.sanjeev@gmail.com",
   },
   nav: {
     primary: [
@@ -38,6 +37,7 @@ export const siteConfig = {
         { label: "Drafting Studio", href: "/#product" },
         { label: "Hearing Prep", href: "/#product" },
         { label: "Case tracking", href: "/#product" },
+        { label: "IP workspace", href: "/#product" },
         { label: "Matter billing", href: "/#product" },
       ],
       Company: [

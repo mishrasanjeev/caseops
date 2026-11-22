@@ -49,6 +49,11 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateNotificationRule: updateNotificationRuleMock,
 }));
 
+// The phone-channel admin card has its own suite (PhoneChannelAdminCard.test.tsx).
+vi.mock("@/components/app/PhoneChannelAdminCard", () => ({
+  PhoneChannelAdminCard: () => null,
+}));
+
 vi.mock("@/lib/capabilities", () => ({
   useCapability: useCapabilityMock,
 }));

@@ -86,6 +86,7 @@ from caseops_api.schemas.matter_access import (
     MatterAccessGrantCreateRequest,
     MatterAccessGrantRecord,
     MatterAccessPanelResponse,
+    MatterEthicalWallDirectoryResponse,
     MatterRestrictedAccessRequest,
 )
 from caseops_api.schemas.matter_bulk_updates import (
@@ -220,6 +221,7 @@ from caseops_api.services.matter_access import (
     add_access_grant,
     add_ethical_wall,
     list_access_panel,
+    list_matter_ethical_wall_directory,
     remove_access_grant,
     remove_ethical_wall,
     set_restricted_access,
@@ -814,6 +816,24 @@ async def check_matter_code_available(
     session: DbSession,
 ) -> dict:
     return matter_code_available(session, context=context, code=code)
+
+
+@router.get(
+    "/ethical-walls",
+    response_model=MatterEthicalWallDirectoryResponse,
+    summary="List active ethical walls across visible matters (admin/owner)",
+    description=(
+        "Admin directory of active Matter ethical walls, newest first, with the "
+        "walled member and the member who set the wall up. Lists only Matters the "
+        "actor may open, so a walled admin cannot read walled Matter titles here. "
+        "Bounded to 500 rows (`truncated` reports more). Audited."
+    ),
+)
+async def get_current_company_matter_ethical_walls(
+    context: MatterAccessManager,
+    session: DbSession,
+) -> MatterEthicalWallDirectoryResponse:
+    return list_matter_ethical_wall_directory(session, context=context)
 
 
 @router.post(

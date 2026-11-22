@@ -19,8 +19,8 @@ export type PrivacyPolicyDocument = {
 };
 
 export const privacyPolicy = {
-  "version": "2026-11-03",
-  "effectiveDate": "3 November 2026",
+  "version": "2026-11-22",
+  "effectiveDate": "22 November 2026",
   "title": "Privacy policy",
   "operator": "Orchestrum Technologies LLP",
   "product": "CaseOps",
@@ -53,6 +53,7 @@ export const privacyPolicy = {
         "Legal workspace information: client and party details, matters, documents, messages, notes, contracts, hearings, deadlines and billing records. These records may contain sensitive information about clients and other people.",
         "Files and optional device features: files, photos or camera images you choose to provide, with related file information. Device permissions depend on the feature and the app version.",
         "If you send a workspace conduct report, we record the selected reason, when we received it, your workspace and account references, and references to the relevant matter, item or member.",
+        "Text and WhatsApp reminders, only if you opt in: the mobile number you verify, when you verified it, when you turned each channel on or off, and the delivery status of each reminder. Reminders carry only the matter code, hearing date, time and court.",
         "Technical and security information: IP address, browser or device type, operating system, app version, session information, access times, error reports and audit records.",
         "Billing and support information: invoice details, business or tax information you provide, payment references or status, enquiries and support communications.",
         "Connected-service information: the account details, access credentials and selected calendar, email or document information needed for an integration you authorise."
@@ -75,7 +76,7 @@ export const privacyPolicy = {
       "paragraphs": [
         "Information is available to people your organisation authorises, subject to the workspace and record-level access controls.",
         "Authorised workspace owners or CaseOps reviewers may see limited report details, depending on who the report concerns. Access to the underlying matter, note or file follows the usual workspace permissions.",
-        "We use service providers for hosting, storage, AI and search processing, communications, payments and support. Depending on the enabled feature, these may include Google Cloud, OpenAI, Voyage AI and SendGrid. A connected service or payment provider may also receive information when you use its integration. Relevant information is shared to perform that function.",
+        "We use service providers for hosting, storage, AI and search processing, communications, payments and support. Depending on the enabled feature, these may include Google Cloud, OpenAI, Voyage AI and SendGrid, and, for reminders you opt in to, MSG91 for text messages and Meta for WhatsApp. A connected service or payment provider may also receive information when you use its integration. Relevant information is shared to perform that function.",
         "Service providers processing personal data for us must use it for the agreed service and protect it with at least the same level of protection described in this policy and required by applicable law.",
         "We may disclose information when required by law, to protect rights or security, or as part of a business transfer with appropriate protections and notice where required.",
         "We do not sell personal data or use it for targeted advertising."

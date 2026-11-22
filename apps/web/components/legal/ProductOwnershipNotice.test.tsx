@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ProductOwnershipNotice } from "./ProductOwnershipNotice";
 
 describe("ProductOwnershipNotice", () => {
-  it("publishes the legal owner, inventor/owner, and both owner emails", () => {
+  it("publishes the legal owner, inventor/owner, and the single owner contact", () => {
     render(<ProductOwnershipNotice />);
 
     const notice = screen.getByRole("complementary", {
@@ -17,8 +17,7 @@ describe("ProductOwnershipNotice", () => {
       "href",
       "mailto:sanjeev@orchestrum.in",
     );
-    expect(
-      screen.getByRole("link", { name: "mishra.sanjeev@gmail.com" }),
-    ).toHaveAttribute("href", "mailto:mishra.sanjeev@gmail.com");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(notice.innerHTML).not.toMatch(/@gmail\.com/i);
   });
 });

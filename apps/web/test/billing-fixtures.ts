@@ -145,6 +145,32 @@ export const planCatalog = {
       prices: [price("price-cases-500", 499900, "month", "exclusive")],
       entitlements: { tracked_cases_limit: 500, provider_spend_monthly_minor: 500000 },
     },
+    {
+      id: "bpv-addon-ip-workspace-202611",
+      plan_code: "addon_ip_workspace",
+      version: "2026.11.v1",
+      segment: "add_on",
+      display_name: "IP workspace",
+      description:
+        "Trademark, patent and design dockets, portfolio, renewals, journal watch, Madrid, recordals, IP documents and client reporting.",
+      publicly_visible: true,
+      trial_eligible: false,
+      prices: [
+        price("bpp-addon-ip-workspace-month-202611", 999900, "month", "exclusive"),
+        price("bpp-addon-ip-workspace-year-202611", 9999000, "year", "exclusive"),
+      ],
+      entitlements: {
+        ip_costs: true,
+        ip_deadline_automation: true,
+        ip_filing_operations: true,
+        ip_notification_automation: true,
+        ip_registry_sync: true,
+        ip_rule_governance: true,
+        ip_watch: true,
+        ip_workspace: true,
+      },
+      eligible_segments: ["firm", "gc"],
+    },
   ],
 };
 

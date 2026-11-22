@@ -60,6 +60,8 @@ const {
 vi.mock("@/lib/api/endpoints", () => ({
   completeMockHearing: completeMockHearingMock,
   createMatterHearing: vi.fn(),
+  // ScheduleHearingDialog reads workspace phone-channel enablement.
+  fetchNotificationPreferences: vi.fn().mockResolvedValue({ tenant: { channels: {} } }),
   // BUG-032 (Hari 2026-05-09): AddCourtOrderDialog (mounted on the
   // Orders-on-file card) imports these. Mock so the page renders
   // without hitting real fetch; the API-call shape is asserted in

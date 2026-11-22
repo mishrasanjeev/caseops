@@ -74,6 +74,10 @@ NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_REASONS = frozenset(
 NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_CODE = (
     "notification_provider_outcome_unknown_reconciliation_required"
 )
+_PHONE_CHANNELS = frozenset(
+    {NotificationDeliveryChannel.SMS, NotificationDeliveryChannel.WHATSAPP}
+)
+_PHONE_PROVIDER_KEYS = {"sms": "msg91", "whatsapp": "meta-whatsapp"}
 NotificationDispatchClaimState = Literal[
     "none",
     "live",
@@ -803,6 +807,16 @@ def enqueue_notification_delivery_intent(
         )
         if suppression is not None:
             suppression_reason = f"email_{suppression.reason}"
+    phone_block_reason = None
+    if channel in _PHONE_CHANNELS:
+        from caseops_api.services.phone_notifications import phone_admission
+
+        phone_block_reason = phone_admission(
+            session,
+            company_id=context.company.id,
+            membership_id=recipient_membership.id if recipient_membership is not None else None,
+            channel=str(channel),
+        ).reason
     external_ready = bool(
         channel == NotificationDeliveryChannel.EMAIL
         and settings.notification_external_delivery_enabled
@@ -810,7 +824,7 @@ def enqueue_notification_delivery_intent(
         and settings.sendgrid_api_key
         and settings.sendgrid_sender_email
         and not suppression_reason
-    )
+    ) or (channel in _PHONE_CHANNELS and phone_block_reason is None)
     blocked_external = not is_in_app and not external_ready
     # Do not retain message content for an external provider that is disabled.
     # This preserves the fail-closed privacy contract while allowing a provider
@@ -880,7 +894,9 @@ def enqueue_notification_delivery_intent(
         confidentiality_mode=("minimal" if not is_in_app else confidentiality_mode),
         failed_at=_now() if blocked_external else None,
         dead_letter_reason=(
-            None if not blocked_external else suppression_reason or "provider_disabled"
+            None
+            if not blocked_external
+            else suppression_reason or phone_block_reason or "provider_disabled"
         ),
         metadata_json=_safe_metadata(
             notification_rule_id=notification_rule_id,
@@ -936,7 +952,7 @@ def enqueue_notification_delivery_intent(
             result=AuditResult.DENIED,
             metadata={
                 "channel": channel,
-                "reason": suppression_reason or "provider_disabled",
+                "reason": suppression_reason or phone_block_reason or "provider_disabled",
                 "source_type": source_type,
                 "source_ref": redact_identifier(source_id),
                 "notification_rule_ref": redact_identifier(notification_rule_id),
@@ -1343,7 +1359,7 @@ def process_notification_delivery_intent(
             event_type="delivery_claim_expired",
             status_value=str(intent.status),
             error=intent.last_error_redacted,
-            provider="sendgrid",
+            provider=_PHONE_PROVIDER_KEYS.get(str(intent.channel), "sendgrid"),
         )
         _ensure_in_app_fallback(session, intent=intent, context=context)
         session.commit()
@@ -1513,6 +1529,15 @@ def process_notification_delivery_intent(
         and _as_utc(intent.next_attempt_at) > _now()
     ):
         return _delivery_result(intent)
+    if intent.channel in _PHONE_CHANNELS:
+        from caseops_api.services.phone_notifications import dispatch_phone_intent
+
+        return dispatch_phone_intent(
+            session,
+            intent=intent,
+            company_id=expected_company_id,
+            context=context,
+        )
     if intent.channel != NotificationDeliveryChannel.IN_APP:
         settings = get_settings()
         provider_ready = bool(
