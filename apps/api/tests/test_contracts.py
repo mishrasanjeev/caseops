@@ -125,10 +125,14 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     assert second_clause_response.status_code == 200
 
     obligations_path = f"/api/contracts/{contract_id}/obligations"
+    obligation_headers = {
+        **auth_headers(owner_token),
+        "X-CaseOps-Automated-Test": "no-paid-providers",
+    }
     for title in ("  ", " \tA\r\n"):
         invalid_obligation = client.post(
             obligations_path,
-            headers=auth_headers(owner_token),
+            headers=obligation_headers,
             json={"title": title},
         )
         assert invalid_obligation.status_code == 422
@@ -142,7 +146,7 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
 
     obligation_response = client.post(
         obligations_path,
-        headers=auth_headers(owner_token),
+        headers=obligation_headers,
         json={
             "owner_membership_id": owner_membership_id,
             "title": "  Deliver security schedule redlines  ",
@@ -153,7 +157,10 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
         },
     )
     assert obligation_response.status_code == 200
-    assert obligation_response.json()["title"] == "Deliver security schedule redlines"
+    saved_obligation = obligation_response.json()
+    assert saved_obligation["title"] == "Deliver security schedule redlines"
+    assert saved_obligation["created_at"].endswith("Z")
+    assert saved_obligation["completed_at"] is None
 
     client.post(
         f"/api/contracts/{contract_id}/playbook-rules",
@@ -203,7 +210,7 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
 
     workspace_response = client.get(
         f"/api/contracts/{contract_id}/workspace",
-        headers=auth_headers(owner_token),
+        headers=obligation_headers,
     )
 
     assert workspace_response.status_code == 200
@@ -212,9 +219,7 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     assert payload["linked_matter"]["id"] == matter_id
     assert payload["owner"]["membership_id"] == owner_membership_id
     assert len(payload["clauses"]) == 2
-    assert len(payload["obligations"]) == 1
-    assert payload["obligations"][0]["id"] == obligation_response.json()["id"]
-    assert payload["obligations"][0]["title"] == "Deliver security schedule redlines"
+    assert payload["obligations"] == [saved_obligation]
     assert payload["obligations"][0]["owner_name"] == "Aditi Counsel"
     assert len(payload["playbook_rules"]) == 3
 
@@ -223,6 +228,25 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     assert hit_statuses["Confidentiality needs breach notice"] == "flagged"
     assert hit_statuses["Indemnity cap fallback"] == "missing"
     assert len(payload["activity"]) >= 7
+
+    completed_response = client.post(
+        obligations_path,
+        headers=obligation_headers,
+        json={"title": "Return approved annexure", "status": "completed"},
+    )
+    assert completed_response.status_code == 200
+    completed = completed_response.json()
+    assert completed["created_at"].endswith("Z")
+    assert completed["completed_at"].endswith("Z")
+    refreshed = client.get(
+        f"/api/contracts/{contract_id}/workspace",
+        headers=obligation_headers,
+    )
+    assert refreshed.status_code == 200
+    assert {row["id"]: row for row in refreshed.json()["obligations"]} == {
+        saved_obligation["id"]: saved_obligation,
+        completed["id"]: completed,
+    }
 
 
 def test_cross_tenant_user_cannot_access_another_company_contract(client: TestClient) -> None:

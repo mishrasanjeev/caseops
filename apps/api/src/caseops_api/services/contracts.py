@@ -194,8 +194,11 @@ def _obligation_record(obligation: ContractObligation) -> ContractObligationReco
         due_on=obligation.due_on,
         status=obligation.status,
         priority=obligation.priority,
-        completed_at=obligation.completed_at,
-        created_at=obligation.created_at,
+        completed_at=(
+            _contract_timestamp_utc(obligation.completed_at)
+            if obligation.completed_at is not None else None
+        ),
+        created_at=_contract_timestamp_utc(obligation.created_at),
     )
 
 

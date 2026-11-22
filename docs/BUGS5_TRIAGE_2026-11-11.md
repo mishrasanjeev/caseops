@@ -176,6 +176,24 @@ The exact source-order check and targeted E2E typecheck passed. The
 complete mobile and desktop journeys still require a new run.
 [Hosted mobile job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262526)
 
+The hosted desktop run retained 713 passes, 20 expected skips and two
+failures. The contract journey reached creation and readback. Its complete
+DTO comparison differed only by the missing UTC offset on SQLite
+`created_at`. The same response projection now normalizes both persistence
+timestamps to UTC, preserves a null completion time and leaves legal dates
+as dates. The observed offset mismatch was reproduced with an actual
+SQLite round trip and the original serializer. The dated browser assertion
+still compares the entire DTO. The API regression now checks both pending
+and completed obligations after a fresh read.
+
+The other desktop failure came from the curator fixture. It supplied
+`Credible source conflict.` but expected the full legal-review explanation.
+The fixture supplies the specific reason and verifies it in the bare-text
+card. The page renders the supplied reason without appending a second period.
+The withheld-text, pending-note and 360px layout checks remain in the same
+journey. Both full browser projects still require replacement evidence.
+[Hosted desktop job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262511)
+
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could

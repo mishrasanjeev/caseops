@@ -285,7 +285,7 @@ export default function StatuteSectionDetailPage() {
             {section.verification_status === "retired"
               ? "Retired provision. The publisher's omission or repeal record is retained; it is not selectable as operative text."
               : section.verification_status === "quarantined"
-              ? `Quarantined: ${section.quarantine_reason ?? "curator verification required"}. The text is withheld.`
+              ? `Quarantined. The text is withheld. ${section.quarantine_reason ?? "Curator verification is required."}`
               : section.verification_status === "verified_official" || section.verification_status === "verified_licensed"
                 ? `${section.source_publisher ?? "Verified publisher"}; verified published source version ${section.source_version}${section.source_sha256 ? ` (SHA-256 ${section.source_sha256.slice(0, 12)}...)` : ""}.`
                 : "Unverified legal text is withheld until curator verification."}
