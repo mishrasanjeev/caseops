@@ -57,7 +57,7 @@ function material(label, now, issuer) {
 }
 
 try {
-  if (process.versions.node !== '22.23.4' || process.argv.length !== 3) throw Error('RUNTIME_OR_ARGUMENTS');
+  if (process.versions.node !== '22.23.5' || process.argv.length !== 3) throw Error('RUNTIME_OR_ARGUMENTS');
   const requested = process.argv[2];
   if (!path.isAbsolute(requested) || fs.realpathSync(requested) !== requested) throw Error('ROOT');
   const parent = path.dirname(requested);
