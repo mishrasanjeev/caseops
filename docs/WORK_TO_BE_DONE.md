@@ -14,6 +14,15 @@ refuses a walled admin (an ethical wall overrides the admin role, restriction
 does not; owners exempt) on Matter and IP docket access and off-boarding. Not
 yet deployed or verified in production.
 
+**Held from the 2026-11-22 release.** The card is built and unit-tested but is not
+mounted on Admin in this release, and its desktop and 393px journey is not in the
+app suite. In release CI (run 45000524482) the Admin page's API calls stalled for
+more than 15 s after a walled colleague's "Matter not found" and the owner's next
+sign-in (desktop), and the portal-invite Matter search on Admin timed out at 30 s
+(393px). A local run reproduced the stall once in 14 attempts; the root cause is
+not found. Admin keeps the "Coming soon" stub until the stall is explained. The
+server-side wall rules, the directory read and the walled-admin refusals ship.
+
 ## November22 - IP workspace paid add-on (J14/M14, J08/M08)
 
 **Partially implemented: landed in code, not deployed or verified in production.**
@@ -3391,7 +3400,7 @@ Without this, the PRD's central promise does not exist.
   - Tests: `tests/test_ethical_walls.py` (6 cases  - unrestricted default visibility, restricted hides non-granted members, wall beats grant, owner bypass, member denied CRUD, cross-tenant 404). Full API suite: 190 passed.
 - **Remaining:**
   - Team-scoped grants once Section 5.7 Teams lands (principal_type=team, principal_id=team_id).
-  - UI for managing grants and the restricted-access toggle (walls have an Admin screen since 2026-11-22; see the November22 entry).
+  - UI for managing grants and the restricted-access toggle (the walls Admin screen was built 2026-11-22 but is held from that release; see the November22 entry).
   - Finer `access_level` values beyond `member` (read-only viewer, billing-only, etc.)  - keep behind the existing enum so adding them doesn't migrate.
 
 ### 5.7 Teams

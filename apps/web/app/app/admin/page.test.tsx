@@ -186,9 +186,6 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
           archive_candidates: [],
         });
       }
-      if (url.includes("/api/matters/ethical-walls")) {
-        return jsonResponse({ walls: [], truncated: false });
-      }
       if (url.includes("/api/matters/")) {
         return jsonResponse({
           matters: [

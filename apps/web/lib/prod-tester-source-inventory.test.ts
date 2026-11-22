@@ -215,8 +215,6 @@ function expectNov14(rows: Case[], production = false) {
 // November 22 release additions, matched by exact identity (one shares an
 // existing file with retained canonical cases).
 const nov22Cases = [
-  ["app-chromium", ["matter-ethical-walls-admin-2026-11-22.spec.ts", "admin walls a colleague off a Matter and lifts the wall at 1280px"]],
-  ["app-mobile", ["matter-ethical-walls-admin-2026-11-22.spec.ts", "[mobile] admin walls a colleague off a Matter and lifts the wall at 393px"]],
   ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "desktop November 22 product claims show their limits"]],
   ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "mobile November 22 product claims show their limits"]],
 ] as const;
@@ -412,7 +410,7 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(nov22.map(row => row.id)).size).toBe(nov22Cases.length);
     expect(nov22.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
     expect(counts([...canonical, ...batch5, ...nov14, ...nov15, ...nov22].map(row => row.project)))
-      .toEqual({ "app-chromium": 731, "app-mobile": 65 });
+      .toEqual({ "app-chromium": 730, "app-mobile": 64 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

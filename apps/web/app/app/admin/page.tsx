@@ -19,7 +19,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { MatterEthicalWallsCard } from "@/components/app/MatterEthicalWallsCard";
 import { MatterPicker } from "@/components/app/MatterPicker";
 import { RoadmapStub } from "@/components/app/RoadmapStub";
 import { TenantAIPolicyCard } from "@/components/app/TenantAIPolicyCard";
@@ -782,8 +781,6 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
-      <MatterEthicalWallsCard />
-
       <TenantAIPolicyCard />
 
       {canAdmin ? null : (
@@ -802,9 +799,10 @@ export default function AdminPage() {
         icon={Wrench}
         eyebrow="Coming soon"
         title="More admin controls on the way"
-        description="Enterprise identity readiness, tenant AI policy, and plan management continue behind explicit status gates."
+        description="Ethical walls UI, enterprise identity readiness, tenant AI policy, and plan management continue behind explicit status gates."
         prdSection="§10.9"
         bullets={[
+          "Ethical walls are wired on the API today and will surface here next.",
           "OIDC / SAML with JIT provisioning and role mapping is planned until IdP UAT evidence exists.",
           "Tenant AI policy — allowed models, prompt audit, external-share approvals.",
           "Plan entitlements — seat limits, matter limits, feature flags.",

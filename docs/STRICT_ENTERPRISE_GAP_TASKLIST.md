@@ -1,3 +1,15 @@
+## November22 — intermittent Admin API stall under SQLite release CI
+
+**Missing (root cause).** In release CI run 45000524482 the Admin page's API calls
+(Matters, walls directory, storage, AI policy, token governance, enterprise
+readiness) stayed pending for more than 15 s on desktop and 30 s at 393px. A local
+SQLite run reproduced it once in 14 attempts, after a walled member's audited
+"Matter not found" and the owner's next sign-in; the 13 instrumented reruns found
+no event-loop block. The SQLite busy timeout and the session pool timeout are both
+30 s, so lock or pool waits on the event loop are the leading hypothesis, not a
+finding. The Admin ethical walls card is held from the 2026-11-22 release until
+this is explained. Production uses PostgreSQL; whether the stall can occur there is unproven.
+
 ## November22 — walled admins could change walls and grants on their Matter
 
 **Implemented in code; release proof pending.** Found while building the Admin
