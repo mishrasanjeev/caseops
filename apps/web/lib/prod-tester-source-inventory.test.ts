@@ -212,6 +212,16 @@ function expectNov14(rows: Case[], production = false) {
   expect(new Set(selected.map(row => row.id)).size).toBe(selected.length);
   expect(selected.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
 }
+// November 22 release additions, matched by exact identity (one shares an
+// existing file with retained canonical cases).
+const nov22Cases = [
+  ["app-chromium", ["matter-ethical-walls-admin-2026-11-22.spec.ts", "admin walls a colleague off a Matter and lifts the wall at 1280px"]],
+  ["app-mobile", ["matter-ethical-walls-admin-2026-11-22.spec.ts", "[mobile] admin walls a colleague off a Matter and lifts the wall at 393px"]],
+  ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "desktop November 22 product claims show their limits"]],
+  ["app-chromium", ["public-content.spec.ts", "Public landing page and user guide", "mobile November 22 product claims show their limits"]],
+] as const;
+const nov22Keys = new Set(nov22Cases.map(([project, titles]) => JSON.stringify([project, titles])));
+const isNov22 = (row: Case) => nov22Keys.has(JSON.stringify([row.project, row.titles]));
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -325,6 +335,7 @@ describe("complete independent App CI project inventory", () => {
   let batch5: Case[];
   let nov14: Case[];
   let nov15: Case[];
+  let nov22: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
@@ -332,7 +343,8 @@ describe("complete independent App CI project inventory", () => {
     batch5 = all.filter(isBatch5);
     nov14 = all.filter(isNov14);
     nov15 = all.filter(isNov15);
-    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
+    nov22 = all.filter(isNov22);
+    canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isNov22(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -363,7 +375,8 @@ describe("complete independent App CI project inventory", () => {
   for (const project of Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[]) {
     const count = appSourceProjects[project];
     it(`collects exactly the ordered canonical ${project} subset without filters`, () => {
-      const selected = collectAppProject(project).filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row));
+      const selected = collectAppProject(project)
+        .filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row) && !isNov22(row));
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
     }, 20_000);
@@ -391,6 +404,15 @@ describe("complete independent App CI project inventory", () => {
     expect(counts(nov15.map(row => row.project))).toEqual({ "app-chromium": 1, "app-mobile": 1 });
     expect(counts([...canonical, ...batch5, ...nov14, ...nov15].map(row => row.project)))
       .toEqual({ "app-chromium": 728, "app-mobile": 64 });
+  });
+
+  it("requires every exact Nov22 release identity outside the unchanged prior cohorts", () => {
+    expect(nov22.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov22Keys].sort());
+    expect(new Set(nov22.map(row => row.id)).size).toBe(nov22Cases.length);
+    expect(nov22.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts([...canonical, ...batch5, ...nov14, ...nov15, ...nov22].map(row => row.project)))
+      .toEqual({ "app-chromium": 731, "app-mobile": 65 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {
