@@ -681,62 +681,37 @@ def refresh_connector_health_records(
             setup_actions=[] if email_configured else ["SENDGRID_API_KEY", "SENDGRID_SENDER_EMAIL"],
         )
     )
-    sms_configured = bool(
-        settings.twilio_enabled
-        and settings.twilio_account_sid
-        and settings.twilio_auth_token
-        and settings.twilio_from_number
-    )
-    rows.append(
-        _update_health(
-            _get_or_create_health(
-                session,
-                company_id=company_id,
-                provider=ConnectorHealthProvider.SMS,
-            ),
-            configured_state=_configured_state(configured=sms_configured),
-            connected_state=_connection_state(
-                configured=sms_configured,
-                connected=False,
-                disabled=not sms_configured,
-            ),
-            webhook_status="not_enabled",
-            polling_status="not_applicable",
-            disabled_reason=None if sms_configured else "SMS provider is disabled or incomplete.",
-            setup_actions=[]
-            if sms_configured
-            else ["TWILIO_ENABLED", "TWILIO_ACCOUNT_SID", "TWILIO_FROM_NUMBER"],
+    from caseops_api.services.phone_providers import phone_channel_readiness
+
+    for provider, channel, label in (
+        (ConnectorHealthProvider.SMS, "sms", "SMS"),
+        (ConnectorHealthProvider.WHATSAPP, "whatsapp", "WhatsApp"),
+    ):
+        readiness = phone_channel_readiness(channel)
+        rows.append(
+            _update_health(
+                _get_or_create_health(session, company_id=company_id, provider=provider),
+                configured_state=_configured_state(configured=readiness.ready),
+                connected_state=_connection_state(
+                    configured=readiness.ready,
+                    connected=False,
+                    disabled=not readiness.ready,
+                ),
+                webhook_status=(
+                    "configured"
+                    if channel == "whatsapp" and settings.whatsapp_app_secret
+                    else "not_enabled"
+                ),
+                polling_status="not_applicable",
+                disabled_reason=None
+                if readiness.ready
+                else f"{label} provider is disabled or incomplete ({readiness.reason}).",
+                setup_actions=[]
+                if readiness.ready
+                else [name.removeprefix("CASEOPS_") for name in readiness.missing]
+                or [f"{readiness.provider_key.upper().replace('-', '_')}_ENABLED"],
+            )
         )
-    )
-    whatsapp_configured = bool(
-        settings.whatsapp_enabled
-        and settings.whatsapp_access_token
-        and settings.whatsapp_phone_number_id
-        and settings.whatsapp_template_name
-    )
-    rows.append(
-        _update_health(
-            _get_or_create_health(
-                session,
-                company_id=company_id,
-                provider=ConnectorHealthProvider.WHATSAPP,
-            ),
-            configured_state=_configured_state(configured=whatsapp_configured),
-            connected_state=_connection_state(
-                configured=whatsapp_configured,
-                connected=False,
-                disabled=not whatsapp_configured,
-            ),
-            webhook_status="not_enabled",
-            polling_status="not_applicable",
-            disabled_reason=None
-            if whatsapp_configured
-            else "WhatsApp provider is disabled or incomplete.",
-            setup_actions=[]
-            if whatsapp_configured
-            else ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"],
-        )
-    )
     session.flush()
     return rows
 

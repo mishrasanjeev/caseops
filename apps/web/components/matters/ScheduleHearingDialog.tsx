@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +18,13 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { apiErrorMessage } from "@/lib/api/config";
-import { createMatterHearing } from "@/lib/api/endpoints";
+import { createMatterHearing, fetchNotificationPreferences } from "@/lib/api/endpoints";
+
+type PhoneChannel = "sms" | "whatsapp";
+const PHONE_CHANNEL_LABEL: Record<PhoneChannel, string> = {
+  sms: "Text message (SMS)",
+  whatsapp: "WhatsApp",
+};
 
 /**
  * ScheduleHearingDialog — manual hearing creation for matters without
@@ -54,6 +60,21 @@ export function ScheduleHearingDialog({
   const [forumName, setForumName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [judgeName, setJudgeName] = useState("");
+  // Phone channels the workspace has enabled and the provider can send on.
+  // Each recipient still receives them only after their own verified opt-in.
+  const preferences = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: fetchNotificationPreferences,
+    enabled: open,
+  });
+  const availablePhoneChannels = (["sms", "whatsapp"] as const).filter((channel) => {
+    const tenant = preferences.data?.tenant.channels[channel];
+    return Boolean(tenant?.enabled && tenant?.provider_configured);
+  });
+  const [skippedPhoneChannels, setSkippedPhoneChannels] = useState<PhoneChannel[]>([]);
+  const phoneChannels = availablePhoneChannels.filter(
+    (channel) => !skippedPhoneChannels.includes(channel),
+  );
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -63,6 +84,9 @@ export function ScheduleHearingDialog({
         forum_name: forumName,
         purpose,
         judge_name: judgeName.trim() || null,
+        ...(phoneChannels.length
+          ? { reminder_channels: ["in_app", "email", ...phoneChannels] }
+          : {}),
       }),
     onSuccess: async () => {
       setOpen(false);
@@ -70,6 +94,7 @@ export function ScheduleHearingDialog({
       setForumName("");
       setPurpose("");
       setJudgeName("");
+      setSkippedPhoneChannels([]);
       await queryClient.invalidateQueries({
         queryKey: ["matters", matterId, "workspace"],
       });
@@ -156,6 +181,33 @@ export function ScheduleHearingDialog({
               onChange={(e) => setJudgeName(e.target.value)}
             />
           </div>
+          {availablePhoneChannels.length ? (
+            <fieldset className="flex flex-col gap-1.5 text-sm text-[var(--color-ink-2)]">
+              <legend className="mb-1 text-xs font-medium text-[var(--color-mute)]">
+                Also remind by
+              </legend>
+              {availablePhoneChannels.map((channel) => (
+                <label key={channel} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={phoneChannels.includes(channel)}
+                    onChange={(event) =>
+                      setSkippedPhoneChannels((current) =>
+                        event.target.checked
+                          ? current.filter((item) => item !== channel)
+                          : [...current, channel],
+                      )
+                    }
+                  />
+                  {PHONE_CHANNEL_LABEL[channel]}
+                </label>
+              ))}
+              <span className="text-xs text-[var(--color-mute)]">
+                Sent only to colleagues who verified a number and opted in.
+              </span>
+            </fieldset>
+          ) : null}
           <p
             className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-xs text-[var(--color-mute)]"
             role="note"

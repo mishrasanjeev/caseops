@@ -4505,7 +4505,16 @@ Only EH-SGR-06 changes status in this pass, because only it was fixed.
 
 ### EH-SGR-16 - Dead notification channels are user-selectable
 
-- **Status:** Missing.
+- **Status:** Partially implemented (2026-11-22, branch
+  `feat/sms-whatsapp-alerts`, not merged or deployed). The generic preference
+  toggle no longer offers `sms`/`whatsapp` and refuses an opt-in through it
+  (422); a verified-number flow (`notification_phone_contacts`), MSG91 and Meta
+  adapters and per-channel consent now exist; the hearing dialog offers a phone
+  channel only when the workspace enabled it and the provider is ready. Still
+  open: no live provider result (DLT/Meta approvals and Secret Manager keys are
+  owner-pending), MSG91 delivery reports are not consumed, and rule-driven
+  channels stay in-app only.
+- **Original status (2026-08-20):** Missing.
 - **Gap found:** `SMS` and `WHATSAPP` are selectable notification channels with
   no way to reach a recipient - there is no verified phone number on `User` or
   `CompanyMembership`, and WhatsApp has no adapter. Selecting `sms` on a hearing

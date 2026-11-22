@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `85debb50d7b9c671ce4e9220f646fb4ef716c354d3e89d152a56c9b5377d4844`
-- SQL tables: `364`
-- SQL columns: `5804`
-- ORM indexes: `1829`
-- Alembic/raw index declarations: `1606`
-- Non-SQL data classes: `16`
+- Canonical map SHA-256: `01f1d5b2f378f8d3ff29119f18aafcbb221174d78209d971477fb4ab8b92f72e`
+- SQL tables: `365`
+- SQL columns: `5822`
+- ORM indexes: `1832`
+- Alembic/raw index declarations: `1609`
+- Non-SQL data classes: `17`
 
 ## Boundary
 
@@ -306,6 +306,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `native_refresh_tokens` | `security_identity_control` | 6 | `registry_fail_closed` |
 | `notification_delivery_events` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `notification_delivery_intents` | `tenant_operational_record` | 46 | `registry_fail_closed` |
+| `notification_phone_contacts` | `tenant_operational_record` | 18 | `registry_fail_closed` |
 | `notification_rules` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `outside_counsel` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `outside_counsel_spend_records` | `billing_provider_evidence` | 19 | `registry_fail_closed` |
@@ -406,6 +407,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `connector-and-payment-provider-held-records` | `provider_held_object` | `registry_fail_closed` |
 | `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
+| `phone-reminder-provider-delivery` | `provider_held_object` | `registry_fail_closed` |
 
 ## Change control
 
