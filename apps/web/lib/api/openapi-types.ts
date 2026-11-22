@@ -43704,7 +43704,13 @@ export interface components {
         OutsideCounselRecommendationRecord: {
             /** Active Matters Count */
             active_matters_count: number;
-            /** Approved Spend Minor */
+            /** Approved Spend By Currency */
+            approved_spend_by_currency: components["schemas"]["OutsideCounselRecommendationSpend"][];
+            /**
+             * Approved Spend Minor
+             * @deprecated
+             * @description INR subtotal for earlier clients. Use approved_spend_by_currency for all subtotals.
+             */
             approved_spend_minor: number;
             /** Counsel Id */
             counsel_id: string;
@@ -43747,6 +43753,13 @@ export interface components {
             matter_title: string;
             /** Results */
             results: components["schemas"]["OutsideCounselRecommendationRecord"][];
+        };
+        /** OutsideCounselRecommendationSpend */
+        OutsideCounselRecommendationSpend: {
+            /** Approved Spend Minor */
+            approved_spend_minor: number;
+            /** Currency */
+            currency: string;
         };
         /** OutsideCounselRecord */
         OutsideCounselRecord: {

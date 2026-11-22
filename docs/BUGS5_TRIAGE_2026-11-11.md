@@ -61,6 +61,15 @@ two cards, and use a synthetic Bench Strategy response for populated label and
 disclosure checks. The local and hosted browser executions and production
 verification remain pending for this separate follow-up.
 
+The same review reproduced inaccurate spend on the Suggested Counsel card.
+The original response combined 22 paise and 23 US cents into a single value
+of 45, and used that combined figure to break ranking ties. The follow-up
+returns a subtotal for each recorded currency, preserves paise and cents in
+the disclosure, and breaks equal experience scores by counsel name and ID.
+The earlier response field remains an INR subtotal for older clients. This
+change belongs to J13/M12, US-038 and FT-055. The compact-card browser journey
+uses real API records and asserts both literal visible amounts.
+
 On `c441cdaf3`, API shard 6 showed the Delhi layout splitting the decree-holder
 and advocate signature labels across pages. The renderer now keeps consecutive
 signature labels together in PDF and Word. The regression checks the full source

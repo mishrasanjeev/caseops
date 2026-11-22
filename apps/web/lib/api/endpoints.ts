@@ -1925,6 +1925,8 @@ export type OutsideCounselRecommendation = {
   total_matters_count: number;
   active_matters_count: number;
   approved_spend_minor: number;
+  // Earlier API revisions omitted the currency breakdown during rolling deployment.
+  approved_spend_by_currency?: components["schemas"]["OutsideCounselRecommendationRecord"]["approved_spend_by_currency"];
   evidence: string[];
 };
 

@@ -715,6 +715,133 @@ def test_recommendations_prefer_matching_counsel_history(client: TestClient) -> 
     )
 
 
+def test_recommendations_keep_currency_subtotals_out_of_ranking(client: TestClient) -> None:
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
+    token = str(bootstrap_company(client)["access_token"])
+    headers = auth_headers(token)
+    matter = _create_matter(
+        client, token, title="Panel approval totals", matter_code="OC-SPEND-100",
+    )
+    created = []
+    for name in ("Alpha Panel Counsel", "Zulu Panel Counsel"):
+        profile = client.post("/api/outside-counsel/profiles", headers=headers, json={"name": name})
+        assert profile.status_code == 200
+        created.append(profile.json()["id"])
+
+    alpha, zulu = created
+    for counsel_id, currency, amount, approved, status in (
+        (alpha, "INR", 39, 15, "partially_approved"),
+        (alpha, "INR", 7, 7, "approved"),
+        (alpha, "USD", 23, 23, "approved"),
+        (alpha, "GBP", 1000, None, "submitted"),
+        (zulu, "USD", 99999, 99999, "approved"),
+    ):
+        spend = client.post(
+            "/api/outside-counsel/spend-records", headers=headers,
+            json={"matter_id": matter["id"], "counsel_id": counsel_id,
+                  "description": "Panel approval fixture", "currency": currency,
+                  "amount_minor": amount, "approved_amount_minor": approved, "status": status},
+        )
+        assert spend.status_code == 200
+
+    result = client.post(
+        "/api/outside-counsel/recommendations", headers=headers, json={"matter_id": matter["id"]},
+    )
+    assert result.status_code == 200
+    rows = result.json()["results"]
+    by_counsel = {row["counsel_id"]: row for row in rows}
+    assert by_counsel[alpha]["approved_spend_minor"] == 22
+    assert by_counsel[alpha]["approved_spend_by_currency"] == [
+        {"currency": "INR", "approved_spend_minor": 22},
+        {"currency": "USD", "approved_spend_minor": 23},
+    ]
+    assert by_counsel[zulu]["approved_spend_minor"] == 0
+    assert by_counsel[zulu]["approved_spend_by_currency"] == [
+        {"currency": "USD", "approved_spend_minor": 99999},
+    ]
+    assert [row["counsel_id"] for row in rows] == [alpha, zulu]
+    assert [row["score"] for row in rows] == [1.0, 1.0]
+
+
+def test_recommendation_history_follows_live_matter_access(client: TestClient) -> None:
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
+    token = str(bootstrap_company(client)["access_token"])
+    owner_headers = auth_headers(token)
+    admin_id, admin_token = _invite_admin(client, token)
+    admin_headers = auth_headers(admin_token)
+    current = _create_matter(
+        client, token, title="Current panel selection", matter_code="OC-SCOPE-100",
+    )
+    private = _create_matter(client, token, title="Protected mandate", matter_code="OC-SCOPE-200")
+    open_matter = _create_matter(
+        client, token, title="Open panel matter", matter_code="OC-SCOPE-300",
+        forum_level="arbitration", court_name="SIAC",
+    )
+    profile = client.post(
+        "/api/outside-counsel/profiles", headers=owner_headers,
+        json={"name": "Shared Panel Counsel"},
+    )
+    assert profile.status_code == 200
+    counsel_id = profile.json()["id"]
+    for matter, state, amount in ((private, "active", 90001), (open_matter, "closed", 15)):
+        assignment = client.post(
+            "/api/outside-counsel/assignments", headers=owner_headers,
+            json={"matter_id": matter["id"], "counsel_id": counsel_id, "status": state},
+        )
+        assert assignment.status_code == 200
+        spend = client.post(
+            "/api/outside-counsel/spend-records", headers=owner_headers,
+            json={"matter_id": matter["id"], "counsel_id": counsel_id,
+                  "description": "Panel history fixture", "currency": "INR", "amount_minor": amount,
+                  "approved_amount_minor": amount, "status": "approved"},
+        )
+        assert spend.status_code == 200
+
+    def read_recommendation(headers: dict[str, str]) -> dict[str, object]:
+        response = client.post(
+            "/api/outside-counsel/recommendations", headers=headers,
+            json={"matter_id": current["id"]},
+        )
+        assert response.status_code == 200
+        (row,) = response.json()["results"]
+        assert row["counsel_id"] == counsel_id
+        return row
+
+    unrestricted = read_recommendation(admin_headers)
+    assert unrestricted["approved_spend_minor"] == 90016
+    assert unrestricted["score"] == 9.0
+    assert unrestricted["total_matters_count"] == 2
+    assert unrestricted["active_matters_count"] == 1
+
+    private_path = f"/api/matters/{private['id']}"
+    restricted = client.post(
+        f"{private_path}/access/restricted", headers=owner_headers, json={"restricted": True},
+    )
+    assert restricted.status_code == 200
+    denied = client.get(private_path, headers=admin_headers)
+    assert denied.status_code == 404
+    reduced = read_recommendation(admin_headers)
+    assert reduced["approved_spend_minor"] == 15
+    assert reduced["score"] == 1.0
+    assert reduced["total_matters_count"] == 1
+    assert reduced["active_matters_count"] == 0
+    assert reduced["evidence"] == ["Active panel counsel."]
+
+    grant = client.post(
+        f"{private_path}/access/grants", headers=owner_headers,
+        json={"membership_id": admin_id, "reason": "Review panel history"},
+    )
+    assert grant.status_code == 200
+    assert read_recommendation(admin_headers) == unrestricted
+    wall = client.post(
+        f"{private_path}/access/walls", headers=owner_headers,
+        json={"excluded_membership_id": admin_id, "reason": "Protected mandate"},
+    )
+    assert wall.status_code == 200
+    assert read_recommendation(admin_headers) == reduced
+    assert read_recommendation(owner_headers) == unrestricted
+
+
 def test_member_cannot_create_outside_counsel_profile(client: TestClient) -> None:
     bootstrap_payload = bootstrap_company(client)
     owner_token = str(bootstrap_payload["access_token"])

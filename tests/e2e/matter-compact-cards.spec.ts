@@ -44,6 +44,16 @@ test.describe("BUG-016 compact Matter cards", () => {
         const inactive = await json<{ id: string }>(await api.post(`${apiBaseUrl}/api/outside-counsel/profiles`, {
           ...mutation, headers, data: { name: inactiveName, panel_status: "inactive", practice_areas: ["Civil"] },
         }), "Create local inactive counsel");
+        for (const [currency, amount] of [["INR", 15], ["USD", 23]] as const) {
+          const recorded = await json<{ currency: string; approved_amount_minor: number }>(
+            await api.post(`${apiBaseUrl}/api/outside-counsel/spend-records`, {
+              ...mutation, headers, data: { matter_id: matter.id, counsel_id: preferred.id,
+                description: "Compact counsel approved spend", currency, amount_minor: amount,
+                approved_amount_minor: amount, status: "approved" },
+            }), "Create local approved panel spend",
+          );
+          expect(recorded).toMatchObject({ currency, approved_amount_minor: amount });
+        }
 
         // Only this bench response is synthetic. Counsel rankings come from the real API.
         const benchPath = `/api/matters/${matter.id}/bench-strategy`;
@@ -82,16 +92,21 @@ test.describe("BUG-016 compact Matter cards", () => {
         const payload = await json<OutsideCounselRecommendationsResult>(response, "Canonical counsel recommendations");
         expect(payload.matter_id).toBe(matter.id);
         expect(payload.results.map(row => [row.counsel_id, row.score])).toEqual([[preferred.id, 8], [inactive.id, -2]]);
+        expect(payload.results.map(row => row.approved_spend_by_currency)).toEqual([
+          [{ currency: "INR", approved_spend_minor: 15 }, { currency: "USD", approved_spend_minor: 23 }], [],
+        ]);
 
         const counsel = page.getByTestId("counsel-recommendations-card");
         const preferredToggle = counsel.locator("summary").filter({ hasText: preferredName });
         const inactiveToggle = counsel.locator("summary").filter({ hasText: inactiveName });
         const practiceEvidence = counsel.getByText("Practice area match for Commercial Litigation.", { exact: true });
         const inactiveEvidence = counsel.getByText("Inactive panel status reduces ranking.", { exact: true });
+        const spendBreakdown = counsel.locator('dl[aria-label="Approved spend by currency"]');
         await expect(preferredToggle.getByText("8 pts", { exact: true })).toBeVisible();
         await expect(inactiveToggle.getByText("-2 pts", { exact: true })).toBeVisible();
         await expect(practiceEvidence).toBeHidden();
         await expect(inactiveEvidence).toBeHidden();
+        await expect(spendBreakdown).toBeHidden();
 
         const panel = page.getByTestId("bench-strategy-panel");
         const statuteToggle = panel.locator("summary").filter({ hasText: /^Top statute sections cited \(1\)$/ });
@@ -120,6 +135,8 @@ test.describe("BUG-016 compact Matter cards", () => {
         }
         await expect(statutes.getByText(statuteLabel, { exact: true })).toBeVisible();
         await expect(authorities.getByText(authorityTitle, { exact: true })).toBeVisible();
+        await expect(spendBreakdown.locator("dt")).toHaveText(["INR", "USD"]);
+        await expect(spendBreakdown.locator("dd")).toHaveText(["₹0.15", "$0.23"]);
         await expectNoPageOverflow(page);
         for (const name of [preferredToggle.getByText(preferredName, { exact: true }),
           statutes.getByText(statuteLabel, { exact: true }), authorities.getByText(authorityTitle, { exact: true })]) {

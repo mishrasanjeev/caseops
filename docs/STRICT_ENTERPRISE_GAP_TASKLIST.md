@@ -1,5 +1,17 @@
 ## November18 — a green CI does not supersede failed local acceptance
 
+## November 22 — outside-counsel recommendation access
+
+**Partially implemented.** J13/M12 recommendation history reproduced a matter
+access leak in an isolated HTTP fixture. An administrator lost direct access
+to one of two matters but the recommendation still returned both assignments
+and 90,016 paise. The viewer's remaining visible matter accounted for 15 paise.
+The candidate applies the canonical matter visibility predicate to each source
+association before ranking or grouping spend. The regression checks direct
+denial, grant restoration, an ethical wall overriding the grant, and the
+owner's separate authorized view. The same regression is registered for
+SQLite and PostgreSQL. Browser and production verification remain pending.
+
 ## November19 — deployed PR624, production Batch5 acceptance still open
 
 **Inconclusive / NO-GO for complete certification.** Main e564 is live and all70

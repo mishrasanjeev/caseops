@@ -18,18 +18,15 @@ import {
   fetchOutsideCounselRecommendations,
   type OutsideCounselRecommendation,
 } from "@/lib/api/endpoints";
+import { formatMoneyMinor } from "@/lib/billing-format";
 import { useCapability } from "@/lib/capabilities";
 import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
-function formatMoney(minor: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(minor / 100);
-}
-
 function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
+  const spend = rec.approved_spend_by_currency;
+  const evidence = rec.evidence.filter((reason) =>
+    !/^Approved spend history totals \d+ minor units across prior matters\.$/.test(reason),
+  );
   return (
     <li className="min-w-0 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)]">
       <details className="group">
@@ -49,13 +46,25 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
           <span className="text-[11px] text-[var(--color-mute-2)]">
             {rec.total_matters_count} matter{rec.total_matters_count === 1 ? "" : "s"}
             {rec.active_matters_count > 0 ? ` · ${rec.active_matters_count} active` : ""}
-            {rec.approved_spend_minor > 0
-              ? ` · ${formatMoney(rec.approved_spend_minor)} approved spend`
-              : ""}
           </span>
-          {rec.evidence.length > 0 ? (
+          {spend?.length ? (
+            <div className="text-xs text-[var(--color-mute)]">
+              <p className="font-medium">Approved spend</p>
+              <dl aria-label="Approved spend by currency" className="mt-1 space-y-1 tabular-nums">
+                {spend.map(({ currency, approved_spend_minor: amount }) => (
+                  <div key={currency} className="flex flex-wrap gap-x-2">
+                    <dt>{currency || "Unknown currency"}</dt>
+                    <dd>{/^[A-Z]{3}$/.test(currency) ? formatMoneyMinor(amount, currency, 2) : `${amount} minor units`}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : spend === undefined && rec.approved_spend_minor > 0 ? (
+            <p className="text-xs text-[var(--color-mute)]">Approved spend by currency is unavailable.</p>
+          ) : null}
+          {evidence.length > 0 ? (
             <ul className="space-y-1 break-words text-xs text-[var(--color-mute)]">
-              {rec.evidence.map((reason) => <li key={reason}>{reason}</li>)}
+              {evidence.map((reason) => <li key={reason}>{reason}</li>)}
             </ul>
           ) : null}
         </div>
@@ -101,8 +110,8 @@ export function CounselRecommendationsCard({
           <CardTitle>Suggested counsel</CardTitle>
         </div>
         <CardDescription>
-          Ranked from your panel by jurisdiction, practice fit, and prior spend on
-          comparable matters. Partner approves any engagement.
+          Ranked from your panel by practice fit, jurisdiction, and relevant matter experience.
+          Partner approves any engagement.
         </CardDescription>
       </CardHeader>
       <CardContent>
