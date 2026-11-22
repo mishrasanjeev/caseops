@@ -20,7 +20,7 @@ build_root="${CASEOPS_ANDROID_BUILD_ROOT:-$HOME/.cache/caseops-mobile/android-bu
 node - "$repo" "$build_root" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const [repo, output] = process.argv.slice(2);
-assert.equal(process.versions.node, '24.15.0', 'PINNED_NODE_24_15_REQUIRED');
+assert.equal(process.versions.node, '24.22.3', 'PINNED_NODE_24_22_3_REQUIRED');
 for (const value of [output, process.env.ANDROID_HOME, process.env.ANDROID_SDK_ROOT, process.env.JAVA_HOME,
   process.env.CASEOPS_ANDROID_JDK17_HOME, process.env.GRADLE_USER_HOME]) assert.ok(path.isAbsolute(value), 'ABSOLUTE_TOOL_AND_OUTPUT_PATHS_REQUIRED');
 assert.equal(fs.realpathSync(process.env.ANDROID_HOME), fs.realpathSync(process.env.ANDROID_SDK_ROOT), 'ONE_EXPLICIT_ANDROID_SDK_REQUIRED');

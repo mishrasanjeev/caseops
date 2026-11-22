@@ -118,7 +118,7 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
   assert.equal(job.defaults.run.shell, 'pwsh');
   assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
-  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
+  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.22.3');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
   const protection = job.steps.find(step => step.name === 'Protect the exact pinned public npm archive on Windows');
   assert.ok(protection && typeof protection.run === 'string');
@@ -387,7 +387,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
   assert.ok(rootInstall < browserInstall && browserInstall < tests);
   const nodeSetup = steps.find(step => step.uses === 'actions/setup-node@v4');
-  assert.equal(nodeSetup.with['node-version'], '24.15.0', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
+  assert.equal(nodeSetup.with['node-version'], '24.22.3', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
   assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
     ['apps/mobile/package-lock.json', 'package-lock.json']);
   for (const event of ['push', 'pull_request']) {
@@ -427,7 +427,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
   assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
   assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
-  assert.ok(protection.run.includes("'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b'"));
+  assert.ok(protection.run.includes("'3b5af1e81a20ae19f3759a281ad2074564b0cca5392100c9c0043b4ac97c45cc'"));
   assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
   assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });

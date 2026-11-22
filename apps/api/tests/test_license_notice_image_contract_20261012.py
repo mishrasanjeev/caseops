@@ -32,6 +32,24 @@ BUILD_TOOL_SOURCES = {
         "f08d9841fdd1e143095de28a772896efb62122bf416e6172c49ab04f309c63e2",
     "license-policy/upstream/picomatch_4.0.7-caseops.1/package.json":
         "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",
+    "license-policy/upstream/glob_14.0.6/LICENSE.md":
+        "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09",
+    "license-policy/upstream/glob_14.0.6/package.json":
+        "46065b223266140254eb17d347469ab824681beaa843516bc1e0008eec612157",
+    "license-policy/upstream/minimatch_11.0.8/LICENSE.md":
+        "2c7c5d22ed5a8ee968c64757710979afcd77438c48b4a265b94e615babd8a901",
+    "license-policy/upstream/minimatch_11.0.8/package.json":
+        "e041e4eea42d4e631dcc9ec8d3e0a1ee7a29a2873f6be55ad92b5567ef0d4177",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/LICENSE.md":
+        "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/package.json":
+        "8c5a050303b8ac93b506cbd1e67cc8e1a77b331b8fb16309581f4e4c97b20f60",
+    "license-policy/upstream/brace-expansion_5.0.13/LICENSE":
+        "9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e",
+    "license-policy/upstream/brace-expansion_5.0.13/package.json":
+        "f3003567866767f2685b97136c99c47886a09be0b2d82ad9818b5b390cc38988",
+    "license-policy/upstream/brace-expansion_5.0.13/brace-expansion-5.0.13.tgz":
+        "015c8761629e59fc31f3a6e472a940f6d759fc8227e67882c399dfb9a703ae6e",
 }
 
 
@@ -148,11 +166,11 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         relative = path.relative_to(ROOT).as_posix()
         assert relative in expected, "Undeclared operator material must not enter the image"
         actual.add(relative)
-        assert len(actual) <= 64
+        assert len(actual) <= 71
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 62
+    assert len(actual) == 71
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
 

@@ -14,7 +14,7 @@ export const ANDROID_HOST_ENV = Object.freeze({ file: 'CASEOPS_ANDROID_HOST_POLI
 export const ANDROID_MARKER = Object.freeze({ name: 'X-CaseOps-Automated-Test', value: 'no-paid-providers' });
 export const ANDROID_EMPTY_MAVEN_ENV = 'CASEOPS_ANDROID_EMPTY_MAVEN_REPOSITORY';
 const ROOT = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
-const NODE = '/Users/sanjeevkumar/.nvm/versions/node/v24.15.0/bin/node';
+const NODE = '/Users/sanjeevkumar/.cache/caseops-mobile/release-tooling/node-security-20261122/node-v24.22.3-darwin-arm64/bin/node';
 const PYTHON = '/Users/sanjeevkumar/.cache/caseops-mobile/release-tooling/python/cpython-3.13.17-macos-aarch64-none/bin/python3.13';
 const JAVA21 = '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home';
 const JAVA17 = '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home';
@@ -242,9 +242,9 @@ function cleanSource() {
   const value = sourceSnapshot(ROOT); assert.ok(value.sourceDirty === false && /^[a-f0-9]{40}$/.test(value.sourceSha) && /^[a-f0-9]{64}$/.test(value.sourceFingerprint), 'ANDROID_HOST_CLEAN_SOURCE_REQUIRED'); return value;
 }
 export function prepareAndroidHostLauncher({ directory, nodePolicyReference, gradlePolicyReference, environment = process.env } = {}) {
-  const end = performance.now() + 20000; assert.equal(process.versions.node, '24.15.0', 'ANDROID_HOST_PINNED_NODE'); assert.equal(process.execPath, NODE, 'ANDROID_HOST_PINNED_NODE_PATH');
+  const end = performance.now() + 20000; assert.equal(process.versions.node, '24.22.3', 'ANDROID_HOST_PINNED_NODE'); assert.equal(process.execPath, NODE, 'ANDROID_HOST_PINNED_NODE_PATH');
   privateDirectory(path.dirname(directory), end); assert.ok(absolute(directory) && directory !== ROOT && !directory.startsWith(ROOT + path.sep), 'ANDROID_HOST_EXTERNAL_DIRECTORY');
-  const report = assertHostNodeTrust({ policyRef: nodePolicyReference, role: 'base' }); assert.ok(report.expectedDefaultCount === 144 && report.defaultEnumerationVerified === true, 'ANDROID_HOST_NODE144_REQUIRED');
+  const report = assertHostNodeTrust({ policyRef: nodePolicyReference, role: 'base' }); assert.ok(report.expectedDefaultCount === 118 && report.defaultEnumerationVerified === true, 'ANDROID_HOST_NODE118_REQUIRED');
   const nodePolicy = readJson(nodePolicyReference, { end, limit: 32768 });
   sourceEnvironment(environment, end); const source = cleanSource(), sourceFiles = {};
   const privateMavenRepository = captureAndroidEmptyMavenRepository(environment.HOME, environment, end);

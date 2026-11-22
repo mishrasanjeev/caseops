@@ -7590,7 +7590,18 @@ The canonical native authorization POST cannot inherit generic 401 refresh
 and bearer retry. Complete UI/client79 and real built-browser14 cases pass;
 current native harness647 passes with two declared Windows-only skips. The old
 production flow reproduces the exact typed403 and succeeds after its extra
-manual connection step. The new flow is not yet deployed; actual native and
-production acceptance remain pending. Existing Android version 3 went live November
-17; Managed publishing now holds future updates. Historical private-only status
+manual connection step. PR642 is now merged at6cdbe791, and the web login update
+is serving100% traffic in revision `caseops-web-login-6cdbe791`. An actual
+production browser journey with the owned disposable QA account passed login,
+one MFA step-up, automatic native authorization and the ready Open CaseOps
+control without another Connect. It did not open the callback or exchange a
+native token and is not reporting-user or complete native acceptance. Its
+retained `production-native-mfa-hotfix-20261122-01/proof-01.json` SHA256 is
+`791d71f81caeb5db991ba612a56e67dff2c4c67a98320b11ee46f6f95600a62d`;
+worker and actual parent exited0. The API was unchanged. Full3268-case Linux
+web coverage, Windows web and all8 canonical main Security jobs passed; the
+remaining canonical main CI matrix is not yet certified. Actual native
+acceptance remains pending. Existing Android version 3 went live November
+17; fresh signed-in Play Console confirms100% production rollout and no
+unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).

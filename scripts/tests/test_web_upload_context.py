@@ -40,6 +40,17 @@ ARBORIST_MATERIALS = {
     "license-policy/upstream/_npmcli_arborist_9.9.3/LICENSE.md",
     "license-policy/upstream/_npmcli_arborist_9.9.3/package.json",
 }
+MOBILE_MATCHER_MATERIALS = {
+    "license-policy/upstream/glob_14.0.6/LICENSE.md",
+    "license-policy/upstream/glob_14.0.6/package.json",
+    "license-policy/upstream/minimatch_11.0.8/LICENSE.md",
+    "license-policy/upstream/minimatch_11.0.8/package.json",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/LICENSE.md",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/package.json",
+    "license-policy/upstream/brace-expansion_5.0.13/LICENSE",
+    "license-policy/upstream/brace-expansion_5.0.13/package.json",
+    "license-policy/upstream/brace-expansion_5.0.13/brace-expansion-5.0.13.tgz",
+}
 NPM_TOOLING_INPUTS = {
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
@@ -146,11 +157,11 @@ class NativeUploadTests(unittest.TestCase):
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
         self.required = {
             REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *NEXT_MATERIALS,
-            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS,
+            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS, *MOBILE_MATCHER_MATERIALS,
             *PDF_PUBLIC_NOTICES,
             *(value["path"] for entry in record["packages"] for value in entry["materials"]),
         }
-        self.assertEqual(len(self.required), 82)
+        self.assertEqual(len(self.required), 91)
 
     def files(self, paths):
         for relative in paths:

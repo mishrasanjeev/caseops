@@ -1,3 +1,22 @@
+## 2026-11-22 - live login update and remaining native work
+
+PR642/6cdbe791 web login is live at100% traffic. The owned-QA production browser
+passed one MFA step-up and automatic authorization through Open CaseOps readiness;
+the callback was not opened and no native token exchanged. Keep the complete
+native verification verdict Inconclusive. Actual Play Console confirms existing
+CaseOps1.0.0(3) at100% production rollout, no unpublished changes, and managed
+publishing on for future updates. No new native binary was submitted for the
+web update. Canonical main Web and Security are green; the rest of CI remains
+separate until terminal results are reconciled.
+
+Continue J20/M22 in an isolated current-main native build cohort: verified new
+Node/CLI admissions, owned mobile installation, fresh Android and iOS Simulator
+artifacts, then independently bound complete83-case platform suites. Do not reuse
+old-binary passes, import optional root web tool changes, relax deadlines or
+claim a physical-device callback from browser readiness. The OnePlus is connected
+with Play-installed code3 but currently locked. Apple organization enrollment
+GZQJ2D9M4N remains Pending; no additional owner action is shown on its page.
+
 ## 2026-11-18 — local Docker04 failures remain release blockers
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

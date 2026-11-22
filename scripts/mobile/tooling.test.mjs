@@ -3089,7 +3089,7 @@ async function localTls(material, callback) {
 
 test('host trust removes only the exact compromised DER and accepts the exact already-clean set', () => {
   const roots = reviewHostNodeRoots();
-  assert.equal(roots.outputCount, 144); assert.equal(roots.removedCount, 1); assert.equal(roots.fingerprints.includes(DENIED_HOST_CA), false);
+  assert.equal(roots.outputCount, 118); assert.equal(roots.removedCount, 0); assert.equal(roots.fingerprints.includes(DENIED_HOST_CA), false);
   const cleaned = roots.pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g);
   const again = reviewHostNodeRoots(cleaned);
   assert.equal(again.removedCount, 0); assert.equal(again.outputSetSha256, roots.outputSetSha256);
@@ -3120,7 +3120,7 @@ test('actual inherited bootstrap activates the exact Node24 default store before
     const prepared = prepareHostNodeTrust({ directory: path.join(root, 'policy'), environment: neutralTrustEnv() });
     const result = await trustChild([trustHelper, 'verify'], { ...neutralTrustEnv(), ...prepared.environment });
     assert.equal(result.code, 0, result.stderr); assert.equal(result.signal, null); assert.equal(result.exceeded, false);
-    const report = JSON.parse(result.stdout); assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 144);
+    const report = JSON.parse(result.stdout); assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 118);
     assert.equal(report.expectedDefaultSetSha256, prepared.descriptor.outputSetSha256); assert.equal(report.globalTrustChanges, 0);
     const standalone = { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_HOST_NODE_BOOTSTRAP_TEST: '1' };
     // A separate Node test controller must not inherit the parent's internal reporter context.
@@ -3143,7 +3143,7 @@ test('native-QA default HTTPS and fetch preserve certificate and hostname reject
       await localTls(materials()[name], async (origin, requests) => {
         const result = await trustChild([trustFixture, 'probe', origin], env);
         assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
-        assert.deepEqual(report.output, [expected, expected]); assert.equal(report.expectedDefaultCount, 145); assert.equal(report.defaultEnumerationVerified, true);
+        assert.deepEqual(report.output, [expected, expected]); assert.equal(report.expectedDefaultCount, 119); assert.equal(report.defaultEnumerationVerified, true);
         assert.equal(requests(), name === 'trusted' ? 2 : 0);
       });
     }
@@ -3157,7 +3157,7 @@ test('normal Worker and subprocess inherit the activated fixture-bound default c
       const result = await trustChild([trustFixture, 'descendants', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
       assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
       assert.deepEqual(Object.keys(report).sort(), ['direct', 'subprocess', 'worker']);
-      for (const value of Object.values(report)) { assert.equal(value.defaultEnumerationVerified, true); assert.equal(value.expectedDefaultCount, 145); assert.deepEqual(value.output, ['local-only', 'local-only']); }
+      for (const value of Object.values(report)) { assert.equal(value.defaultEnumerationVerified, true); assert.equal(value.expectedDefaultCount, 119); assert.deepEqual(value.output, ['local-only', 'local-only']); }
       assert.equal(requests(), 6);
     });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
@@ -3268,7 +3268,7 @@ test('zero, oversize, hardlinked, shared-write and symlink CA inputs refuse befo
 });
 test('provisioning pins exact accepted Node/npm and clean official Appium driver releases', () => {
   const pins = JSON.parse(fs.readFileSync(new URL('./tooling.json', import.meta.url), 'utf8'));
-  assert.equal(pins.node, '24.15.0'); assert.equal(pins.npm, '11.12.1');
+  assert.equal(pins.node, '24.22.3'); assert.equal(pins.npm, '11.12.1');
   assert.equal(pins.appium, '3.9.0'); assert.equal(pins.xcuitest, '12.22.2'); assert.equal(pins.uiautomator2, '8.7.3'); assert.equal(pins.webdriverio, '10.1.0');
   for (const [name, expected] of Object.entries(pins.hostNodeTrust)) {
     assert.match(expected, /^[a-f0-9]{64}$/);
@@ -3285,7 +3285,7 @@ test('the actual provisioner outer executes only pinned held helper bytes before
   try {
     const valid = await trustChild(['--input-type=module', '-e', match[1], path.dirname(trustHelper), path.join(root, 'valid')], neutralTrustEnv());
     assert.equal(valid.code, 0, valid.stderr); const q = JSON.parse(valid.stdout);
-    assert.equal(q.prepared.descriptor.nodeVersion, '24.15.0'); assert.equal(q.pins.appium, '3.9.0');
+    assert.equal(q.prepared.descriptor.nodeVersion, '24.22.3'); assert.equal(q.pins.appium, '3.9.0');
     const source = path.join(root, 'source'); fs.mkdirSync(source, { mode: 0o700 });
     for (const name of ['tooling.json', 'host-node-trust.mjs', 'host-node-trust-start.mjs']) fs.copyFileSync(path.join(path.dirname(trustHelper), name), path.join(source, name));
     fs.appendFileSync(path.join(source, 'host-node-trust.mjs'), '\nconsole.log("UNADMITTED_SOURCE_EXECUTED");\n');
@@ -3454,7 +3454,7 @@ test('CI preparation refuses to complete when a project config appears during th
 }));
 test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
   assert.deepEqual(HOST_NODE_ROOTS['22.23.5'], HOST_NODE_ROOTS['22.23.4']);
-  assert.ok(['22.23.4', '24.15.0', '22.14.0'].every(version => Object.hasOwn(HOST_NODE_ROOTS, version)));
+  assert.ok(['22.23.4', '24.15.0', '22.14.0', '24.22.3'].every(version => Object.hasOwn(HOST_NODE_ROOTS, version)));
   let setupCount = 0, commandCount = 0;
   const nativePhaseCommands = [];
   for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
@@ -3464,7 +3464,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
       let setup, trust;
       for (const step of job.steps ?? []) {
-        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; if (name === 'ci.yml' && ['web', 'web-windows'].includes(jobId)) assert.equal(step.with['node-version'], '22.23.5'); else assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; if (name === 'ci.yml' && ['web', 'web-windows'].includes(jobId)) assert.equal(step.with['node-version'], '22.23.5'); else assert.ok(['22.23.4', '24.22.3'].includes(step.with['node-version'])); setupCount++; }
         if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
         const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
         if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
@@ -3567,7 +3567,7 @@ test('actual Next page-data Worker preserves inherited default HTTPS and fetch v
       await localTls(materials()[name], async (origin, requests) => {
         const result = await trustChild([trustFixture, 'next-worker', origin], { ...neutralTrustEnv(), ...prepared.environment, CASEOPS_TEST_FIXTURE_CA: JSON.stringify(reference) });
         assert.equal(result.code, 0, result.stderr); const report = JSON.parse(result.stdout);
-        assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 145);
+        assert.equal(report.defaultEnumerationVerified, true); assert.equal(report.expectedDefaultCount, 119);
         assert.deepEqual(report.output, [expected, expected]); assert.equal(requests(), name === 'trusted' ? 2 : 0);
       });
     }
@@ -3582,7 +3582,7 @@ test('reviewed source-map inheritance keeps every extra preload and proxy overri
     const base = { ...neutralTrustEnv(), ...prepared.environment }, allowed = base.NODE_OPTIONS + ' --enable-source-maps';
     assert.ok(Buffer.byteLength(allowed) <= 8191, 'BOOTSTRAP_OPTIONS_MUST_REMAIN_WITHIN_WINDOWS_CMD_ENV_BOUND');
     const positive = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: allowed });
-    assert.equal(positive.code, 0, positive.stderr); assert.equal(JSON.parse(positive.stdout).expectedDefaultCount, 144);
+    assert.equal(positive.code, 0, positive.stderr); assert.equal(JSON.parse(positive.stdout).expectedDefaultCount, 118);
     for (const options of [allowed + ' --enable-source-maps', allowed + ' --import=data:text/javascript,console.log(%22UNADMITTED_PRELOAD_EXECUTED%22)', allowed + ' --use-env-proxy', allowed + ' --use-openssl-ca', '--enable-source-maps ' + base.NODE_OPTIONS]) {
       const result = await trustChild([trustHelper, 'verify'], { ...base, NODE_OPTIONS: options });
       assert.notEqual(result.code, 0); assert.doesNotMatch(result.stdout, /UNADMITTED_PRELOAD_EXECUTED/);
@@ -3721,12 +3721,12 @@ function iosProjectionFixture() {
     shims: { node: { path: paths.bin + '/node' } }, bundle: { path: base + '/ruby188.pem', sha256: '1'.repeat(64), sizeBytes: 100 }, fixtureCA: null,
     nodeNpm: { user: { path: base + '/npm-user.npmrc' }, global: { path: base + '/npm-global.npmrc' }, parent: paths.runtime + '/npm' },
     source: { 'ios-host-pods.rb': { sha256: IOS_PODS_SOURCE_SHA256 } } };
-  const environment = { NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: base + '/node144.pem', SSL_CERT_DIR: base + '/node-empty',
+  const environment = { NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: base + '/node118.pem', SSL_CERT_DIR: base + '/node-empty',
     CASEOPS_HOST_NODE_TRUST_POLICY_FILE: base + '/node.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: '2'.repeat(64) };
   const admitted = { policy, node: { environment }, bundle: { bytes: Buffer.from('SYNTHETIC-PUBLIC-CA') },
     podsSource: Buffer.from('# SYNTHETIC CONTRACT SOURCE'), podEntry: Buffer.from('# SYNTHETIC POD ENTRY') };
   const npmRoot = policy.nodeNpm.parent + '/caseops-npm-ABC123';
-  admitted.npmRuntime = { root: npmRoot, files: 2154, inventory: { entries: 2605, observations: 7815 },
+  admitted.npmRuntime = { root: npmRoot, files: 2163, inventory: { entries: 2614, observations: 7842 },
     environment: { CASEOPS_PINNED_NPM_NODE: policy.tools.node.path, CASEOPS_PINNED_NPM_ROOT: npmRoot,
       CASEOPS_PINNED_NPM_ENTRY: npmRoot + '/caseops-entry.mjs', CASEOPS_PINNED_NPM_BOOTSTRAP: 'SYNTHETIC-REVIEWED-NPM-BOOTSTRAP',
       CASEOPS_PINNED_NPM_CLI_SHA256: '4'.repeat(64), CASEOPS_PINNED_NPX_CLI_SHA256: '5'.repeat(64), CASEOPS_PINNED_NPM_DEADLINE: String(policy.deadlineEpochMs),
@@ -3741,7 +3741,7 @@ test('iOS Node and Pods constructors use separate stores and owned HOME without 
   const f = iosProjectionFixture(), input = { EXPO_PUBLIC_API_ORIGIN: 'https://api.contract-fixture.org' }, before = { ...input };
   const node = iosHostCommandProjection(f.admitted, f.ref, 'node', ['--print', '1'], input);
   const pod = iosHostCommandProjection(f.admitted, f.ref, 'pod', ['install', '--deployment', '--no-repo-update'], input);
-  assert.equal(node.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/node144.pem');
+  assert.equal(node.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/node118.pem');
   assert.equal(node.environment.NPM_CONFIG_USERCONFIG, f.policy.nodeNpm.user.path); assert.equal(node.environment.NPM_CONFIG_STRICT_SSL, 'true');
   assert.equal(pod.environment.SSL_CERT_FILE, '/SYNTHETIC/owned-ios-host/ruby188.pem');
   assert.equal(pod.environment.NODE_OPTIONS, undefined); assert.equal(pod.environment.NODE_EXTRA_CA_CERTS, undefined);
@@ -4816,8 +4816,8 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
-  assert.ok(helper.includes("const NODE_HELPER = '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '5dfd52600a80d998d5ee6f5e305d2bace317b35efb90ce9aaa468a187fd7c499'"));
+  assert.ok(helper.includes("const NODE_HELPER = 'fe59defc0356456c496f3f7e7ecf30da5ce09b17d970111d9b76983baaaa0623'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '4ea585ec93ef4c699539890cbee3bc3cd6793fe0748355280581910072d2f024'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4960,8 +4960,8 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'd9e096cf74508700496b85e45c75b5f23dd3ba11'], ['100644', 'f760bbba17aacb26aabefdc5302c1196f52163d4']]);
-    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29977n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', '7f1c1da587791ccba39c53ebbc7f37cb03f3c254'], ['100644', '67d04805895e6daf1ffa8fc8b45a0126891b5442']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 30213n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
       let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
@@ -5042,7 +5042,7 @@ test('CI source copy replacement changes no existing replacement mode and closes
 test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
   const trace = ciSourceTrace(); let staged;
   fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
-  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29977); }
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 30213); }
   finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
   const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
   try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
@@ -5062,8 +5062,8 @@ test('CI explicit Windows preparation imports copied bytes and scopes child poli
     const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
     const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
     const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
-    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e');
-    const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, 'fe59defc0356456c496f3f7e7ecf30da5ce09b17d970111d9b76983baaaa0623');
+    const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 118);
     const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
     const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
     assert.equal(JSON.parse(fs.readFileSync(rows.CASEOPS_HOST_NODE_TRUST_POLICY_FILE)).runtimeSource.helper.path, trustHelper);
@@ -5116,7 +5116,7 @@ test('CI Windows entry executes only copied bytes when exact public inputs have 
     console.log(JSON.stringify({originalLoads,batches,roots:result.approvedRoots,copies:result.runtimeSourceCopies.length,keys:result.appendedKeys}));`;
   const environment = { ...neutralTrustEnv(), CI: 'true', GITHUB_ACTIONS: 'true', RUNNER_TEMP: root, CASEOPS_CI_WORKSPACE: workspace, GITHUB_OUTPUT: commands, OWNED_FIXTURE_ROOT: root, OWNED_FIXTURE_SOURCE: source };
   const output = execFileSync(process.execPath, ['--input-type=module', '--eval', script], { env: environment, timeout: 30000, encoding: 'utf8', maxBuffer: 16384 });
-  assert.deepEqual(JSON.parse(output), { originalLoads: 0, batches: 2, roots: 144, copies: 2, keys: 9 });
+  assert.deepEqual(JSON.parse(output), { originalLoads: 0, batches: 2, roots: 118, copies: 2, keys: 9 });
 }));
 
 
@@ -5847,7 +5847,7 @@ test('source observer import is inert and the worker allowlist is literal and un
 test('source observer absent mode preserves BASE144 and creates no compact witness', async () => {
   await withObserverFixture(async ({ root, run }) => {
     const result = await run({ mode: false, args: ['-e', 'console.log(require("node:tls").getCACertificates("default").length)'] });
-    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stdout.toString(), '144\n'); assert.equal(result.stderr.length, 0);
+    assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stdout.toString(), '118\n'); assert.equal(result.stderr.length, 0);
     assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
   });
 });
@@ -5920,8 +5920,8 @@ test('source observer native recipe rejects the pair and pure inventory forms re
 });
 test('source observer exact selector keeps Node22, Worker, unknown argv and changed source in rich fallback', () => {
   const ref = { path: '/approved/test.mjs', sha256: 'a'.repeat(64), sizeBytes: 3 };
-  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [ref], startupFlags: ['--use-openssl-ca'], expoConfigTarget: null };
-  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: ['--use-openssl-ca'], argv: ['/node24', ref.path], cwd: '/approved', testContext: 'child-v8', entryReference: ref };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.22.3' }, workerCwd: '/approved', workerTargets: [ref], startupFlags: ['--use-openssl-ca'], expoConfigTarget: null };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.22.3', execArgv: ['--use-openssl-ca'], argv: ['/node24', ref.path], cwd: '/approved', testContext: 'child-v8', entryReference: ref };
   assert.equal(selectCompactInvocation(actual, admitted).mode, 'compact');
   for (const delta of [{ isMainThread: false }, { executable: '/node22', nodeVersion: '22.14.0' }, { argv: ['/node24', ref.path, 'extra'] }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { execArgv: ['--inspect'] }])
     assert.deepEqual(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
@@ -6009,7 +6009,7 @@ test('source observer inherited normal ESM Worker remains rich without a Session
     const worker = `import{parentPort}from'node:worker_threads';import tls from'node:tls';const m=await import(${JSON.stringify(uri)});parentPort.postMessage({status:m.sourceGateObserverStatus(),roots:tls.getCACertificates('default').length})`;
     const code = `const{Worker}=require('node:worker_threads');const w=new Worker(new URL(${JSON.stringify('data:text/javascript;base64,')}+Buffer.from(${JSON.stringify(worker)}).toString('base64')));w.once('message',r=>console.log(JSON.stringify(r)));w.once('exit',c=>{if(c)process.exitCode=c})`;
     const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
-    const report = JSON.parse(result.stdout); assert.equal(report.roots, 144, JSON.stringify(report)); assert.equal(report.status.reason, 'worker-thread');
+    const report = JSON.parse(result.stdout); assert.equal(report.roots, 118, JSON.stringify(report)); assert.equal(report.status.reason, 'worker-thread');
     assert.equal(report.status.sessionAllowed, false); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
     assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
   });
@@ -6018,15 +6018,15 @@ test('source observer async and synchronous unselected children retain their exa
   await withObserverFixture(async ({ root, run }) => {
     const code = `const{spawn,spawnSync}=require('node:child_process');const args=['-e','console.log(require("node:tls").getCACertificates("default").length)'];const c=spawn(process.execPath,args,{stdio:['ignore','pipe','pipe']});let o='',e='';c.stdout.on('data',b=>o+=b);c.stderr.on('data',b=>e+=b);c.once('close',n=>{const s=spawnSync(process.execPath,args,{encoding:'utf8'});console.log(JSON.stringify({async:{code:n,stdout:o,stderr:e,pid:c.pid},sync:{code:s.status,stdout:s.stdout,stderr:s.stderr,pid:s.pid}}))})`;
     const result = await run({ args: ['-e', code] }); assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.stderr.length, 0);
-    const report = JSON.parse(result.stdout); for (const value of Object.values(report)) { const { pid, ...output } = value; assert.ok(Number.isSafeInteger(pid) && pid > 0); assert.deepEqual(output, { code: 0, stdout: '144\n', stderr: '' }); }
+    const report = JSON.parse(result.stdout); for (const value of Object.values(report)) { const { pid, ...output } = value; assert.ok(Number.isSafeInteger(pid) && pid > 0); assert.deepEqual(output, { code: 0, stdout: '118\n', stderr: '' }); }
     assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []); for (const pid of [result.pid, report.async.pid, report.sync.pid]) assert.equal(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${pid}-`)).length, 1);
   });
 });
 test('source observer Expo selector requires the exact pinned public or introspect argv and current ref', () => {
   const ref = { path: '/approved/apps/mobile/node_modules/expo/bin/cli', sha256: 'a'.repeat(64), sizeBytes: 43 };
   const target = { entry: ref, cwd: '/approved/apps/mobile', argvSuffixes: [['config', '--type', 'public', '--json'], ['config', '--type', 'introspect', '--json']] };
-  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.15.0' }, workerCwd: '/approved', workerTargets: [], startupFlags: [], expoConfigTarget: target };
-  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.15.0', execArgv: [], argv: ['/node24', ref.path, ...target.argvSuffixes[0]], cwd: target.cwd, entryReference: ref };
+  const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.22.3' }, workerCwd: '/approved', workerTargets: [], startupFlags: [], expoConfigTarget: target };
+  const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.22.3', execArgv: [], argv: ['/node24', ref.path, ...target.argvSuffixes[0]], cwd: target.cwd, entryReference: ref };
   assert.equal(selectCompactInvocation(actual, admitted).reason, 'exact-pinned-expo-config');
   assert.equal(selectCompactInvocation({ ...actual, argv: ['/node24', ref.path, ...target.argvSuffixes[1]] }, admitted).mode, 'compact');
   for (const delta of [{ argv: [...actual.argv, '--unsafe'] }, { cwd: '/approved' }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { argv: ['/node24', ref.path, 'start'] }])
@@ -6044,7 +6044,7 @@ function observerNestedEvidence() {
   return { actual: { start, end: JSON.parse(JSON.stringify(start)), pid: 123, parentEntryReference: rule.constructorSource },
     manifest: { primaryNode: { path: '/node24' } }, selection: { nestedDriver: rule }, context: {
       initialEnvironment: { ...environment, NODE_TEST_CONTEXT: 'child-v8' }, nodeEnvironmentKeys: ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'],
-      bootstrapReference: ref('/owned/B.mjs'), reviewNestedEnvironment: () => ({ scopedPolicyVerified: true, childEffectiveDefaultClaim: false, expectedDefaultCount: 144, policyRef: ref('/owned/policy.json') }) } };
+      bootstrapReference: ref('/owned/B.mjs'), reviewNestedEnvironment: () => ({ scopedPolicyVerified: true, childEffectiveDefaultClaim: false, expectedDefaultCount: 118, policyRef: ref('/owned/policy.json') }) } };
 }
 test('source observer nested evidence keeps the intrinsic role distinct from a worker witness', () => {
   const { actual, manifest, selection, context } = observerNestedEvidence(), result = reviewNestedDriverEvidence(actual, manifest, selection, context);
@@ -6074,7 +6074,7 @@ for (const [label, emptyExecArgv] of [['default', false], ['explicit empty execA
       for (const result of [baseline, observed]) {
         assert.equal(result.code, 0, result.stderr.toString()); assert.equal(result.signal, null); assert.equal(result.stderr.length, 0);
         // This enumeration is a constructor fact, not an HTTPS or TLS-clean verdict.
-        assert.deepEqual(JSON.parse(result.stdout), { mainRoots: 144, worker: { status: { mode: 'not-activated' }, roots: 0 } });
+        assert.deepEqual(JSON.parse(result.stdout), { mainRoots: 118, worker: { status: { mode: 'not-activated' }, roots: 0 } });
         assert.ok(observerFiles(result.coverageDirectory).filter(name => name.startsWith(`coverage-${result.pid}-`)).length >= 2);
       }
       assert.deepEqual(JSON.parse(observed.stdout), JSON.parse(baseline.stdout)); assert.deepEqual(fs.readdirSync(path.join(root, 'output')), []);
@@ -6085,7 +6085,7 @@ async function observerChildPolicy(callback) {
     const child = fixture.observerTrust.prepareHostNodeTrust({ directory: path.join(fixture.root, 'child-policy'), environment: fixture.base, sourceRefs: { helper: fixture.H, bootstrap: fixture.B } });
     const environment = { ...child.environment }, descriptor = JSON.parse(fs.readFileSync(child.policyRef.path));
     const commit = () => { const raw = Buffer.from(JSON.stringify(descriptor, null, 2) + '\n'); fs.writeFileSync(child.policyRef.path, raw); environment.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256 = observerHash(raw); };
-    const context = { parentPolicy: fixture.prepared.descriptor, parentReport: { defaultEnumerationVerified: true, expectedDefaultCount: 144 },
+    const context = { parentPolicy: fixture.prepared.descriptor, parentReport: { defaultEnumerationVerified: true, expectedDefaultCount: 118 },
       sourceRepo: observerRoot, bootstrapBytes: observerRead(fixture.B.path), deadlineEpochMs: observerNow() + 5000 };
     // This helper supplies an explicit parent-admission double. The runtime B
     // must obtain that admission from H's actual CURRENT process; this unit is
@@ -6137,8 +6137,16 @@ test('source observer bootstrap generator preserves exact tokens and AST within 
   assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace(observerHash(recorder), '0'.repeat(64)))), { code: 'ERR_ASSERTION' });
   assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace('const A_SIZE = ' + recorder.length, 'const A_SIZE = 0'))), { code: 'ERR_ASSERTION' });
   const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
-  assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
-  assert.deepEqual(first.provenance.compilerNodeVersions, ['22.23.5', '24.15.0']);
+  assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(declared.compilerNodeVersions, ['24.22.3']);
+  assert.equal(declared.parser.version, '8.18.0');
+  assert.equal(declared.parser.sha256, 'fc3ed7b81e58464715d0291402892f22c3d86ea75302645a330390f85d8015c9');
+  if (process.versions.node === '24.22.3') assert.deepEqual(first.provenance, declared);
+  else {
+    assert.equal(process.versions.node, '22.23.5'); assert.equal(first.provenance.parser.version, '8.16.0');
+    for (const key of ['inputSha256', 'inputBytes', 'outputSha256', 'outputBytes', 'normalizedAstSha256', 'exactAstEqual', 'optionWithSourceMapsBytes', 'optionByteLimit', 'transformation'])
+      assert.deepEqual(first.provenance[key], declared[key]);
+  }
+  assert.deepEqual(first.provenance.compilerNodeVersions, [process.versions.node]);
   assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.alloc(16385)), /BOOTSTRAP_GENERATOR_INPUT/);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.from([0xff])), /encoded data|UTF-8/);
@@ -6374,7 +6382,7 @@ test('iOS npm version uses the actual held public constructor and deregisters it
     f.admitted.npmRuntime = await m.prepareIosNpmRuntime(f.policy);
     // Both full payload reads include the archive, registry entry and two POSIX shims.
     // 2 * (16023946 + 8542 + 113 + 113); archive-only bytes are not the complete inventory.
-    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2605, observations: 7815, bytesRead: 32065428 });
+    assert.deepEqual(f.admitted.npmRuntime.inventory, { entries: 2614, observations: 7842, bytesRead: 32594746 });
     assert.equal(registered, 1); assert.equal(deregistered, 1);
     const command = m.iosHostCommandProjection(f.admitted, f.ref, 'npm', ['--version'], { CASEOPS_IOS_HOST_OUTER_DEADLINE: String(f.policy.deadlineEpochMs) }), hostile = path.join(f.root, 'hostile');
     fs.mkdirSync(hostile, { mode: 0o700 }); const sentinel = path.join(hostile, 'USED_GLOBAL');
@@ -6424,14 +6432,73 @@ test('iOS local archive admission accepts the current full lock and refuses stal
     integrity: 'sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow==' });
   const staleForgeBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
   assert.equal(staleForgeBytes.length, bytes.length);
-  assert.equal(createHash('sha256').update(staleForgeBytes).digest('hex'), '34022fda1a86525457ee5486661b06fa5dbfe82dc89c7de0f7d5b272d65b0858');
-  // Retain the earlier exact stale-lock witness as well as the current lock
-  // with only node-forge reverted. A matcher repair must not relabel history.
-  old.packages['node_modules/picomatch'].integrity = 'sha512-kf1q+F+yNl2zOpKF1y8Ly4RMctOJ16lEmH8qPJKKh1HkSnGWx+JToOcBOu+5C4T7aNk6Gk7dv+o8b/wq563ASw==';
-  const oldBytes = Buffer.from(JSON.stringify(old, null, 2) + '\n');
-  assert.equal(oldBytes.length, bytes.length);
+  assert.equal(createHash('sha256').update(staleForgeBytes).digest('hex'), '4657b8329dcc46699fde9e659c14b3a8c376540e94d29ea15384da70636e6d2d');
+  // Preserve both original full historical witnesses; the current matcher
+  // lock with only node-forge reverted is an additional independent negative.
+  const historicalOld = structuredClone(old);
+  historicalOld.packages[''].devDependencies.glob = 'file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz';
+  const historicalMatcherRows = {
+  "node_modules/@isaacs/nonrecursive-glob-match": {
+    "version": "1.0.3",
+    "resolved": "https://registry.npmjs.org/@isaacs/nonrecursive-glob-match/-/nonrecursive-glob-match-1.0.3.tgz",
+    "integrity": "sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==",
+    "license": "BlueOak-1.0.0"
+  },
+  "node_modules/brace-expansion": {
+    "version": "5.0.12",
+    "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.12.tgz",
+    "integrity": "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==",
+    "license": "MIT",
+    "dependencies": {
+      "balanced-match": "^4.0.2"
+    },
+    "engines": {
+      "node": "20 || >=22"
+    }
+  },
+  "node_modules/glob": {
+    "version": "14.0.2-caseops.1",
+    "resolved": "file:vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz",
+    "integrity": "sha512-ZKnzrk0tIJ5mnuG6m6y33yCHQyAWCyBNJHvaEuiaAnFK/pIT4QyEgEAvAtBuhHdoPgyvZujZkb5x1XbEMbUe/w==",
+    "license": "BlueOak-1.0.0",
+    "dependencies": {
+      "minimatch": "^11.0.0",
+      "minipass": "^7.1.3",
+      "path-scurry": "^3.0.0"
+    },
+    "engines": {
+      "node": "18 || 20 || >=22"
+    },
+    "funding": {
+      "url": "https://github.com/sponsors/isaacs"
+    }
+  },
+  "node_modules/minimatch": {
+    "version": "11.0.1",
+    "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-11.0.1.tgz",
+    "integrity": "sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==",
+    "license": "BlueOak-1.0.0",
+    "dependencies": {
+      "@isaacs/nonrecursive-glob-match": "^1.0.1",
+      "brace-expansion": "^5.0.12"
+    },
+    "engines": {
+      "node": "18 || 20 || >=22"
+    },
+    "funding": {
+      "url": "https://github.com/sponsors/isaacs"
+    }
+  }
+};
+  for (const [key, value] of Object.entries(historicalMatcherRows)) historicalOld.packages[key] = value;
+  const historicalForgeBytes = Buffer.from(JSON.stringify(historicalOld, null, 2) + '\n');
+  assert.equal(historicalForgeBytes.length, 266715);
+  assert.equal(createHash('sha256').update(historicalForgeBytes).digest('hex'), '34022fda1a86525457ee5486661b06fa5dbfe82dc89c7de0f7d5b272d65b0858');
+  historicalOld.packages['node_modules/picomatch'].integrity = 'sha512-kf1q+F+yNl2zOpKF1y8Ly4RMctOJ16lEmH8qPJKKh1HkSnGWx+JToOcBOu+5C4T7aNk6Gk7dv+o8b/wq563ASw==';
+  const oldBytes = Buffer.from(JSON.stringify(historicalOld, null, 2) + '\n');
+  assert.equal(oldBytes.length, 266715);
   assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '53c67dc370ed29978716f044794098ef3f67ad16cb888eab02c3618a7df72cdc');
-  for (const rejectedBytes of [oldBytes, staleForgeBytes]) {
+  for (const rejectedBytes of [oldBytes, historicalForgeBytes, staleForgeBytes]) {
     try {
       fs.writeFileSync(lock, rejectedBytes);
       fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };

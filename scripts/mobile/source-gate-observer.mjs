@@ -126,7 +126,7 @@ function held(ref, maximum, end) {
 /** Public selected-policy admission only; never claims another process's TLS default. */
 export function reviewCapturedBasePolicy(environment, context) {
   const end = context.deadlineEpochMs, parent = context.parentPolicy, report = context.parentReport;
-  need(report?.defaultEnumerationVerified === true && report.expectedDefaultCount === 144
+  need(report?.defaultEnumerationVerified === true && report.expectedDefaultCount === 118
     && parent?.role === 'base' && parent.fixtureCA === null, 'SOURCE_GATE_PARENT_BASE_REQUIRED');
   const tuple = ['NODE_OPTIONS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256'];
   const actualTuple = Object.keys(environment).filter(key => /^(?:NODE_OPTIONS|SSL_CERT_FILE|SSL_CERT_DIR|CASEOPS_HOST_NODE_TRUST_POLICY_(?:FILE|SHA256))$/i.test(key));
@@ -141,13 +141,13 @@ export function reviewCapturedBasePolicy(environment, context) {
     need(Buffer.from(JSON.stringify(descriptor, null, 2) + '\n').equals(descriptorBytes), 'SOURCE_GATE_CHILD_POLICY_ENCODING');
     for (const key of keys.filter(key => !['runtimeSource', 'bundle', 'emptyDirectory'].includes(key)))
       need(equal(descriptor[key], parent[key]), 'SOURCE_GATE_CHILD_ROOT_FIELDS');
-    need(descriptor.role === 'base' && descriptor.nodeVersion === '24.15.0' && descriptor.outputCount === 144
+    need(descriptor.role === 'base' && descriptor.nodeVersion === '24.22.3' && descriptor.outputCount === 118
       && descriptor.fixtureCA === null, 'SOURCE_GATE_CHILD_BASE_REQUIRED');
     exact(descriptor.runtimeSource, ['helper', 'bootstrap'], 'SOURCE_GATE_CHILD_SOURCE');
     const h = descriptor.runtimeSource.helper, b = descriptor.runtimeSource.bootstrap;
     reference(h, MAX_SOURCE); reference(b, MAX_SOURCE);
     need(h.path === path.join(context.sourceRepo, 'scripts/mobile/host-node-trust.mjs')
-      && h.sha256 === '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e' && h.sizeBytes === 29977
+      && h.sha256 === 'fe59defc0356456c496f3f7e7ecf30da5ce09b17d970111d9b76983baaaa0623' && h.sizeBytes === 30213
       && b.path === path.join(context.sourceRepo, 'scripts/mobile/host-node-trust-start.mjs')
       && b.sha256 === sha(context.bootstrapBytes) && b.sizeBytes === context.bootstrapBytes.length, 'SOURCE_GATE_CHILD_SOURCE');
     helperBytes = held(h, MAX_SOURCE, end); bootstrapBytes = held(b, MAX_SOURCE, end);
@@ -167,7 +167,7 @@ export function reviewCapturedBasePolicy(environment, context) {
     const opened = IO.opendirSync(empty); try { check(end); need(DIR_READ.call(opened) === null, 'SOURCE_GATE_CHILD_EMPTY_DIRECTORY'); } finally { DIR_CLOSE.call(opened); }
     need(equal(frame(emptyStat), frame(IO.lstatSync(empty, { bigint: true }))) && equal(emptyBefore, namespace(empty, end))
       && equal(frame(stat), frame(IO.lstatSync(directory, { bigint: true }))) && equal(before, namespace(directory, end)), 'SOURCE_GATE_CHILD_POLICY_NAMESPACE');
-    return { scopedPolicyVerified: true, expectedDefaultCount: 144, childEffectiveDefaultClaim: false,
+    return { scopedPolicyVerified: true, expectedDefaultCount: 118, childEffectiveDefaultClaim: false,
       scope: 'selected-policy-admission-only; independent fixture-worker H activation/default proof required',
       policyRef: { path: file, sha256: digest, sizeBytes: descriptorBytes.length }, parentApprovedBundleSha256: sha(parentBundle) };
   } finally { for (const buffer of [descriptorBytes, childBundle, parentBundle, helperBytes, bootstrapBytes]) buffer?.fill(0); }
@@ -287,7 +287,7 @@ function admitSelection(value, m, bootstrapBytes) {
       && value.nestedDriver.cwd === m.source.repo, 'SOURCE_GATE_EXACT_NESTED_RULE');
   }
   const bootstrap = 'data:text/javascript;base64,' + bootstrapBytes.toString('base64');
-  return { ...value, admissionComplete: true, primaryNode: { ...m.primaryNode, version: '24.15.0' },
+  return { ...value, admissionComplete: true, primaryNode: { ...m.primaryNode, version: '24.22.3' },
     startupFlags: ['--use-openssl-ca', '--import=' + bootstrap,
       '--inspect-port=127.0.0.1:9229', '--inspect-publish-uid=stderr,http',
       '--test-concurrency=0', '--heap-prof-interval=524288', '--test-timeout=0',
@@ -343,7 +343,7 @@ export function reviewNestedDriverEvidence(actual, m, selection, context) {
   need(Object.keys(env).length === start.envPairs.length && env.CASEOPS_HOST_NODE_BOOTSTRAP_TEST === '1'
     && !Object.hasOwn(env, 'NODE_TEST_CONTEXT'), 'SOURCE_GATE_NESTED_ENV');
   const review = context.reviewNestedEnvironment(env, start.args.slice(1), context.bootstrapBytes);
-  need(review && review.scopedPolicyVerified === true && review.childEffectiveDefaultClaim === false && review.expectedDefaultCount === 144, 'SOURCE_GATE_NESTED_TLS_ENV');
+  need(review && review.scopedPolicyVerified === true && review.childEffectiveDefaultClaim === false && review.expectedDefaultCount === 118, 'SOURCE_GATE_NESTED_TLS_ENV');
   const safeEnv = {};
   const keys = new Set([...Object.keys(context.initialEnvironment).filter(k => !['NODE_TEST_CONTEXT', ...context.nodeEnvironmentKeys].includes(k)),
     ...context.nodeEnvironmentKeys, 'CASEOPS_HOST_NODE_BOOTSTRAP_TEST']);
@@ -473,7 +473,7 @@ export function activateSourceGateObserver(context) {
   const candidate = selection.workerTargets.find(ref => ref.path === process.argv[1])
     ?? (selection.expoConfigTarget && selection.expoConfigTarget.entry.path === process.argv[1] ? selection.expoConfigTarget.entry : null);
   let entryReference = null;
-  if (candidate && isMainThread && process.versions.node === '24.15.0') { const raw = held(candidate, MAX_TARGET, m.deadlineEpochMs); raw.fill(0); entryReference = candidate; }
+  if (candidate && isMainThread && process.versions.node === '24.22.3') { const raw = held(candidate, MAX_TARGET, m.deadlineEpochMs); raw.fill(0); entryReference = candidate; }
   const result = selectCompactInvocation({ isMainThread, nodeVersion: process.versions.node, executable: process.execPath,
     execArgv: process.execArgv, argv: process.argv, cwd: process.cwd(), testContext: process.env.NODE_TEST_CONTEXT, entryReference }, selection);
   active = { manifestSha256: context.manifestReference.sha256, status: result };

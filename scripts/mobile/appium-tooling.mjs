@@ -475,15 +475,20 @@ export async function readInstalledDrivers(runtime, { limits = DRIVER_LIST_LIMIT
     return installed;
   } finally { fs.closeSync(list); }
 }
+/** Validate runtime placement without admitting a Node runtime or performing writes. */
+export function assertAppiumRuntimePath(runtime) {
+  assert.ok(path.isAbsolute(runtime) && !fs.existsSync(runtime), 'APPIUM_TOOLING_NEW_RUNTIME_REQUIRED');
+  const relative = path.relative(REPO, runtime);
+  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+}
+
 /**
  * Install the repaired Appium project into a new runtime (also its APPIUM_HOME)
  * and audit its locked and physical graphs.
  */
 export async function prepareAppiumTooling(runtime, { request = globalThis.fetch } = {}) {
   assert.equal(process.versions.node, '24.15.0', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
-  assert.ok(path.isAbsolute(runtime) && !fs.existsSync(runtime), 'APPIUM_TOOLING_NEW_RUNTIME_REQUIRED');
-  const relative = path.relative(REPO, runtime);
-  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+  assertAppiumRuntimePath(runtime);
   const vendor = path.join(runtime, 'vendor'); fs.mkdirSync(vendor, { recursive: true, mode: 0o700 });
   const glob = fs.readFileSync(path.join(REPO, VENDORED_GLOB.relative)); assert.equal(sha256(glob), VENDORED_GLOB.sha256, 'APPIUM_TOOLING_VENDORED_DIGEST');
   fs.writeFileSync(path.join(vendor, path.basename(VENDORED_GLOB.relative)), glob, { flag: 'wx' });

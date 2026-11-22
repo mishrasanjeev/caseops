@@ -201,3 +201,10 @@ apps/mobile/package-lock.json text eol=lf
 # Root manifests and lockfiles also feed the reviewed build inputs.
 /package.json text eol=lf
 /package-lock.json text eol=lf
+
+# Current mobile matcher supplier; retain legacy Appium supplier rules above.
+apps/mobile/vendor/glob-14.0.6-caseops.2/*.tgz -text
+apps/mobile/vendor/glob-14.0.6-caseops.2/*.json text eol=lf
+apps/mobile/vendor/glob-14.0.6-caseops.2/*.md text eol=lf
+apps/mobile/vendor/glob-14.0.6-caseops.2/*.txt text eol=lf
+/apps/mobile/vendor/glob-14.0.6-caseops.2/BUNDLED-LICENSES.txt whitespace=-blank-at-eof

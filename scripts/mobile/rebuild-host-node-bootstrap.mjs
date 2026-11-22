@@ -5,7 +5,11 @@ import vm from 'node:vm';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 const PARSER = 'internal/deps/acorn/acorn/dist/acorn';
-const PARSER_SHA256 = '2261c5f0e4abe860e889dfc67081683a4ba4d27deb7f4cbc8ad06a1b7fdd510c';
+const PARSERS = Object.freeze({
+  '24.22.3': Object.freeze({ version: '8.18.0', sha256: 'fc3ed7b81e58464715d0291402892f22c3d86ea75302645a330390f85d8015c9' }),
+  '22.23.5': Object.freeze({ version: '8.16.0', sha256: '2261c5f0e4abe860e889dfc67081683a4ba4d27deb7f4cbc8ad06a1b7fdd510c' }),
+  '24.15.0': Object.freeze({ version: '8.16.0', sha256: '2261c5f0e4abe860e889dfc67081683a4ba4d27deb7f4cbc8ad06a1b7fdd510c' }),
+});
 const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const frame = s => fields.map(key => String(s[key]));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -19,16 +23,17 @@ function normalized(value) {
 }
 export function rebuildHostNodeBootstrap(bytes) {
   const end = performance.now() + 5000;
-  need(['22.23.5', '24.15.0'].includes(process.versions.node) && Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 16384, 'BOOTSTRAP_GENERATOR_INPUT');
+  const parser = PARSERS[process.versions.node];
+  need(parser && Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 16384, 'BOOTSTRAP_GENERATOR_INPUT');
   const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   // Exact compiler input is already embedded in the accepted Node executable.
   // No package install, external parser, runtime require or downloaded source.
   const parserSource = process.binding('natives')[PARSER];
-  need(typeof parserSource === 'string' && Buffer.byteLength(parserSource) <= 524288 && sha(parserSource) === PARSER_SHA256, 'BOOTSTRAP_GENERATOR_PARSER');
+  need(typeof parserSource === 'string' && Buffer.byteLength(parserSource) <= 524288 && sha(parserSource) === parser.sha256, 'BOOTSTRAP_GENERATOR_PARSER');
   const exports = {}, context = { exports, module: { exports } };
   vm.runInNewContext(parserSource, context, { timeout: 1000, filename: 'node:' + PARSER });
   const acorn = exports, options = { ecmaVersion: 'latest', sourceType: 'module' };
-  need(acorn.version === '8.16.0', 'BOOTSTRAP_GENERATOR_PARSER');
+  need(acorn.version === parser.version, 'BOOTSTRAP_GENERATOR_PARSER');
   const tokens = acorn.tokenizer(source, options); let result = '', last = '', count = 0;
   while (true) {
     need(performance.now() < end && ++count <= 8192, 'BOOTSTRAP_GENERATOR_BOUND');
@@ -49,8 +54,8 @@ export function rebuildHostNodeBootstrap(bytes) {
   need(before === after && performance.now() < end, 'BOOTSTRAP_GENERATOR_AST_CHANGED');
   const output = Buffer.from(result), optionBytes = Buffer.byteLength('--use-openssl-ca --import=data:text/javascript;base64,' + output.toString('base64') + ' --enable-source-maps');
   need(optionBytes <= 8191, 'BOOTSTRAP_GENERATOR_WINDOWS_ENV_BOUND');
-  return { bytes: output, provenance: { schemaVersion: 1, kind: 'caseops-host-node-bootstrap-token-compaction', compilerNodeVersions: ['22.23.5', '24.15.0'],
-    parser: { nativeId: PARSER, version: acorn.version, sha256: PARSER_SHA256 }, inputSha256: sha(bytes), inputBytes: bytes.length,
+  return { bytes: output, provenance: { schemaVersion: 1, kind: 'caseops-host-node-bootstrap-token-compaction', compilerNodeVersions: [process.versions.node],
+    parser: { nativeId: PARSER, version: acorn.version, sha256: parser.sha256 }, inputSha256: sha(bytes), inputBytes: bytes.length,
     outputSha256: sha(output), outputBytes: output.length, normalizedAstSha256: sha(before), exactAstEqual: true,
     optionWithSourceMapsBytes: optionBytes, optionByteLimit: 8191,
     transformation: 'Exact original token spans; only separating whitespace/comments and two retained literal anchors. No identifier, literal or AST rewriting.' } };

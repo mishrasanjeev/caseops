@@ -60,9 +60,13 @@ function verify(v) { return verifyInstalledNpm(v.root, v.rows, v.directories, pe
 
 test('the exact pinned installer classifies every package, marker and embedded dependency', () => {
   const bytes = readPinnedArchive(archive), members = regularTarMembers(gunzipSync(bytes)), graph = npmAdvisoryInventory(members);
-  assert.equal(hash(bytes), NPM_ARTIFACT.sha256); assert.equal(members.length, 2154);
+  assert.equal(hash(bytes), NPM_ARTIFACT.sha256); assert.equal(members.length, 2163);
   assert.equal(graph.logicalPackages, 146); assert.equal(graph.ownedModuleMarkers, 42); assert.equal(graph.rows.length, 154); assert.equal(graph.names, 142);
-  assert.deepEqual(graph.graph.glob, ['14.0.2', '14.0.2-caseops.1']); assert.deepEqual(graph.graph.minimatch, ['11.0.1']);
+  assert.deepEqual(graph.graph.glob, ['14.0.6', '14.0.6-caseops.2']); assert.deepEqual(graph.graph.minimatch, ['11.0.8']);
+  assert.deepEqual(graph.graph['brace-expansion'], ['5.0.13']);
+  assert.deepEqual(graph.rows.filter(row => row.name === 'brace-expansion').map(row => [row.role, row.version]).sort(),
+    [['embedded-default-bundle', '5.0.13'], ['installed', '5.0.13']]);
+  assert.deepEqual(graph.graph['@isaacs/nonrecursive-glob-match'], ['1.1.0']);
   assert.deepEqual(graph.graph['lru-cache'], ['11.2.7', '11.5.3']);
 });
 test('a changed archive is refused before extraction or CLI execution', t => {
@@ -132,7 +136,7 @@ test('an incomplete installed inventory fails instead of reporting an empty succ
     () => assert.throws(() => verify(value), /NPM_TOOLING_COMPLETE_INSTALLED_INVENTORY/));
 });
 test('new staged bytes execute the unchanged npm CLI and a healthy full dependency graph', t => {
-  const root = fixture(t), result = prepareNpm({ parent: root, archive }); assert.equal(result.files, 2154); assert.equal(result.inventory.entries, 2605); assert.equal(result.inventory.observations, 7815);
+  const root = fixture(t), result = prepareNpm({ parent: root, archive }); assert.equal(result.files, 2163); assert.equal(result.inventory.entries, 2614); assert.equal(result.inventory.observations, 7842);
   assert.ok(Object.entries(result.environment).every(([name, value]) => name.length + value.length < 8191));
   assert.ok(result.environment.CASEOPS_PINNED_NPM_ENTRY.endsWith('caseops-entry.mjs'));
   assert.equal(result.environment.CASEOPS_PINNED_NPM_BOOTSTRAP.includes('\n'), false);
@@ -889,8 +893,9 @@ test('appium runtime with a dot-dot name inside the repository refuses before wr
   let writes = 0, requests = 0;
   const mkdir = t.mock.method(fs, 'mkdirSync', () => { writes++; throw new Error('OFFLINE_UNEXPECTED_RUNTIME_WRITE'); });
   try {
+    assert.throws(() => appiumTooling.assertAppiumRuntimePath(runtime), /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/);
     await assert.rejects(appiumTooling.prepareAppiumTooling(runtime, { request: async () => { requests++; throw new Error('OFFLINE_UNEXPECTED_DOWNLOAD'); } }),
-      /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/);
+      process.versions.node === '24.15.0' ? /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/ : /APPIUM_TOOLING_PINNED_NODE_REQUIRED/);
     assert.equal(writes, 0); assert.equal(requests, 0); assert.equal(fs.existsSync(runtime), false);
   } finally { mkdir.mock.restore(); }
 });
