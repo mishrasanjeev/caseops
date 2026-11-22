@@ -255,7 +255,9 @@ def test_walled_admin_cannot_offboard_grants_on_walled_matter(client: TestClient
     leaver_b, _ = _invite(client, owner_token, "off-leaver-b@asterlegal.in", "member")
     replacement, _ = _invite(client, owner_token, "off-replacement@asterlegal.in", "member")
     walled_matter = _matter(client, owner, "OFF-WALLED")
+    open_matter = _matter(client, owner, "OFF-OPEN")
     grant_a = _grant(client, owner, walled_matter, leaver_a)
+    _grant(client, owner, open_matter, leaver_a)
     grant_b = _grant(client, owner, walled_matter, leaver_b)
     wall = client.post(
         f"/api/matters/{walled_matter}/access/walls",
@@ -274,6 +276,17 @@ def test_walled_admin_cannot_offboard_grants_on_walled_matter(client: TestClient
     )
     assert any(b.startswith(refusal) for b in preview.json()["blockers"])
     assert not any("OFF-WALLED" in b for b in preview.json()["blockers"])
+    # The walled Matter appears only as that count: never its code, title or id.
+    assert "OFF-WALLED" not in preview.text
+    assert "Offboarding OFF-WALLED" not in preview.text
+    assert walled_matter not in preview.text
+    labels = [row["label"] for row in preview.json()["supported_objects"]]
+    assert "OFF-OPEN - Offboarding OFF-OPEN" in labels
+    assert preview.json()["supported_counts"]["restricted_access_grants"] == 2
+    # Someone who can open the Matter still sees it listed.
+    owner_preview = client.post(f"{base}/preview", headers=owner, json=body)
+    assert owner_preview.status_code == 200, owner_preview.text
+    assert "OFF-WALLED - Offboarding OFF-WALLED" in owner_preview.text
 
     commit = client.post(f"{base}/commit", headers=walled, json=body)
     assert commit.status_code == 400, commit.text

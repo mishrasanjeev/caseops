@@ -23,13 +23,17 @@ entry with that one when both land.
   the replacement without expected access, with no one told. An owner or an
   admin who can open those Matters completes it.
 
-Tests: `tests/test_20261122_walled_admin_access_management.py` (walled admin
-refused and audited, unwalled admin and owner still work, other tenant 404).
-Mutation probes: removing either new check fails its test.
+- Off-boarding preview disclosure (fixed in the same PR): the preview no longer
+  lists object rows whose Matter the acting admin cannot open, so it shows
+  neither their Matter code, title nor id. They appear only in the per-type
+  counts and the blocker's count. Matters the admin can open are listed as
+  before, and owners see every row.
 
-Still open: the off-boarding preview's `supported_objects` labels still list
-`matter_code - title` for Matters the acting admin cannot open. The blocker
-prevents the change, but the preview discloses the titles.
+Tests: `tests/test_20261122_walled_admin_access_management.py` (walled admin
+refused and audited, the walled admin's preview body carries neither the walled
+Matter's code, title nor id while an open Matter stays listed, unwalled admin
+and owner still work, other tenant 404). Mutation probes: removing any of the
+new checks or the preview redaction fails its test.
 
 ## November18 — a green CI does not supersede failed local acceptance
 
