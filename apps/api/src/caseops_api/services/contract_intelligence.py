@@ -48,6 +48,7 @@ from caseops_api.db.models import (
     ModelRun,
 )
 from caseops_api.schemas.contracts import (
+    ContractObligationTitle,
     PartyClauseAmbiguousItem,
     PartyClauseExtractionRequest,
     PartyClauseExtractionResponse,
@@ -646,7 +647,7 @@ def _clause_extraction_messages(text: str) -> list[LLMMessage]:
 class _ExtractedObligation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: str = Field(min_length=2, max_length=255)
+    title: ContractObligationTitle
     description: str = Field(default="", max_length=2000)
     due_on_iso: str | None = Field(
         default=None,

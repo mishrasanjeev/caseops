@@ -207,6 +207,13 @@ The full workspace regression checks the same refusals and reads back the
 single valid obligation by its saved ID.
 The complete API and browser acceptance still need to run.
 
+The AI response model admitted the same invalid obligation titles. It now
+uses the shared title constraint while keeping the provider JSON schema and
+other fields unchanged. The expanded route regression checks the existing
+single retry, a typed refusal and identical saved obligations before and
+after the failed extraction. The source-model controls passed. The full
+mocked-provider route must still execute.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

@@ -407,15 +407,20 @@ def test_extract_obligations_success_path_persists_rows(
         s.commit()
         company_id = contract.company_id
 
-    class _ValidObligationProvider:
+    class _ObligationProvider:
         name = "mock"
         model = "mock-valid-obligations"
 
+        def __init__(self, title: str = "  Milestone payment  ") -> None:
+            self.title = title
+            self.calls = 0
+
         def generate(self, messages: list[LLMMessage], **_kw):
+            self.calls += 1
             payload = {
                 "obligations": [
                     {
-                        "title": "Milestone payment",
+                        "title": self.title,
                         "description": "₹5,00,000 within 30 days of milestone",
                         "due_on_iso": "2026-12-31",
                         "priority": "high",
@@ -439,7 +444,7 @@ def test_extract_obligations_success_path_persists_rows(
 
     monkeypatch.setattr(
         "caseops_api.services.contract_intelligence.build_provider",
-        lambda *a, **kw: _ValidObligationProvider(),
+        lambda *a, **kw: _ObligationProvider(),
     )
 
     with factory() as s:
@@ -511,9 +516,28 @@ def test_extract_obligations_success_path_persists_rows(
         prior.completed_at = datetime.now(UTC)
         s.commit()
 
+    headers = {**_bearer(token), "X-CaseOps-Automated-Test": "no-paid-providers"}
+    workspace_path = f"/api/contracts/{contract_id}/workspace"
+    extraction_path = f"/api/ai/contracts/{contract_id}/obligations/extract"
+    before = client.get(workspace_path, headers=headers)
+    assert before.status_code == 200
+    malformed = _ObligationProvider(title=" \t ")
+    with monkeypatch.context() as invalid_provider:
+        invalid_provider.setattr(
+            "caseops_api.services.contract_intelligence.build_provider",
+            lambda *a, **kw: malformed,
+        )
+        refused = client.post(extraction_path, headers=headers)
+    assert refused.status_code == 422
+    assert "obligations.0.title" in refused.json()["detail"]
+    assert malformed.calls == 2
+    after = client.get(workspace_path, headers=headers)
+    assert after.status_code == 200
+    assert after.json()["obligations"] == before.json()["obligations"]
+
     repeated = client.post(
-        f"/api/ai/contracts/{contract_id}/obligations/extract",
-        headers=_bearer(token),
+        extraction_path,
+        headers=headers,
     )
     assert repeated.status_code == 200, repeated.text
     assert repeated.json()["inserted"] == 1
