@@ -9032,6 +9032,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch/journal-feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Trade Marks Journal feed status */
+        get: operations["journal_feed_status_api_ip_watch_journal_feed_get"];
+        /** Turn the public Trade Marks Journal feed on or off for this workspace */
+        put: operations["journal_feed_setting_api_ip_watch_journal_feed_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/watch/journal-ingestions": {
         parameters: {
             query?: never;
@@ -31234,6 +31252,51 @@ export interface components {
             /** Release Reason */
             release_reason: string;
         };
+        /** IpJournalFeedSettingResponse */
+        IpJournalFeedSettingResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Run As Membership Id */
+            run_as_membership_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
+        /** IpJournalFeedSettingUpdateRequest */
+        IpJournalFeedSettingUpdateRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /** Expected Version */
+            expected_version?: number | null;
+        };
+        /** IpJournalFeedStatusResponse */
+        IpJournalFeedStatusResponse: {
+            /** Attribution */
+            attribution: string;
+            /** Documents */
+            documents?: components["schemas"]["IpPublicJournalDocumentResponse"][];
+            /** Global Enabled */
+            global_enabled: boolean;
+            last_check?: components["schemas"]["IpPublicJournalCheckResponse"] | null;
+            /** Listing Url */
+            listing_url: string;
+            /** Review Items */
+            review_items?: components["schemas"]["IpPublicJournalReviewItemResponse"][];
+            /**
+             * Review Total
+             * @default 0
+             */
+            review_total: number;
+            setting?: components["schemas"]["IpJournalFeedSettingResponse"] | null;
+            /** Source Key */
+            source_key: string;
+        };
         /** IpJournalIngestionRunResponse */
         IpJournalIngestionRunResponse: {
             /** Company Id */
@@ -33833,6 +33896,98 @@ export interface components {
             registry_freshness: "not_configured" | "candidate_pending" | "current";
             /** Unconfirmed Deadline Refs */
             unconfirmed_deadline_refs: string[];
+        };
+        /** IpPublicJournalCheckResponse */
+        IpPublicJournalCheckResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Documents Discovered */
+            documents_discovered: number;
+            /** Http Status */
+            http_status: number | null;
+            /** Issues Listed */
+            issues_listed: number;
+            /** Reason Code */
+            reason_code: string | null;
+            /** Status */
+            status: string;
+        };
+        /**
+         * IpPublicJournalDocumentResponse
+         * @description Public source lineage for one listed journal PDF.
+         */
+        IpPublicJournalDocumentResponse: {
+            /** Attempts */
+            attempts: number;
+            /** Available On */
+            available_on: string | null;
+            /** Byte Size */
+            byte_size: number | null;
+            /** Content Sha256 */
+            content_sha256: string | null;
+            /** Entry Count */
+            entry_count: number;
+            /** Error Code */
+            error_code: string | null;
+            /** File Name */
+            file_name: string;
+            /** Id */
+            id: string;
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Page Count */
+            page_count: number | null;
+            /** Parser Version */
+            parser_version: string | null;
+            /** Retrieved At */
+            retrieved_at: string | null;
+            /** Review Count */
+            review_count: number;
+            /** Source Url */
+            source_url: string;
+            /** Status */
+            status: string;
+            /** Workspace Entries Compared */
+            workspace_entries_compared?: number | null;
+            /** Workspace Status */
+            workspace_status?: string | null;
+        };
+        /**
+         * IpPublicJournalReviewItemResponse
+         * @description A span of a public journal PDF the parser could not read with confidence.
+         */
+        IpPublicJournalReviewItemResponse: {
+            /** Application Number */
+            application_number: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Journal Page */
+            journal_page: string | null;
+            /** Page End */
+            page_end: number;
+            /** Page Start */
+            page_start: number;
+            /** Review Reason */
+            review_reason: string | null;
+            /** Source Url */
+            source_url: string;
         };
         /** IpRecordalCreateRequest */
         IpRecordalCreateRequest: {
@@ -70483,6 +70638,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpWatchHandoffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_feed_status_api_ip_watch_journal_feed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalFeedStatusResponse"];
+                };
+            };
+        };
+    };
+    journal_feed_setting_api_ip_watch_journal_feed_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpJournalFeedSettingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalFeedStatusResponse"];
                 };
             };
             /** @description Validation Error */
