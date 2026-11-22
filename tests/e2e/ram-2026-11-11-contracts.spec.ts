@@ -25,8 +25,8 @@ for (const mobile of [false, true]) {
     annotation: { type: "caseops-b5-proof", description: "workflow-outcome" },
   }, async ({ page, request, baseURL }, info) => {
     test.setTimeout(240_000);
-    const press = await reportedDevicePress(page, info, mobile);
     const rt = await prepareTester(page, request, baseURL, mobile ? { width: 393, height: 851 } : { width: 1366, height: 900 });
+    const press = await reportedDevicePress(page, info, mobile);
     await verifyReportedContractControls(page, request, rt, info);
     const title = `Synthetic contract B5 ${runId()}`;
     await page.goto(`${rt.web.origin}/app/contracts`);

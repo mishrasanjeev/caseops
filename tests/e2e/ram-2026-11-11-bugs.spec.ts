@@ -62,6 +62,7 @@ for (const phone of [false, true]) {
   test(`${phone ? "[mobile] " : ""}BUG-003 communications resolved preview and missing-value guard ${phone ? "phone" : "desktop"}`, {
     annotation: { type: "caseops-b5-proof", description: "preview-no-paid-guard" },
   }, async ({ page, request, baseURL }, info) => {
+    await page.setViewportSize(phone ? { width: 393, height: 851 } : { width: 1365, height: 900 });
     const press = await reportedDevicePress(page, info, phone);
     const web = new URL(baseURL ?? required("CASEOPS_WEB_BASE_URL"));
     const local = loopback(web);
@@ -100,7 +101,6 @@ for (const phone of [false, true]) {
       await json(await client.get(`${api.origin}/api/auth/me`, { headers: authHeaders, maxRetries: 0, maxRedirects: 0 }), "Reporter self-auth"), actor,
     );
     await selfAuth(request, headers);
-    await page.setViewportSize(phone ? { width: 393, height: 851 } : { width: 1365, height: 900 });
     await page.route((url) => url.pathname.endsWith("/communications/send-email"), async (route) => {
       const outgoing = route.request();
       if (new URL(outgoing.url()).origin !== api.origin || outgoing.method() !== "POST"

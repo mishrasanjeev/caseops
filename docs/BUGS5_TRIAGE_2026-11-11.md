@@ -166,6 +166,16 @@ These records confirm a separate worker loss and leave the root of either
 worker exit open. [PR 639 original job](https://github.com/mishrasanjeev/caseops/actions/runs/44988792499/job/137105171972) ·
 [PR 639 later job](https://github.com/mishrasanjeev/caseops/actions/runs/45000524482/job/137140836128)
 
+The hosted mobile run on `ac07460d` retained 61 passes, one expected skip
+and two failures. Both stopped at the viewport assertion before the
+communications or contract workflow. Playwright 1.60 reports a 393×851
+Pixel 5 screen and a 393×727 default viewport. Both journeys now apply
+their original explicit 393×851 viewport before the device assertion. The
+touch, mobile-mode, page-geometry and workflow assertions remain in place.
+The exact source-order check and targeted E2E typecheck passed. The
+complete mobile and desktop journeys still require a new run.
+[Hosted mobile job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262526)
+
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could
