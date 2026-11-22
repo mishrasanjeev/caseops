@@ -68,8 +68,8 @@ from caseops_api.services.contracts import (
     update_contract,
     update_contract_attachment_metadata,
     update_contract_legal_reference,
-    update_contract_term_suggestion,
     update_contract_metadata,
+    update_contract_term_suggestion,
 )
 from caseops_api.services.document_dispatch import dispatch_document_processing_job
 from caseops_api.services.session_context import SessionContext
@@ -383,7 +383,11 @@ def patch_current_company_contract_term_suggestion(
     session: DbSession,
 ) -> ContractTermSuggestionRecord:
     return update_contract_term_suggestion(
-        session, context=context, contract_id=contract_id, suggestion_id=suggestion_id, payload=payload,
+        session,
+        context=context,
+        contract_id=contract_id,
+        suggestion_id=suggestion_id,
+        payload=payload,
     )
 
 

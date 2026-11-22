@@ -442,8 +442,12 @@ def test_pending_term_edit_preserves_source_and_refuses_stale_review(client: Tes
     })
     assert edited.status_code == 200, edited.text
     after = edited.json()
-    assert after == {**before, "suggested_expires_on": "2029-01-01", "suggested_duration_months": None,
-                     "updated_at": after["updated_at"]}
+    assert after == {
+        **before,
+        "suggested_expires_on": "2029-01-01",
+        "suggested_duration_months": None,
+        "updated_at": after["updated_at"],
+    }
     assert after["updated_at"] != before["updated_at"]
     workspace = client.get(path + "/workspace", headers=headers).json()
     assert workspace["term_suggestions"] == [after]
@@ -468,7 +472,8 @@ def test_pending_term_edit_preserves_source_and_refuses_stale_review(client: Tes
     assert client.get(path + "/workspace", headers=headers).json()["term_suggestions"] == [after]
     with get_session_factory()() as session:
         edit_audits = list(session.scalars(select(AuditEvent).where(
-            AuditEvent.target_id == before["id"], AuditEvent.action == "contract.term_suggestion.updated",
+            AuditEvent.target_id == before["id"],
+            AuditEvent.action == "contract.term_suggestion.updated",
         )))
         assert len(edit_audits) == 1
         assert edit_audits[0].actor_membership_id == actor["membership"]["id"]

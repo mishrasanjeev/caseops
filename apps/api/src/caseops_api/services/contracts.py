@@ -522,7 +522,9 @@ def _contract_timestamp_utc(value: datetime) -> datetime:
 
 
 def _assert_contract_version(contract: Contract, expected: datetime | None) -> None:
-    if expected is not None and _contract_timestamp_utc(expected) != _contract_timestamp_utc(contract.updated_at):
+    if expected is not None and (
+        _contract_timestamp_utc(expected) != _contract_timestamp_utc(contract.updated_at)
+    ):
         raise HTTPException(
             status_code=409,
             detail="This contract changed after you opened it. Reload before saving your changes.",
@@ -1445,16 +1447,31 @@ def update_contract_term_suggestion(
         session, context=context, contract_id=contract.id, suggestion_id=suggestion_id,
     )
     if suggestion.status != ContractReviewStatus.SUGGESTED:
-        raise HTTPException(status_code=409, detail="Contract term suggestions cannot change after review.")
-    if _contract_timestamp_utc(payload.expected_updated_at) != _contract_timestamp_utc(suggestion.updated_at):
-        raise HTTPException(status_code=409, detail="This suggestion has changed. Reload it before saving.")
+        raise HTTPException(
+            status_code=409,
+            detail="Contract term suggestions cannot change after review.",
+        )
+    if _contract_timestamp_utc(payload.expected_updated_at) != _contract_timestamp_utc(
+        suggestion.updated_at
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This suggestion has changed. Reload it before saving.",
+        )
 
     before = _term_suggestion_snapshot(suggestion)
     requested = payload.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
-    fields = ("suggested_effective_on", "suggested_expires_on", "suggested_renewal_on", "suggested_duration_months")
+    fields = (
+        "suggested_effective_on",
+        "suggested_expires_on",
+        "suggested_renewal_on",
+        "suggested_duration_months",
+    )
     terms = {field: requested.get(field, before[field]) for field in fields}
     if all(value is None for value in terms.values()):
-        raise HTTPException(status_code=422, detail="At least one suggested contract term is required.")
+        raise HTTPException(
+            status_code=422, detail="At least one suggested contract term is required."
+        )
     changes = {field: value for field, value in terms.items() if value != before[field]}
     if not changes:
         return _term_suggestion_record(suggestion)

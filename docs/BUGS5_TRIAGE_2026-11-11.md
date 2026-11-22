@@ -31,8 +31,12 @@ has no new execution credit until its case results are recorded.
 
 The local test window is shared. The UAE validation controller currently has
 active jobs. Static Python syntax, bundle checksum, exact manifest counts and
-the retained Motor Vehicles PDF digest are verified. Runtime tests, canonical
-OpenAPI generation, full Docker, CI, merge and production checks are pending.
+the retained Motor Vehicles PDF digest are verified. The hosted [Security
+workflow](https://github.com/mishrasanjeev/caseops/actions/runs/44971063277/job/137050729084)
+ran the canonical OpenAPI generator. Its clean-diff check detected the expected
+uncommitted client changes. The generated patch was applied and checked against
+the emitted blob identity. The new head still needs the complete green CI run,
+local full Docker and runtime tests, and production acceptance.
 
 ## Evidence Boundary
 

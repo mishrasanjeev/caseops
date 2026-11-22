@@ -225,7 +225,9 @@ def test_motor_vehicles_edition_withholds_illustrated_and_omitted_schedules():
     assert document["non_provision_pages"][-1]["pages"] == [174, 175]
 
     section = sources[act, "Section 147"]
-    assert section["section_text"].startswith("147. Requirement of policies and limits of liability.")
+    assert section["section_text"].startswith(
+        "147. Requirement of policies and limits of liability."
+    )
     assert section["source_url"] == f"{document['source_url']}#page=86"
     assert section["verification_status"] == "verified_official"
 

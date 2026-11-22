@@ -137,7 +137,9 @@ def test_template_name_uniqueness_409(client: TestClient) -> None:
     assert "already exists" in dup.json()["detail"].lower()
 
 
-def test_existing_template_edit_preserves_identity_and_refuses_stale_saves(client: TestClient) -> None:
+def test_existing_template_edit_preserves_identity_and_refuses_stale_saves(
+    client: TestClient,
+) -> None:
     headers = auth_headers(str(bootstrap_company(client)["access_token"]))
     original = _create_template(client, headers)
     path = f"/api/admin/email-templates/{original['id']}"
@@ -163,7 +165,9 @@ def test_existing_template_edit_preserves_identity_and_refuses_stale_saves(clien
         "body_template": "An older editor must not replace the current template.",
     })
     assert stale.status_code == 409, stale.text
-    assert stale.json()["detail"] == "This template changed after you opened it. Reload it before saving."
+    assert stale.json()["detail"] == (
+        "This template changed after you opened it. Reload it before saving."
+    )
     persisted = client.get(path, headers=headers)
     assert persisted.status_code == 200 and persisted.json() == current
 
