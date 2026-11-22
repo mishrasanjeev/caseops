@@ -84,6 +84,20 @@ the reviewed Git bytes, with LF enforced at checkout. The workflow-step
 checksum stays unchanged. Full replacement CI and release acceptance are
 still required.
 
+On `c899efe2`, the retained JUnit records confirm the execution-application
+Word and PDF regression and the email preview case with saved case, court and
+lawyer fields. Browser acceptance remains pending.
+
+PostgreSQL shards 10 and 11 each retained one failure, with 131 and 130
+passes respectively. The named October index-refusal and round-trip cases
+shared a fixture that used the current ORM to insert historical obligations.
+Its implicit RETURNING clause referenced provenance that the named
+historical schema does not contain. The fixture now inserts the same duties
+through the table reflected at that boundary, with explicit old-shape values.
+The original schema revisions, index checks, complete row snapshots and
+catalog assertions remain. Both inserts compile against the old schema on
+each dialect. The native replay remains pending.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor
