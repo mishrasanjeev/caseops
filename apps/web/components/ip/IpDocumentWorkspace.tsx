@@ -963,18 +963,12 @@ function RetireDocumentPanel({
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const reasonGroup = useRef<HTMLDivElement>(null);
   const preview = useQuery({
     queryKey: ["ip", "documents", document.id, "retirement"],
     queryFn: () => fetchIpDocumentRetirement(document.id),
     staleTime: 0,
   });
-  // The panel opens under the Retire button, which on a phone is often the
-  // last thing on screen. Bring it into view when it opens and again when the
-  // reliance check settles and the reason field or blockers replace the status.
-  useEffect(() => {
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    panelRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
-  }, [preview.status]);
   const retire = useMutation({
     mutationFn: () => {
       const trimmed = reason.trim();
@@ -1008,6 +1002,22 @@ function RetireDocumentPanel({
   const data = preview.data;
   const blockers = data?.blockers ?? [];
   const blocked = !!data && (!data.may_retire || blockers.length > 0 || data.already_retired);
+  const reasonReady = !!data && !preview.isError && !blocked;
+  // The panel opens under the Retire button, which on a phone is often the last
+  // thing on screen. Bring the panel into view when it opens and when the
+  // reliance check settles, then the reason field and its error once ready.
+  useEffect(() => {
+    const panel = panelRef.current;
+    const target = reasonReady ? reasonGroup.current : panel;
+    if (!panel || !target) return;
+    const { activeElement, body } = panel.ownerDocument;
+    // The check can finish after the user moves on. Do not pull them back.
+    if (activeElement && activeElement !== body
+      && activeElement.getAttribute("aria-controls") !== panelId
+      && !panel.contains(activeElement)) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    target.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [panelId, preview.status, reasonError, reasonReady]);
   return (
     <section
       ref={panelRef}
@@ -1065,7 +1075,7 @@ function RetireDocumentPanel({
           </ul>
         </div>
       ) : (
-        <div className="flex min-w-0 flex-col gap-1">
+        <div ref={reasonGroup} className="flex min-w-0 scroll-my-4 flex-col gap-1">
           <Label htmlFor={reasonId}>Reason for retiring</Label>
           <Textarea
             id={reasonId}
