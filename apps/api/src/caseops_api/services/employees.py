@@ -1542,26 +1542,20 @@ def _actor_hidden_matter_ids(
     context: SessionContext,
     matter_ids: set[str],
 ) -> set[str]:
-    """Affected Matters the acting admin may not open (walled or restricted).
+    """Affected Matters the acting admin is ethically walled from.
 
     Offboarding rewrites those Matters' grants and responsibilities, so it
-    obeys the same visibility rule as the Matter access writers. Owners
-    bypass walls through the shared predicate and never have hidden Matters.
+    follows the Matter access writers' policy: a wall overrides the admin
+    role, restriction does not. Owners are exempt.
     """
-    from caseops_api.services.record_access_policy import visible_matters_filter
+    from caseops_api.services.matter_access import walled_access_manager_target_ids
 
-    if not matter_ids:
-        return set()
-    visible = set(
-        session.scalars(
-            select(Matter.id).where(
-                Matter.company_id == context.company.id,
-                Matter.id.in_(matter_ids),
-                visible_matters_filter(session, context=context),
-            )
-        )
+    return walled_access_manager_target_ids(
+        session,
+        context=context,
+        target_column=EthicalWall.matter_id,
+        target_ids=set(matter_ids),
     )
-    return set(matter_ids) - visible
 
 
 def _build_offboarding_preview(
@@ -1751,15 +1745,15 @@ def _build_offboarding_preview(
         # A count only: naming the Matters would disclose what the wall hides.
         blockers.append(
             f"You cannot act on {hidden} affected "
-            f"{'Matter' if hidden == 1 else 'Matters'} that you are walled or "
-            "restricted from. Ask a workspace owner, or an admin who can open "
-            "them, to offboard this employee."
+            f"{'Matter' if hidden == 1 else 'Matters'} that you are ethically "
+            "walled from. Ask a workspace owner, or an admin who is not walled "
+            "from them, to offboard this employee."
         )
 
     return EmployeeOffboardingPreviewResponse(
         employee=_employee_record(session, target),
         reassign_to=_employee_record(session, reassign_to) if reassign_to else None,
-        # Rows on Matters the actor cannot open appear only in the counts and
+        # Rows on Matters the actor is walled from appear only in the counts and
         # the blocker above, never with their code, title or id.
         supported_objects=[row for row in supported if row.matter_id not in hidden_ids],
         unsupported_objects=[row for row in unsupported if row.matter_id not in hidden_ids],

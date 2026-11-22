@@ -9,10 +9,10 @@ visibility-scoped, 500-row bound) and writes through the existing audited wall
 routes. API, component and desktop/393px journey tests cover listing, creation,
 lifting, denial, tenant isolation and what a walled admin, partner or member
 sees. Still open: team-subject and time-boxed Matter walls have no writer, the
-grants and restricted-access toggle still have no screen. The access panel and
-all wall, grant and restricted-access writers now refuse a walled admin with the
-audited 404 (owners exempt); IP docket access management and off-boarding grant
-reassignment remain open. Not yet deployed or verified in production.
+grants and restricted-access toggle still have no screen. Access management
+refuses a walled admin (an ethical wall overrides the admin role, restriction
+does not; owners exempt) on Matter and IP docket access and off-boarding. Not
+yet deployed or verified in production.
 
 ## November22 - IP workspace paid add-on (J14/M14, J08/M08)
 

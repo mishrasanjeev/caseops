@@ -6,77 +6,76 @@ ethical walls screen (J14/M13, SEC-004). The Matter access writers in
 Matter by id, so an admin walled from a Matter could lift its own wall, add
 walls, grant itself or others access, or read the access panel by id.
 
-Fix (PR #634): `_lock_matter_access_responsibility_fence`, the shared fence of
+Policy: **an ethical wall overrides the admin role; restriction does not.**
+Admins remain the access managers of restricted Matters and IP dockets they
+cannot read, but never of a record that walls them out. Owners are exempt.
+
+Fix (PR #634, narrowed on the release integration branch):
+`_lock_matter_access_responsibility_fence`, the shared fence of
 `add_ethical_wall`, `remove_ethical_wall`, `add_access_grant`,
 `remove_access_grant` and `set_restricted_access`, and the `list_access_panel`
-read now call `assert_access`, the same visibility predicate every Matter read
-uses. A walled actor gets the audited `access_denied` row and the same
-"Matter not found" 404 as any read; owners bypass walls through that predicate.
-The check runs under the Company lock all access-policy writers take. Access
-review finalization (`services/access_reviews.py`) already resolved its target
-through that predicate before calling `remove_access_grant`; its denial is not
-committed mid-transaction. The admin wall directory applies the same predicate.
+read call `_refuse_walled_matter_access_manager`. It uses
+`walled_access_manager_target_ids`, which applies the wall test every read uses
+(`_wall_subject_filter` with `_active_wall_window`: an active, unrevoked wall on
+the membership or one of its active teams). A walled actor gets the audited
+`access_denied` row and the read's "Matter not found." 404, with
+`commit_denial` respected for access-review finalization. The check runs under
+the Company lock the Matter access writers take. The admin wall directory read
+lists only Matters the actor may open.
 
-Tests (`tests/test_ethical_walls.py`): a walled admin gets 404 on lifting its
-own wall, adding a wall, granting itself or a colleague, revoking a grant,
-toggling restriction and reading the panel, each audited, with the ACL
-unchanged; an unwalled admin and a self-walled owner still manage walls and
-grants; cross-tenant stays 404. Mutation probe: removing the fence check fails
-the walled-admin test.
+The first version used the full read rule (`assert_access`), which also refused
+an admin on a restricted Matter it had no grant on. PostgreSQL CI caught it
+(`test_postgres_matter_counsel_current_acl[wall]`: an admin restricts a Matter,
+then grants). Narrowed to walls only.
 
-Consequence to note: an admin who restricts a Matter without being its assignee
-or holding a grant can no longer manage that Matter's access afterwards; an
-owner or a granted admin must. This follows the existing read policy.
+Tests: `tests/test_ethical_walls.py` (a walled admin gets an audited 404 on all
+seven access calls with the ACL unchanged; an unwalled admin and a self-walled
+owner still manage; cross-tenant 404) and
+`tests/test_20261122_walled_admin_access_management.py` (an unwalled admin
+restricts a Matter, cannot read it, and still reads the panel, grants, revokes,
+walls and lifts the restriction). Mutation probe: removing the wall check fails
+the walled-admin tests.
 
-Still **Missing** on the same rule (inventory, not changed here):
-- IP docket access management (`get_ip_access_panel`, `preview_ip_access_change`,
-  `apply_ip_access_change` via `_load_ip_docket_for_access_management`) checks
-  role but not the actor's own docket visibility.
-- Employee off-boarding (`services/employees.py`
-  `_merge_or_reassign_matter_grants`) moves a departing member's Matter grants
-  without checking the acting admin's visibility of each Matter.
-- Read-only or system writers checked and unaffected: `services/teams.py`
-  (dependency probe only), `services/ip_operations.py` (initial IP creator
-  grants), `scripts/bootstrap_ip_production_qa.py` (owner QA context).
+Inventory: `services/access_reviews.py` (finalize resolves its target through
+the read rule, then the fence applies), `services/teams.py` (dependency probe
+only), `services/ip_operations.py` (initial IP creator grants),
+`scripts/bootstrap_ip_production_qa.py` (owner context). IP docket access
+management and off-boarding are covered by the next entry.
 
-Release proof still needed: hosted CI, PostgreSQL run and a deployed check.
+Release proof still needed: hosted CI, PostgreSQL CI and a deployed check.
 
 ## November22 — walled admins and IP docket access, off-boarding grants
 
-**Implemented in code; release proof pending.** These are the two paths that
-PR #634's walled-admin entry listed as Missing (SEC-004, J14/M13). Merge this
-entry with that one when both land.
+**Implemented in code; release proof pending.** The same walls-only policy for
+the two remaining paths (PR #640, narrowed on the release integration branch).
 
 - IP docket access management: `get_ip_access_panel`,
   `preview_ip_access_change` and `apply_ip_access_change` (through
-  `_lock_ip_access_responsibility_fence`) now call
-  `_assert_ip_access_manager_can_open`, which applies
-  `assert_ip_docket_access`: an admin who cannot open the docket (IP wall, or a
-  restricted record without a grant) gets the audited "IP docket record not
-  found" 404. Owners are exempt for management only, so a firm can always
-  recover an IP record's access policy; the IP read policy itself still does
-  not exempt owners. Access-review finalization passes `commit_denial=False`.
-  Changed expectation: `test_ip_access_preview_apply_revocation_and_delivery_reauthorization`
-  had a hidden admin reach the preview-token mismatch (409); it now gets 404.
+  `_lock_ip_access_responsibility_fence`) call
+  `_assert_ip_access_manager_can_open`. An admin walled from the docket gets
+  the audited "IP docket record not found." 404; an admin without a grant on
+  a restricted docket still manages its access. Owners are exempt; the IP read
+  rule itself still does not exempt owners. Access-review finalization passes
+  `commit_denial=False`. The existing expectation that an ungranted admin
+  applying someone else's preview token gets 409 is unchanged.
 - Employee off-boarding: `_build_offboarding_preview`, used by preview and
-  commit, adds a blocker when the acting admin cannot open some affected
-  Matters (grants, assignee or other moved work). Chosen behaviour is to refuse
-  the whole off-boarding with the count only, no Matter names. Skipping would
-  leave the leaver's grants and responsibilities on an inactive membership and
-  the replacement without expected access, with no one told. An owner or an
-  admin who can open those Matters completes it.
-
-- Off-boarding preview disclosure (fixed in the same PR): the preview no longer
-  lists object rows whose Matter the acting admin cannot open, so it shows
-  neither their Matter code, title nor id. They appear only in the per-type
-  counts and the blocker's count. Matters the admin can open are listed as
-  before, and owners see every row.
+  commit, refuses with a name-free count when the acting admin is walled from
+  some affected Matters (grants, assignee or other moved work). Refusing,
+  rather than skipping, avoids leaving the leaver's grants on an inactive
+  membership and a replacement without the expected access. An owner or an
+  unwalled admin completes it. Restricted-but-unwalled Matters off-board as
+  before.
+- Off-boarding preview disclosure: rows on Matters the acting admin is walled
+  from appear only in the per-type counts and the blocker's count, never with
+  their Matter code, title or id. Other rows, including restricted Matters, are
+  listed as before; owners see every row.
 
 Tests: `tests/test_20261122_walled_admin_access_management.py` (walled admin
-refused and audited, the walled admin's preview body carries neither the walled
-Matter's code, title nor id while an open Matter stays listed, unwalled admin
-and owner still work, other tenant 404). Mutation probes: removing any of the
-new checks or the preview redaction fails its test.
+refused and audited for IP access and off-boarding; the walled admin's preview
+carries neither the walled Matter's code, title nor id; an unwalled admin
+manages a restricted IP docket it cannot read and off-boards grants on a
+restricted, unwalled Matter; owner works; other tenant 404). Mutation probes:
+removing the wall check fails its tests.
 
 ## November18 — a green CI does not supersede failed local acceptance
 

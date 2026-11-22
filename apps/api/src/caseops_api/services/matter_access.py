@@ -19,6 +19,7 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -73,6 +74,7 @@ from caseops_api.services.assignment_memberships import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_operational_guard import matter_is_operational
 from caseops_api.services.record_access_policy import (
+    _active_wall_window,
     _grant_subject_filter,
     _is_owner,
     _team_scoping_enabled,
@@ -457,6 +459,67 @@ def _load_ip_docket_for_access_management(
     return docket
 
 
+def walled_access_manager_target_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    target_column: Any,
+    target_ids: set[str],
+) -> set[str]:
+    """Targets (Matter or IP docket ids) the acting manager is walled from.
+
+    Access-management policy: an ethical wall overrides the admin role, and
+    restriction does not. Admins stay the access managers of restricted
+    records they cannot read, but never of a record that walls them out.
+    The wall test is the one every read applies (`_wall_subject_filter` with
+    `_active_wall_window`: an active, unrevoked wall naming the membership or
+    one of its active teams). Owners are exempt.
+    """
+    if context.membership.role == MembershipRole.OWNER or not target_ids:
+        return set()
+    return set(
+        session.scalars(
+            select(target_column).where(
+                target_column.in_(target_ids),
+                _wall_subject_filter(context.membership.id),
+                _active_wall_window(datetime.now(UTC)),
+            )
+        )
+    )
+
+
+def _refuse_walled_matter_access_manager(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    commit_denial: bool = True,
+) -> None:
+    """Same audited "Matter not found." as a read, for a walled manager only."""
+    if not walled_access_manager_target_ids(
+        session,
+        context=context,
+        target_column=EthicalWall.matter_id,
+        target_ids={matter.id},
+    ):
+        return
+    record_from_context(
+        session,
+        context,
+        action="access_denied",
+        target_type="matter",
+        target_id=matter.id,
+        matter_id=matter.id,
+        result="denied",
+        metadata={"reason": "matter_visibility_denied"},
+        commit=commit_denial,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Matter not found.",
+    )
+
+
 def _assert_ip_access_manager_can_open(
     session: Session,
     *,
@@ -464,17 +527,32 @@ def _assert_ip_access_manager_can_open(
     docket: IpDocketRecord,
     commit_denial: bool = True,
 ) -> None:
-    """An admin manages a docket's access only if it may open the docket.
+    """A walled admin cannot manage a docket's access; restriction alone is fine.
 
-    A wall or a missing restricted-record grant overrides the admin role
-    exactly as on every docket read: same audited "not found". Owners are
-    exempt here (unlike the docket read policy) so a firm can always recover
-    an IP record's access policy; an owner's own wall still hides the docket.
+    The refusal is the docket read's audited "not found". Owners are exempt.
     """
-    if context.membership.role == MembershipRole.OWNER:
+    if not walled_access_manager_target_ids(
+        session,
+        context=context,
+        target_column=EthicalWall.ip_docket_id,
+        target_ids={docket.id},
+    ):
         return
-    assert_ip_docket_access(
-        session, context=context, docket=docket, commit_denial=commit_denial
+    record_from_context(
+        session,
+        context,
+        action="access_denied",
+        target_type="ip_docket_record",
+        target_id=docket.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        result="denied",
+        metadata={"reason": "ip_docket_visibility_denied"},
+        commit=commit_denial,
+    )
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="IP docket record not found.",
     )
 
 
@@ -2087,8 +2165,8 @@ def attach_visible_matters_filter(
 # CRUD helpers for grants / walls / restricted flag.
 #
 # All require the caller to be owner/admin (route capability plus
-# _require_admin) and able to open the Matter (assert_access in the fence and
-# the panel read), so an ethical wall overrides the admin role here too.
+# _require_admin) and not ethically walled from the Matter (checked in the
+# fence and the panel read). Restriction does not stop an admin managing.
 # ---------------------------------------------------------------------------
 
 
@@ -2142,13 +2220,12 @@ def _lock_matter_access_responsibility_fence(
         context.company.id,
         matter_id,
     )
-    # Access managers act only on Matters they may open. A wall overrides the
-    # admin role here exactly as on every read: a walled admin gets the same
-    # audited 404, so it can neither lift its own wall nor change the Matter's
-    # walls or grants. Owners bypass walls through the shared predicate.
-    # Access-policy writers serialize on the Company lock above, so the
-    # decision cannot race another wall or grant change.
-    assert_access(
+    # An ethical wall overrides the admin role; restriction does not. A walled
+    # admin gets the read's audited 404, so it can neither lift its own wall
+    # nor change the Matter's walls, grants or restriction. Admins still
+    # manage restricted Matters they cannot read. Owners are exempt. Matter
+    # access writers serialize on the Company lock above.
+    _refuse_walled_matter_access_manager(
         session,
         context=context,
         matter=advisory_matter,
@@ -2314,7 +2391,7 @@ def list_access_panel(
     _require_admin(context)
     matter = _load_matter_or_404(session, context.company.id, matter_id)
     # Same rule as the writers: a walled admin cannot read this Matter's ACL.
-    assert_access(session, context=context, matter=matter)
+    _refuse_walled_matter_access_manager(session, context=context, matter=matter)
     grants = list(
         session.scalars(
             select(MatterAccessGrant)

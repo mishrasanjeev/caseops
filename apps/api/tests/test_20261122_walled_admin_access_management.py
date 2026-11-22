@@ -1,10 +1,10 @@
-"""An admin who cannot open a record cannot manage its access (SEC-004).
+"""A walled admin cannot manage a record's access; restriction alone is fine.
 
-IP docket access management and employee off-boarding follow the same
-visibility rule as every read: a walled admin, or one without a grant on a
-restricted record, gets the
-audited "not found" (IP) or an explicit, name-free refusal (off-boarding).
-Owners stay exempt; unwalled admins keep working; other tenants get 404.
+Policy (SEC-004): an ethical wall overrides the admin role, restriction does
+not. A walled admin gets the read's audited "not found" (Matter and IP access
+management) or an explicit, name-free refusal (off-boarding). Admins remain
+the access managers of restricted records they cannot read. Owners stay
+exempt; other tenants get 404.
 """
 
 from __future__ import annotations
@@ -272,7 +272,7 @@ def test_walled_admin_cannot_offboard_grants_on_walled_matter(client: TestClient
     assert preview.status_code == 200, preview.text
     assert preview.json()["can_commit"] is False
     refusal = (
-        "You cannot act on 1 affected Matter that you are walled or restricted from."
+        "You cannot act on 1 affected Matter that you are ethically walled from."
     )
     assert any(b.startswith(refusal) for b in preview.json()["blockers"])
     assert not any("OFF-WALLED" in b for b in preview.json()["blockers"])
@@ -317,3 +317,97 @@ def test_walled_admin_cannot_offboard_grants_on_walled_matter(client: TestClient
         json=body,
     )
     assert cross.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Restriction is not a wall: admins keep managing restricted records.
+# ---------------------------------------------------------------------------
+
+
+def test_unwalled_admin_restricts_then_manages_a_restricted_matter(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    owner = auth_headers(owner_token)
+    admin_id, admin = _invite(client, owner_token, "restrict-admin@asterlegal.in", "admin")
+    member_id, _ = _invite(client, owner_token, "restrict-member@asterlegal.in", "member")
+    matter_id = _matter(client, owner, "RESTRICT-ADMIN")
+
+    restricted = client.post(
+        f"/api/matters/{matter_id}/access/restricted", headers=admin, json={"restricted": True}
+    )
+    assert restricted.status_code == 200, restricted.text
+    # The admin is not assignee and holds no grant: it cannot read the Matter...
+    assert client.get(f"/api/matters/{matter_id}", headers=admin).status_code == 404
+    # ...but it still manages its access.
+    panel = client.get(f"/api/matters/{matter_id}/access", headers=admin)
+    assert panel.status_code == 200, panel.text
+    assert panel.json()["restricted_access"] is True
+    grant = client.post(
+        f"/api/matters/{matter_id}/access/grants",
+        headers=admin,
+        json={"membership_id": member_id, "reason": "Assigned to the brief."},
+    )
+    assert grant.status_code == 200, grant.text
+    revoked = client.delete(
+        f"/api/matters/{matter_id}/access/grants/{grant.json()['id']}", headers=admin
+    )
+    assert revoked.status_code == 204, revoked.text
+    wall = client.post(
+        f"/api/matters/{matter_id}/access/walls",
+        headers=admin,
+        json={"excluded_membership_id": member_id},
+    )
+    assert wall.status_code == 200, wall.text
+    unrestricted = client.post(
+        f"/api/matters/{matter_id}/access/restricted", headers=admin, json={"restricted": False}
+    )
+    assert unrestricted.status_code == 200, unrestricted.text
+    assert admin_id != member_id
+
+
+def test_unwalled_admin_manages_a_restricted_ip_docket_it_cannot_read(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    owner = auth_headers(owner_token)
+    _, admin = _invite(client, owner_token, "ip-restricted-admin@asterlegal.in", "admin")
+    member_id, _ = _invite(client, owner_token, "ip-restricted-member@asterlegal.in", "member")
+    docket_id = _docket(client, owner, restricted=True, mark="RESTRICTMARK")
+    assert client.get(f"/api/ip/dockets/{docket_id}", headers=admin).status_code == 404
+
+    panel = _panel(client, admin, docket_id)
+    assert panel.status_code == 200, panel.text
+    version = panel.json()["access_policy_version"]
+    applied = _preview_and_apply(client, admin, docket_id, _change(member_id, version, "grant"))
+    assert applied["panel"]["access_policy_version"] == version + 1
+
+
+def test_admin_offboards_grants_on_restricted_but_unwalled_matters(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    owner = auth_headers(owner_token)
+    _, admin = _invite(client, owner_token, "off-restricted-admin@asterlegal.in", "admin")
+    leaver, _ = _invite(client, owner_token, "off-restricted-leaver@asterlegal.in", "member")
+    replacement, _ = _invite(client, owner_token, "off-restricted-repl@asterlegal.in", "member")
+    matter_id = _matter(client, owner, "OFF-RESTRICTED")
+    grant_id = _grant(client, owner, matter_id, leaver)
+    restricted = client.post(
+        f"/api/matters/{matter_id}/access/restricted", headers=owner, json={"restricted": True}
+    )
+    assert restricted.status_code == 200, restricted.text
+    assert client.get(f"/api/matters/{matter_id}", headers=admin).status_code == 404
+
+    body = {"reassign_to_membership_id": replacement}
+    base = f"/api/companies/current/employees/{leaver}/offboarding"
+    preview = client.post(f"{base}/preview", headers=admin, json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["can_commit"] is True, preview.json()["blockers"]
+    assert "OFF-RESTRICTED - Offboarding OFF-RESTRICTED" in preview.text
+    done = client.post(f"{base}/commit", headers=admin, json=body)
+    assert done.status_code == 200, done.text
+    assert _grant_holder(grant_id) == replacement
