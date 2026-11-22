@@ -4817,7 +4817,7 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
   assert.ok(helper.includes("const NODE_HELPER = 'fe59defc0356456c496f3f7e7ecf30da5ce09b17d970111d9b76983baaaa0623'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '4ea585ec93ef4c699539890cbee3bc3cd6793fe0748355280581910072d2f024'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = 'd30ea50bbe6e026fa2dea1fee1e62afda00c3b49d05de8547c8207f976330431'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4960,7 +4960,7 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', '7f1c1da587791ccba39c53ebbc7f37cb03f3c254'], ['100644', '67d04805895e6daf1ffa8fc8b45a0126891b5442']]);
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', '7f1c1da587791ccba39c53ebbc7f37cb03f3c254'], ['100644', 'a9f2b1c32e8976602e1863c6c373fc59d368f9b2']]);
     for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 30213n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
@@ -5923,7 +5923,7 @@ test('source observer exact selector keeps Node22, Worker, unknown argv and chan
   const admitted = { admissionComplete: true, primaryNode: { path: '/node24', version: '24.22.3' }, workerCwd: '/approved', workerTargets: [ref], startupFlags: ['--use-openssl-ca'], expoConfigTarget: null };
   const actual = { isMainThread: true, executable: '/node24', nodeVersion: '24.22.3', execArgv: ['--use-openssl-ca'], argv: ['/node24', ref.path], cwd: '/approved', testContext: 'child-v8', entryReference: ref };
   assert.equal(selectCompactInvocation(actual, admitted).mode, 'compact');
-  for (const delta of [{ isMainThread: false }, { executable: '/node22', nodeVersion: '22.14.0' }, { argv: ['/node24', ref.path, 'extra'] }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { execArgv: ['--inspect'] }])
+  for (const delta of [{ isMainThread: false }, { executable: '/node22', nodeVersion: '22.14.0' }, { argv: ['/node24', ref.path, 'extra'] }, { entryReference: { ...ref, sha256: 'b'.repeat(64) } }, { execArgv: ['--inspect'] }, { execArgv: ['--no-experimental-addon-modules'] }])
     assert.deepEqual(selectCompactInvocation({ ...actual, ...delta }, admitted).sessionAllowed, false);
 });
 test('source observer sink uses its one FD, exact partial writes and same-FD readback', t => observerSinkFixture(({ output, io }) => {
@@ -6498,11 +6498,11 @@ test('iOS local archive admission accepts the current full lock and refuses stal
   const oldBytes = Buffer.from(JSON.stringify(historicalOld, null, 2) + '\n');
   assert.equal(oldBytes.length, 266715);
   assert.equal(createHash('sha256').update(oldBytes).digest('hex'), '53c67dc370ed29978716f044794098ef3f67ad16cb888eab02c3618a7df72cdc');
-  for (const rejectedBytes of [oldBytes, historicalForgeBytes, staleForgeBytes]) {
+  for (const [rejectedBytes, expectedError] of [[oldBytes, /IOS_HOST_FILE_IDENTITY/], [historicalForgeBytes, /IOS_HOST_FILE_IDENTITY/], [staleForgeBytes, /IOS_HOST_HASH_CHANGED/]]) {
     try {
       fs.writeFileSync(lock, rejectedBytes);
       fs.openSync = (file, ...rest) => { if (file === path.join(root, relative)) archiveOpens++; return open(file, ...rest); };
-      assert.throws(() => reviewIosLocalArchive(p, args), /IOS_HOST_HASH_CHANGED/);
+      assert.throws(() => reviewIosLocalArchive(p, args), expectedError);
     } finally { fs.openSync = open; fs.writeFileSync(lock, bytes); }
     assert.equal(archiveOpens, 0);
   }

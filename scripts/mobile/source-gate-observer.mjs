@@ -296,7 +296,7 @@ function admitSelection(value, m, bootstrapBytes) {
       '--tls-cipher-list=TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA',
       '--watch-kill-signal=SIGTERM', '--cpu-prof-interval=1000',
       '--test-coverage-functions=0', '--test-coverage-lines=0', '--test-coverage-branches=0',
-      '--test-isolation=process', '--use-largepages=off',
+      '--test-isolation=process', '--use-largepages=off', '--experimental-addon-modules',
       '--network-family-autoselection-attempt-timeout=250', '--secure-heap-min=2',
       '--v8-pool-size=4', '--node-snapshot',
       '--trace-event-file-pattern=node_trace.${rotation}.log', '--secure-heap=0',

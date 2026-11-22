@@ -200,7 +200,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 63)
+        self.assertEqual(len(operator), 72)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",

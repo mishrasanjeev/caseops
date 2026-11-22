@@ -282,8 +282,19 @@ test('fixed mobile glob keeps actual Expo consumers ordinary matching and bounde
     const reason = Error('OWNED_GLOB_CANCELLATION');
     await assert.rejects(glob.glob('**/*', { cwd: directory, signal: AbortSignal.abort(reason) }), error => error === reason);
     const minimatch = require('minimatch');
-    assert.throws(() => new minimatch.Minimatch('a/**/../b/**/../c', { optimizationLevel: 2, braceExpandMax: 2 }),
-      { name: 'RangeError', message: `optimizationLevel 2: too many patterns from '**/..'` });
+    const minimatchDirectory = path.dirname(require.resolve('minimatch/package.json'));
+    const minimatchEsm = await import(pathToFileURL(path.join(minimatchDirectory, 'dist/esm/index.js')).href);
+    for (const api of [minimatch, minimatchEsm]) {
+      const withinLimit = new api.Minimatch('a/**/../b/**/../c', { optimizationLevel: 2, braceExpandMax: 2 });
+      assert.equal(withinLimit.globParts.length, 2);
+      assert.ok(withinLimit.set.length <= 2);
+      // Two following components make the second split eligible: four rows
+      // without the explicit limit, so this exercises the actual stop path.
+      const overflowPattern = 'a/**/../b/**/../c/d';
+      assert.equal(new api.Minimatch(overflowPattern, { optimizationLevel: 2 }).globParts.length, 4);
+      assert.throws(() => new api.Minimatch(overflowPattern, { optimizationLevel: 2, braceExpandMax: 2 }),
+        { name: 'RangeError', message: `optimizationLevel 2: too many patterns from '**/..'` });
+    }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

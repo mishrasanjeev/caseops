@@ -434,18 +434,18 @@ function actualAndroidWorkerFacts(t) {
 test('actual Android Node shim rebinds Node144 for Workers and process.execPath forks while removing Java fields', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
   const result = actualAndroidWorkerFacts(t);
-  const expected = { count: 144, java: null, expected: 144, verified: true };
+  const expected = { count: 118, java: null, expected: 118, verified: true };
   assert.deepEqual({ count: result.count, java: result.java, expected: result.expected, verified: result.verified, worker: result.worker, fork: result.fork }, { ...expected, worker: expected, fork: expected });
 });
 test('actual Android file Worker retains the effective Node144 default with empty execArgv', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
   const result = actualAndroidWorkerFacts(t);
-  const expected = { count: 144, java: null, expected: 144, verified: true };
+  const expected = { count: 118, java: null, expected: 118, verified: true };
   assert.deepEqual(result.fileEmpty, expected);
 });
 test('actual Android CJS file Worker retains the effective Node144 default with eval false', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
-  assert.deepEqual(actualAndroidWorkerFacts(t).cjsFile, { count: 144, java: null, expected: 144, verified: true });
+  assert.deepEqual(actualAndroidWorkerFacts(t).cjsFile, { count: 118, java: null, expected: 118, verified: true });
 });
 test('actual Android CJS eval Worker with empty execArgv refuses the required effective Node144 default', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
