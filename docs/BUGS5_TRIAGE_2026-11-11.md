@@ -136,9 +136,14 @@ For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could
 be identified, but its PDF and an individual official schedule returned HTTP
-403 on direct acquisition. India Code also reports a site migration. The text
-inventory stays pending until the complete official source bytes and edition
-can be verified. [Gazette](https://egazette.gov.in/WriteReadData/2025/265620.pdf) ·
+403 on direct acquisition. On the new India Code site, the official item
+`123456789/620179` leads to the original Gazette dated 14 September 1961.
+The delivered scan contains an India Code watermark and differs in length
+and checksum from the catalogue's original bitstream metadata. The separate
+official text bitstream matches its listed checksum. The scan's first page
+identifies the as-enacted edition. The amended 1961 text inventory stays
+pending. [Gazette archive](https://indiacode.gov.in/server/api/core/bitstreams/2014b1cd-7c61-420b-9b63-dca1f478a253/content) ·
+[2025 Gazette](https://egazette.gov.in/WriteReadData/2025/265620.pdf) ·
 [CBDT transition guidance](https://www.incometaxindia.gov.in/documents/20117/43120/Updated-FQAs-on-Interplay%26Transitions.pdf/dda21cfd-28be-d931-ad5c-6459ecbd2ea7?t=1775128133037&version=2.0)
 
 ## Evidence Boundary

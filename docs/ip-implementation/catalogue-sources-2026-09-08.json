@@ -232,9 +232,15 @@
           "status": "acquisition_failed",
           "sha256": null,
           "error": "Response status code does not indicate success: 500 (Internal Server Error)."
+        },
+        {
+          "url": "https://indiacode.gov.in/server/api/core/items/0b2a1b74-1516-4012-b097-ca14d948c38e",
+          "checked_at": "2026-11-22T07:49:00.8991875+00:00",
+          "status": "official_listing_identified",
+          "sha256": null
         }
       ],
-      "remaining_work": "Official archive download still returns HTTP 500; CBDT consolidation access also failed. Full historical edition, 2025 successor and 2026 amendment/transition packs remain open."
+      "remaining_work": "India Code's migrated item 123456789/620179 exposes the as-enacted Gazette. The delivered PDF's length and checksum differ from its catalogue metadata. The complete amended 1961 edition, 2025 successor and 2026 amendment and transition packs remain open."
     },
     {
       "statute_id": "gst-cgst-2017",
