@@ -348,6 +348,7 @@ def assert_ip_docket_access(
     *,
     context: SessionContext,
     docket: IpDocketRecord,
+    commit_denial: bool = True,
 ) -> None:
     if can_access_ip_docket(session, context=context, docket=docket):
         return
@@ -361,7 +362,7 @@ def assert_ip_docket_access(
         ip_docket_id=docket.id,
         result="denied",
         metadata={"reason": "ip_docket_visibility_denied"},
-        commit=True,
+        commit=commit_denial,
     )
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -454,6 +455,27 @@ def _load_ip_docket_for_access_management(
             detail="IP docket record not found.",
         )
     return docket
+
+
+def _assert_ip_access_manager_can_open(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    commit_denial: bool = True,
+) -> None:
+    """An admin manages a docket's access only if it may open the docket.
+
+    A wall or a missing restricted-record grant overrides the admin role
+    exactly as on every docket read: same audited "not found". Owners are
+    exempt here (unlike the docket read policy) so a firm can always recover
+    an IP record's access policy; an owner's own wall still hides the docket.
+    """
+    if context.membership.role == MembershipRole.OWNER:
+        return
+    assert_ip_docket_access(
+        session, context=context, docket=docket, commit_denial=commit_denial
+    )
 
 
 MatterOperationalRoleSnapshot = tuple[tuple[str, str, str, str], ...]
@@ -760,12 +782,16 @@ def _lock_ip_access_responsibility_fence(
     *,
     context: SessionContext,
     docket_id: str,
+    commit_denial: bool = True,
 ) -> tuple[IpDocketRecord, dict[str, CompanyMembership], set[str]]:
     session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     advisory = _load_ip_docket_for_access_management(
         session,
         context=context,
         docket_id=docket_id,
+    )
+    _assert_ip_access_manager_can_open(
+        session, context=context, docket=advisory, commit_denial=commit_denial
     )
     role_membership_ids = _operational_ip_docket_role_membership_ids(
         session,
@@ -1576,11 +1602,15 @@ def preview_ip_access_change(
     context: SessionContext,
     docket_id: str,
     payload: IpAccessChangeRequest,
+    commit_denial: bool = True,
 ) -> IpAccessPreviewResponse:
     docket = _load_ip_docket_for_access_management(
         session,
         context=context,
         docket_id=docket_id,
+    )
+    _assert_ip_access_manager_can_open(
+        session, context=context, docket=docket, commit_denial=commit_denial
     )
     return _ip_access_preview_for_docket(
         session,
@@ -1619,6 +1649,7 @@ def get_ip_access_panel(
         context=context,
         docket_id=docket_id,
     )
+    _assert_ip_access_manager_can_open(session, context=context, docket=docket)
     grants, walls = _ip_access_rows(session, docket=docket)
     membership_labels, team_labels = _subject_labels(
         session, company_id=context.company.id
@@ -1724,6 +1755,8 @@ def apply_ip_access_change(
         session,
         context=context,
         docket_id=docket_id,
+        # Access-review finalization owns its transaction.
+        commit_denial=commit,
     )
     preview = _ip_access_preview_for_docket(
         session,

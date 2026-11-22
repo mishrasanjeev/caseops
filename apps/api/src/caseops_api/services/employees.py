@@ -1536,6 +1536,34 @@ def _ethical_wall_conflict_count(
     )
 
 
+def _actor_hidden_matter_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_ids: set[str],
+) -> set[str]:
+    """Affected Matters the acting admin may not open (walled or restricted).
+
+    Offboarding rewrites those Matters' grants and responsibilities, so it
+    obeys the same visibility rule as the Matter access writers. Owners
+    bypass walls through the shared predicate and never have hidden Matters.
+    """
+    from caseops_api.services.record_access_policy import visible_matters_filter
+
+    if not matter_ids:
+        return set()
+    visible = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.company_id == context.company.id,
+                Matter.id.in_(matter_ids),
+                visible_matters_filter(session, context=context),
+            )
+        )
+    )
+    return set(matter_ids) - visible
+
+
 def _build_offboarding_preview(
     session: Session,
     *,
@@ -1712,12 +1740,29 @@ def _build_offboarding_preview(
         )
         if conflicts:
             blockers.append("Replacement employee is ethically walled from affected matters.")
+    hidden_ids = _actor_hidden_matter_ids(
+        session,
+        context=context,
+        matter_ids=affected_matter_ids
+        | {row.matter_id for row in [*supported, *unsupported] if row.matter_id},
+    )
+    hidden = len(hidden_ids)
+    if hidden:
+        # A count only: naming the Matters would disclose what the wall hides.
+        blockers.append(
+            f"You cannot act on {hidden} affected "
+            f"{'Matter' if hidden == 1 else 'Matters'} that you are walled or "
+            "restricted from. Ask a workspace owner, or an admin who can open "
+            "them, to offboard this employee."
+        )
 
     return EmployeeOffboardingPreviewResponse(
         employee=_employee_record(session, target),
         reassign_to=_employee_record(session, reassign_to) if reassign_to else None,
-        supported_objects=supported,
-        unsupported_objects=unsupported,
+        # Rows on Matters the actor cannot open appear only in the counts and
+        # the blocker above, never with their code, title or id.
+        supported_objects=[row for row in supported if row.matter_id not in hidden_ids],
+        unsupported_objects=[row for row in unsupported if row.matter_id not in hidden_ids],
         supported_counts=_object_counts(
             supported,
             known_types=OFFBOARDING_SUPPORTED_TYPES,

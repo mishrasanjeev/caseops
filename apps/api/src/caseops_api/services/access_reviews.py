@@ -626,7 +626,11 @@ def finalize(session, *, context, campaign_id, expected_version):
                 expected_access_policy_version=target.access_policy_version,
             )
             preview = matter_access.preview_ip_access_change(
-                session, context=context, docket_id=target.id, payload=command
+                session,
+                context=context,
+                docket_id=target.id,
+                payload=command,
+                commit_denial=False,
             )
             response = matter_access.apply_ip_access_change(
                 session,
