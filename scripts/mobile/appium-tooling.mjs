@@ -320,17 +320,84 @@ export function platformExcluded(entry) {
   return mismatched(entry.os, process.platform) || mismatched(entry.cpu, process.arch)
     || (Array.isArray(entry.libc) && (currentLibc() === null || mismatched(entry.libc, currentLibc())));
 }
+/** Only absent optional ancestors can explain a transitive platform omission. */
+function optionalPlatformAbsence(state, lock, installed, placeholders) {
+  const entries = Object.entries(lock.packages), incoming = new Map(entries.map(([key]) => [key, []]));
+  const missing = entries.filter(([key]) => key && !installed.has(key) && !placeholders.has(key));
+  const resolve = (parent, name) => {
+    assert.ok(typeof name === 'string' && /^(?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+$/.test(name)
+      && !name.split('/').some(part => ['.', '..', 'node_modules'].includes(part)), 'APPIUM_TOOLING_LOCK_DEPENDENCY_NAME');
+    // Use the declaration key, including npm aliases; never its version/spec target.
+    // Walking directories also handles a scoped parent's enclosing namespace.
+    for (let directory = parent; ; directory = path.posix.dirname(directory)) {
+      state.budget.entry();
+      if (path.posix.basename(directory) !== 'node_modules') {
+        const key = (directory ? directory + '/' : '') + 'node_modules/' + name;
+        if (Object.hasOwn(lock.packages, key)) return key;
+      }
+      if (!directory || directory === '.') return null;
+      if (path.posix.dirname(directory) === '.') directory = '';
+      if (!directory) {
+        state.budget.entry(); const key = 'node_modules/' + name;
+        return Object.hasOwn(lock.packages, key) ? key : null;
+      }
+    }
+  };
+  for (const [parent, entry] of entries) {
+    state.budget.entry();
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'devDependencies']) {
+      const value = entry[field];
+      assert.ok(value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value)), 'APPIUM_TOOLING_LOCK_DEPENDENCY_MAP');
+    }
+    for (const field of ['bundleDependencies', 'bundledDependencies'])
+      assert.ok(entry[field] === undefined || typeof entry[field] === 'boolean' || Array.isArray(entry[field]), 'APPIUM_TOOLING_LOCK_DEPENDENCY_MAP');
+    const optional = entry.optionalDependencies ?? {}, dependencies = entry.dependencies ?? {};
+    const add = (name, spec, optionalEdge) => {
+      state.budget.entry(); assert.equal(typeof spec, 'string', 'APPIUM_TOOLING_LOCK_DEPENDENCY_SPEC');
+      const target = resolve(parent, name);
+      if (target) incoming.get(target).push({ parent, optional: optionalEdge });
+    };
+    for (const [name, spec] of Object.entries(dependencies)) if (!Object.hasOwn(optional, name)) add(name, spec, false);
+    for (const [name, spec] of Object.entries(optional)) add(name, spec, true);
+    for (const [name, spec] of Object.entries(entry.peerDependencies ?? {})) add(name, spec, entry.peerDependenciesMeta?.[name]?.optional === true);
+    if (!parent) for (const [name, spec] of Object.entries(entry.devDependencies ?? {}))
+      if (!Object.hasOwn(dependencies, name) && !Object.hasOwn(optional, name)) add(name, spec, false);
+    for (const names of [entry.bundleDependencies, entry.bundledDependencies]) if (Array.isArray(names))
+      for (const name of names) add(name, '*', Object.hasOwn(optional, name));
+  }
+  const excluded = new Set();
+  for (const [key, entry] of missing) {
+    state.budget.entry();
+    const liveRequired = incoming.get(key).some(edge => !edge.optional
+      && (!edge.parent || installed.has(edge.parent) || placeholders.has(edge.parent)));
+    if (entry.optional === true && platformExcluded(entry) && !liveRequired) excluded.add(key);
+  }
+  // A fixed point leaves every unanchored cycle and unknown parent unresolved.
+  // Placeholders are not platform-excluded anchors, and live/root edges never close.
+  let changed;
+  do {
+    changed = false;
+    for (const [key, entry] of missing) {
+      state.budget.entry(); const parents = incoming.get(key);
+      if (!excluded.has(key) && entry.optional === true && parents.length > 0
+        && parents.every(edge => excluded.has(edge.parent))) { excluded.add(key); changed = true; }
+    }
+  } while (changed);
+  return excluded;
+}
+
 /** Reconcile installed packages and placeholders with the lockfile and npm's hidden lock. */
 function reconcileLock(state, lock) {
   const installed = new Map(state.packages.map(row => [row.path, row])), placeholders = new Set(state.placeholders), absentOptional = [];
   assert.equal(installed.size, state.packages.length, 'APPIUM_TOOLING_DUPLICATE_PACKAGE_PATH');
+  const excludedOptional = optionalPlatformAbsence(state, lock, installed, placeholders);
   for (const [key, entry] of Object.entries(lock.packages)) {
     if (!key) continue;
     const row = installed.get(key);
     if (row) {
       assert.ok(entry.version === row.version && (entry.name ?? key.split('node_modules/').pop()) === row.name, 'APPIUM_TOOLING_LOCK_IDENTITY_MISMATCH');
     } else if (placeholders.has(key)) assert.equal(entry.optional, true, 'APPIUM_TOOLING_PLACEHOLDER_NOT_OPTIONAL');
-    else { assert.ok(entry.optional === true && platformExcluded(entry), 'APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT'); absentOptional.push(key); }
+    else { assert.ok(entry.optional === true && excludedOptional.has(key), 'APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT'); absentOptional.push(key); }
   }
   for (const key of [...installed.keys(), ...placeholders]) assert.ok(Object.hasOwn(lock.packages, key), 'APPIUM_TOOLING_UNLOCKED_PACKAGE');
   if (state.hidden) {
@@ -420,6 +487,38 @@ function run(command, args, options) {
   return new Promise((resolve, reject) => { child.once('error', reject);
     child.once('exit', (status, signal) => signal ? reject(new Error('APPIUM_TOOLING_CHILD_SIGNAL')) : resolve(status)); });
 }
+/** Execute only the canonical install/prune pair; this is not runtime acceptance. */
+export async function installAppiumProject(runtime, { execute = run } = {}) {
+  assert.equal(process.versions.node, '24.22.3', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(path.isAbsolute(runtime) && fs.realpathSync(runtime) === runtime, 'APPIUM_TOOLING_CANONICAL_RUNTIME_REQUIRED');
+  const relative = path.relative(REPO, runtime);
+  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+  const uid = process.getuid?.();
+  assert.ok(Number.isInteger(uid), 'APPIUM_TOOLING_OWNER_OBSERVATION_REQUIRED');
+  const fd = fs.openSync(runtime, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  const identity = value => ['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(value[key])).join(':');
+  let failed = false, original;
+  try {
+    const initial = fs.fstatSync(fd, { bigint: true });
+    const check = () => {
+      const named = fs.lstatSync(runtime, { bigint: true }), held = fs.fstatSync(fd, { bigint: true });
+      assert.ok(named.isDirectory() && !named.isSymbolicLink() && held.isDirectory() && held.uid === BigInt(uid)
+        && identity(held) === identity(initial) && frame(held) === frame(named), 'APPIUM_TOOLING_INSTALL_DIRECTORY_CHANGED');
+    };
+    check();
+    const npm = path.join(REPO, 'scripts/mobile/npm-tooling.mjs');
+    assert.equal(await execute(process.execPath, [npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'], { cwd: runtime }), 0, 'APPIUM_TOOLING_INSTALL');
+    check();
+    assert.equal(await execute(process.execPath, [npm, 'prune', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: runtime }), 0, 'APPIUM_TOOLING_PRUNE');
+    check();
+  } catch (error) { failed = true; original = error; }
+  try { fs.closeSync(fd); }
+  catch (error) {
+    if (!failed) { failed = true; original = error; }
+    else console.error('APPIUM_TOOLING_INSTALL_DIRECTORY_CLOSE_FAILED');
+  }
+  if (failed) throw original;
+}
 export const DRIVER_LIST_LIMITS = Object.freeze({ entries: 512, bytes: 1048576, milliseconds: 60000 });
 /** Keep the child's original stdout descriptor until its JSON and name are reconciled. */
 export async function readInstalledDrivers(runtime, { limits = DRIVER_LIST_LIMITS } = {}) {
@@ -508,9 +607,7 @@ export async function prepareAppiumTooling(runtime, { request = globalThis.fetch
 
   for (const name of ['package.json', 'package-lock.json'])
     fs.copyFileSync(path.join(REPO, APPIUM_TOOLING_PROJECT, name), path.join(runtime, name), fs.constants.COPYFILE_EXCL);
-  const npm = [path.join(REPO, 'scripts/mobile/npm-tooling.mjs'), 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'];
-  const installStatus = await run(process.execPath, npm, { cwd: runtime });
-  assert.equal(installStatus, 0, 'APPIUM_TOOLING_INSTALL');
+  await installAppiumProject(runtime);
   await readInstalledDrivers(runtime);
 
   const inventories = { locked: lockedAdvisoryInventory(path.join(runtime, 'package-lock.json')), physical: physicalAdvisoryInventory(runtime) };

@@ -842,6 +842,31 @@ function installFixture(t, { bins = true } = {}) {
   }
   return { root, write };
 }
+// A platform-ineligible pair owns the only incoming paths to this absent chain.
+function optionalAncestorFixture(t, edit = () => {}, { alias = false, nearestLiveCopy = false } = {}) {
+  const { root, write } = installFixture(t), file = path.join(root, 'package-lock.json');
+  const lock = JSON.parse(fs.readFileSync(file, 'utf8')), p = lock.packages;
+  const wasm = alias ? '@img/wasm-alias' : '@img/sharp-wasm32';
+  const otherOS = process.platform === 'freebsd' ? 'linux' : 'freebsd';
+  const otherCPU = process.arch === 'wasm32' ? 'x64' : 'wasm32';
+  p[''].optionalDependencies = { '@img/foreign-os': '1.0.0', '@img/foreign-cpu': '1.0.0' };
+  // npm optionalDependencies supersedes the same ordinary declaration.
+  p[''].dependencies = { '@img/foreign-os': '1.0.0' };
+  const spec = alias ? 'npm:@img/sharp-wasm32@0.35.5' : '0.35.5';
+  p['node_modules/@img/foreign-os'] = { version: '1.0.0', optional: true, os: [otherOS], dependencies: { [wasm]: spec } };
+  p['node_modules/@img/foreign-cpu'] = { version: '1.0.0', optional: true, cpu: [otherCPU], dependencies: { [wasm]: spec } };
+  p['node_modules/' + wasm] = { name: '@img/sharp-wasm32', version: '0.35.5', optional: true, dependencies: { '@emnapi/runtime': '1.11.3' } };
+  p['node_modules/@emnapi/runtime'] = { version: '1.11.3', optional: true, dependencies: { tslib: '2.9.1' } };
+  p['node_modules/tslib'] = { version: '2.9.1', optional: true };
+  if (nearestLiveCopy) {
+    p['node_modules/driver'].dependencies = { '@emnapi/runtime': '1.11.3' };
+    write('node_modules/driver/node_modules/@emnapi/runtime/package.json', { name: '@emnapi/runtime', version: '1.11.3' });
+  }
+  edit(p, wasm); write('package-lock.json', lock);
+  return { root, wasm, expected: ['node_modules/@img/sharp-other', 'node_modules/@img/foreign-os', 'node_modules/@img/foreign-cpu',
+    'node_modules/' + wasm, 'node_modules/@emnapi/runtime', 'node_modules/tslib'].sort() };
+}
+
 const inventoryRefusal = (root, pattern, options) => assert.throws(() => appiumTooling.physicalAdvisoryInventory(root, options), pattern);
 
 test('appium physical inventory reconciles nested, scoped, embedded, placeholder, absent optional and bin identities with both locks', t => {
@@ -853,6 +878,10 @@ test('appium physical inventory reconciles nested, scoped, embedded, placeholder
   assert.ok(inventory.observations.entries > 0 && inventory.observations.bytes > 0);
   assert.equal(appiumTooling.platformExcluded({ os: [process.platform] }), false); assert.equal(appiumTooling.platformExcluded({ os: ['!' + process.platform] }), true);
   assert.equal(appiumTooling.platformExcluded({ cpu: [process.arch] }), false); assert.equal(appiumTooling.platformExcluded({}), false);
+  for (const options of [{}, { alias: true, nearestLiveCopy: true }]) {
+    const chain = optionalAncestorFixture(t, () => {}, options);
+    assert.deepEqual(appiumTooling.physicalAdvisoryInventory(chain.root).absentOptional, chain.expected);
+  }
 });
 
 test('appium physical inventory refuses a missing root, unknown metadata and unreconciled lock identities', t => {
@@ -869,6 +898,22 @@ test('appium physical inventory refuses a missing root, unknown metadata and unr
   { const { root } = installFixture(t); lockEdit(root, p => { p['node_modules/@img/sharp-other'].os = [process.platform]; }); inventoryRefusal(root, /APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT/); }
   { const { root } = installFixture(t); lockEdit(root, p => { p['node_modules/required'] = { version: '1.0.0' }; }); inventoryRefusal(root, /APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT/); }
   { const { root, write } = installFixture(t); write('node_modules/.package-lock.json', { lockfileVersion: 3, packages: { 'node_modules/appium': { version: '3.9.0' } } }); inventoryRefusal(root, /APPIUM_TOOLING_HIDDEN_LOCK_MISMATCH/); }
+  for (const edit of [
+    (p, wasm) => { p['node_modules/driver'].dependencies = { [wasm]: '0.35.5' }; },
+    (p, wasm) => { p['node_modules/@scope/x'].peerDependencies = { [wasm]: '0.35.5' }; },
+    (p, wasm) => { p[''].devDependencies = { [wasm]: '0.35.5' }; },
+    (p, wasm) => { delete p['node_modules/' + wasm].optional; },
+    p => { p['node_modules/unknown-optional'] = { version: '1.0.0', optional: true }; },
+    (p, wasm) => { delete p['node_modules/@img/foreign-os'].dependencies; delete p['node_modules/@img/foreign-cpu'].dependencies;
+      p['node_modules/@emnapi/runtime'].dependencies[wasm] = '0.35.5'; },
+  ]) {
+    const { root } = optionalAncestorFixture(t, edit);
+    inventoryRefusal(root, /APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT/);
+  }
+  for (const invalid of [null, [], 'untyped']) {
+    const { root } = optionalAncestorFixture(t, p => { p['node_modules/driver'].dependencies = invalid; });
+    inventoryRefusal(root, /APPIUM_TOOLING_LOCK_DEPENDENCY_MAP/);
+  }
 });
 
 test('appium physical inventory refuses links, undeclared bins and insertion or change after discovery', t => {
@@ -1054,7 +1099,7 @@ test('appium driver listing charges final reconciliation and bounds the actual c
   assert.ok(observed.reads >= 2, 'entry exhaustion must follow actual child completion and descriptor readback');
 });
 
-test('committed appium tooling lock pins the rebundled driver and only fixed glob/minimatch identities', () => {
+test('committed appium tooling lock pins the rebundled driver and only fixed glob/minimatch identities', async t => {
   const project = fileURLToPath(new URL('../../' + appiumTooling.APPIUM_TOOLING_PROJECT + '/', import.meta.url));
   const manifest = JSON.parse(fs.readFileSync(path.join(project, 'package.json'), 'utf8'));
   const pins = JSON.parse(fs.readFileSync(fileURLToPath(new URL('./tooling.json', import.meta.url)), 'utf8'));
@@ -1076,6 +1121,36 @@ test('committed appium tooling lock pins the rebundled driver and only fixed glo
   assert.deepEqual(graph.glob, ['14.0.6-caseops.2']); assert.deepEqual(graph.minimatch, ['11.0.8']);
   assert.deepEqual(graph['brace-expansion'], ['5.0.13']); assert.deepEqual(graph['@isaacs/nonrecursive-glob-match'], ['1.1.0']);
   assert.deepEqual(graph['path-scurry'], ['3.0.0']);
+  const runtime = fixture(t), commands = [];
+  const execute = async (...args) => { commands.push(args); return 0; };
+  if (process.versions.node !== '24.22.3') {
+    await assert.rejects(appiumTooling.installAppiumProject(runtime, { execute }), /APPIUM_TOOLING_PINNED_NODE_REQUIRED/);
+    assert.deepEqual(commands, []); return;
+  }
+  if (typeof process.getuid !== 'function') {
+    await assert.rejects(appiumTooling.installAppiumProject(runtime, { execute }), /APPIUM_TOOLING_OWNER_OBSERVATION_REQUIRED/);
+    assert.deepEqual(commands, []); return;
+  }
+  await appiumTooling.installAppiumProject(runtime, { execute });
+  const npm = fileURLToPath(new URL('./npm-tooling.mjs', import.meta.url));
+  assert.deepEqual(commands, [
+    [process.execPath, [npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'], { cwd: runtime }],
+    [process.execPath, [npm, 'prune', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: runtime }],
+  ]);
+  for (const failAt of [1, 2]) {
+    let calls = 0;
+    await assert.rejects(appiumTooling.installAppiumProject(runtime, { execute: async () => ++calls === failAt ? 1 : 0 }),
+      failAt === 1 ? /APPIUM_TOOLING_INSTALL/ : /APPIUM_TOOLING_PRUNE/);
+    assert.equal(calls, failAt);
+    const unknown = new Error('OFFLINE_UNKNOWN_ACK'); calls = 0;
+    await assert.rejects(appiumTooling.installAppiumProject(runtime, { execute: async () => { if (++calls === failAt) throw unknown; return 0; } }), error => error === unknown);
+    assert.equal(calls, failAt);
+  }
+  const replaced = fixture(t), retained = replaced + '-retained';
+  t.after(() => fs.rmSync(retained, { recursive: true, force: true }));
+  let calls = 0;
+  await assert.rejects(appiumTooling.installAppiumProject(replaced, { execute: async () => { calls++; fs.renameSync(replaced, retained); fs.mkdirSync(replaced); return 0; } }), /APPIUM_TOOLING_INSTALL_DIRECTORY_CHANGED/);
+  assert.equal(calls, 1);
 });
 
 test('appium tooling sources are in the native source fingerprint and its dirty fence', t => {
