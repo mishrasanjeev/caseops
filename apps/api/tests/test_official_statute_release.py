@@ -59,11 +59,17 @@ def test_repeal_power_is_not_itself_a_repealed_provision(label):
     assert not release.is_omitted_arrangement(label)
 
 
+MIGRATED_MOTOR_VEHICLES_URL = (
+    "https://indiacode.gov.in/server/api/core/bitstreams/031fe0a8-b3a6-4da2-b130-ec2e870fe4f2/content"
+)
+
+
 @pytest.mark.parametrize(
     "url",
     [
         "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
         "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2065/1/aa2005.pdf",
+        MIGRATED_MOTOR_VEHICLES_URL,
     ],
 )
 def test_reviewed_official_download_contract_accepts_live_and_retained_editions(url):
@@ -80,10 +86,62 @@ def test_reviewed_official_download_contract_accepts_live_and_retained_editions(
         "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf&redirect=evil",
         "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf&rfilename=A1860-45.pdf",
         "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2065/1/aa2005.pdf?redirect=evil",
+        MIGRATED_MOTOR_VEHICLES_URL.replace("https://", "http://"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("indiacode.gov.in", "indiacode.gov.in.example.com"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("indiacode.gov.in", "@indiacode.gov.in"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("indiacode.gov.in", "user:secret@indiacode.gov.in"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("indiacode.gov.in", "indiacode.gov.in:443"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("bitstreams", "items"),
+        MIGRATED_MOTOR_VEHICLES_URL.replace("031fe0a8-", "wrong-"),
+        MIGRATED_MOTOR_VEHICLES_URL + "?download=true",
+        MIGRATED_MOTOR_VEHICLES_URL + "#",
+        MIGRATED_MOTOR_VEHICLES_URL + "#page=8",
     ],
 )
 def test_download_contract_does_not_allow_arbitrary_query_or_publisher(url):
     assert not release._official_document_url(url)
+
+
+@pytest.mark.parametrize("different_bitstream", [False, True])
+def test_migrated_edition_locators_keep_the_exact_document_and_page(
+    tmp_path, monkeypatch, different_bitstream,
+):
+    # Use the retained catalogue as an offline fixture for URL admission. This
+    # test does not change its edition, document bytes or provision contents.
+    documents = json.loads(release.DOCUMENT_PATH.read_text(encoding="utf-8"))
+    act = "motor-vehicles-1988"
+    document = next(item for item in documents["documents"] if item["statute_id"] == act)
+    document["source_url"] = MIGRATED_MOTOR_VEHICLES_URL
+    document["act_url"] = MIGRATED_MOTOR_VEHICLES_URL
+    rows = json.loads(release.BUNDLE_PATH.read_text(encoding="utf-8"))
+    motor_vehicle_rows = [row for row in rows if row["statute_id"] == act]
+    for row in motor_vehicle_rows:
+        page = row["source_policy"]["official_pdf_page"]
+        row["source_url"] = f"{MIGRATED_MOTOR_VEHICLES_URL}#page={page}"
+    if different_bitstream:
+        motor_vehicle_rows[0]["source_url"] = motor_vehicle_rows[0]["source_url"].replace(
+            "031fe0a8-b3a6-4da2-b130-ec2e870fe4f2", "2014b1cd-7c61-420b-9b63-dca1f478a253",
+        )
+    raw = json.dumps(rows)
+    doc_file = tmp_path / "docs.json"
+    bundle = tmp_path / "bundle.json"
+    checksum = tmp_path / "bundle.sha256"
+    doc_file.write_text(json.dumps(documents), encoding="utf-8")
+    bundle.write_text(raw, encoding="utf-8")
+    checksum.write_text(hashlib.sha256(raw.encode()).hexdigest(), encoding="utf-8")
+    monkeypatch.setattr(release, "DOCUMENT_PATH", doc_file)
+    monkeypatch.setattr(release, "BUNDLE_PATH", bundle)
+    monkeypatch.setattr(release, "CHECKSUM_PATH", checksum)
+    if different_bitstream:
+        with pytest.raises(ValueError, match="Official provision provenance mismatch"):
+            release.load_release_bundle()
+    else:
+        loaded_documents, loaded_sources = release.load_release_bundle()
+        assert loaded_documents[act] == document
+        loaded_vehicle_rows = {
+            number: row for (act_id, number), row in loaded_sources.items() if act_id == act
+        }
+        assert loaded_vehicle_rows == {row["section_number"]: row for row in motor_vehicle_rows}
 
 
 @pytest.mark.parametrize(

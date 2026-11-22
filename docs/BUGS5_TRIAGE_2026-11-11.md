@@ -166,6 +166,22 @@ pending. [Gazette archive](https://indiacode.gov.in/server/api/core/bitstreams/2
 [2025 Gazette](https://egazette.gov.in/WriteReadData/2025/265620.pdf) ·
 [CBDT transition guidance](https://www.incometaxindia.gov.in/documents/20117/43120/Updated-FQAs-on-Interplay%26Transitions.pdf/dda21cfd-28be-d931-ad5c-6459ecbd2ea7?t=1775128133037&version=2.0)
 
+India Code's new central Ministry record includes a Motor Vehicles Act edition
+dated 15 August 2026. Two direct downloads matched byte for byte. The source
+compiler needed eight exact heading locators and revised page ranges. It then
+reproduced all 259 provision identities in a diagnostic bundle, including the
+image-based First Schedule quarantine. It detected 179 provision text
+differences after whitespace normalization. These differences still need
+review against the published pages before the later edition is admitted.
+[New official PDF](https://indiacode.gov.in/server/api/core/bitstreams/031fe0a8-b3a6-4da2-b130-ec2e870fe4f2/content)
+
+The release validator previously refused the new India Code host. It now
+accepts the exact HTTPS bitstream path and binds every provision link to its
+manifest document and page. Source checks cover the retained catalogue, a
+correctly bound migrated locator, a different bitstream, and malformed or
+unapproved URLs. The August 2026 edition remains a diagnostic candidate.
+Full runtime and release verification remain open.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor
