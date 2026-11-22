@@ -47,4 +47,16 @@ export const marketingFaqs = [
     q: "Who owns the data used to fine-tune models?",
     a: "You do. Customer data is not used for cross-tenant training by default. Tenant-specific model adaptation is planned and would require an explicit opt-in inside the tenant boundary.",
   },
+  {
+    q: "Does the IP workspace connect to IP India or WIPO?",
+    a: "No. There is no live IP India or WIPO feed. Your team enters or imports registry data and records the evidence behind it, and journal watch compares the journal entries you record; it does not fetch journals. The IP workspace is not part of the self-serve plans: CaseOps adds it to a workspace's plan on request.",
+  },
+  {
+    q: "Which courts does court sync cover?",
+    a: "Direct court-website sync covers the Supreme Court of India and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts. Suggested hearing dates arrive with their source for a lawyer to accept or reject. Other courts use eCourts case tracking through a paid court-data provider, within the workspace's provider budget, or hearings entered by hand.",
+  },
+  {
+    q: "Is there a mobile app?",
+    a: "A native iOS and Android app is a development candidate and is not yet in the App Store or Google Play. Until it ships, use the web app in a phone or tablet browser.",
+  },
 ] as const;

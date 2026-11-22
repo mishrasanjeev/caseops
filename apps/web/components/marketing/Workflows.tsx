@@ -16,8 +16,8 @@ const flows = [
     headline: "Control the portfolio, not the paperwork.",
     bullets: [
       "Structured intake keeps pre-engagement work organized while optional conflict review remains available and auditable without blocking Active status.",
-      "Contract repository with clause extraction and obligation tracking.",
-      "Matter intelligence review, outside-counsel spend, aging, realization, and audited provider operations in one dashboard.",
+      "Contract repository with clause extraction, obligation tracking and a redline viewer for counterparty Word mark-ups.",
+      "Matter intelligence review, outside-counsel budgets and logged spend, and audited provider operations in one workspace.",
     ],
   },
   {

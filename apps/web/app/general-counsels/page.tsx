@@ -9,8 +9,10 @@ import {
   GitBranch,
   Landmark,
   Layers,
+  MessageSquare,
   ScrollText,
   ShieldCheck,
+  Smartphone,
   Users,
   Wallet,
 } from "lucide-react";
@@ -30,7 +32,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Legal operations software for Indian in-house teams",
   description:
-    "CaseOps connects matters, contracts, outside counsel, spend, and review evidence for Indian in-house legal teams.",
+    "CaseOps connects matters, contracts and redlines, outside counsel, spend, trade mark portfolios and review evidence for Indian in-house legal teams.",
   alternates: { canonical: "/general-counsels" },
   openGraph: {
     type: "article",
@@ -164,7 +166,7 @@ export default function GeneralCounselsPage() {
             <div className="grid gap-5 md:grid-cols-2 md:items-start">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-brand-600)]">
-                  What the GC gets to say
+                  What the GC can answer (illustrative figures)
                 </div>
                 <p className="mt-3 text-[15.5px] leading-relaxed text-[var(--color-ink-2)]">
                   "Of our 83 open matters, 11 have a deadline in the next 30 days. Of our
@@ -195,7 +197,7 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={Layers}
               title="Single matter graph"
-              body="Open, pending, on hold, closed — with stage, forum and next action in one row per matter."
+              body="Intake, active, on hold, disposed — with forum, court, next hearing and tags in one row per matter."
             />
             <PitchCard
               icon={Activity}
@@ -205,7 +207,22 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={GitBranch}
               title="Team scope and walls"
-              body="Restrict visibility at a matter level when a case is conflicted or sensitive — without reshuffling roles."
+              body="Teams with leads can scope matter visibility, so colleagues see their teams' matters plus firm-wide ones. Restrict a sensitive matter or wall off a conflicted person without reshuffling roles; workspace owners always see everything."
+            />
+            <PitchCard
+              icon={Landmark}
+              title="Trade mark and patent portfolio"
+              body="List, grid, family and deadline-tracker views, renewals chased against recorded client instructions, and client-safe IP reports. Registry data is entered or imported; there is no live IP India or WIPO feed. Added to a plan on request."
+            />
+            <PitchCard
+              icon={MessageSquare}
+              title="Ask this Workspace"
+              body="Ask factual questions about the matters, IP records and documents you may see; answers cite the exact record, and opening a citation rechecks access and is audited. Off until the workspace owner enables it. Not legal advice."
+            />
+            <PitchCard
+              icon={Smartphone}
+              title="On a phone"
+              body="The web app works in a phone or tablet browser. A native iOS and Android app is a development candidate, not yet in the App Store or Google Play."
             />
           </div>
         </Slide>
@@ -216,33 +233,33 @@ export default function GeneralCounselsPage() {
           tone="light"
           eyebrow="Outside counsel"
           title="Brief, budget and measure — without a spreadsheet."
-          description="Outside counsel becomes a first-class workspace. Assign a matter to a firm, set a budget with alerts, see realisation against it, compare outcomes across firms."
+          description="Outside counsel becomes a first-class workspace. Assign a matter to a firm with a budget ceiling, log spend against it, and review the firm's invoices and work product in one place."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={Briefcase}
-              title="Directory with outcomes"
-              body="Rate cards, practice areas, historical outcomes, conflict flags — not just a contact list."
+              title="Counsel panel"
+              body="Profiles, contacts, practice areas, jurisdictions and panel status, kept with the matters each firm is assigned to."
             />
             <PitchCard
               icon={Wallet}
-              title="Budget with alerts"
-              body="Spend cap per matter. Invoices beyond the cap require a GC override, recorded on the audit trail."
+              title="Budget per assignment"
+              body="Set a budget ceiling on each assignment and log spend against it as submitted, approved, partly approved, disputed or paid."
             />
             <PitchCard
               icon={Activity}
-              title="Realisation by firm"
-              body="See billed, collected and aging per counsel. Compare realisation rates across firms before the next brief."
+              title="Spend by firm"
+              body="See approved and paid spend per counsel from the records you log. The view covers only what has been entered."
             />
             <PitchCard
               icon={Landmark}
               title="Outside-counsel portal — shipped"
-              body="Every briefed firm gets a magic-link login at /portal/oc — see assigned matters, upload work product, submit invoices, log time. Scope-gated by MatterPortalGrant; the GC sees every action on the audit trail."
+              body="Briefed counsel sign in with an emailed link and see only their assigned matters. They upload work product, submit invoices and log time; files are scanned before your team sees them, and invoices arrive for review."
             />
             <PitchCard
               icon={ShieldCheck}
               title="Client portal + KYC — shipped"
-              body="The client gets their own /portal view of the matter (Overview, Comms, Hearings, KYC tabs). KYC submit + GC review + audit on every state transition. Built on the same Phase C portal scaffold; no second auth system to operate."
+              body="Clients sign in with an emailed link and see only what you share: matters (Overview, Comms, Hearings, KYC) and IP records with approved publications. They reply, submit KYC and send instructions for your acknowledgement, with audit on every state change."
             />
             <PitchCard
               icon={BookOpenText}
@@ -281,7 +298,7 @@ export default function GeneralCounselsPage() {
           title="Pull duties out of contracts. Track them where they live."
           description="Store contracts, review AI-extracted clauses, track obligations and compare against a playbook. Extraction depends on document quality and provider availability; review the source contract before relying on the result."
         >
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <PitchCard
               icon={FileSearch}
               title="Clause extraction"
@@ -295,7 +312,12 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={BadgeCheck}
               title="Playbook compare"
-              body="A 15-rule default Indian commercial playbook seeds in one click. The OpenAI review model compares each clause against the expected position and flags matched / missing / deviation with severity."
+              body="A partner or admin installs a 15-position default playbook for Indian commercial contracts. After clause extraction, a review model marks each position matched, deviation or missing, with severity. Review each finding against the contract."
+            />
+            <PitchCard
+              icon={GitBranch}
+              title="Counterparty redlines"
+              body="Open a counterparty's Word mark-up to list insertions, deletions, moved passages and formatting changes by author. A warning appears when the file holds tracked changes the viewer cannot display; accept or reject changes in Word."
             />
           </div>
         </Slide>
@@ -320,7 +342,7 @@ export default function GeneralCounselsPage() {
                 inverse
                 icon={Landmark}
                 title="Matter-level ethical walls"
-                body="A walled matter is invisible to users outside the wall — including admins. Override, not weaken."
+                body="A walled person, admins included, gets 'not found' on every list, search and detail view, and the attempt is audited. Workspace owners always keep access."
               />
               <ReviewRow
                 inverse

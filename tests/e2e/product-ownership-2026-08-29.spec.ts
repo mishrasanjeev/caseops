@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const legalOwner = "Orchestrum Technologies LLP";
 const inventorOwner = "Sanjeev Kumar";
-const ownerEmails = ["sanjeev@orchestrum.in", "mishra.sanjeev@gmail.com"];
+const ownerEmails = ["sanjeev@orchestrum.in"];
 
 test.describe("CaseOps product ownership", () => {
   test("the landing page states the legal owner and inventor/owner", async ({ page }) => {
@@ -25,6 +25,8 @@ test.describe("CaseOps product ownership", () => {
         `mailto:${email}`,
       );
     }
+    await expect(notice.getByRole("link")).toHaveCount(ownerEmails.length);
+    expect(await page.content()).not.toMatch(/@gmail\.com/i);
   });
 
   test("the ownership notice is inherited by every major route family", async ({ page }) => {
@@ -77,6 +79,7 @@ test.describe("CaseOps product ownership", () => {
       expect(body).toContain(`Product owner: ${legalOwner}`);
       expect(body).toContain(`Inventor/Owner: ${inventorOwner}`);
       for (const email of ownerEmails) expect(body).toContain(email);
+      expect(body).not.toMatch(/@gmail\.com/i);
     }
   });
 });
