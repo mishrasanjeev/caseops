@@ -234,6 +234,10 @@ class Settings(BaseSettings):
     ip_filing_operations_rollout_expires_at: datetime | None = Field(default=None)
     ip_watch_enabled: bool = Field(default=False)
     ip_watch_rollout_expires_at: datetime | None = Field(default=None)
+    # Global kill switch for the public Trade Marks Journal feed. Off by
+    # default: no IP India request is made until it is set, and each
+    # workspace must also opt in (ip_journal_feed_settings).
+    ip_journal_feed_enabled: bool = Field(default=False)
     ip_costs_enabled: bool = Field(default=False)
     ip_costs_rollout_expires_at: datetime | None = Field(default=None)
     ip_rule_governance_enabled: bool = Field(default=False)

@@ -5946,3 +5946,22 @@ defers real application schema imports and adds native module-load guards
 plus real validator proof. Complete replacement coverage now expects 3,256
 cases in 316 files, with the same 792 browser metadata identities. All new
 compile, CI, production and recovery evidence remains pending.
+
+## November 22 — public Trade Marks Journal feed (IPLF-052C)
+
+**Partially implemented.** UJ-33/UJ-21, IP-WATCH-01..05. Code, migration
+`20261122_0001`, governance map/projection and tests land on branch
+`feat/ip-india-journal-feed`; nothing is deployed or switched on. The feed runs
+inside the existing `caseops-ip-journal-watch` job, so the job inventory, image
+and schedule are unchanged; the platform kill switch
+`CASEOPS_IP_JOURNAL_FEED_ENABLED` defaults off and is not in the job's checked-in
+environment. Activation needs a reviewed inventory change that adds it (with
+`CASEOPS_IP_WATCH_ENABLED`) to the job, a first production run observed against
+the live public listing, and owner sign-off of the source-terms reading recorded
+in the PR. Remaining hardening gaps: the parser is validated against journal
+2287 only (two real PDFs, 1,319 entries, one flagged for review); a republished
+PDF under the same listed file name is not re-fetched; profiles created after a
+document was compared are not compared with it; an entry linked to the tenant's
+own application is recorded without `application_id`. Trade mark e-status,
+e-register and public search are CAPTCHA/OTP-gated and remain **Missing** by
+design for automation.

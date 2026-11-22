@@ -22701,6 +22701,7 @@ MatterOptionReadPage = _readthrough_models.MatterOptionReadPage
 MatterPackItemReadPage = _readthrough_models.MatterPackItemReadPage
 MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
 MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
+from caseops_api.db import ip_journal_feed_models as _journal_feed_models  # noqa: E402
 from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
 from caseops_api.db import workspace_conduct_models as _conduct_models  # noqa: E402
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
@@ -22713,6 +22714,11 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
     IpPatentProsecutionEvent,
 )
 
+IpJournalFeedSetting = _journal_feed_models.IpJournalFeedSetting
+IpJournalFeedTenantRun = _journal_feed_models.IpJournalFeedTenantRun
+IpPublicJournalCheck = _journal_feed_models.IpPublicJournalCheck
+IpPublicJournalDocument = _journal_feed_models.IpPublicJournalDocument
+IpPublicJournalEntry = _journal_feed_models.IpPublicJournalEntry
 MatterTaskQueueDirty = _queue_models.MatterTaskQueueDirty
 MatterTaskQueueGroup = _queue_models.MatterTaskQueueGroup
 MatterTaskQueuePage = _queue_models.MatterTaskQueuePage
