@@ -68,8 +68,8 @@ export function PhoneChannelAdminCard(): React.JSX.Element {
             onRetry={query.refetch}
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+          <div className="@container overflow-x-auto">
+            <table className="w-full text-left text-sm @min-[36rem]:min-w-[36rem] @max-[36rem]:stacked-table">
               <thead className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-mute)]">
                 <tr>
                   <th className="py-2 pr-3">Channel</th>
@@ -87,7 +87,7 @@ export function PhoneChannelAdminCard(): React.JSX.Element {
                     : null;
                   return (
                     <tr key={channel} data-testid={`phone-admin-${channel}`}>
-                      <td className="py-3 pr-3 align-top">
+                      <td data-label="Channel" className="py-3 pr-3 align-top">
                         <div className="font-medium text-[var(--color-ink)]">
                           {LABEL[channel].name}
                         </div>
@@ -95,7 +95,7 @@ export function PhoneChannelAdminCard(): React.JSX.Element {
                           {LABEL[channel].provider}
                         </div>
                       </td>
-                      <td className="py-3 pr-3 align-top">
+                      <td data-label="Provider" className="py-3 pr-3 align-top">
                         <Badge tone={row.provider_ready ? "success" : "warning"}>
                           {row.provider_ready ? "Ready" : "Not ready"}
                         </Badge>
@@ -110,15 +110,15 @@ export function PhoneChannelAdminCard(): React.JSX.Element {
                           </p>
                         ) : null}
                       </td>
-                      <td className="py-3 pr-3 align-top">
+                      <td data-label="Workspace" className="py-3 pr-3 align-top">
                         <Badge tone={row.tenant_enabled ? "brand" : "neutral"}>
                           {row.tenant_enabled ? "Enabled" : "Disabled"}
                         </Badge>
                       </td>
-                      <td className="py-3 pr-3 text-right align-top font-mono tabular-nums">
+                      <td data-label="Opted in" className="py-3 pr-3 text-right align-top font-mono tabular-nums">
                         {row.opted_in_members}
                       </td>
-                      <td className="py-3 text-right align-top">
+                      <td data-label="Action" className="py-3 text-right align-top">
                         <Button
                           type="button"
                           size="sm"
