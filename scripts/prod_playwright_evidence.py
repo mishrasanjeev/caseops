@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 728, "app-mobile": 64}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 731, "app-mobile": 65}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 722, "app-mobile": 56}
 NOV14_REFERENCE_FILE = "ram-2026-11-14-prod.spec.ts"
 NOV14_DRAFT_FILE = "draft-quality20261114.spec.ts"
 NOV15_DRAFT_FILE = "drafting-formats20261115.spec.ts"

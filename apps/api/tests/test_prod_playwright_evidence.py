@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 728, "app-mobile": 64}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 731, "app-mobile": 65}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3082,7 +3082,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 719, "app-mobile": 55}
+APP_COUNTS = {"app-chromium": 722, "app-mobile": 56}
 BATCH5_BUGS_FILE = "ram-2026-11-11-bugs.spec.ts"
 BATCH5_BUGS_CASES = (
     (
@@ -3364,13 +3364,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all774_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all778_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 774
+    assert sum(APP_COUNTS.values()) == 778
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [
