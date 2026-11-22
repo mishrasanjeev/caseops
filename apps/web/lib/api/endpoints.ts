@@ -5,6 +5,7 @@ import {
   getCsrfHeaders,
 } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
+import type { components } from "./openapi-types";
 import {
   type AuthContext,
   type AuthSession,
@@ -6176,6 +6177,19 @@ export type ContractTermSuggestionRecord = {
 
 export async function fetchContractWorkspace(contractId: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/contracts/${contractId}/workspace`);
+}
+
+export type ContractObligationRecord =
+  components["schemas"]["caseops_api__schemas__contracts__ContractObligationRecord"];
+
+export async function createContractObligation(
+  contractId: string,
+  body: components["schemas"]["ContractObligationCreateRequest"],
+): Promise<ContractObligationRecord> {
+  return apiRequest<ContractObligationRecord>(
+    `/api/contracts/${encodeURIComponent(contractId)}/obligations`,
+    { method: "POST", body },
+  );
 }
 
 export async function createContract(input: {

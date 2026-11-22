@@ -197,6 +197,49 @@ for (const mobile of [false, true]) {
       expect((await json(await request.get(apiPath, { headers: rt.headers }), "Rejected term retains canonical renewal")).renewal_on).toBe("2027-10-01");
       await expectNoPageOverflow(page);
       if (rt.local) await page.screenshot({ path: info.outputPath(`contract-terms-${mobile ? "mobile" : "desktop"}.png`) });
+
+      await page.getByRole("tab", { name: "Obligations (0)", exact: true })[press]();
+      await page.getByRole("button", { name: "Add obligation", exact: true })[press]();
+      const obligationForm = page.getByRole("form", { name: "Add obligation", exact: true });
+      const obligation = {
+        title: "Send the synthetic renewal notice",
+        description: "Use the address in the synthetic contract.",
+        due_on: "2027-09-15",
+        priority: "high",
+        status: "pending",
+        owner_membership_id: rt.actor.membership.id,
+      };
+      await obligationForm.getByLabel("Obligation title", { exact: true }).fill(obligation.title);
+      await obligationForm.getByLabel("Obligation details", { exact: true }).fill(obligation.description);
+      await obligationForm.getByLabel("Due date", { exact: true }).fill(obligation.due_on);
+      await obligationForm.getByLabel("Priority", { exact: true }).selectOption(obligation.priority);
+      await obligationForm.getByLabel("Owner", { exact: true }).selectOption(obligation.owner_membership_id);
+      await expectNoPageOverflow(page);
+      const [obligationResponse] = await Promise.all([
+        page.waitForResponse((response) => response.url() === `${apiPath}/obligations`
+          && response.request().method() === "POST"),
+        obligationForm.getByRole("button", { name: "Save obligation", exact: true })[press](),
+      ]);
+      expect(obligationResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      expect(obligationResponse.request().postDataJSON()).toEqual(obligation);
+      const savedObligation = await json(obligationResponse, "Save manual contract obligation");
+      expect(savedObligation).toMatchObject({ ...obligation, contract_id: contractId, completed_at: null });
+      expect(savedObligation.owner_name).toEqual(expect.any(String));
+      expect(savedObligation.owner_name).not.toBe("");
+      await expect(obligationForm).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: obligation.title, exact: true })).toBeVisible();
+      await page.reload();
+      await page.getByRole("tab", { name: "Obligations (1)", exact: true })[press]();
+      const obligationRow = page.getByRole("tabpanel").getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: obligation.title, exact: true }),
+      });
+      for (const value of [obligation.description, obligation.due_on, obligation.priority,
+        obligation.status, savedObligation.owner_name]) {
+        await expect(obligationRow.getByText(value, { exact: true })).toBeVisible();
+      }
+      const savedWorkspace = await json(await request.get(`${apiPath}/workspace`, { headers: rt.headers }), "Read persisted obligation");
+      expect(savedWorkspace.obligations).toEqual([savedObligation]);
+      await expectNoPageOverflow(page);
       await rt.release();
     } finally {
       await json(await request.patch(apiPath, { headers: rt.headers, data: { status: "terminated" } }), "Retire only the new synthetic QA contract");

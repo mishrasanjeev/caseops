@@ -107,6 +107,15 @@ and require the decree-holder and advocate labels to stay together. The
 original approval, finalization and persisted-reload checks are unchanged.
 The full workflow replay remains pending.
 
+BUG-008 follow-up found that the workspace had no manual entry control. The
+existing authorized API already saves obligations and validates an active
+owner in the current company. The workspace now offers this path to contract
+editors, displays the persisted owner and status, and records new entries as
+pending. The added unit and desktop/phone cases cover refusal, assignment, the
+exact new record and reload. Source parsing passed. Full execution, editing
+existing duties, approval, task/calendar promotion and separate structured
+source fields remain open.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

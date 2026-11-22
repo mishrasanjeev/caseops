@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ContractMetadataEditor } from "@/components/app/ContractMetadataEditor";
+import { ContractObligationEntry } from "@/components/app/ContractObligationEntry";
 import { ContractTermEntry } from "@/components/app/ContractTermEntry";
 import { Button } from "@/components/ui/Button";
 import {
@@ -72,6 +73,7 @@ import {
 import type {
   ContractAttachmentRole,
   ContractLegalReferenceRecord,
+  ContractObligationRecord,
   ContractTermSuggestionRecord,
   ContractTypeKey,
 } from "@/lib/api/endpoints";
@@ -116,15 +118,7 @@ type Workspace = {
     notes: string | null;
     created_at: string;
   }>;
-  obligations: Array<{
-    id: string;
-    title: string;
-    description: string | null;
-    due_on: string | null;
-    status: string;
-    priority: string;
-    created_at: string;
-  }>;
+  obligations: ContractObligationRecord[];
   playbook_rules: Array<{
     id: string;
     rule_name: string;
@@ -920,7 +914,7 @@ export default function ContractDetailPage() {
 
         <TabsContent value="obligations">
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <CardHeader className="flex flex-col items-start justify-between gap-3 space-y-0 sm:flex-row">
               <div>
                 <CardTitle>Obligations</CardTitle>
                 <CardDescription>
@@ -946,12 +940,14 @@ export default function ContractDetailPage() {
                 </Button>
               ) : null}
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {canEdit ? (
+                <ContractObligationEntry key={contractId} contractId={contractId} onSaved={invalidateWorkspace} />
+              ) : null}
               {obligations.length === 0 ? (
                 <EmptyState
                   icon={Clock}
-                  title="No obligations extracted yet"
-                  description="After uploading the contract, ‘Extract obligations’ pulls payment milestones, notice periods, and renewal deadlines."
+                  title="No obligations recorded yet"
                 />
               ) : (
                 <ul className="flex flex-col gap-2">
@@ -960,22 +956,30 @@ export default function ContractDetailPage() {
                       key={o.id}
                       className="rounded-lg border border-[var(--color-line)] bg-white p-3"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <h3 className="break-words text-sm font-semibold text-[var(--color-ink)]">{o.title}</h3>
+                      {o.description ? (
+                        <p className="mt-1 whitespace-pre-line break-words text-sm text-[var(--color-ink-2)]">
+                          {o.description}
+                        </p>
+                      ) : null}
+                      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                        <div className="min-w-0 break-words">
+                          <dt className="text-[var(--color-mute)]">Owner</dt>
+                          <dd>{o.owner_name ?? (o.owner_membership_id ? "Owner unavailable" : "Unassigned")}</dd>
+                        </div>
                         <div>
-                          <div className="text-sm font-semibold text-[var(--color-ink)]">
-                            {o.title}
-                          </div>
-                          {o.description ? (
-                            <div className="mt-1 text-xs text-[var(--color-ink-2)]">
-                              {o.description}
-                            </div>
-                          ) : null}
+                          <dt className="text-[var(--color-mute)]">Due date</dt>
+                          <dd>{o.due_on ?? "No due date"}</dd>
                         </div>
-                        <div className="text-right text-xs text-[var(--color-mute)]">
-                          <div>Due: {o.due_on ?? "—"}</div>
-                          <div className="capitalize">{o.priority}</div>
+                        <div>
+                          <dt className="text-[var(--color-mute)]">Status</dt>
+                          <dd className="capitalize">{o.status.replaceAll("_", " ")}</dd>
                         </div>
-                      </div>
+                        <div>
+                          <dt className="text-[var(--color-mute)]">Priority</dt>
+                          <dd className="capitalize">{o.priority}</dd>
+                        </div>
+                      </dl>
                     </li>
                   ))}
                 </ul>
