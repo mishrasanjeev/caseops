@@ -13,13 +13,9 @@ Three capabilities, one module, shared provider plumbing:
   structured findings. Ephemeral — caller can persist as clauses /
   obligations / notes if desired.
 
-All three are idempotent:
-
-- extract_clauses / extract_obligations delete any previously auto-
-  extracted rows on the contract before writing new ones (marked via
-  ``notes`` prefix ``[auto] ``) so reruns don't compound, but manually
-  authored rows survive.
-- compare_playbook returns ephemeral findings, with durable model/usage evidence.
+Clause and obligation extraction replace previous generated rows with recorded
+provenance. Obligations with an owner or recorded progress remain in place.
+Playbook comparison returns ephemeral findings with durable model/usage evidence.
 
 Also shipped: ``install_default_playbook_rules`` one-shot that seeds
 the 15-rule default Indian commercial playbook onto a contract's
@@ -36,7 +32,7 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
@@ -542,9 +538,7 @@ def extract_clauses(
 ) -> ClauseExtractionSummary:
     """Run clause extraction on the contract's attached text + write rows.
 
-    Idempotent: removes previously auto-extracted clauses (``notes``
-    prefix ``[auto] ``) before writing fresh ones so retries reconcile
-    with the latest model output.
+    Replace only rows created by the provenance-aware extractor.
     """
     contract = _load_contract(session, context=context, contract_id=contract_id)
     text = _collect_contract_text(contract)
@@ -581,7 +575,7 @@ def extract_clauses(
     removed = session.execute(
         delete(ContractClause)
         .where(ContractClause.contract_id == contract.id)
-        .where(ContractClause.notes.like("[auto]%"))
+        .where(ContractClause.extracted_by_ai.is_(True))
     ).rowcount or 0
 
     risk_enum = {
@@ -599,7 +593,9 @@ def extract_clauses(
             clause_type=clause.clause_type,
             clause_text=clause.clause_text.strip(),
             risk_level=risk_enum.get(clause.risk_level, ContractClauseRiskLevel.MEDIUM),
-            notes=f"[auto] {clause.rationale}".strip()[:4000] if clause.rationale else "[auto]",
+            notes=f"AI extraction: {clause.rationale}"[:4000]
+            if clause.rationale else "AI extraction",
+            extracted_by_ai=True,
         )
         session.add(row)
         inserted += 1
@@ -708,11 +704,25 @@ def extract_obligations(
         feature="extract obligations",
     )
 
+    generated_scope = and_(
+        ContractObligation.contract_id == contract.id,
+        ContractObligation.extracted_by_ai.is_(True),
+    )
+    replaceable = and_(
+        ContractObligation.owner_membership_id.is_(None),
+        ContractObligation.status == ContractObligationStatus.PENDING,
+        ContractObligation.completed_at.is_(None),
+    )
     removed = session.execute(
-        delete(ContractObligation)
-        .where(ContractObligation.contract_id == contract.id)
-        .where(ContractObligation.description.like("[auto]%"))
+        delete(ContractObligation).where(generated_scope, replaceable)
     ).rowcount or 0
+    # A retained copy of the exact same suggestion should not lead to a new
+    # pending obligation when an existing record has already been acted on.
+    retained = set(session.execute(
+        select(
+            ContractObligation.title, ContractObligation.description, ContractObligation.due_on,
+        ).where(generated_scope)
+    ).tuples())
 
     priority_enum = {
         "low": ContractObligationPriority.LOW,
@@ -727,12 +737,18 @@ def extract_obligations(
                 due = datetime.strptime(obligation.due_on_iso, "%Y-%m-%d").date()
             except ValueError:
                 due = None
+        title = obligation.title.strip()[:255]
+        description = (
+            f"AI extraction: {obligation.description.strip()}"[:2000]
+            if obligation.description else "AI extraction"
+        )
+        if (title, description, due) in retained:
+            continue
         row = ContractObligation(
             contract_id=contract.id,
-            title=obligation.title.strip()[:255],
-            description=f"[auto] {obligation.description.strip()}"[:2000]
-            if obligation.description
-            else "[auto]",
+            title=title,
+            description=description,
+            extracted_by_ai=True,
             due_on=due,
             status=ContractObligationStatus.PENDING,
             priority=priority_enum.get(

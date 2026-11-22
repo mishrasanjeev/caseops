@@ -195,6 +195,12 @@
     "matter_readthrough_dirty": "registry_fail_closed"
   },
   "column_category_overrides": {
+    "contract_clauses": {
+      "extracted_by_ai": "lifecycle_or_audit_evidence"
+    },
+    "contract_obligations": {
+      "extracted_by_ai": "lifecycle_or_audit_evidence"
+    },
     "matter_attachments": {
       "native_local_processing_only": "lifecycle_or_audit_evidence"
     },
@@ -7902,6 +7908,11 @@
           "sql_type": "VARCHAR(36)",
           "nullable": true
         },
+        "extracted_by_ai": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
@@ -8054,6 +8065,11 @@
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATE",
           "nullable": true
+        },
+        "extracted_by_ai": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "BOOLEAN",
+          "nullable": false
         },
         "id": {
           "category_id": "tenant_or_access_identifier",
@@ -33251,7 +33267,7 @@
       }
     }
   ],
-  "schema_fingerprint": "6217a7326d3f8d896b9e4f34488a5c20cea709053fac7c137cfb473305ff4fe9",
+  "schema_fingerprint": "7ceffe65f86af7bea79942e586b686d9060b3d01c3ddef4654c3f4ec3164784c",
   "index_inventory": {
     "orm_index_count": 1829,
     "orm_index_fingerprint": "a9740893574c982867815622a7837dc489b5f26b4400bc000ae7c9546f46819d",

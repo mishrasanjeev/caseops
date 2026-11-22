@@ -60,6 +60,16 @@ gate first. The fixture now checks both that 403 and the 401 returned for an
 invalid bearer session, then runs the full edit and stale-review assertions.
 Both hosted failures remain release evidence. A fresh run must verify the changes.
 
+BUG-007 and BUG-008 also share a verified preservation gap. Both extraction
+paths selected rows for replacement using the editable `[auto]` text prefix.
+A synthetic SQL check of the original predicates selected a manually entered
+row as well as a previously generated row. The follow-up uses explicit
+extraction provenance for new rows and retains all historical records without
+guessing their origin. A repeat extraction must preserve manual records,
+tracked obligations and records on other contracts. This change does not
+establish legal drafting quality or satisfy the broader editing and review
+criteria. Cross-dialect migration and workflow acceptance remain pending.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

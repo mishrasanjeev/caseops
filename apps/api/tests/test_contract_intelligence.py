@@ -39,13 +39,13 @@ def _bootstrap(client: TestClient) -> dict[str, str]:
     return resp.json()
 
 
-def _create_contract(client: TestClient, token: str) -> str:
+def _create_contract(client: TestClient, token: str, *, code: str = "C-ACME-001") -> str:
     resp = client.post(
         "/api/contracts/",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "MSA with Acme India",
-            "contract_code": "C-ACME-001",
+            "contract_code": code,
             "contract_type": "msa",
             "counterparty_name": "Acme India Pvt Ltd",
             "status": "draft",
@@ -151,8 +151,8 @@ def test_extract_clauses_success_path_persists_rows(
     direct local smoke returned 422 because the default mock LLM
     can't satisfy the strict pydantic clause schema. This test
     pins the contract: a provider that emits a valid extraction
-    payload MUST result in ContractClause rows persisted with the
-    [auto] notes prefix and the right risk_level + clause_type.
+    payload MUST result in ContractClause rows persisted with
+    recorded provenance and the expected risk level and clause type.
     """
     import json as _json
     import uuid as _uuid
@@ -174,6 +174,15 @@ def test_extract_clauses_success_path_persists_rows(
     session_data = _bootstrap(client)
     token = session_data["access_token"]
     contract_id = _create_contract(client, token)
+    manual_text = "[auto] Literal text entered by the user."
+    manual = client.post(
+        f"/api/contracts/{contract_id}/clauses",
+        headers=_bearer(token),
+        json={"title": "Manual clause", "clause_type": "payment",
+              "clause_text": "Pay the agreed amount.", "notes": manual_text},
+    )
+    assert manual.status_code == 200, manual.text
+    manual_id = manual.json()["id"]
 
     factory = get_session_factory()
 
@@ -274,8 +283,7 @@ def test_extract_clauses_success_path_persists_rows(
     assert result.provider == "mock"
     assert result.model == "mock-valid-clauses"
 
-    # Rows landed in the DB with the [auto] notes prefix and the
-    # right clause_type / risk_level pulled from the LLM payload.
+    assert result.removed == 0
     with factory() as s:
         rows = list(
             s.scalars(
@@ -284,14 +292,56 @@ def test_extract_clauses_success_path_persists_rows(
                 )
             )
         )
-    assert len(rows) == 2
+    by_id = {row.id: row for row in rows}
+    assert len(by_id) == 3
+    retained = by_id.pop(manual_id)
+    assert retained.notes == manual_text
+    assert retained.extracted_by_ai is False
+    assert all(row.extracted_by_ai is True for row in by_id.values())
+    rows = list(by_id.values())
     types = {r.clause_type for r in rows}
     assert types == {"limitation_of_liability", "indemnity"}
     risks = {r.clause_type: r.risk_level for r in rows}
     assert risks["limitation_of_liability"] == "medium"
     assert risks["indemnity"] == "high"
-    for r in rows:
-        assert (r.notes or "").startswith("[auto]")
+    for row in rows:
+        assert row.notes.startswith("AI extraction: ")
+
+    other_contract_id = _create_contract(client, token, code="C-OTHER-002")
+    with factory() as s:
+        template = rows[0]
+        other = ContractClause(
+            contract_id=other_contract_id,
+            title=template.title,
+            notes=template.notes,
+            extracted_by_ai=True,
+            clause_type=template.clause_type,
+            clause_text=template.clause_text,
+            risk_level=template.risk_level,
+        )
+        s.add(other)
+        s.flush()
+        other_id = other.id
+        s.commit()
+
+    repeated = client.post(
+        f"/api/ai/contracts/{contract_id}/clauses/extract",
+        headers=_bearer(token),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["inserted"] == 2
+    assert repeated.json()["removed"] == 2
+
+    with factory() as s:
+        reloaded = list(s.scalars(select(ContractClause).where(
+            ContractClause.contract_id == contract_id,
+        )))
+        outside_scope = s.get(ContractClause, other_id)
+        assert outside_scope.notes == other.notes
+    preserved = {row.id: row for row in reloaded if row.id in {manual_id, *by_id}}
+    assert set(preserved) == {manual_id}
+    assert preserved[manual_id].notes == manual_text
+
 
 
 def test_extract_obligations_success_path_persists_rows(
@@ -323,6 +373,14 @@ def test_extract_obligations_success_path_persists_rows(
     session_data = _bootstrap(client)
     token = session_data["access_token"]
     contract_id = _create_contract(client, token)
+    manual_text = "[auto] Literal text entered by the user."
+    manual = client.post(
+        f"/api/contracts/{contract_id}/obligations",
+        headers=_bearer(token),
+        json={"title": "Manual obligation", "description": manual_text, "due_on": "2026-10-15"},
+    )
+    assert manual.status_code == 200, manual.text
+    manual_id = manual.json()["id"]
 
     factory = get_session_factory()
     with factory() as s:
@@ -403,6 +461,7 @@ def test_extract_obligations_success_path_persists_rows(
 
     assert result.contract_id == contract_id
     assert result.inserted == 2
+    assert result.removed == 0
 
     with factory() as s:
         rows = list(
@@ -412,7 +471,13 @@ def test_extract_obligations_success_path_persists_rows(
                 )
             )
         )
-    assert len(rows) == 2
+    by_id = {row.id: row for row in rows}
+    assert len(by_id) == 3
+    retained = by_id.pop(manual_id)
+    assert retained.description == manual_text
+    assert retained.extracted_by_ai is False
+    assert all(row.extracted_by_ai is True for row in by_id.values())
+    rows = list(by_id.values())
     titles = {r.title for r in rows}
     assert titles == {"Milestone payment", "Renewal notice"}
     by_title = {r.title: r for r in rows}
@@ -420,8 +485,56 @@ def test_extract_obligations_success_path_persists_rows(
     assert by_title["Milestone payment"].due_on == _date(2026, 12, 31)
     assert by_title["Renewal notice"].priority == "medium"
     assert by_title["Renewal notice"].due_on is None
-    for r in rows:
-        assert (r.description or "").startswith("[auto]")
+    for row in rows:
+        assert row.description.startswith("AI extraction: ")
+
+    other_contract_id = _create_contract(client, token, code="C-OTHER-002")
+    with factory() as s:
+        template = rows[0]
+        other = ContractObligation(
+            contract_id=other_contract_id,
+            title=template.title,
+            description=template.description,
+            extracted_by_ai=True,
+        )
+        s.add(other)
+        s.flush()
+        other_id = other.id
+        s.commit()
+
+    # A recorded owner and prior completion are retained through re-extraction.
+    protected = next(row for row in rows if row.title == "Renewal notice")
+    with factory() as s:
+        prior = s.get(ContractObligation, protected.id)
+        prior.owner_membership_id = membership.id
+        prior.status = "completed"
+        prior.completed_at = datetime.now(UTC)
+        s.commit()
+
+    repeated = client.post(
+        f"/api/ai/contracts/{contract_id}/obligations/extract",
+        headers=_bearer(token),
+    )
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["inserted"] == 1
+    assert repeated.json()["removed"] == 1
+
+    with factory() as s:
+        reloaded = list(s.scalars(select(ContractObligation).where(
+            ContractObligation.contract_id == contract_id,
+        )))
+        outside_scope = s.get(ContractObligation, other_id)
+        assert outside_scope.description == other.description
+    preserved = {row.id: row for row in reloaded if row.id in {manual_id, *by_id}}
+    assert set(preserved) == {manual_id, protected.id}
+    assert preserved[manual_id].description == manual_text
+    assert preserved[protected.id].status == "completed"
+    assert preserved[protected.id].owner_membership_id == membership.id
+    assert preserved[protected.id].completed_at is not None
+    assert sorted(row.title for row in reloaded) == [
+        "Manual obligation", "Milestone payment", "Renewal notice",
+    ]
+
 
 
 def test_structured_with_retry_returns_actionable_422_when_provider_keeps_failing() -> None:
