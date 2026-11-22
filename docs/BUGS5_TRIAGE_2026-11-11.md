@@ -141,6 +141,17 @@ process exit code, signal and assigned test files on unexpected exits. The
 cause and the complete replacement Windows result remain unverified.
 [Windows job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140063090)
 
+The isolated Windows diagnostic on `28fd52a9` passed all 23 unchanged PDF
+preview tests without a worker exit. The full-repository coverage thresholds
+remained enabled and correctly failed on the one-file run. Its launcher had
+no hosted trust bootstrap. Comparing the retained hosted logs shows six
+bootstrap refusals in the earlier complete pass and seven in the failed run.
+The additional line appears between the prior completed test and the next
+reported results. The shared log cannot identify the process responsible for
+that line. The observer now distinguishes startup acknowledgment from an
+assigned collect or run request and retains the original unexpected-exit
+behavior. An exact-source complete Windows run must still pass.
+
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could

@@ -83,7 +83,8 @@ type WorkerRequest = Parameters<ForksPoolWorker["send"]>[0];
 
 class ObservedForkWorker extends ForksPoolWorker {
   private stopping = false;
-  private task: { workerId: number; phase: "collect" | "run"; files: string[] } | null = null;
+  private startupAcknowledged = false;
+  private task: { workerId: number; phase: "start" | "collect" | "run"; files: string[] } | null = null;
 
   constructor(private readonly poolOptions: PoolOptions) {
     super(poolOptions);
@@ -91,9 +92,16 @@ class ObservedForkWorker extends ForksPoolWorker {
 
   override async start() {
     await super.start();
+    this.on("message", (message: unknown) => {
+      if (typeof message === "object" && message !== null
+        && "__vitest_worker_response__" in message && message.__vitest_worker_response__ === true
+        && "type" in message && message.type === "started" && !("error" in message && message.error)) {
+        this.startupAcknowledged = true;
+      }
+    });
     this.on("exit", (code: number | null, signal?: NodeJS.Signals | null) => {
       if (this.stopping) return;
-      const evidence = { code, signal: signal ?? null, task: this.task };
+      const evidence = { code, signal: signal ?? null, startupAcknowledged: this.startupAcknowledged, task: this.task };
       this.poolOptions.project.vitest.logger.errorStream.write(
         `CaseOps Vitest fork exited unexpectedly ${JSON.stringify(evidence)}\n`,
       );
@@ -101,7 +109,9 @@ class ObservedForkWorker extends ForksPoolWorker {
   }
 
   override send(message: WorkerRequest) {
-    if (message.type === "run" || message.type === "collect") {
+    if (message.type === "start") {
+      this.task = { workerId: message.workerId, phase: "start", files: [] };
+    } else if (message.type === "run" || message.type === "collect") {
       const root = this.poolOptions.project.config.root;
       const files = message.context.files.slice(0, 8).map(({ filepath }) => {
         const relative = path.relative(root, filepath);
