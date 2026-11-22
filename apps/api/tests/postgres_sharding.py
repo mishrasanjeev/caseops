@@ -41,14 +41,36 @@ _MEASURED_SIXTEEN_SHARD_DESTINATIONS = {
 # twelve-minute job bound after native exit0. Exchange the108.81-second backfill
 # with the0.017-second guard only when both retain opposite reviewed children.
 # This preserves every parent, child count, test body and timeout.
-_PARENT_THREE_HEAVY = (
+_READTHROUGH_BACKFILL = (
     "tests/test_matter_readthrough_page_migration_20261028.py::"
     "test_named_0007_to_0008_backfill_old_column_crud_and_restart_preserve_every_source[postgres]"
 )
-_PARENT_THREE_LIGHT = (
-    "tests/test_ip_upload_admission_postgres.py::"
-    "test_ip_upload_sqlite_guard_uses_actual_legacy_transaction_state[explicit-begin-True]"
-)
+_MEASURED_CHILD_EXCHANGES = {
+    3: ((
+        _READTHROUGH_BACKFILL,
+        "tests/test_ip_upload_admission_postgres.py::"
+        "test_ip_upload_sqlite_guard_uses_actual_legacy_transaction_state[explicit-begin-True]",
+    ),),
+    # CI44993022903 recorded 242.32 and 640.65 phase seconds in children 6 and
+    # 22. The latter passed all 132 cases but crossed the twelve-minute job
+    # deadline. Move the two measured readthrough cases (107.57s and 110.39s)
+    # against two measured counterparts under 0.07s, only in the observed
+    # direction and only when both still belong to this same parent.
+    6: (
+        (
+            _READTHROUGH_BACKFILL,
+            "tests/test_drive_attachment_admission_postgres.py::"
+            "test_drive_metadata_review_preserves_dirty_caller[ignore]",
+        ),
+        (
+            "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+            "test_named_0008_waits_for_acknowledged_historical_source_writer_before_current_head[hearing_packs]",
+            "tests/test_notice_upload_admission_postgres.py::"
+            "test_upload_cannot_release_an_externally_owned_connection_transaction"
+            "[False-True-create_savepoint-ip-False]",
+        ),
+    ),
+}
 
 
 def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
@@ -69,10 +91,9 @@ def partition(nodeids: list[str], shard: int, total: int) -> list[str]:
         # ABBA remains the default split of each frozen sixteen-shard parent.
         children = {node: (index + 1) // 2 % 2
                     for index, node in enumerate(parent_nodes)}
-        if (parent == 3 and children.get(_PARENT_THREE_HEAVY) == 1
-                and children.get(_PARENT_THREE_LIGHT) == 0):
-            children[_PARENT_THREE_HEAVY] = 0
-            children[_PARENT_THREE_LIGHT] = 1
+        for heavy, light in _MEASURED_CHILD_EXCHANGES.get(parent, ()):
+            if children.get(heavy) == 1 and children.get(light) == 0:
+                children[heavy], children[light] = 0, 1
         selected = [
             node for node in parent_nodes if children[node] == child
         ]

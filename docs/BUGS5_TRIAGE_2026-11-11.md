@@ -112,9 +112,34 @@ existing authorized API already saves obligations and validates an active
 owner in the current company. The workspace now offers this path to contract
 editors, displays the persisted owner and status, and records new entries as
 pending. The added unit and desktop/phone cases cover refusal, assignment, the
-exact new record and reload. Source parsing passed. Full execution, editing
-existing duties, approval, task/calendar promotion and separate structured
-source fields remain open.
+exact new record and reload. Editing existing duties, approval, task/calendar
+promotion and separate structured source fields remain open.
+
+Hosted CI for `13890ebe3` confirms the exact execution-application workflow and
+both incomplete-table recovery cases. The three historical obligation-index
+cases passed on SQLite and PostgreSQL. The complete Windows web run passed
+3,259 cases in 316 files. The obligation browser journey and production
+acceptance remain open. [CI results](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903)
+
+PostgreSQL shard 22 recorded 132 passing cases, all 396 test phases and a
+successful native exit. GitHub still cancelled the job at the unchanged
+twelve-minute limit. Its sibling shard 6 spent 242.32 seconds in test phases,
+while shard 22 spent 640.65 seconds. Two readthrough cases accounted for
+217.96 seconds. The revised partition exchanges those two cases with measured
+short cases from shard 6 when each pair is still in the observed positions.
+The retained 4,205-case inventory verifies unchanged case counts, parent
+assignments and exact coverage. Only four cases move. Projected phase times
+are 460.16 and 422.82 seconds. The complete replacement CI remains pending.
+[Original cancelled job](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903/job/137118098559)
+
+For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
+section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
+to earlier tax years and proceedings. The official 2026 consolidation could
+be identified, but its PDF and an individual official schedule returned HTTP
+403 on direct acquisition. India Code also reports a site migration. The text
+inventory stays pending until the complete official source bytes and edition
+can be verified. [Gazette](https://egazette.gov.in/WriteReadData/2025/265620.pdf) ·
+[CBDT transition guidance](https://www.incometaxindia.gov.in/documents/20117/43120/Updated-FQAs-on-Interplay%26Transitions.pdf/dda21cfd-28be-d931-ad5c-6459ecbd2ea7?t=1775128133037&version=2.0)
 
 ## Evidence Boundary
 
