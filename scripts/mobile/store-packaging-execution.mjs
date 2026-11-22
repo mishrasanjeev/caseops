@@ -89,7 +89,7 @@ export function admitTools(value, platform, { contractOnly = false, deadline, qu
       if (role !== 'bundletool') assert.ok(Number(actual.metadata.mode) & 0o111, 'STORE_TOOL_EXECUTABLE_REQUIRED');
     }
   }
-  assert.equal(value.entries.node.version, '24.15.0', 'STORE_NODE_VERSION_REQUIRED');
+  assert.equal(value.entries.node.version, '24.22.3', 'STORE_NODE_VERSION_REQUIRED');
   assert.equal(value.entries.python.version, '3.13.17', 'STORE_PYTHON_VERSION_REQUIRED');
   if (platform === 'ios') {
     objectKeys(value.iosHostPolicy, ['path', 'sha256', 'sizeBytes'], 'STORE_IOS_HOST_POLICY_REQUIRED');
@@ -193,7 +193,7 @@ async function executePackaging(requestRef, { root = ROOT, adapter, purpose } = 
   assert.ok(contractOnly || (qualification
     ? process.env.CASEOPS_ANDROID_QUALIFICATION_BUILD_GO === 'EXPLICIT_NON_SUBMITTABLE_ANDROID_QUALIFICATION'
     : process.env.CASEOPS_LOCAL_STORE_BUILD_GO === 'EXPLICIT_REVIEWED_LOCAL_STORE_BUILD'), 'STORE_BUILD_NOT_ARMED');
-  assert.ok(contractOnly || (process.platform === 'darwin' && process.versions.node === '24.15.0'), 'STORE_ACCEPTED_HOST_REQUIRED');
+  assert.ok(contractOnly || (process.platform === 'darwin' && process.versions.node === '24.22.3'), 'STORE_ACCEPTED_HOST_REQUIRED');
   const q = jsonInput(reference(requestRef)).value;
   objectKeys(q, ['schemaVersion', 'kind', 'readyForLocalBuild', 'syntheticDataOnly', 'platform', 'recipe', 'sourceTree', 'gates', 'tools',
     'storeHistory', 'reservationDirectory', 'outputDirectory', 'architecture', 'signingSecrets', 'privacyPolicy'], 'STORE_EXECUTION_REQUEST_REQUIRED');

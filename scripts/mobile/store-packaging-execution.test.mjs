@@ -44,7 +44,7 @@ function fixture(t, { androidOnly = false, reservationDirectory } = {}) {
   const iosNames = ['node', 'python', 'git', 'ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'];
   const names = [...iosNames, 'java', 'keytool', 'jarsigner', 'bundletool', 'aapt2'];
   const allTools = Object.fromEntries(names.map(name => { const ref = save(name + '-tool', 'SYNTHETIC_TOOL'); fs.chmodSync(ref.path, 0o700);
-    return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.15.0', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
+    return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.22.3', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
   const hostRef = save('synthetic-ios-host-policy.json', { syntheticContractOnly: true });
   const runtimeRef = save('runtime-public.txt', 'PUBLIC_RUNTIME');
   const generatedValue = platform => (platform === 'ios' ? [['Podfile', 'PUBLIC SYNTHETIC PODFILE']]
@@ -273,7 +273,17 @@ test('independently supplied current store history must match identities and bot
 });
 test('actual public tool files are descriptor-hashed and changed size or owner declarations refuse', t => {
   const f = fixture(t), a = f.make(); const value = JSON.parse(fs.readFileSync(a.q.tools.path));
-  admitTools(value, 'ios'); fs.appendFileSync(value.entries.pod.path, 'changed'); assert.throws(() => admitTools(value, 'ios'));
+  for (const platform of ['ios', 'android']) {
+    const current = platform === 'ios' ? value : JSON.parse(fs.readFileSync(f.make('android').q.tools.path));
+    admitTools(current, platform);
+    for (const version of ['24.15.0', '22.23.5']) {
+      const rejected = structuredClone(current); rejected.entries.node.version = version;
+      assert.throws(() => admitTools(rejected, platform), /STORE_NODE_VERSION_REQUIRED/);
+    }
+  }
+  assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
+  assert.deepEqual(fs.readdirSync(f.reservations), []);
+  fs.appendFileSync(value.entries.pod.path, 'changed'); assert.throws(() => admitTools(value, 'ios'));
   const bad = structuredClone(value); bad.entries.node.ownerUid = (process.getuid?.() || 0) + 10000;
   assert.throws(() => admitTools(bad, 'ios'), /STORE_TOOL_IDENTITY_REQUIRED/);
 });

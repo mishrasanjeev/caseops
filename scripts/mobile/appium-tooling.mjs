@@ -19,17 +19,19 @@ const registry = (name, version) => `https://registry.npmjs.org/${name}/-/${name
 // One npm project holds appium, webdriverio and the driver, so the driver's
 // appium peer resolves to the installed core and one lock covers the graph.
 export const APPIUM_TOOLING_PROJECT = 'scripts/mobile/appium-tooling';
-export const VENDORED_GLOB = Object.freeze({ name: 'glob', version: '14.0.2-caseops.1',
-  relative: 'apps/mobile/vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz',
-  sha256: '6a1eb71056c3c6138d30c06c4c9e0877b4a9bf79ee66c684a9405c6c4442ae25' });
+export const VENDORED_GLOB = Object.freeze({ name: 'glob', version: '14.0.6-caseops.2',
+  relative: 'apps/mobile/vendor/glob-14.0.6-caseops.2/glob-14.0.6-caseops.2.tgz',
+  sha256: 'f9c33abe2f13a5965bd3c32d70955742821d4e5e8ee6edb7a7f16d1c0aaaf374' });
 // Each replacement directory must hold exactly the named old version (or be
 // absent for a new dependency) before it is replaced.
 const DRIVER_REPLACEMENTS = Object.freeze([
-  Object.freeze({ into: 'node_modules/glob', name: 'glob', version: '14.0.2-caseops.1', replaces: '13.0.6', vendored: true, sha256: VENDORED_GLOB.sha256 }),
-  Object.freeze({ into: 'node_modules/minimatch', name: 'minimatch', version: '11.0.1', replaces: '10.2.6',
-    integrity: 'sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==' }),
-  Object.freeze({ into: 'node_modules/@isaacs/nonrecursive-glob-match', name: '@isaacs/nonrecursive-glob-match', version: '1.0.3', replaces: null,
-    integrity: 'sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==' }),
+  Object.freeze({ into: 'node_modules/glob', name: 'glob', version: '14.0.6-caseops.2', replaces: '13.0.6', vendored: true, sha256: VENDORED_GLOB.sha256 }),
+  Object.freeze({ into: 'node_modules/minimatch', name: 'minimatch', version: '11.0.8', replaces: '10.2.6',
+    integrity: 'sha512-nFQuYSTVrGvysVBps5Ih+0BdnYFN/Cj3C816r6+p7yK+FHrVLGE4O4N9AFwykrlNlvM2HYt+Rad1Uiro6h88Ig==' }),
+  Object.freeze({ into: 'node_modules/@isaacs/nonrecursive-glob-match', name: '@isaacs/nonrecursive-glob-match', version: '1.1.0', replaces: null,
+    integrity: 'sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw==' }),
+  Object.freeze({ into: 'node_modules/brace-expansion', name: 'brace-expansion', version: '5.0.13', replaces: '5.0.12',
+    integrity: 'sha512-Vh3dmFbc4wZeox7M9I/0L9GfFd83Su4+yCck/OF9Gi/P/dAHn0RT7X4K9R7gMNMhDck3DvhR6QXsnQdjjgwNvQ==' }),
   // glob 14 requires path-scurry ^3; other bundled consumers keep 2.0.2.
   Object.freeze({ into: 'node_modules/glob/node_modules/path-scurry', name: 'path-scurry', version: '3.0.0', replaces: null,
     integrity: 'sha512-1pTbQqH1wIwMi/eleQ5leFTTCkzFsPcgXNjwOA8YGGW/W4/kHT3dssE7Z6NH+zuqNLOzOB0uaD61yl7cAcVhgg==' }),
@@ -38,21 +40,21 @@ export const UIA2_REBUNDLE = Object.freeze({
   driver: 'uiautomator2',
   upstream: Object.freeze({ name: 'appium-uiautomator2-driver', version: '8.7.3',
     integrity: 'sha512-Aa+CPtxasGBVg30d62Lun45ike7p8QNpN8n7i1FrRv7V8A04cfPulPYFzl5t71VdICXADaU6bzP7hsLXE2ahFQ==' }),
-  localVersion: '8.7.3-caseops.1',
+  localVersion: '8.7.3-caseops.3',
   replacements: DRIVER_REPLACEMENTS,
   provenanceFile: 'CASEOPS-REBUNDLE.json',
-  tarSha256: '4f55ebc09906251558b33f593664d34eb3ecd6c95fcd46dcdd65f70634a90c75',
-  tgzIntegrity: 'sha512-OS9PpU9Eoyl7QmSpkO+eSoo/JcqsUyXO8lqHWaDUb0StsSv+WK3HLeME1XRkZJ52sFh0c2MAP5kSYU01YmpbvA==',
+  tarSha256: '14d09422e649ec87e438503d54b6e8f2b636bb628a65851ad61e791db28d52ad',
+  tgzIntegrity: 'sha512-rdOC3zcTsyDopWz4J6+kabAx9oRuWEDvGoTkX0z0UC6wuVbL1aBAB4KdCbKSzdEb+n6tkbhkiLkf9H1X2GXLxA==',
 });
 export const XCUITEST_REBUNDLE = Object.freeze({
   driver: 'xcuitest',
   upstream: Object.freeze({ name: 'appium-xcuitest-driver', version: '12.22.2',
     integrity: 'sha512-Zgtv+BBZ35QyONs3I972JjEz1d9cBlzHWIJNug33jslu6OcIUKyNKr79xwpiOb1Kpcs8Pzq0yctdzcwZ7FjBkQ==' }),
-  localVersion: '12.22.2-caseops.1',
+  localVersion: '12.22.2-caseops.3',
   replacements: DRIVER_REPLACEMENTS,
   provenanceFile: 'CASEOPS-REBUNDLE.json',
-  tarSha256: 'b69fc94c1180820fa5864d2659a9f91e73d81e658a7dffbde934eb06df86bc14',
-  tgzIntegrity: 'sha512-3L0NpmjThZZj7f+/8M0qik6kPn14q4uLKNfSv9lTMYqXzZTQ3sURMAf2i+c96QwysAmh/RjAUGsuLcbPKX2DLQ==',
+  tarSha256: 'f7791a8d6d33487dbf480c076750f9e3aaae22005e63bcc5f538dc6ce014a712',
+  tgzIntegrity: 'sha512-8UgvXmPyO7Txgg2sHy39UQT61Ef52FexYD+QuI+WvN6hvd7tD3QLweLYPz4mBAPrgWsIz6/Y/q+t6whWuXh2FQ==',
 });
 export const DRIVER_REBUNDLES = Object.freeze([UIA2_REBUNDLE, XCUITEST_REBUNDLE]);
 
@@ -162,7 +164,7 @@ export function rebundleDriver(archives, spec) {
       licenseFile: licenceFile(added, prefix), archiveSha256: sha256(archive), removedFiles: removed.length, addedFiles: added.length });
   }
   const driverLicence = { package: `${original.name}@${original.version}`, license: original.license, licenseFile: licenceFile(rows, 'package/') };
-  for (const name of ['glob', 'minimatch']) {
+  for (const name of ['glob', 'minimatch', 'brace-expansion', '@isaacs/nonrecursive-glob-match']) {
     const copies = rows.filter(r => r.path.endsWith('/package.json') && new RegExp(`/node_modules/${name}/package\\.json$`).test(r.path));
     assert.deepEqual(copies.map(r => r.path), [`package/node_modules/${name}/package.json`], 'APPIUM_TOOLING_SINGLE_FIXED_COPY');
   }
@@ -181,7 +183,7 @@ export function rebundleDriver(archives, spec) {
   });
   const provenance = { kind: 'caseops-appium-driver-rebundle-v1', name: spec.upstream.name,
     upstreamVersion: spec.upstream.version, localVersion: spec.localVersion, upstreamIntegrity: spec.upstream.integrity,
-    advisories: ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249'], driverLicence, replacements: replaced, dependentSpecs: dependents,
+    advisories: ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249', 'GHSA-6jwq-xf8q-xcwh'], driverLicence, replacements: replaced, dependentSpecs: dependents,
     unchanged: 'All other upstream members are byte-identical; the root package.json changes only version and files.' };
   const manifest = { ...original, version: spec.localVersion, files: [...original.files, spec.provenanceFile] };
   rows = rows.filter(r => r.path !== 'package/package.json');
@@ -487,7 +489,7 @@ export function assertAppiumRuntimePath(runtime) {
  * and audit its locked and physical graphs.
  */
 export async function prepareAppiumTooling(runtime, { request = globalThis.fetch } = {}) {
-  assert.equal(process.versions.node, '24.15.0', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.equal(process.versions.node, '24.22.3', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
   assertAppiumRuntimePath(runtime);
   const vendor = path.join(runtime, 'vendor'); fs.mkdirSync(vendor, { recursive: true, mode: 0o700 });
   const glob = fs.readFileSync(path.join(REPO, VENDORED_GLOB.relative)); assert.equal(sha256(glob), VENDORED_GLOB.sha256, 'APPIUM_TOOLING_VENDORED_DIGEST');

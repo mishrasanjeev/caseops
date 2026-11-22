@@ -736,12 +736,14 @@ function driverFixture() {
     'appium-uiautomator2-driver': packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: ['build/lib'] },
       'LICENSE': 'Apache', 'build/lib/driver.js': 'driver', 'node_modules/glob/package.json': { name: 'glob', version: '13.0.6' }, 'node_modules/glob/old.js': 'old',
       'node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' },
+      'node_modules/brace-expansion/package.json': { name: 'brace-expansion', version: '5.0.12' },
       'node_modules/@appium/support/package.json': { name: '@appium/support', version: '7.2.9', dependencies: { glob: '13.0.6', semver: '7.7.2' } },
       'node_modules/readdir-glob/package.json': { name: 'readdir-glob', version: '3.0.0', dependencies: { minimatch: '^10.2.2' } },
       'node_modules/parse-listing/.Makefile.un~': 'undo' }),
-    glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.2-caseops.1', dependencies: { minimatch: '^11.0.0' } }, 'LICENSE.md': 'BlueOak', 'dist/index.js': 'new' }),
-    minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' }, 'LICENSE.md': 'BlueOak' }),
-    '@isaacs/nonrecursive-glob-match': packageArchive({ 'package.json': { name: '@isaacs/nonrecursive-glob-match', version: '1.0.3' }, 'LICENSE.md': 'BlueOak' }),
+    glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.6-caseops.2', dependencies: { minimatch: '^11.0.0' } }, 'LICENSE.md': 'BlueOak', 'dist/index.js': 'new' }),
+    minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.8' }, 'LICENSE.md': 'BlueOak' }),
+    '@isaacs/nonrecursive-glob-match': packageArchive({ 'package.json': { name: '@isaacs/nonrecursive-glob-match', version: '1.1.0' }, 'LICENSE.md': 'BlueOak' }),
+    'brace-expansion': packageArchive({ 'package.json': { name: 'brace-expansion', version: '5.0.13' }, 'LICENSE': 'MIT' }),
     'path-scurry': packageArchive({ 'package.json': { name: 'path-scurry', version: '3.0.0' }, 'LICENSE.md': 'BlueOak' }),
   };
   const spec = { ...appiumTooling.UIA2_REBUNDLE, tarSha256: null,
@@ -755,33 +757,35 @@ test('appium driver rebundle replaces only advisory glob/minimatch copies and re
   const { archives, spec } = driverFixture(), first = appiumTooling.rebundleDriver(archives, spec);
   assert.ok(first.tgz.equals(appiumTooling.rebundleDriver(archives, spec).tgz)); assert.equal(first.tgz[9], 3);
   const rows = memberMap(first.tgz), json = name => JSON.parse(rows.get('package/' + name).bytes.toString('utf8'));
-  assert.deepEqual(json('package.json'), { name: 'appium-uiautomator2-driver', version: '8.7.3-caseops.1', files: ['build/lib', 'CASEOPS-REBUNDLE.json'] });
-  assert.equal(json('node_modules/glob/package.json').version, '14.0.2-caseops.1'); assert.ok(!rows.has('package/node_modules/glob/old.js'));
-  assert.equal(json('node_modules/minimatch/package.json').version, '11.0.1');
+  assert.deepEqual(json('package.json'), { name: 'appium-uiautomator2-driver', version: '8.7.3-caseops.3', files: ['build/lib', 'CASEOPS-REBUNDLE.json'] });
+  assert.equal(json('node_modules/glob/package.json').version, '14.0.6-caseops.2'); assert.ok(!rows.has('package/node_modules/glob/old.js'));
+  assert.equal(json('node_modules/minimatch/package.json').version, '11.0.8');
+  assert.equal(json('node_modules/brace-expansion/package.json').version, '5.0.13');
   assert.equal(json('node_modules/glob/node_modules/path-scurry/package.json').version, '3.0.0');
-  assert.equal(json('node_modules/@isaacs/nonrecursive-glob-match/package.json').version, '1.0.3');
-  assert.deepEqual(json('node_modules/@appium/support/package.json').dependencies, { glob: '14.0.2-caseops.1', semver: '7.7.2' });
-  assert.deepEqual(json('node_modules/readdir-glob/package.json').dependencies, { minimatch: '11.0.1' });
+  assert.equal(json('node_modules/@isaacs/nonrecursive-glob-match/package.json').version, '1.1.0');
+  assert.deepEqual(json('node_modules/@appium/support/package.json').dependencies, { glob: '14.0.6-caseops.2', semver: '7.7.2' });
+  assert.deepEqual(json('node_modules/readdir-glob/package.json').dependencies, { minimatch: '11.0.8' });
   assert.equal(rows.get('package/build/lib/driver.js').bytes.toString(), 'driver'); assert.ok(rows.has('package/node_modules/parse-listing/.Makefile.un~'));
   const provenance = json('CASEOPS-REBUNDLE.json');
   assert.deepEqual(provenance.dependentSpecs.map(r => [r.package, r.name, r.from, r.to]),
-    [['@appium/support@7.2.9', 'glob', '13.0.6', '14.0.2-caseops.1'], ['readdir-glob@3.0.0', 'minimatch', '^10.2.2', '11.0.1']]);
-  assert.deepEqual(provenance.replacements.map(r => [r.directory, r.from, r.to]), [['node_modules/glob', '13.0.6', '14.0.2-caseops.1'],
-    ['node_modules/minimatch', '10.2.6', '11.0.1'], ['node_modules/@isaacs/nonrecursive-glob-match', null, '1.0.3'], ['node_modules/glob/node_modules/path-scurry', null, '3.0.0']]);
-  assert.deepEqual(provenance.advisories, ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249']);
+    [['@appium/support@7.2.9', 'glob', '13.0.6', '14.0.6-caseops.2'], ['readdir-glob@3.0.0', 'minimatch', '^10.2.2', '11.0.8']]);
+  assert.deepEqual(provenance.replacements.map(r => [r.directory, r.from, r.to]), [['node_modules/glob', '13.0.6', '14.0.6-caseops.2'],
+    ['node_modules/minimatch', '10.2.6', '11.0.8'], ['node_modules/@isaacs/nonrecursive-glob-match', null, '1.1.0'], ['node_modules/brace-expansion', '5.0.12', '5.0.13'], ['node_modules/glob/node_modules/path-scurry', null, '3.0.0']]);
+  assert.deepEqual(provenance.advisories, ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249', 'GHSA-6jwq-xf8q-xcwh']);
   assert.throws(() => appiumTooling.rebundleDriver(archives, { ...spec, tarSha256: '0'.repeat(64) }), /APPIUM_TOOLING_REBUNDLE_DIGEST/);
 });
 
 test('appium driver rebundle refuses unpinned inputs, unexpected prior versions and duplicate vulnerable copies', () => {
   const { archives, spec } = driverFixture();
-  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' }, 'x.js': '' }) }, spec), /APPIUM_TOOLING_REPLACEMENT_INTEGRITY/);
-  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.2-caseops.1' } }) }, spec), /APPIUM_TOOLING_VENDORED_DIGEST/);
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, minimatch: packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.8' }, 'x.js': '' }) }, spec), /APPIUM_TOOLING_REPLACEMENT_INTEGRITY/);
+  assert.throws(() => appiumTooling.rebundleDriver({ ...archives, glob: packageArchive({ 'package.json': { name: 'glob', version: '14.0.6-caseops.2' } }) }, spec), /APPIUM_TOOLING_VENDORED_DIGEST/);
   const swapped = packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: [] }, 'node_modules/glob/package.json': { name: 'glob', version: '13.0.5' } });
   assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': swapped }, spec), /APPIUM_TOOLING_UPSTREAM_INTEGRITY/);
   assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': swapped },
     { ...spec, upstream: { ...spec.upstream, integrity: sri(swapped) } }), /APPIUM_TOOLING_REPLACED_IDENTITY/);
   const nested = packageArchive({ 'package.json': { name: 'appium-uiautomator2-driver', version: '8.7.3', files: [] }, 'LICENSE': 'Apache',
     'node_modules/glob/package.json': { name: 'glob', version: '13.0.6' }, 'node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' },
+    'node_modules/brace-expansion/package.json': { name: 'brace-expansion', version: '5.0.12' },
     'node_modules/archiver/node_modules/minimatch/package.json': { name: 'minimatch', version: '10.2.6' } });
   assert.throws(() => appiumTooling.rebundleDriver({ ...archives, 'appium-uiautomator2-driver': nested },
     { ...spec, upstream: { ...spec.upstream, integrity: sri(nested) } }), /APPIUM_TOOLING_SINGLE_FIXED_COPY/);
@@ -807,8 +811,8 @@ test('appium driver rebundle records each shipped licence and refuses a pinned r
   const { archives, spec } = driverFixture(), provenance = appiumTooling.rebundleDriver(archives, spec).provenance;
   assert.deepEqual(provenance.driverLicence.licenseFile.path, 'LICENSE');
   assert.deepEqual(provenance.replacements.map(r => r.licenseFile.path), ['node_modules/glob/LICENSE.md', 'node_modules/minimatch/LICENSE.md',
-    'node_modules/@isaacs/nonrecursive-glob-match/LICENSE.md', 'node_modules/glob/node_modules/path-scurry/LICENSE.md']);
-  const bare = packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.1' } });
+    'node_modules/@isaacs/nonrecursive-glob-match/LICENSE.md', 'node_modules/brace-expansion/LICENSE', 'node_modules/glob/node_modules/path-scurry/LICENSE.md']);
+  const bare = packageArchive({ 'package.json': { name: 'minimatch', version: '11.0.8' } });
   assert.throws(() => appiumTooling.rebundleDriver({ ...archives, minimatch: bare },
     { ...spec, replacements: spec.replacements.map(r => r.name === 'minimatch' ? { ...r, integrity: sri(bare) } : r) }), /APPIUM_TOOLING_LICENCE_REQUIRED/);
 });
@@ -819,15 +823,15 @@ function installFixture(t, { bins = true } = {}) {
     fs.writeFileSync(path.join(root, file), typeof value === 'string' ? value : JSON.stringify(value)); };
   const other = process.platform === 'darwin' ? 'linux' : 'darwin';
   const packages = { 'node_modules/appium': { version: '3.9.0' }, 'node_modules/@scope/x': { version: '1.0.0' },
-    'node_modules/appium/node_modules/glob': { version: '14.0.2-caseops.1' }, 'node_modules/driver': { version: '1.0.0' },
+    'node_modules/appium/node_modules/glob': { version: '14.0.6-caseops.2' }, 'node_modules/driver': { version: '1.0.0' },
     'node_modules/driver/node_modules/@emnapi/runtime': { version: '1.11.3', optional: true, inBundle: true },
     'node_modules/@img/sharp-other': { version: '0.34.5', optional: true, os: [other] } };
   write('package-lock.json', { lockfileVersion: 3, packages: { '': { name: 'fixture' }, ...packages } });
   write('node_modules/.package-lock.json', { lockfileVersion: 3, packages: Object.fromEntries(Object.entries(packages).filter(([key]) => !key.includes('sharp'))) });
   write('node_modules/appium/package.json', { name: 'appium', version: '3.9.0', bin: { appium: 'index.js' } }); write('node_modules/appium/index.js', '');
   write('node_modules/@scope/x/package.json', { name: '@scope/x', version: '1.0.0' });
-  write('node_modules/appium/node_modules/glob/package.json', { name: 'glob', version: '14.0.2-caseops.1' });
-  write('node_modules/appium/node_modules/glob/CASEOPS-BUNDLE-SOURCES.json', { sourceArchives: [{ name: 'minimatch', version: '11.0.1' }] });
+  write('node_modules/appium/node_modules/glob/package.json', { name: 'glob', version: '14.0.6-caseops.2' });
+  write('node_modules/appium/node_modules/glob/CASEOPS-BUNDLE-SOURCES.json', { sourceArchives: [{ name: 'minimatch', version: '11.0.8' }] });
   write('node_modules/driver/package.json', { name: 'driver', version: '1.0.0' });
   fs.mkdirSync(path.join(root, 'node_modules/driver/node_modules/@emnapi/runtime'), { recursive: true });
   write('node_modules/.cache/appium/extensions.yaml', 'drivers: {}\n');
@@ -842,7 +846,7 @@ const inventoryRefusal = (root, pattern, options) => assert.throws(() => appiumT
 
 test('appium physical inventory reconciles nested, scoped, embedded, placeholder, absent optional and bin identities with both locks', t => {
   const { root } = installFixture(t), inventory = appiumTooling.physicalAdvisoryInventory(root);
-  assert.deepEqual(inventory.graph, { '@scope/x': ['1.0.0'], appium: ['3.9.0'], driver: ['1.0.0'], glob: ['14.0.2-caseops.1'], minimatch: ['11.0.1'] });
+  assert.deepEqual(inventory.graph, { '@scope/x': ['1.0.0'], appium: ['3.9.0'], driver: ['1.0.0'], glob: ['14.0.6-caseops.2'], minimatch: ['11.0.8'] });
   assert.deepEqual(inventory.emptyPlaceholders, ['node_modules/driver/node_modules/@emnapi/runtime']);
   assert.deepEqual(inventory.absentOptional, ['node_modules/@img/sharp-other']);
   assert.equal(inventory.binLinks, process.platform === 'win32' ? 0 : 1);
@@ -895,7 +899,7 @@ test('appium runtime with a dot-dot name inside the repository refuses before wr
   try {
     assert.throws(() => appiumTooling.assertAppiumRuntimePath(runtime), /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/);
     await assert.rejects(appiumTooling.prepareAppiumTooling(runtime, { request: async () => { requests++; throw new Error('OFFLINE_UNEXPECTED_DOWNLOAD'); } }),
-      process.versions.node === '24.15.0' ? /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/ : /APPIUM_TOOLING_PINNED_NODE_REQUIRED/);
+      process.versions.node === '24.22.3' ? /APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY/ : /APPIUM_TOOLING_PINNED_NODE_REQUIRED/);
     assert.equal(writes, 0); assert.equal(requests, 0); assert.equal(fs.existsSync(runtime), false);
   } finally { mkdir.mock.restore(); }
 });
@@ -1069,7 +1073,9 @@ test('committed appium tooling lock pins the rebundled driver and only fixed glo
   }
   assert.equal(hash(fs.readFileSync(fileURLToPath(new URL('../../' + appiumTooling.VENDORED_GLOB.relative, import.meta.url)))), appiumTooling.VENDORED_GLOB.sha256);
   const graph = appiumTooling.lockedAdvisoryInventory(lockfile).graph;
-  assert.deepEqual(graph.glob, ['14.0.2-caseops.1']); assert.deepEqual(graph.minimatch, ['11.0.1']); assert.deepEqual(graph['path-scurry'], ['2.0.2', '3.0.0']);
+  assert.deepEqual(graph.glob, ['14.0.6-caseops.2']); assert.deepEqual(graph.minimatch, ['11.0.8']);
+  assert.deepEqual(graph['brace-expansion'], ['5.0.13']); assert.deepEqual(graph['@isaacs/nonrecursive-glob-match'], ['1.1.0']);
+  assert.deepEqual(graph['path-scurry'], ['3.0.0']);
 });
 
 test('appium tooling sources are in the native source fingerprint and its dirty fence', t => {

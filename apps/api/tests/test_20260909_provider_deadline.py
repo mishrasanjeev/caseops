@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Event, Thread
@@ -216,27 +217,57 @@ def test_real_loopback_transport_cancels_stalled_response_without_starvation(pha
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_port}"
-    provider = EcourtsIndiaApiProvider(
-        base_url=base, token="loopback-only", request_budget_seconds=0.25
-    )
+    # Resolve the real transport's default trust configuration before the
+    # operation clock. This case measures cancellation after actual TCP entry;
+    # client context-entry budgeting has independent coverage below.
+    transport_closed = Event()
+
+    class OwnedTransport(httpx.AsyncHTTPTransport):
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            await super().__aexit__(exc_type, exc_value, traceback)
+            transport_closed.set()
+
+        async def aclose(self):
+            await super().aclose()
+            transport_closed.set()
+
+    transport = None
     try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            started = time.monotonic()
-            pending = pool.submit(provider.get_case_by_cnr, cnr="DLHC010012342026")
-            assert entered.wait(2), "the real TCP request never reached the fixture"
-            with httpx.Client(timeout=1, trust_env=False) as client:
+        transport = OwnedTransport(trust_env=False)
+        provider = EcourtsIndiaApiProvider(
+            base_url=base,
+            token="loopback-only",
+            transport=transport,
+            request_budget_seconds=0.25,
+        )
+        with httpx.Client(timeout=1, trust_env=False) as client:
+            setup_started = time.monotonic()
+            assert client.get(base + "/health").text == "ok"
+            assert time.monotonic() - setup_started < 2
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                started = time.monotonic()
+                pending = pool.submit(provider.get_case_by_cnr, cnr="DLHC010012342026")
+                assert entered.wait(2), "the real TCP request never reached the fixture"
                 assert client.get(base + "/health").text == "ok"
                 with pytest.raises(CaseTrackingProviderError) as error:
                     pending.result(timeout=2)
                 assert error.value.response_class == "timeout"
+                assert transport_closed.is_set()
                 assert time.monotonic() - started < 2
                 assert client.get(base + "/health").text == "ok"
             assert len([path for path in paths if path != "/health"]) == 1
     finally:
+        # Pool exit has settled its worker before fallback closure. AsyncClient
+        # normally closes this transport on that worker's own event loop. Only
+        # setup failure before that ownership requires fallback closure.
         release.set()
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+        try:
+            if transport is not None and not transport_closed.is_set():
+                asyncio.run(transport.aclose())
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
 
 def test_case_provider_does_not_forward_authentication_to_redirects():
@@ -254,3 +285,37 @@ def test_case_provider_does_not_forward_authentication_to_redirects():
     with pytest.raises(CaseTrackingProviderError):
         provider.get_case_by_cnr(cnr="DLHC010012342026")
     assert len(calls) == 1
+
+
+def test_provider_deadline_includes_client_context_entry(monkeypatch):
+    calls, closed = [], []
+
+    async def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={})
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://provider.invalid",
+        token="deterministic",
+        transport=httpx.MockTransport(handler),
+        request_budget_seconds=0.05,
+    )
+    original_client = provider._client
+
+    @asynccontextmanager
+    async def delayed_client_entry():
+        async with original_client() as client:
+            try:
+                await asyncio.sleep(5)
+                yield client
+            finally:
+                closed.append(True)
+
+    monkeypatch.setattr(provider, "_client", delayed_client_entry)
+    started = time.monotonic()
+    with pytest.raises(CaseTrackingProviderError) as error:
+        provider.get_case_by_cnr(cnr="DLHC010012342026")
+    assert error.value.response_class == "timeout"
+    assert time.monotonic() - started < 0.8
+    assert calls == []
+    assert closed == [True]
