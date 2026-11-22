@@ -113,7 +113,7 @@ function readPromotionSource(root, git, deadline, sourceReader) {
 
 export async function promoteAndroidQualification(requestRef, { root = ROOT, sourceReader = gitSource, harnesses } = {}) {
   const contractOnly = sourceReader !== gitSource || harnesses !== undefined;
-  assert.ok(contractOnly || (root === ROOT && process.platform === 'darwin' && process.versions.node === '24.15.0'), 'QUALIFICATION_PINNED_HOST_REQUIRED');
+  assert.ok(contractOnly || (root === ROOT && process.platform === 'darwin' && process.versions.node === '24.22.3'), 'QUALIFICATION_PINNED_HOST_REQUIRED');
   assert.ok(contractOnly || process.env.CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO === 'EXPLICIT_REVIEWED_ALL15_GATE_PROMOTION', 'QUALIFICATION_PROMOTION_NOT_ARMED');
   const deadline = Date.now() + 120000;
   const json = ref => jsonInput(ref, { deadline }).value;
