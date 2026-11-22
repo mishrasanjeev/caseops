@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Sparkles, Users } from "lucide-react";
 
+import { formatCounselAmount } from "@/components/app/CounselCurrencyTotals";
 import {
   Card,
   CardContent,
@@ -18,7 +19,6 @@ import {
   fetchOutsideCounselRecommendations,
   type OutsideCounselRecommendation,
 } from "@/lib/api/endpoints";
-import { formatMoneyMinor } from "@/lib/billing-format";
 import { useCapability } from "@/lib/capabilities";
 import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
@@ -54,7 +54,7 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
                 {spend.map(({ currency, approved_spend_minor: amount }) => (
                   <div key={currency} className="flex flex-wrap gap-x-2">
                     <dt>{currency || "Unknown currency"}</dt>
-                    <dd>{/^[A-Z]{3}$/.test(currency) ? formatMoneyMinor(amount, currency, 2) : `${amount} minor units`}</dd>
+                    <dd>{formatCounselAmount(amount, currency)}</dd>
                   </div>
                 ))}
               </dl>

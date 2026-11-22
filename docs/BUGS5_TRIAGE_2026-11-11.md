@@ -70,6 +70,15 @@ The earlier response field remains an INR subtotal for older clients. This
 change belongs to J13/M12, US-038 and FT-055. The compact-card browser journey
 uses real API records and asserts both literal visible amounts.
 
+A separate J13/M12 follow-up found the same currency problem in the portfolio
+and per-Matter spend displays. The portfolio fixture rendered ₹0.45 for 22
+paise and 23 US cents. Both pages now use the existing spend records to show
+amounts by currency. The Matter page uses its own currency for a single
+currency, and an incomplete retained response shows unavailable amounts. The
+portfolio disables sorting by the old mixed-currency sum. A synthetic React
+render and native TypeScript compilation covered these display boundaries.
+The amended browser journey still needs an actual run.
+
 On `c441cdaf3`, API shard 6 showed the Delhi layout splitting the decree-holder
 and advocate signature labels across pages. The renderer now keeps consecutive
 signature labels together in PDF and Word. The regression checks the full source
