@@ -53,6 +53,7 @@ from caseops_api.schemas.provider_costs import (
     ProviderCostProfileUpdateRequest,
 )
 from caseops_api.schemas.saas_billing import (
+    PlatformAddOnMutation,
     PlatformCouponCreateRequest,
     PlatformGrantCreditsRequest,
     PlatformManualInvoiceCreateRequest,
@@ -121,6 +122,7 @@ from caseops_api.services.saas_billing import (
     platform_provider_events,
     platform_revenue_csv,
     platform_set_overage_policy,
+    platform_set_subscription_add_on,
     platform_usage_report,
 )
 from caseops_api.services.security import require_recent_step_up, require_step_up_always
@@ -735,6 +737,22 @@ def resume_company_subscription(
         session,
         company_id=company_id,
         payload=PlatformSubscriptionMutation(status="active", reason=payload.reason),
+        platform_admin=route_context.platform_admin,
+        context=route_context.context,
+    )
+
+
+@router.post("/companies/{company_id}/subscription/add-ons")
+def set_company_subscription_add_on(
+    company_id: str,
+    payload: PlatformAddOnMutation,
+    route_context: PlatformBillingManager,
+    session: DbSession,
+) -> dict[str, object]:
+    return platform_set_subscription_add_on(
+        session,
+        company_id=company_id,
+        payload=payload,
         platform_admin=route_context.platform_admin,
         context=route_context.context,
     )

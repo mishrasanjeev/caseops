@@ -1,3 +1,18 @@
+## November22 - IP workspace paid add-on (J14/M14, J08/M08)
+
+**Partially implemented: landed in code, not deployed or verified in production.**
+Migration `20261122_0001` adds `addon_ip_workspace` to catalog 2026.11.v1
+(Rs 9,999 a month, Rs 99,990 a year, GST-exclusive, Firm and GC plans only)
+granting exactly the eight IP entitlement keys the IP gates check. Entitlement
+resolution ignores the add-on on an ineligible plan; checkout and the new
+platform-admin add-on route refuse Solo, trial and internal plans. Activation
+and ending are audited for the platform and the tenant. Remaining: deploy, a
+production invoice-activation replay on a real Firm or GC tenant, a
+platform-admin UI for the route, and a time-based add-on term end if the owner
+wants one (today add-ons, like base plans, end by status or explicit ending).
+The migration must be re-chained after whichever of this change and the
+`sales_demo` plan (PR #628) lands second.
+
 ## 2026-11-18 — local Docker04 failures remain release blockers
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

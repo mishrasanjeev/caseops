@@ -72,6 +72,23 @@ def _merge_entitlements(base: dict[str, Any], delta: dict[str, Any], *, quantity
         base[key] = value
 
 
+def add_on_allowed_on_plan(add_on: BillingPlanVersion, plan: BillingPlanVersion | None) -> bool:
+    """Whether an add-on may apply to a base plan.
+
+    ``feature_summary_json.eligible_segments`` restricts an add-on to the listed
+    base-plan segments; without it every plan may carry the add-on. Purchase,
+    activation and entitlement resolution all ask this one question, so an add-on
+    on an ineligible plan (for example after a move to Solo) grants nothing.
+    """
+
+    segments = (add_on.feature_summary_json or {}).get("eligible_segments")
+    if segments is None:
+        return True
+    if not isinstance(segments, list):
+        return False
+    return plan is not None and plan.segment in segments
+
+
 def _latest_subscription(session: Session, company_id: str) -> BillingSubscription | None:
     rows = list(
         session.scalars(
@@ -120,7 +137,7 @@ def resolve_entitlements(session: Session, subscription: BillingSubscription) ->
         if item.item_type != "add_on":
             continue
         row = add_on_rows.get(item.item_code)
-        if row is not None:
+        if row is not None and add_on_allowed_on_plan(row, subscription.plan_version):
             _merge_entitlements(entitlements, _plan_entitlements(row), quantity=item.quantity)
     if subscription.entitlement_overrides_json:
         entitlements.update(subscription.entitlement_overrides_json)

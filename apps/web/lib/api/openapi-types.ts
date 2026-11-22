@@ -12530,6 +12530,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/companies/{company_id}/subscription/add-ons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Company Subscription Add On */
+        post: operations["set_company_subscription_add_on_api_platform_admin_companies__company_id__subscription_add_ons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-admin/companies/{company_id}/subscription/resume": {
         parameters: {
             query?: never;
@@ -15280,6 +15297,8 @@ export interface components {
             add_on_code: string;
             /** Cancel Url */
             cancel_url?: string | null;
+            /** Interval */
+            interval?: ("month" | "year") | null;
             /**
              * Quantity
              * @default 1
@@ -17481,6 +17500,8 @@ export interface components {
             description: string | null;
             /** Display Name */
             display_name: string;
+            /** Eligible Segments */
+            eligible_segments?: string[] | null;
             /** Entitlements */
             entitlements: {
                 [key: string]: unknown;
@@ -45232,6 +45253,25 @@ export interface components {
             material_access_instructions: string;
             /** Material Custodian */
             material_custodian: string;
+        };
+        /** PlatformAddOnMutation */
+        PlatformAddOnMutation: {
+            /** Add On Code */
+            add_on_code: string;
+            /**
+             * Billing Interval
+             * @default month
+             * @enum {string}
+             */
+            billing_interval: "month" | "year";
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "ended";
         };
         /** PlatformCouponCreateRequest */
         PlatformCouponCreateRequest: {
@@ -77442,6 +77482,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PlatformSubscriptionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_company_subscription_add_on_api_platform_admin_companies__company_id__subscription_add_ons_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformAddOnMutation"];
             };
         };
         responses: {

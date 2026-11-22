@@ -4081,6 +4081,8 @@ export const billingPlanRecord = z.object({
   trial_eligible: z.boolean(),
   prices: z.array(billingPriceRecord),
   entitlements: z.record(z.string(), z.unknown()),
+  // Base-plan segments an add-on is sold on; null means every plan.
+  eligible_segments: z.array(z.string()).nullable().optional(),
 });
 
 export const billingPlansResponse = z.object({
