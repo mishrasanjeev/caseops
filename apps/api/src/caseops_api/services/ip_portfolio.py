@@ -233,17 +233,30 @@ def _primary_client_expressions(company_id: str):
     return family_key, label
 
 
+def _confirmed_registry_sync_conditions():
+    return (
+        IpDocketEvent.company_id == TrademarkApplication.company_id,
+        IpDocketEvent.docket_id == IpDocketRecord.id,
+        IpDocketEvent.source == "registry_sync",
+        IpDocketEvent.candidate_status == "confirmed",
+    )
+
+
 def _latest_registry_sync_at():
     return (
         select(func.max(IpDocketEvent.entered_at))
-        .where(
-            IpDocketEvent.company_id == TrademarkApplication.company_id,
-            IpDocketEvent.docket_id == IpDocketRecord.id,
-            IpDocketEvent.source == "registry_sync",
-            IpDocketEvent.candidate_status == "confirmed",
-        )
+        .where(*_confirmed_registry_sync_conditions())
         .correlate(TrademarkApplication, IpDocketRecord)
         .scalar_subquery()
+    )
+
+
+def _confirmed_registry_sync_exists(*conditions):
+    return (
+        select(IpDocketEvent.id)
+        .where(*_confirmed_registry_sync_conditions(), *conditions)
+        .correlate(TrademarkApplication, IpDocketRecord)
+        .exists()
     )
 
 
@@ -299,14 +312,22 @@ def _primary_application_identifiers(
 
 
 def _registry_state_predicate(state: str):
-    latest = _latest_registry_sync_at()
+    # B4-ADJ-44: PostgreSQL estimates "(scalar subquery) IS NULL" at 0.5%, which
+    # planned the unavailable filter as one docket and rescanned the portfolio
+    # per docket. entered_at is non-null, so these EXISTS forms are exactly the
+    # max(entered_at) comparisons: none, any at or after the threshold, or some
+    # but none at or after it.
     threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
+    fresh = IpDocketEvent.entered_at >= threshold
     if state == "current":
-        return latest >= threshold
+        return _confirmed_registry_sync_exists(fresh)
     if state == "stale":
-        return and_(latest.is_not(None), latest < threshold)
+        return and_(
+            _confirmed_registry_sync_exists(),
+            ~_confirmed_registry_sync_exists(fresh),
+        )
     if state == "unavailable":
-        return latest.is_(None)
+        return ~_confirmed_registry_sync_exists()
     # No per-docket provider-failure owner exists before IPLF-043B. A caller
     # asking for failures therefore gets an empty scope, never a fabricated 0.
     return false()
