@@ -12680,6 +12680,81 @@ export async function fetchIpWatchWorkspace(
   return apiRequest(`/api/ip/watch?${params.toString()}`);
 }
 
+/** Public source lineage of one Trade Marks Journal PDF the official listing names. */
+export type IpPublicJournalDocument = {
+  id: string;
+  journal_number: string;
+  journal_date: string;
+  available_on: string | null;
+  file_name: string;
+  source_url: string;
+  status: "pending" | "parsed" | "needs_review" | "failed";
+  attempts: number;
+  content_sha256: string | null;
+  byte_size: number | null;
+  page_count: number | null;
+  entry_count: number;
+  review_count: number;
+  parser_version: string | null;
+  error_code: string | null;
+  retrieved_at: string | null;
+  workspace_status: string | null;
+  workspace_entries_compared: number | null;
+};
+
+export type IpPublicJournalReviewItem = {
+  id: string;
+  document_id: string;
+  journal_number: string;
+  journal_date: string;
+  page_start: number;
+  page_end: number;
+  journal_page: string | null;
+  review_reason: string | null;
+  application_number: string | null;
+  source_url: string;
+};
+
+export type IpJournalFeedStatus = {
+  source_key: string;
+  listing_url: string;
+  attribution: string;
+  /** Platform kill switch: false means no IP India request is made at all. */
+  global_enabled: boolean;
+  setting: {
+    enabled: boolean;
+    version: number;
+    run_as_membership_id: string;
+    updated_by_membership_id: string;
+    updated_at: string;
+  } | null;
+  last_check: {
+    status: "succeeded" | "failed" | "refused";
+    reason_code: string | null;
+    http_status: number | null;
+    issues_listed: number;
+    documents_discovered: number;
+    checked_at: string;
+  } | null;
+  documents: IpPublicJournalDocument[];
+  review_items: IpPublicJournalReviewItem[];
+  review_total: number;
+};
+
+export async function fetchIpJournalFeedStatus(): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed");
+}
+
+export async function updateIpJournalFeedSetting(input: {
+  enabled: boolean;
+  expectedVersion: number | null;
+}): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed", {
+    method: "PUT",
+    body: { enabled: input.enabled, expected_version: input.expectedVersion },
+  });
+}
+
 /** Recorded journal entries the viewer may see, searched on the server. */
 export async function searchIpJournalPublications(
   query: string,

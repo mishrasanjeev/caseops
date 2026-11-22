@@ -547,7 +547,7 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
-        assert current == "20261121_0001"
+        assert current == "20261122_0001"
         # The current head (the restore-forward sales demo plan) refuses on both
         # dialects before touching any row. The historical migration is rehearsed
         # separately above.

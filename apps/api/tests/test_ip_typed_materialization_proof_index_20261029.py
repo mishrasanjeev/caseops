@@ -261,7 +261,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head == "20261121_0001"
+        assert current_head == "20261122_0001"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)

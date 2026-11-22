@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `6cbb296d7e68cfb2ac9b2b36ceebb6dd2afd1a58fa61e0b0353515be94def95d`
-- SQL tables: `364`
-- SQL columns: `5804`
-- ORM indexes: `1829`
-- Alembic/raw index declarations: `1606`
+- Canonical map SHA-256: `fadafbc63add97e38c48850ff8760bc7af84a06677da1e5cd354c73317f9da65`
+- SQL tables: `369`
+- SQL columns: `5870`
+- ORM indexes: `1835`
+- Alembic/raw index declarations: `1612`
 - Non-SQL data classes: `16`
 
 ## Boundary
@@ -173,6 +173,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
 | `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_journal_feed_settings` | `tenant_operational_record` | 7 | `registry_fail_closed` |
+| `ip_journal_feed_tenant_runs` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `ip_journal_ingestion_runs` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
@@ -196,6 +198,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_post_registration_recordals` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_proceedings` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_public_journal_checks` | `public_or_licensed_legal_reference` | 9 | `registry_fail_closed` |
+| `ip_public_journal_documents` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
+| `ip_public_journal_entries` | `public_or_licensed_legal_reference` | 17 | `registry_fail_closed` |
 | `ip_registry_diffs` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_registry_links` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_registry_snapshots` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |

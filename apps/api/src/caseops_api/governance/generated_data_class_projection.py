@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "6cbb296d7e68cfb2ac9b2b36ceebb6dd2afd1a58fa61e0b0353515be94def95d"
-MAP_SCHEMA_FINGERPRINT = "6217a7326d3f8d896b9e4f34488a5c20cea709053fac7c137cfb473305ff4fe9"
+MAP_DOCUMENT_FINGERPRINT = "fadafbc63add97e38c48850ff8760bc7af84a06677da1e5cd354c73317f9da65"
+MAP_SCHEMA_FINGERPRINT = "eb7f1d16237cdb2458e1112d4b40320395f05a86a2c71634ccfbb1223cd1b939"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "60ed06a8e2ff5c35f894263a32b11df6288b499dcb4f1471040ee1531dffa927"
+ORM_SCHEMA_FINGERPRINT = "db46ffe19463d77b1db43a3f7c7a20075825c11327340d4ec167669e90acda4f"
 
-PROJECTION_ID = "daadebe51e0a414bc9a45ebf8bdb286df40ce07030d5fd1e9d41986d0c0f685b"
+PROJECTION_ID = "3242a8c325089d3ead1dc699ebfec2da91ab31d6b6c40c79915c6bb6f6dc8f41"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -192,6 +192,8 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_identifiers",
         "ip_import_rows",
         "ip_incident_kill_switches",
+        "ip_journal_feed_settings",
+        "ip_journal_feed_tenant_runs",
         "ip_journal_ingestion_runs",
         "ip_journal_publications",
         "ip_matter_links",
@@ -215,6 +217,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_portfolio_saved_views",
         "ip_post_registration_recordals",
         "ip_proceedings",
+        "ip_public_journal_checks",
+        "ip_public_journal_documents",
+        "ip_public_journal_entries",
         "ip_registry_diffs",
         "ip_registry_links",
         "ip_registry_snapshots",
