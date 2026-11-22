@@ -11,7 +11,15 @@ import {
   fetchBillingPlans,
 } from "@/lib/api/endpoints";
 import type { BillingPlanRecord, BillingPlansResponse } from "@/lib/api/schemas";
-import { formatBytes, formatLimit, formatMoneyMinor } from "@/lib/billing-format";
+import {
+  IP_WORKSPACE_ADD_ON,
+  addOnAvailability,
+  addOnAvailableOn,
+  formatBytes,
+  formatLimit,
+  formatMoneyMinor,
+  segmentLabel,
+} from "@/lib/billing-format";
 import { apiErrorMessage } from "@/lib/api/config";
 
 type Segment = "solo" | "firm" | "gc";
@@ -167,6 +175,16 @@ export function PricingPageClient() {
       .sort((a, b) => sortKey(a) - sortKey(b));
   }, [activeSegment, catalog]);
 
+  const ipAddOn = catalog?.add_ons.find((addOn) => addOn.plan_code === IP_WORKSPACE_ADD_ON) ?? null;
+
+  function requestPlan(planCode: string) {
+    setSelectedPlan(planCode);
+    document.getElementById("pricing-request")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
   return (
     <main className="min-h-screen bg-[var(--color-bg)]">
       <header className="border-b border-[var(--color-line)] bg-white">
@@ -310,13 +328,7 @@ export function PricingPageClient() {
                       type="button"
                       variant={highlighted ? "secondary" : "outline"}
                       className="flex-1"
-                      onClick={() => {
-                        setSelectedPlan(plan.plan_code);
-                        document.getElementById("pricing-request")?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                      }}
+                      onClick={() => requestPlan(plan.plan_code)}
                     >
                       Request plan
                     </Button>
@@ -327,6 +339,14 @@ export function PricingPageClient() {
           </div>
         )}
       </section>
+
+      {ipAddOn ? (
+        <IpWorkspaceAddOn
+          addOn={ipAddOn}
+          segment={activeSegment}
+          onRequest={() => requestPlan(ipAddOn.plan_code)}
+        />
+      ) : null}
 
       <section className="border-t border-[var(--color-line)] bg-white">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-10 lg:grid-cols-2">
@@ -366,8 +386,8 @@ export function PricingPageClient() {
               Start a trial or request a plan.
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-[var(--color-mute)]">
-              Plans are activated by the CaseOps team: tell us the plan you
-              want and we confirm your limits and raise the invoice. Online
+              Plans and add-ons are activated by the CaseOps team: tell us
+              what you want and we confirm your limits and raise the invoice. Online
               payment is not open yet. Corporate and enterprise plans can be
               billed by manual invoice.
             </p>
@@ -381,5 +401,68 @@ export function PricingPageClient() {
         </div>
       </section>
     </main>
+  );
+}
+
+function IpWorkspaceAddOn({
+  addOn,
+  segment,
+  onRequest,
+}: {
+  addOn: BillingPlanRecord;
+  segment: Segment;
+  onRequest: () => void;
+}) {
+  const monthly = priceFor(addOn, "month");
+  const annual = priceFor(addOn, "year");
+  const saving = annualSavingMinor(addOn);
+  const available = addOnAvailableOn(addOn, segment);
+  return (
+    <section
+      aria-labelledby="ip-addon-heading"
+      data-testid={`addon-${addOn.plan_code}`}
+      className="mx-auto max-w-7xl px-5 pb-12"
+    >
+      <div className="grid gap-6 rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] lg:grid-cols-[1.3fr_1fr]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-mute)]">Add-on</p>
+          <h2 id="ip-addon-heading" className="mt-1 text-xl font-semibold tracking-tight text-[var(--color-ink)]">
+            {addOn.display_name}
+          </h2>
+          <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-[var(--color-mute)]">
+            {addOn.description}
+          </p>
+          <dl className="mt-4 grid gap-1 text-sm sm:grid-cols-[9rem_1fr] sm:gap-x-4">
+            <dt className="font-semibold text-[var(--color-ink)]">Available on</dt>
+            <dd className="text-[var(--color-ink-2)]">{addOnAvailability(addOn)}</dd>
+          </dl>
+        </div>
+        <div className="tabular-nums">
+          <div className="text-3xl font-semibold tracking-tight text-[var(--color-ink)]">
+            {formatMoneyMinor(monthly?.amount_minor, monthly?.currency ?? "INR")}
+          </div>
+          <div className="text-sm text-[var(--color-mute)]">
+            {monthly?.tax_behavior === "inclusive" ? "per month, GST included" : "per month + GST"}
+          </div>
+          {annual ? (
+            <div className="mt-1 text-sm text-[var(--color-ink-2)]">
+              Annual {formatMoneyMinor(annual.amount_minor, annual.currency)}
+              {saving !== null ? `, saves ${formatMoneyMinor(saving)}` : ""}
+            </div>
+          ) : null}
+          <div className="mt-5">
+            {available ? (
+              <Button type="button" variant="outline" onClick={onRequest}>
+                Request add-on
+              </Button>
+            ) : (
+              <p className="text-sm text-[var(--color-ink-2)]">
+                Not available on {segmentLabel(segment)} plans.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

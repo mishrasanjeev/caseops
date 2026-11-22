@@ -8491,6 +8491,7 @@ export async function fetchBillingAddOns(): Promise<BillingPlansResponse> {
 
 export async function createBillingAddOnCheckout(input: {
   addOnCode: string;
+  interval?: "month" | "year" | null;
   quantity?: number;
   successUrl?: string | null;
   cancelUrl?: string | null;
@@ -8499,6 +8500,7 @@ export async function createBillingAddOnCheckout(input: {
     method: "POST",
     body: {
       add_on_code: input.addOnCode,
+      interval: input.interval ?? null,
       quantity: input.quantity ?? 1,
       success_url: input.successUrl ?? null,
       cancel_url: input.cancelUrl ?? null,
