@@ -765,10 +765,27 @@ def test_recommendations_keep_currency_subtotals_out_of_ranking(client: TestClie
 
 def test_recommendation_history_follows_live_matter_access(client: TestClient) -> None:
     client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
-    token = str(bootstrap_company(client)["access_token"])
+    owner = bootstrap_company(client)
+    owner_id = owner["membership"]["id"]
+    token = str(owner["access_token"])
     owner_headers = auth_headers(token)
     admin_id, admin_token = _invite_admin(client, token)
     admin_headers = auth_headers(admin_token)
+
+    # Send both credentials through the real client to exercise cookie priority.
+    # The SQLite fixture's request wrapper would otherwise strip the cookie.
+    both = client.send(client.build_request("GET", "/api/auth/me", headers=owner_headers))
+    assert "cookie" in both.request.headers
+    assert both.status_code == 200
+    assert both.json()["membership"]["id"] == admin_id
+
+    client.cookies.clear()
+    for headers, expected_id in ((owner_headers, owner_id), (admin_headers, admin_id)):
+        principal = client.get("/api/auth/me", headers=headers)
+        assert "cookie" not in principal.request.headers
+        assert principal.status_code == 200
+        assert principal.json()["membership"]["id"] == expected_id
+
     current = _create_matter(
         client, token, title="Current panel selection", matter_code="OC-SCOPE-100",
     )
