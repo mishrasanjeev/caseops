@@ -40,6 +40,7 @@ VERIFIED = {
     "iea-1872": 184,
     "specific-relief-1963": 47,
     "ipc-1860": 554,
+    "motor-vehicles-1988": 250,
 }
 
 
@@ -155,6 +156,7 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
             "iea-1872": 167,
             "specific-relief-1963": 44,
             "ipc-1860": 511,
+            "motor-vehicles-1988": 217,
         }[act_id]
         assert {f"Section {number}" for number in range(1, last + 1)} <= numbers
         previous = None
@@ -212,6 +214,33 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
     assert last_bns["source_policy"]["official_pdf_end_page"] == 111
     assert "(4) The mention of particular matters" in last_bns["section_text"]
     assert "STATEMENT OF OBJECTS AND REASONS" not in last_bns["section_text"]
+
+
+def test_motor_vehicles_edition_withholds_illustrated_and_omitted_schedules():
+    documents, sources = release.load_release_bundle()
+    act = "motor-vehicles-1988"
+    document = documents[act]
+    assert document["act_url"] == document["source_url"]
+    assert document["source_version"] == "India Code consolidation as on 21 May 2025"
+    assert document["non_provision_pages"][-1]["pages"] == [174, 175]
+
+    section = sources[act, "Section 147"]
+    assert section["section_text"].startswith("147. Requirement of policies and limits of liability.")
+    assert section["source_url"] == f"{document['source_url']}#page=86"
+    assert section["verification_status"] == "verified_official"
+
+    schedule = sources[act, "First Schedule"]
+    assert schedule["verification_status"] == "quarantined"
+    assert schedule["source_url"] == f"{document['source_url']}#page=120"
+    assert "image-based" in schedule["quarantine_reason"]
+    retired = {
+        number for (key, number), row in sources.items()
+        if key == act and row["verification_status"] == "retired"
+    }
+    assert retired == {
+        "Section 140", "Section 141", "Section 142", "Section 143", "Section 144",
+        "Section 191", "Section 195", "Second Schedule",
+    }
 
 
 def test_bsa_complete_schedule_and_final_section_are_separate_source_units():
@@ -507,6 +536,23 @@ def test_complete_release_seed_details_history_and_idempotence(client):
                 response.json()["section"]["section_text"]
                 == sources[act_id, row["section_number"]]["section_text"]
             )
+
+    motor_url = "/api/statutes/motor-vehicles-1988/sections"
+    response = client.get(motor_url, headers=headers)
+    assert response.status_code == 200, response.text
+    motor = response.json()
+    selectable = {row["section_number"] for row in motor["sections"]}
+    assert "Section 147" in selectable
+    assert selectable.isdisjoint({"First Schedule", "Second Schedule", "Section 140"})
+    catalogue = {row["section_number"]: row["selection_state"] for row in motor["catalog_sections"]}
+    for number, state in [("First Schedule", "quarantined"), ("Second Schedule", "retired")]:
+        assert catalogue[number] == state
+        response = client.get(f"{motor_url}/{quote(number)}", headers=headers)
+        assert response.status_code == 200, response.text
+        detail = response.json()["section"]
+        assert detail["verification_status"] == state
+        assert detail["section_text"] is None
+        assert detail["section_url"] == sources["motor-vehicles-1988", number]["source_url"]
 
 
 def test_seed_preserves_reviewed_labels_and_pending_history_when_upgrading_legacy_rows(client):

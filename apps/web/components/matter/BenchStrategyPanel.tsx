@@ -109,8 +109,8 @@ export function BenchStrategyPanel({
   return (
     <Card data-testid="bench-strategy-panel">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Gavel className="h-4 w-4" /> Bench strategy
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+          <Gavel className="h-4 w-4 shrink-0" aria-hidden /> Bench strategy
           <span data-testid="bench-strategy-quality-chip">
             <Badge tone={qualityTone(quality)}>{qualityLabel}</Badge>
           </span>
@@ -139,24 +139,24 @@ export function BenchStrategyPanel({
         ) : null}
 
         {data.top_statute_sections.length > 0 ? (
-          <section data-testid="bench-strategy-statutes">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-mute-2)]">
-              <ScrollText className="h-3 w-3" aria-hidden />
-              Top statute sections cited
-            </div>
-            <ul className="divide-y divide-[var(--color-line-2)]">
-              {data.top_statute_sections.slice(0, 10).map((s) => (
+          <details className="rounded-md border border-[var(--color-line)] px-3">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+              <ScrollText className="mr-2 inline h-3 w-3" aria-hidden />
+              Top statute sections cited ({data.top_statute_sections.length})
+            </summary>
+            <ul className="divide-y divide-[var(--color-line-2)]" data-testid="bench-strategy-statutes">
+              {data.top_statute_sections.map((s) => (
                 <li
                   key={s.statute_section_id}
                   className="flex items-start justify-between gap-3 py-2"
                   data-testid={`bench-strategy-statute-${s.statute_section_id}`}
                 >
                   <div className="min-w-0">
-                    <div className="font-mono text-sm font-semibold text-[var(--color-ink)]">
+                    <div className="break-words font-mono text-sm font-semibold text-[var(--color-ink)]">
                       {s.statute_id} · {s.section_number}
                     </div>
                     {s.section_label ? (
-                      <div className="truncate text-xs text-[var(--color-mute)]">
+                      <div className="break-words text-xs text-[var(--color-mute)]">
                         {s.section_label}
                       </div>
                     ) : null}
@@ -170,24 +170,24 @@ export function BenchStrategyPanel({
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
         ) : null}
 
         {data.top_authorities.length > 0 ? (
-          <section data-testid="bench-strategy-authorities">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-mute-2)]">
-              <BookOpenCheck className="h-3 w-3" aria-hidden />
-              Top authorities cited
-            </div>
-            <ul className="divide-y divide-[var(--color-line-2)]">
-              {data.top_authorities.slice(0, 10).map((a) => (
+          <details className="rounded-md border border-[var(--color-line)] px-3">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+              <BookOpenCheck className="mr-2 inline h-3 w-3" aria-hidden />
+              Top authorities cited ({data.top_authorities.length})
+            </summary>
+            <ul className="divide-y divide-[var(--color-line-2)]" data-testid="bench-strategy-authorities">
+              {data.top_authorities.map((a) => (
                 <li
                   key={a.authority_id}
                   className="flex items-start justify-between gap-3 py-2"
                   data-testid={`bench-strategy-authority-${a.authority_id}`}
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm text-[var(--color-ink)]">
+                    <div className="break-words text-sm text-[var(--color-ink)]">
                       {a.title || a.authority_id}
                     </div>
                   </div>
@@ -200,7 +200,7 @@ export function BenchStrategyPanel({
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
         ) : null}
 
         {data.top_authorities.length === 0 &&

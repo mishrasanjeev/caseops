@@ -813,15 +813,25 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     );
     // Authorities section (the L-B-driven block) + at least one row
     const authoritiesSection = page.getByTestId("bench-strategy-authorities");
+    const authoritiesToggle = panel.locator("summary").filter({ hasText: /^Top authorities cited \(2\)$/ });
+    await expect(authoritiesSection).toBeHidden();
+    await authoritiesToggle.press("Enter");
     await expect(authoritiesSection).toBeVisible();
     await expect(authoritiesSection).toContainText(/Vishaka v\. State of Rajasthan/);
     await expect(authoritiesSection).toContainText(/Kesavananda Bharati/);
     // Statutes section (L-C-driven)
     const statutesSection = page.getByTestId("bench-strategy-statutes");
+    const statutesToggle = panel.locator("summary").filter({ hasText: /^Top statute sections cited \(1\)$/ });
+    await expect(statutesSection).toBeHidden();
+    await statutesToggle.press("Enter");
     await expect(statutesSection).toBeVisible();
     await expect(statutesSection).toContainText(/bns-2023/);
     await expect(statutesSection).toContainText(/Section 318/);
     await expect(statutesSection).toContainText(/Cheating/);
+    await statutesToggle.press("Enter");
+    await expect(statutesSection).toBeHidden();
+    await expect(statutesToggle).toBeFocused();
+    await expect(authoritiesSection).toBeVisible();
     // Disclaimer must always render
     await expect(page.getByTestId("bench-strategy-disclaimer")).toContainText(
       /not legal advice/i,

@@ -11,6 +11,7 @@ is written by the same module that owns the rest of the comms log.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -18,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import EmailTemplate
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.email_templates import (
     EmailRenderResponse,
     EmailTemplateCreateRequest,
@@ -50,19 +52,26 @@ def list_email_templates(
     )
 
 
-def _load(session: Session, *, context: SessionContext, template_id: str) -> EmailTemplate:
-    template = session.scalar(
-        select(EmailTemplate).where(
-            EmailTemplate.id == template_id,
-            EmailTemplate.company_id == context.company.id,
-        )
+def _load(
+    session: Session, *, context: SessionContext, template_id: str, for_update: bool = False,
+) -> EmailTemplate:
+    query = select(EmailTemplate).where(
+        EmailTemplate.id == template_id,
+        EmailTemplate.company_id == context.company.id,
     )
+    if for_update:
+        query = query.with_for_update().execution_options(populate_existing=True)
+    template = session.scalar(query)
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Email template not found.",
         )
     return template
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def get_email_template(
@@ -115,12 +124,21 @@ def update_email_template(
     template_id: str,
     payload: EmailTemplateUpdateRequest,
 ) -> EmailTemplateRecord:
-    template = _load(session, context=context, template_id=template_id)
+    serialize_sqlite_writer(session)
+    template = _load(session, context=context, template_id=template_id, for_update=True)
+    if payload.expected_updated_at is not None and (
+        _utc(payload.expected_updated_at) != _utc(template.updated_at)
+    ):
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This template changed after you opened it. Reload it before saving.",
+        )
     if payload.name is not None:
         template.name = payload.name.strip()
     if payload.kind is not None:
         template.kind = payload.kind.strip()
-    if payload.description is not None:
+    if "description" in payload.model_fields_set:
         template.description = payload.description
     if payload.subject_template is not None:
         template.subject_template = payload.subject_template
@@ -145,7 +163,8 @@ def update_email_template(
 def archive_email_template(
     session: Session, *, context: SessionContext, template_id: str,
 ) -> EmailTemplateRecord:
-    template = _load(session, context=context, template_id=template_id)
+    serialize_sqlite_writer(session)
+    template = _load(session, context=context, template_id=template_id, for_update=True)
     template.is_active = False
     session.commit()
     session.refresh(template)

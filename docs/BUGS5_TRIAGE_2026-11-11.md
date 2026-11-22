@@ -1,5 +1,39 @@
 # Ram Workbook 5: Triage And Acceptance
 
+## November 22 follow-up on the 17 open reports
+
+The follow-up starts at main `1b6ba0f6c7f5306c574f2602d784a9ccbb4fa84b`.
+The November 11 Bug Fix Summary identifies the 17 reports below. The November 7
+AI Requirements Summary supplies the related acceptance scenarios. Its 84 finding
+groups and 60 scenarios include feature requirements and external dependencies.
+Production QA 44919885553 remains the baseline evidence. A scenario listed below
+has no new execution credit until its case results are recorded.
+
+| Open report | What the current evidence establishes | Required follow-up |
+| --- | --- | --- |
+| BUG-001 | Retained original PDF preview and export matched on desktop and phone. The original never changed. The synthetic `ram-2026-10-22-drafting` journey also covers change requests, regeneration, approval, finalization and reload. | DR-T01–05. Review approved court profiles and legal propositions against the exact source and jurisdiction. Keep the original PDF verdict and legal-quality verdict distinct. |
+| BUG-003 | Baseline admin exposes create and archive. The existing PATCH API supplies the reusable-template write boundary. Earlier guarded composition and stale-send evidence remains valid. | Candidate adds a prefilled, versioned editor and an optional personal default on the current browser. Run the extended desktop/phone journey and SQLite/PostgreSQL checks. Additional automatic fields and verified actual inbox delivery remain open. |
+| BUG-004 | The [Delhi High Court judgment dated 6 November](https://delhihighcourt.nic.in/app/showFileJudgment/68006112026RCR3402024_174221.pdf) confirms the exact CNR and case number and dismisses that High Court revision. Current code distinguishes unavailability, depleted balance, ambiguous match, and verified no-match. | TRK-T01–06. Use the authorized QA scope to verify provider eligibility, the exact match, judgment and disposed status. A verified next hearing belongs to a separate active-case fixture. Keep the underlying eviction proceeding separate from the reported High Court revision. |
+| BUG-007 | Clause extraction and basic tenant playbook rules exist. The reported legal drafting quality is unproven. | CON-T03–05 and J10/FT-051. Use a reviewed Indian-law scenario pack with documented transaction, dates, jurisdiction and independent legal assessment. Verify human editing and review separately. |
+| BUG-008 | Current extraction stores source quotes and manual obligations have a create path. The report asks for structured editing, assignment and approved promotion. | J10/J08, FT-052/054, CON-T05. Reconcile the stored fields and lifecycle with the original duty. Preserve the excerpt and require evidence or an explicit missing label for each extracted field. |
+| BUG-009 | Existing manual suggestions and reviewed canonical promotion passed. Pending suggestions have no edit route or control at main. | Candidate edits dates and duration while preserving source evidence and invalidating stale review. Run the amended desktop/phone and HTTP cases. Automated extraction still needs reviewed input and evidence. |
+| BUG-010 | Tenant playbook CRUD and comparison already exist. A mock missing-finding test supplies limited comparison evidence. | J10/FT-051. Use actual approved rules, check review decisions and source excerpts, and have replacement wording legally assessed. |
+| BUG-011 | DOCX import reads tracked revisions and preserves original bytes. No current native edit, decision or clean-export workflow is proved. | CON-T03/04. Establish original and proposed versions, per-change decisions and clean/tracked exports including tables. |
+| BUG-012 | Governance and current eligibility controls passed. The reported tenant's exact active rule/calendar state was not pinned. | CAL-T03 and J08. Verify the actual configured jurisdiction and supported versions. Exercise approved synthetic activation plus pending/mismatch/permission refusals. |
+| BUG-013 | Representative factual citation/reopen, legal abstention and research recovery passed. Generation used a deterministic provider fixture. | AST-T01–04 and RES-T02/03. Verify the workbook question, source availability and cited proposition support using an approved benchmark. |
+| BUG-014 | Browser query recovery, mode changes, Back and reload passed. The seven-mode desktop latency check is retained. | RES-T01–05. Verify relevant sources, explicit forum filters and complete phone interactions, then evaluate legal synthesis on a reviewed pack. |
+| BUG-015 | Retained full Docker, current main CI and production automation run bounded suites with explicit skips. | Map actual tests to the stated route and workflow inventory. This report asks for ongoing test coverage and independent review, which continue on each changed release. |
+| BUG-016 | The original workbook identifies Suggested Counsel and Bench Strategy on the Matter page. Both rendered all detail vertically, and Bench Strategy truncated long labels. | J03/J09/J13 and NFT-013/014. Candidate adds a compact expandable counsel layout and disclosure controls for Bench Strategy citation lists. Prove full details, keyboard open/close, touch targets and no overflow on desktop and phone. |
+| ENH-017 | Court hierarchy and a reviewed High Court pilot exist. The requested nationwide directory and updates require additional reviewed public sources. | J06/US-060/062. Verify identity, date and transfer history coverage per supported district source. |
+| BUG-018 | Frozen release seeds expose 298 Income-tax Act, 1961 rows and 217 Motor Vehicles Act, 1988 rows with no text. The pinned 21 May 2025 India Code Motor Vehicles edition compiled into 259 identities: 250 verified, eight retired and one image-based First Schedule quarantined. | J05/MOD-TS-017 and FT-090. Replay the complete canonical compiler, seed and verify source text, attachment, reload and withheld states. The official CBDT 1961 PDF is listed but the direct download returned 403. Its exact bytes and 2025 repeal/savings scope remain open. |
+| BUG-019 | Static official IP references and manually recorded registry evidence work in their verified scope. The [10 November CGPDTM notice](https://ipindia.gov.in/storage/uploads/others/n5VgKh9iNvopzN2XoXnRP9yqWPS4wVXbrIPFxwt5.pdf) restricts commercial scraping and substantial extraction of the listed official resources. | REG-T01–04. Use only a supported channel with permission for the intended commercial use. Test exact identity, stale data, changes and fail-closed matching when such a channel is available. |
+| ENH-020 | Reviewed judge mapping exists. The reported prediction page has no positive comparable sample. | J06/J09. Verify source-backed descriptive results and honest low-sample behavior. Unsupported judge favorability and uncalibrated probabilities are excluded by the PRD. |
+
+The local test window is shared. The UAE validation controller currently has
+active jobs. Static Python syntax, bundle checksum, exact manifest counts and
+the retained Motor Vehicles PDF digest are verified. Runtime tests, canonical
+OpenAPI generation, full Docker, CI, merge and production checks are pending.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

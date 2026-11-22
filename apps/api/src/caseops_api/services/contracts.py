@@ -48,6 +48,7 @@ from caseops_api.schemas.contracts import (
     ContractRecord,
     ContractTermSuggestionCreateRequest,
     ContractTermSuggestionRecord,
+    ContractTermSuggestionUpdateRequest,
     ContractUpdateRequest,
     ContractWorkspaceMembership,
     ContractWorkspaceResponse,
@@ -516,11 +517,12 @@ def lock_contract_actor(
     )
 
 
-def _assert_contract_version(contract: Contract, expected: datetime | None) -> None:
-    def as_utc(value: datetime) -> datetime:
-        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+def _contract_timestamp_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
-    if expected is not None and as_utc(expected) != as_utc(contract.updated_at):
+
+def _assert_contract_version(contract: Contract, expected: datetime | None) -> None:
+    if expected is not None and _contract_timestamp_utc(expected) != _contract_timestamp_utc(contract.updated_at):
         raise HTTPException(
             status_code=409,
             detail="This contract changed after you opened it. Reload before saving your changes.",
@@ -1430,6 +1432,58 @@ def create_contract_term_suggestion(
     return _term_suggestion_record(refreshed)
 
 
+def update_contract_term_suggestion(
+    session: Session,
+    *,
+    context: SessionContext,
+    contract_id: str,
+    suggestion_id: str,
+    payload: ContractTermSuggestionUpdateRequest,
+) -> ContractTermSuggestionRecord:
+    contract = _get_locked_contract(session, context=context, contract_id=contract_id)
+    suggestion = _get_contract_term_suggestion_model(
+        session, context=context, contract_id=contract.id, suggestion_id=suggestion_id,
+    )
+    if suggestion.status != ContractReviewStatus.SUGGESTED:
+        raise HTTPException(status_code=409, detail="Contract term suggestions cannot change after review.")
+    if _contract_timestamp_utc(payload.expected_updated_at) != _contract_timestamp_utc(suggestion.updated_at):
+        raise HTTPException(status_code=409, detail="This suggestion has changed. Reload it before saving.")
+
+    before = _term_suggestion_snapshot(suggestion)
+    requested = payload.model_dump(exclude_unset=True, exclude={"expected_updated_at"})
+    fields = ("suggested_effective_on", "suggested_expires_on", "suggested_renewal_on", "suggested_duration_months")
+    terms = {field: requested.get(field, before[field]) for field in fields}
+    if all(value is None for value in terms.values()):
+        raise HTTPException(status_code=422, detail="At least one suggested contract term is required.")
+    changes = {field: value for field, value in terms.items() if value != before[field]}
+    if not changes:
+        return _term_suggestion_record(suggestion)
+
+    for field, value in changes.items():
+        setattr(suggestion, field, value)
+    # Accepted terms are fenced against the contract version. Advance it even
+    # though the date fields on the contract itself are still untouched.
+    contract.updated_at = utcnow()
+    _append_activity(
+        session, contract_id=contract.id, actor_membership_id=context.membership.id,
+        event_type="contract_term_suggestion_updated", title="Contract term suggestion updated",
+        detail="Suggested terms are pending human review.",
+    )
+    record_from_context(
+        session, context, action="contract.term_suggestion.updated",
+        target_type="contract_term_suggestion", target_id=suggestion.id,
+        metadata={
+            "source_attachment_id": suggestion.source_attachment_id,
+            "before": {field: before[field] for field in changes},
+            "after": changes,
+        },
+    )
+    session.commit()
+    return _term_suggestion_record(_get_contract_term_suggestion_model(
+        session, context=context, contract_id=contract.id, suggestion_id=suggestion_id,
+    ))
+
+
 def review_contract_term_suggestion(
     session: Session,
     *,
@@ -1459,13 +1513,13 @@ def review_contract_term_suggestion(
             status_code=status.HTTP_409_CONFLICT,
             detail="Contract term suggestions cannot change after review.",
         )
+    if accepted and expected_updated_at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="The observed contract version is required before accepting terms.",
+        )
+    _assert_contract_version(contract, expected_updated_at)
     if accepted:
-        if expected_updated_at is None:
-            raise HTTPException(
-                status_code=422,
-                detail="The observed contract version is required before accepting terms.",
-            )
-        _assert_contract_version(contract, expected_updated_at)
         _ensure_term_suggestion_can_be_accepted(suggestion)
     before_suggestion = _term_suggestion_snapshot(suggestion)
     before_terms = _canonical_term_snapshot(contract)

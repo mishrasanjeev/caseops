@@ -8,6 +8,7 @@ import { apiErrorMessage } from "@/lib/api/config";
 import { previewMatterEmail, type MatterEmailMessage, type MatterEmailPreview } from "@/lib/api/communications-email";
 import type { EmailTemplateRecord } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+import { getStoredContext } from "@/lib/session";
 
 export type EmailSubmission = MatterEmailMessage & {
   preview_token: string;
@@ -16,14 +17,33 @@ export type EmailSubmission = MatterEmailMessage & {
 const known = new Set(["client_name", "hearing_date", "matter_title", "matter_code"]);
 const field = "min-w-0 w-full rounded-md border border-[var(--color-line)] px-3 py-2 text-sm";
 
+function templatePreferenceKey(): string | null {
+  try {
+    const context = getStoredContext();
+    return context ? `caseops.email-template.${context.company.id}.${context.membership.id}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function storedTemplatePreference(key: string | null): string | null {
+  if (!key) return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 export function ComposeEmailForm({ matterId, templates, loading, templateError, submitting, onSubmit }: {
   matterId: string; templates: EmailTemplateRecord[]; loading: boolean;
   templateError: string | null; submitting: boolean; onSubmit: (input: EmailSubmission) => void;
 }) {
   const canManage = useCapability("email_templates:manage");
-  const [templateId, setTemplateId] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [preferenceKey] = useState(templatePreferenceKey);
+  const [preferredId, setPreferredId] = useState(() => storedTemplatePreference(preferenceKey));
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ templateId: string; subject: string; body: string } | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [recipient, setRecipient] = useState("");
   const [name, setName] = useState("");
@@ -31,6 +51,14 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
   const [preview, setPreview] = useState<{ key: string; revision: number; data: MatterEmailPreview } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const preferred = loading || templateError ? undefined : templates.find(
+    (template) => template.id === preferredId && template.is_active,
+  );
+  const { templateId, subject, body } = draft ?? {
+    templateId: preferred?.id ?? "",
+    subject: preferred?.subject_template ?? "",
+    body: preferred?.body_template ?? "",
+  };
   const message: MatterEmailMessage = {
     template_id: templateId || null, subject, body, variables,
     recipient_email: recipient.trim(), recipient_name: name.trim() || null,
@@ -58,6 +86,20 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
     setError(null);
   }
 
+  function savePreferredTemplate(id: string | null) {
+    setPreferenceError(null);
+    if (!preferenceKey || preferenceKey !== templatePreferenceKey()) return;
+    try {
+      if (id) window.localStorage.setItem(preferenceKey, id);
+      else window.localStorage.removeItem(preferenceKey);
+      // Changing a preference applies next time, without changing this draft.
+      setDraft({ templateId, subject, body });
+      setPreferredId(id);
+    } catch {
+      setPreferenceError("This browser could not save your template preference.");
+    }
+  }
+
   useEffect(() => {
     invalidatePreview();
     return () => { revision.current += 1; };
@@ -75,6 +117,7 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
 
   async function showPreview() {
     if (!validMessage || previewing) return;
+    setDraft({ templateId, subject, body });
     setPreview(null);
     setError(null);
     setPreviewing(true);
@@ -111,8 +154,8 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
             <select className={field} value={templateId} data-testid="comm-send-template" onChange={(e) => {
               const t = templates.find((item) => item.id === e.target.value);
               invalidatePreview();
-              setTemplateId(e.target.value); setSubject(t?.subject_template ?? "");
-              setBody(t?.body_template ?? ""); setVariables({});
+              setDraft({ templateId: t?.id ?? "", subject: t?.subject_template ?? "", body: t?.body_template ?? "" });
+              setVariables({});
             }}>
               <option value="">Manual message</option>
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -120,6 +163,22 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
           </label>
           {canManage ? <a className="shrink-0 py-2 text-sm underline" href="/app/admin/email-templates">Manage templates</a> : null}
         </div>
+        {preferenceKey && !loading && !templateError ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {selected?.is_active && selected.id !== preferredId ? (
+              <Button type="button" variant="outline" onClick={() => savePreferredTemplate(selected.id)}>
+                Use as default on this browser
+              </Button>
+            ) : null}
+            {preferredId ? (
+              <Button type="button" variant="outline" onClick={() => savePreferredTemplate(null)}>
+                Clear browser default
+              </Button>
+            ) : null}
+            {preferred ? <span className="min-w-0 break-words text-xs">Browser default: {preferred.name}</span> : null}
+            {preferenceError ? <p role="alert" className="text-sm">{preferenceError}</p> : null}
+          </div>
+        ) : null}
         <div className="grid min-w-0 gap-3 sm:grid-cols-2">
           <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Recipient email
             <input className={field} type="email" required value={recipient} onChange={(e) => { invalidatePreview(); setRecipient(e.target.value); }} data-testid="comm-send-recipient-email" />
@@ -129,10 +188,10 @@ export function ComposeEmailForm({ matterId, templates, loading, templateError, 
           </label>
         </div>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Subject
-          <input className={field} required maxLength={400} value={subject} onChange={(e) => { invalidatePreview(); setSubject(e.target.value); }} data-testid="comm-send-subject" />
+          <input className={field} required maxLength={400} value={subject} onChange={(e) => { invalidatePreview(); setDraft({ templateId, subject: e.target.value, body }); }} data-testid="comm-send-subject" />
         </label>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium">Message
-          <textarea className={field} rows={7} required maxLength={20000} value={body} onChange={(e) => { invalidatePreview(); setBody(e.target.value); }} data-testid="comm-send-body" />
+          <textarea className={field} rows={7} required maxLength={20000} value={body} onChange={(e) => { invalidatePreview(); setDraft({ templateId, subject, body: e.target.value }); }} data-testid="comm-send-body" />
         </label>
         {customVariables.map((v) => <label key={v} className="flex min-w-0 flex-col gap-1 text-xs font-medium">{selected?.variables.find((item) => item.name === v)?.label || v}
           <input className={field} maxLength={2000} value={variables[v] ?? ""} onChange={(e) => { invalidatePreview(); setVariables((old) => ({ ...old, [v]: e.target.value })); }} data-testid={`comm-send-var-${v}`} />

@@ -148,11 +148,30 @@ for (const mobile of [false, true]) {
       await page.getByLabel("Suggested effective date", { exact: true }).fill("2026-11-15");
       await page.getByLabel("Suggested expiry date", { exact: true }).fill("2027-11-14");
       await page.getByLabel("Suggested renewal date", { exact: true }).fill("2027-10-01");
-      await page.getByLabel("Suggested duration (months)", { exact: true }).fill("12");
+      await page.getByLabel("Suggested duration (months)", { exact: true }).fill("11");
       await page.getByLabel("Source document", { exact: true }).selectOption(docxId);
       await page.getByLabel("Source evidence", { exact: true }).fill("Effective on 15 November 2026. Expires on 14 November 2027. Renewal on 1 October 2027.");
       await page.getByRole("button", { name: "Save suggestion", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Term suggestions (1)", exact: true })).toBeVisible();
+      await expect(page.getByText("11 months", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Edit suggestion", exact: true }).click();
+      const termEdit = page.getByRole("form", { name: "Edit term suggestion" });
+      await expect(termEdit.getByLabel("Suggested effective date", { exact: true })).toHaveValue("2026-11-15");
+      await expect(termEdit.getByLabel("Suggested duration (months)", { exact: true })).toHaveValue("11");
+      await termEdit.getByLabel("Suggested duration (months)", { exact: true }).fill("12");
+      const [edited] = await Promise.all([
+        page.waitForResponse((response) => response.url().startsWith(`${apiPath}/term-suggestions/`)
+          && response.request().method() === "PATCH"),
+        termEdit.getByRole("button", { name: "Save suggestion", exact: true }).click(),
+      ]);
+      expect(edited.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      expect(await json(edited, "Persist reviewed correction to pending term")).toMatchObject({
+        suggested_duration_months: 12, source_attachment_id: docxId, status: "suggested",
+      });
+      await expect(termEdit).toHaveCount(0);
+      await page.reload();
+      await page.getByRole("tab", { name: "Terms", exact: true }).click();
+      await expect(page.getByText("12 months", { exact: true })).toBeVisible();
       expect((await json(await request.get(apiPath, { headers: rt.headers }), "Canonical terms before acceptance")).effective_on).toBe(details.effective_on);
       const accepting = page.waitForResponse((r) => r.url().startsWith(`${apiPath}/term-suggestions/`) && r.url().endsWith("/accept") && r.request().method() === "POST");
       await page.getByRole("button", { name: "Accept", exact: true }).click();

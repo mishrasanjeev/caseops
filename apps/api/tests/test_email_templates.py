@@ -137,6 +137,46 @@ def test_template_name_uniqueness_409(client: TestClient) -> None:
     assert "already exists" in dup.json()["detail"].lower()
 
 
+def test_existing_template_edit_preserves_identity_and_refuses_stale_saves(client: TestClient) -> None:
+    headers = auth_headers(str(bootstrap_company(client)["access_token"]))
+    original = _create_template(client, headers)
+    path = f"/api/admin/email-templates/{original['id']}"
+    named = client.patch(path, headers=headers, json={"description": "Previous purpose."})
+    assert named.status_code == 200, named.text
+    baseline = named.json()
+
+    edited = client.patch(path, headers=headers, json={
+        "expected_updated_at": baseline["updated_at"],
+        "description": None,
+        "subject_template": "Revised hearing update",
+    })
+    assert edited.status_code == 200, edited.text
+    current = edited.json()
+    assert current == {
+        **baseline, "description": None, "subject_template": "Revised hearing update",
+        "updated_at": current["updated_at"],
+    }
+    assert current["updated_at"] != baseline["updated_at"]
+
+    stale = client.patch(path, headers=headers, json={
+        "expected_updated_at": baseline["updated_at"],
+        "body_template": "An older editor must not replace the current template.",
+    })
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["detail"] == "This template changed after you opened it. Reload it before saving."
+    persisted = client.get(path, headers=headers)
+    assert persisted.status_code == 200 and persisted.json() == current
+
+    archived = client.delete(path, headers=headers)
+    assert archived.status_code == 200 and archived.json()["is_active"] is False
+    stale_after_archive = client.patch(path, headers=headers, json={
+        "expected_updated_at": current["updated_at"], "subject_template": "Stale after archive",
+    })
+    assert stale_after_archive.status_code == 409, stale_after_archive.text
+    retained = client.get(path, headers=headers)
+    assert retained.status_code == 200 and retained.json() == archived.json()
+
+
 def test_render_endpoint_substitutes_and_reports_missing(
     client: TestClient,
 ) -> None:

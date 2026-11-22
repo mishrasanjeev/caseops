@@ -35,6 +35,7 @@ EXPECTED_COUNTS = {
     "transfer-of-property-1882": 149,
     "contract-1872": 269,
     "consumer-protection-2019": 107,
+    "motor-vehicles-1988": 259,
 }
 
 

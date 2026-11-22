@@ -410,8 +410,22 @@ class ContractTermSuggestionCreateRequest(BaseModel):
         return self
 
 
+class ContractTermSuggestionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: datetime
+    suggested_effective_on: date | None = None
+    suggested_expires_on: date | None = None
+    suggested_renewal_on: date | None = None
+    suggested_duration_months: int | None = Field(default=None, ge=0, le=1200)
+
+
 class ContractTermReviewRequest(BaseModel):
     expected_updated_at: datetime
+
+
+class ContractTermRejectRequest(BaseModel):
+    expected_updated_at: datetime | None = None
 
 
 class ContractTermSuggestionRecord(BaseModel):

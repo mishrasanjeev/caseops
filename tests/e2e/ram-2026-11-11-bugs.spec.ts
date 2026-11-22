@@ -1,6 +1,6 @@
 /** BUG-003 partial candidate and B5-013/014 test-only draft, one exact release.
- * Preview and marked 409 rejection are not delivery acceptance. Default-template
- * selection and full reusable-template editing remain open in workbook row 003.
+ * Preview and marked 409 rejection are not delivery acceptance. This journey also
+ * edits the same reusable template and checks the persisted text in Compose.
  * Reuse the tester's auth helpers, never prepareTester's unrelated IP setup.
  */
 import { randomUUID } from "node:crypto";
@@ -52,7 +52,8 @@ function sameActor(value: unknown, actor: AuthSession): AuthContext {
   return current;
 }
 type CreatedMatter = { id: string; matter_code: string; status: string; updated_at: string; next_hearing_on: string | null };
-type CreatedTemplate = { id: string; company_id: string; name: string; created_by_membership_id: string; is_active: boolean };
+type CreatedTemplate = { id: string; company_id: string; name: string; created_by_membership_id: string; is_active: boolean;
+  updated_at: string; subject_template: string; body_template: string; variables: unknown[] };
 
 type ResearchMatter = CreatedMatter & { company_id: string; title: string; practice_area: string };
 type ResearchResponse = Awaited<ReturnType<typeof searchAuthorities>>;
@@ -137,6 +138,31 @@ for (const phone of [false, true]) {
         && template.created_by_membership_id === actor.membership.id, "Only this reporter's uniquely named synthetic template").toBe(true);
       await release();
 
+      const templateRow = page.getByTestId(`email-template-${templateId}`);
+      await templateRow.getByRole("button", { name: `Edit ${templateName}`, exact: true }).click();
+      await expect(templateRow.getByTestId("email-template-name")).toHaveValue(templateName);
+      await expect(templateRow.getByTestId("email-template-subject")).toHaveValue(template.subject_template);
+      await expect(templateRow.getByTestId("email-template-body")).toHaveValue(template.body_template);
+      const revisedSubject = "Revised status update for {{client_name}}";
+      await templateRow.getByTestId("email-template-subject").fill(revisedSubject);
+      const [patchResponse] = await Promise.all([
+        responseFor(`/api/admin/email-templates/${templateId}`, "PATCH"),
+        templateRow.getByTestId("email-template-submit").click(),
+      ]);
+      expect(patchResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      expect(patchResponse.request().postDataJSON()).toEqual({
+        expected_updated_at: template.updated_at,
+        subject_template: revisedSubject,
+        variables: template.variables,
+      });
+      const revised = await json<CreatedTemplate>(patchResponse, "UI-edited synthetic template");
+      expect(revised).toEqual({ ...template, subject_template: revisedSubject, updated_at: revised.updated_at });
+      expect(revised.updated_at).not.toBe(template.updated_at);
+      await expect(templateRow.getByTestId("email-template-submit")).toHaveCount(0);
+      await expect(templateRow.getByText(revisedSubject, { exact: true })).toBeVisible();
+      await page.reload();
+      await expect(templateRow.getByText(revisedSubject, { exact: true })).toBeVisible();
+
       await page.goto(`${web.origin}/app/matters`);
       await page.getByTestId("new-matter-trigger").first().click();
       const dialog = page.getByRole("dialog", { name: "New matter" });
@@ -157,6 +183,15 @@ for (const phone of [false, true]) {
       await page.getByTestId("comm-send-toggle").click();
       const compose = page.getByRole("region", { name: "Compose email" });
       await compose.getByTestId("comm-send-template").selectOption(templateId);
+      await expect(compose.getByLabel("Subject", { exact: true })).toHaveValue(revisedSubject);
+      await compose.getByRole("button", { name: "Use as default on this browser", exact: true }).click();
+      await expect(compose.getByText(`Browser default: ${templateName}`, { exact: true })).toBeVisible();
+      await page.reload();
+      await page.getByTestId("comm-send-toggle").click();
+      await expect(compose.getByTestId("comm-send-template")).toHaveValue(templateId);
+      await expect(compose.getByLabel("Subject", { exact: true })).toHaveValue(revisedSubject);
+      await compose.getByRole("button", { name: "Clear browser default", exact: true }).click();
+      await expect(compose.getByTestId("comm-send-template")).toHaveValue(templateId);
       await compose.getByLabel("Recipient email", { exact: true }).fill("no-delivery@example.com");
       await expect(compose.getByTestId("comm-send-submit")).toBeDisabled();
       async function preview() {
@@ -168,6 +203,7 @@ for (const phone of [false, true]) {
         return json<{ subject: string; body: string; missing_variables: string[]; invalid_placeholders: string[]; preview_token: string | null }>(response, "Matter-scoped preview from the expected API");
       }
       const missing = await preview();
+      expect(missing.subject).toBe("Revised status update for QA Client");
       expect(missing.missing_variables).toEqual(["hearing_date"]);
       expect(missing.preview_token).toBeNull();
       await expect(compose.getByRole("alert")).toContainText("hearing_date");
@@ -246,6 +282,9 @@ for (const phone of [false, true]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       await page.reload();
       await expect(page.getByText("No communications yet", { exact: true })).toBeVisible();
+      await page.getByTestId("comm-send-toggle").click();
+      await expect(compose.getByTestId("comm-send-template")).toHaveValue("");
+      await expect(compose.getByRole("button", { name: "Clear browser default", exact: true })).toHaveCount(0);
       await selfAuth(request, headers);
       await selfAuth(page.request, transport);
       await release();

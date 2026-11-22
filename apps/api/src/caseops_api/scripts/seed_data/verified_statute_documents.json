@@ -2813,6 +2813,89 @@
           "page": 261
         }
       ]
+    },
+    {
+      "statute_id": "motor-vehicles-1988",
+      "file": "motor-vehicles-1988-current.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1798/1/aA1988-59.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1798/1/aA1988-59.pdf",
+      "sha256": "be5bac906607cb2ac902d5c113c42c7f89142be3591a81ccb825cfbb7ee5d50d",
+      "retrieved_at": "2026-09-08T05:52:45.237269+00:00",
+      "source_version": "India Code consolidation as on 21 May 2025",
+      "issuing_body": "Ministry of Road Transport and Highways, Government of India",
+      "toc_pages": [
+        3,
+        9
+      ],
+      "body_pages": [
+        10,
+        173
+      ],
+      "section_count": 257,
+      "complete_arrangement_labels": true,
+      "stop_arrangement_at_sentence_end": true,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            9
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            174,
+            175
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "supplements": [
+        {
+          "key": "schedule_1",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "THE FIRST SCHEDULE",
+          "heading": "1[2[THE FIRST SCHEDULE]]",
+          "page": 120
+        },
+        {
+          "key": "schedule_2",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "THE SECOND SCHEDULE. [Omitted]",
+          "heading": "1[THE SECOND SCHEDULE.—[Schedule for compensation for third party fatal accidents/injury cases",
+          "page": 173
+        }
+      ],
+      "blocked_supplements": {
+        "schedule_1": "The publisher's signs are image-based. Read the whole linked official PDF schedule, including illustrations. The extracted text is incomplete and unavailable for citation or attachment."
+      },
+      "body_heading_evidence": {
+        "93": {
+          "page": 66,
+          "text": "93. 1[Agent or canvasser or aggregator to obtain licence.]— (1) No person shall engage himself—"
+        },
+        "110B": {
+          "page": 74,
+          "text": "110B. Type approval certificate and testing agencies.— (1) No motor vehicle, including a trailer or"
+        },
+        "147": {
+          "page": 86,
+          "text": "147. Requirement of policies and limits of liability.—(1) In order to comply with the requirements"
+        },
+        "193": {
+          "page": 105,
+          "text": "193. Punishment of 2[agents, canvassers and aggregators] without proper authority.—3[1]"
+        }
+      }
     }
   ]
 }

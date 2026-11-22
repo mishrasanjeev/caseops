@@ -151,6 +151,8 @@ export default function ContractDetailPage() {
     null,
   );
   const [redlineAttachmentId, setRedlineAttachmentId] = useState<string | null>(null);
+  const [termEditor, setTermEditor] = useState<ContractTermSuggestionRecord | null>(null);
+  const editingTerm = termEditor?.contract_id === contractId ? termEditor : null;
   const [legalReferenceDraft, setLegalReferenceDraft] = useState({
     act_name: "",
     section_label: "",
@@ -231,25 +233,29 @@ export default function ContractDetailPage() {
   });
 
   const acceptTermSuggestionMutation = useMutation({
-    mutationFn: (suggestionId: string) =>
-      acceptContractTermSuggestion({ contractId, suggestionId, expected_updated_at: workspaceQuery.data!.contract.updated_at }),
+    mutationFn: ({ suggestionId, version }: { suggestionId: string; version: string }) =>
+      acceptContractTermSuggestion({ contractId, suggestionId, expected_updated_at: version }),
     onSuccess: async () => {
       await invalidateWorkspace();
       toast.success("Term suggestion accepted.");
     },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not accept term suggestion.")),
+    onError: async (err) => {
+      toast.error(apiErrorMessage(err, "Could not accept term suggestion."));
+      await invalidateWorkspace();
+    },
   });
 
   const rejectTermSuggestionMutation = useMutation({
-    mutationFn: (suggestionId: string) =>
-      rejectContractTermSuggestion({ contractId, suggestionId }),
+    mutationFn: ({ suggestionId, version }: { suggestionId: string; version: string }) =>
+      rejectContractTermSuggestion({ contractId, suggestionId, expected_updated_at: version }),
     onSuccess: async () => {
       await invalidateWorkspace();
       toast.success("Term suggestion rejected.");
     },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not reject term suggestion.")),
+    onError: async (err) => {
+      toast.error(apiErrorMessage(err, "Could not reject term suggestion."));
+      await invalidateWorkspace();
+    },
   });
 
   const uploadMutation = useMutation({
@@ -1039,11 +1045,21 @@ export default function ContractDetailPage() {
                             </p>
                           ) : null}
                         </div>
-                        {canEditDetails && suggestion.status === "suggested" ? (
+                        {canEditDetails && suggestion.status === "suggested" && editingTerm?.id !== suggestion.id ? (
                           <div className="flex flex-wrap gap-2">
                             <Button
                               size="sm"
-                              onClick={() => acceptTermSuggestionMutation.mutate(suggestion.id)}
+                              variant="outline"
+                              disabled={!!editingTerm || acceptTermSuggestionMutation.isPending || rejectTermSuggestionMutation.isPending}
+                              onClick={() => setTermEditor(suggestion)}
+                              data-testid={`edit-term-suggestion-${suggestion.id}`}
+                            >
+                              Edit suggestion
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={acceptTermSuggestionMutation.isPending || rejectTermSuggestionMutation.isPending}
+                              onClick={() => acceptTermSuggestionMutation.mutate({ suggestionId: suggestion.id, version: contract.updated_at })}
                               data-testid={`accept-term-suggestion-${suggestion.id}`}
                             >
                               Accept
@@ -1051,13 +1067,26 @@ export default function ContractDetailPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => rejectTermSuggestionMutation.mutate(suggestion.id)}
+                              disabled={acceptTermSuggestionMutation.isPending || rejectTermSuggestionMutation.isPending}
+                              onClick={() => rejectTermSuggestionMutation.mutate({ suggestionId: suggestion.id, version: contract.updated_at })}
                             >
                               Reject
                             </Button>
                           </div>
                         ) : null}
                       </div>
+                      {canEditDetails && editingTerm?.id === suggestion.id ? (
+                        <div className="mt-3">
+                          <ContractTermEntry
+                            key={editingTerm.id}
+                            contractId={contractId}
+                            attachments={attachments}
+                            original={editingTerm}
+                            onSaved={invalidateWorkspace}
+                            onClose={() => setTermEditor(null)}
+                          />
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles, Users } from "lucide-react";
+import { ChevronDown, Sparkles, Users } from "lucide-react";
 
 import {
   Card,
@@ -35,12 +35,21 @@ function formatMoney(minor: number): string {
 
 function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
   return (
-    <li className="flex flex-col gap-1.5 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-[var(--color-ink)]">
+    <li className="min-w-0 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)]">
+      <details className="group">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 break-words text-sm font-semibold text-[var(--color-ink)]">
             {rec.counsel_name}
           </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="tabular text-sm font-semibold text-[var(--color-ink)]" aria-label={`Panel match score ${formatScore(rec.score)}`}>
+              {formatScore(rec.score)}
+            </span>
+            <ChevronDown className="h-4 w-4 group-open:rotate-180" aria-hidden />
+          </span>
+        </summary>
+        <div className="space-y-2 border-t border-[var(--color-line)] px-3 py-2">
+          <StatusBadge status={rec.panel_status} />
           <span className="text-[11px] text-[var(--color-mute-2)]">
             {rec.total_matters_count} matter{rec.total_matters_count === 1 ? "" : "s"}
             {rec.active_matters_count > 0 ? ` · ${rec.active_matters_count} active` : ""}
@@ -48,26 +57,13 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
               ? ` · ${formatMoney(rec.approved_spend_minor)} approved spend`
               : ""}
           </span>
+          {rec.evidence.length > 0 ? (
+            <ul className="space-y-1 break-words text-xs text-[var(--color-mute)]">
+              {rec.evidence.map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+          ) : null}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="tabular text-sm font-semibold text-[var(--color-ink)]">
-            {formatScore(rec.score)}
-          </span>
-          <StatusBadge status={rec.panel_status} />
-        </div>
-      </div>
-      {rec.evidence.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5">
-          {rec.evidence.slice(0, 4).map((reason) => (
-            <li
-              key={reason}
-              className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-white px-2 py-0.5 text-[10px] text-[var(--color-mute)]"
-            >
-              {reason}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      </details>
     </li>
   );
 }
@@ -132,7 +128,7 @@ export function CounselRecommendationsCard({
             description="Add counsel to the panel and we'll rank them for this matter."
           />
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="grid items-start gap-2 sm:grid-cols-2">
             {data.results.map((rec) => (
               <CounselRow key={rec.counsel_id} rec={rec} />
             ))}
