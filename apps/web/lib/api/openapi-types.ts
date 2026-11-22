@@ -818,6 +818,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/notification-phone-channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SMS and WhatsApp readiness, workspace enablement and opted-in members. */
+        get: operations["get_admin_phone_channels_api_admin_notification_phone_channels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/notification-preferences": {
         parameters: {
             query?: never;
@@ -12173,6 +12190,75 @@ export interface paths {
         patch: operations["patch_notification_preferences_api_notification_preferences_patch"];
         trace?: never;
     };
+    "/api/notification-preferences/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the current user's mobile number, verification and consent state. */
+        get: operations["get_phone_contact_api_notification_preferences_phone_get"];
+        put?: never;
+        post?: never;
+        /** Remove the current user's mobile number and stop phone reminders. */
+        delete: operations["delete_phone_contact_api_notification_preferences_phone_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Opt in to, or out of, SMS or WhatsApp reminders. */
+        post: operations["set_phone_contact_consent_api_notification_preferences_phone_consent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a one-time code to verify the current user's mobile number. */
+        post: operations["start_phone_contact_verification_api_notification_preferences_phone_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the one-time code and mark the mobile number verified. */
+        post: operations["confirm_phone_contact_verification_api_notification_preferences_phone_verification_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notification-preferences/test": {
         parameters: {
             query?: never;
@@ -14769,6 +14855,24 @@ export interface paths {
         put?: never;
         /** Receive SendGrid event-notification webhook */
         post: operations["sendgrid_events_api_webhooks_sendgrid_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/webhooks/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Meta webhook subscription handshake */
+        get: operations["whatsapp_webhook_verify_api_webhooks_whatsapp_get"];
+        put?: never;
+        /** Receive WhatsApp STOP replies and delivery statuses */
+        post: operations["whatsapp_webhook_api_webhooks_whatsapp_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -45215,6 +45319,128 @@ export interface components {
             /** Provider Order Id */
             provider_order_id: string | null;
         };
+        /** PhoneChannelAdminRecord */
+        PhoneChannelAdminRecord: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Kill Switch Active */
+            kill_switch_active: boolean;
+            /** Missing Configuration */
+            missing_configuration?: string[];
+            /** Not Ready Reason */
+            not_ready_reason?: string | null;
+            /**
+             * Opted In Members
+             * @default 0
+             */
+            opted_in_members: number;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "msg91" | "meta-whatsapp";
+            /** Provider Ready */
+            provider_ready: boolean;
+            /** Tenant Enabled */
+            tenant_enabled: boolean;
+            /**
+             * Transport
+             * @enum {string}
+             */
+            transport: "mock" | "live";
+        };
+        /** PhoneChannelAdminResponse */
+        PhoneChannelAdminResponse: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["PhoneChannelAdminRecord"];
+            };
+        };
+        /** PhoneChannelConsentRecord */
+        PhoneChannelConsentRecord: {
+            /** Blocked Reason */
+            blocked_reason?: string | null;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Consent At */
+            consent_at?: string | null;
+            /** Deliverable */
+            deliverable: boolean;
+            /** Opt Out Source */
+            opt_out_source?: string | null;
+            /** Opted In */
+            opted_in: boolean;
+            /** Opted Out At */
+            opted_out_at?: string | null;
+            /** Provider Ready */
+            provider_ready: boolean;
+            /** Tenant Enabled */
+            tenant_enabled: boolean;
+        };
+        /** PhoneConsentRequest */
+        PhoneConsentRequest: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Consent Text Version */
+            consent_text_version?: "2026-11-22" | null;
+            /** Opted In */
+            opted_in: boolean;
+        };
+        /** PhoneContactStatusResponse */
+        PhoneContactStatusResponse: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["PhoneChannelConsentRecord"];
+            };
+            /**
+             * Consent Text Version
+             * @default 2026-11-22
+             */
+            consent_text_version: string;
+            /** Phone Masked */
+            phone_masked?: string | null;
+            /** Verification Channel */
+            verification_channel?: ("sms" | "whatsapp") | null;
+            /** Verification Expires At */
+            verification_expires_at?: string | null;
+            /**
+             * Verification Pending
+             * @default false
+             */
+            verification_pending: boolean;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** PhoneVerificationConfirmRequest */
+        PhoneVerificationConfirmRequest: {
+            /** Code */
+            code: string;
+        };
+        /** PhoneVerificationStartRequest */
+        PhoneVerificationStartRequest: {
+            /**
+             * Channel
+             * @default sms
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Phone Number */
+            phone_number: string;
+        };
         /** PineLabsActivationDecisionRequest */
         PineLabsActivationDecisionRequest: {
             /**
@@ -53187,6 +53413,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Microsoft365ReadinessTestResponse"];
+                };
+            };
+        };
+    };
+    get_admin_phone_channels_api_admin_notification_phone_channels_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneChannelAdminResponse"];
                 };
             };
         };
@@ -76839,6 +77085,145 @@ export interface operations {
             };
         };
     };
+    get_phone_contact_api_notification_preferences_phone_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+        };
+    };
+    delete_phone_contact_api_notification_preferences_phone_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+        };
+    };
+    set_phone_contact_consent_api_notification_preferences_phone_consent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_phone_contact_verification_api_notification_preferences_phone_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneVerificationStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_phone_contact_verification_api_notification_preferences_phone_verification_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneVerificationConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_current_user_notification_api_notification_preferences_test_post: {
         parameters: {
             query?: never;
@@ -81893,6 +82278,70 @@ export interface operations {
             header?: {
                 "X-Twilio-Email-Event-Webhook-Signature"?: string | null;
                 "X-Twilio-Email-Event-Webhook-Timestamp"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookAckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whatsapp_webhook_verify_api_webhooks_whatsapp_get: {
+        parameters: {
+            query?: {
+                "hub.challenge"?: string | null;
+                "hub.mode"?: string | null;
+                "hub.verify_token"?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whatsapp_webhook_api_webhooks_whatsapp_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Hub-Signature-256"?: string | null;
             };
             path?: never;
             cookie?: never;

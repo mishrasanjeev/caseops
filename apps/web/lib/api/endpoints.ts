@@ -154,6 +154,9 @@ import {
   type MailboxMessageReviewResponse,
   type Microsoft365TenantConfigurationResponse,
   type NotificationPreferenceResponse,
+  type PhoneChannel,
+  type PhoneChannelAdminResponse,
+  type PhoneContactStatusResponse,
   type MailboxImportResponse,
   type MailboxStatusResponse,
   type MailboxWatchResponse,
@@ -284,6 +287,8 @@ import {
   mailboxMessageReviewResponse,
   microsoft365TenantConfigurationResponse,
   notificationPreferenceResponse,
+  phoneChannelAdminResponse,
+  phoneContactStatusResponse,
   mailboxImportResponse,
   mailboxStatusResponse,
   mailboxWatchResponse,
@@ -1965,6 +1970,8 @@ export type MatterHearingCreateInput = {
   judge_name?: string | null;
   outcome_note?: string | null;
   status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+  // Omitted means the API default (in-app and email).
+  reminder_channels?: Array<"in_app" | "email" | "sms" | "whatsapp">;
 };
 
 export async function createMatterHearing(
@@ -7969,6 +7976,60 @@ export async function updateTenantNotificationPreferences(input: {
     },
   });
   return notificationPreferenceResponse.parse(data);
+}
+
+export async function fetchPhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone");
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function startPhoneVerification(input: {
+  phoneNumber: string;
+  channel: PhoneChannel;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/verification", {
+    method: "POST",
+    body: { phone_number: input.phoneNumber, channel: input.channel },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function confirmPhoneVerification(
+  code: string,
+): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/notification-preferences/phone/verification/confirm",
+    { method: "POST", body: { code } },
+  );
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function setPhoneConsent(input: {
+  channel: PhoneChannel;
+  optedIn: boolean;
+  consentTextVersion?: string;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/consent", {
+    method: "POST",
+    body: {
+      channel: input.channel,
+      opted_in: input.optedIn,
+      consent_text_version: input.optedIn ? input.consentTextVersion : undefined,
+    },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function removePhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone", {
+    method: "DELETE",
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function fetchAdminPhoneChannels(): Promise<PhoneChannelAdminResponse> {
+  const data = await apiRequest<unknown>("/api/admin/notification-phone-channels");
+  return phoneChannelAdminResponse.parse(data);
 }
 
 async function mutateProviderOperation(

@@ -3996,6 +3996,76 @@ class UserNotificationPreference(Base):
     membership: Mapped[CompanyMembership] = relationship()
 
 
+class NotificationPhoneContact(Base):
+    """One verified phone destination per tenant membership.
+
+    SMS and WhatsApp delivery are strictly opt-in: a send needs a verified
+    number plus an un-withdrawn, timestamped consent for that channel. The
+    number is personal data and is scoped to the membership, so consent given
+    inside one workspace never authorizes delivery for another.
+    """
+
+    __tablename__ = "notification_phone_contacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "membership_id",
+            name="uq_notification_phone_contact_membership",
+        ),
+        ForeignKeyConstraint(
+            ["company_id", "membership_id"],
+            ["company_memberships.company_id", "company_memberships.id"],
+            name="fk_notification_phone_contact_membership",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "verification_attempts >= 0",
+            name="ck_notification_phone_contact_attempts",
+        ),
+        Index("ix_notification_phone_contacts_phone", "phone_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    # E.164 with the leading plus, for example +919812345678.
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_channel: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    verification_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verification_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    verification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sms_consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sms_opted_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    whatsapp_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    whatsapp_opted_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    consent_text_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    opt_out_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class NotificationRule(Base):
     __tablename__ = "notification_rules"
 

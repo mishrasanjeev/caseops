@@ -92,6 +92,12 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # (SendGrid is a third party), so a role/capability guard would
     # reject every legitimate event.
     ("POST", "/api/webhooks/sendgrid/events"),
+    # WhatsApp Cloud API webhook - signed by Meta with X-Hub-Signature-256
+    # (HMAC-SHA256 of the body with CASEOPS_WHATSAPP_APP_SECRET), refused
+    # with 503 outside local envs when the secret is absent. It can only
+    # withdraw WhatsApp consent (STOP replies) or advance a matching
+    # WhatsApp intent's delivery status; Meta has no CaseOps session.
+    ("POST", "/api/webhooks/whatsapp"),
     # Gmail Pub/Sub push webhook (BUG-053) - verified by
     # CASEOPS_GMAIL_WEBHOOK_VERIFICATION_TOKEN and mapped back to the
     # tenant by connected mailbox display_email. Raw payloads are hashed

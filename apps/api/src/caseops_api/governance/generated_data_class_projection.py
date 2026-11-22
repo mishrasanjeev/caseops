@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "3020a90ac4d67789fbc1e8d944650a5763f6688691e00cc911577d16d789e055"
-MAP_SCHEMA_FINGERPRINT = "eb7f1d16237cdb2458e1112d4b40320395f05a86a2c71634ccfbb1223cd1b939"
+MAP_DOCUMENT_FINGERPRINT = "b9b807e29ce7eaba88214ed712fff29bd63a7a2fc2e778676cee85fdad2f8c9d"
+MAP_SCHEMA_FINGERPRINT = "f294232bd169a8d50bfb762b04673095fe0825b641d16001e8a97dfc0db80009"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "db46ffe19463d77b1db43a3f7c7a20075825c11327340d4ec167669e90acda4f"
+ORM_SCHEMA_FINGERPRINT = "afc82e528cf3e509bbb917af5b86a7d98dbab52ef8f7ec45990fb56666abff67"
 
-PROJECTION_ID = "acf268816af89fc1f27013976f324ddfd8e45c6982268279beb5215823053ca9"
+PROJECTION_ID = "5cf7980cba2349f42b05467e38aa152fd168d436c661688a2f7d0073895dad4c"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -330,6 +330,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "native_refresh_tokens",
         "notification_delivery_events",
         "notification_delivery_intents",
+        "notification_phone_contacts",
         "notification_rules",
         "outside_counsel",
         "outside_counsel_spend_records",
@@ -429,6 +430,7 @@ INVENTORIED_NON_SQL_CLASSES = frozenset(
         "llm-and-embedding-provider-held-content",
         "matter-attachment-pgvector-index",
         "operational-activity-report-delivery",
+        "phone-reminder-provider-delivery",
         "platform-console-account-link-delivery",
         "portfolio-export-dispatch-envelope",
         "public-enquiry-reference-notification",

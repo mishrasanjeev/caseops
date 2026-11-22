@@ -3300,7 +3300,7 @@ def test_postgres_legacy_and_intent_workers_emit_one_hearing_email(
         legacy_send_forbidden,
     )
     monkeypatch.setattr(
-        "caseops_api.services.hearing_reminders._send_via_twilio_sms",
+        "caseops_api.services.phone_notifications.send_phone_template",
         legacy_send_forbidden,
     )
     start = Event()

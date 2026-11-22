@@ -3332,6 +3332,24 @@ Without this, the PRD's central promise does not exist.
 > external channels are implemented. Remaining scope is provider-specific
 > policy, credential, and runbook approval plus transactional email/SMS/WhatsApp
 > adapters and sender-domain/template governance.
+>
+> 2026-11-22 SMS/WhatsApp slice (Partially implemented, not live): MSG91 and Meta
+> Cloud API adapters (`services/phone_providers.py`) and the opt-in gate,
+> verification, consent, dispatch and WhatsApp STOP/status webhook
+> (`services/phone_notifications.py`, table `notification_phone_contacts`) are
+> in code with fake-transport tests. Go-live needs the owner to: register the
+> DLT entity, six-character header and three DLT templates (hearing reminder
+> with VAR1..VAR4 = Matter code, date, time, court; alert with VAR1 = Matter
+> code; one-time code with VAR1) and link them to MSG91 templates; get three
+> Meta templates approved (utility hearing and alert, authentication copy-code);
+> store `CASEOPS_MSG91_AUTH_KEY`, `CASEOPS_WHATSAPP_ACCESS_TOKEN`,
+> `CASEOPS_WHATSAPP_APP_SECRET` and `CASEOPS_WHATSAPP_WEBHOOK_VERIFY_TOKEN` in
+> Secret Manager; set the template/sender/phone-number ids,
+> `CASEOPS_PHONE_NOTIFICATION_TRANSPORT=live` and `CASEOPS_MSG91_ENABLED` /
+> `CASEOPS_WHATSAPP_ENABLED`; register a verified actual per-message cost for
+> categories `sms`/`msg91` and `whatsapp`/`meta-whatsapp`; subscribe the Meta
+> webhook to `/api/webhooks/whatsapp`; then prove one real send per channel.
+> MSG91 delivery reports are not consumed yet (SMS ends at provider-accepted).
 
 - **Traces to:** PRD Section 9.10 fee-collection, PRD Section 9.2 invitations; today `payments.py` generates a link but never emails it
 - **Done when:**

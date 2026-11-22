@@ -40,7 +40,13 @@ def test_default_budget_is_machine_resolved_without_mutable_name_bypass(
         assert default.monthly_limit_minor == DEFAULT_MONTHLY_LIMIT_MINOR
         assert default.unlimited is False
         assert default.budget_scope == "account"
-        assert set(default.scope_provider_keys) == {"ecourtsindia", "indian-kanoon"}
+        # SMS and WhatsApp messages share the default account budget too.
+        assert set(default.scope_provider_keys) == {
+            "ecourtsindia",
+            "indian-kanoon",
+            "msg91",
+            "meta-whatsapp",
+        }
 
         company.name = "GBA Law Office"
         still_default = resolve_provider_spend_policy(
@@ -180,7 +186,7 @@ def test_workspace_usage_report_publishes_spend_and_remaining_by_provider(
     )
     assert response.status_code == 200, response.text
     by_provider = {row["provider_key"]: row for row in response.json()["by_provider"]}
-    assert set(by_provider) == {"ecourtsindia", "indian-kanoon"}
+    assert set(by_provider) == {"ecourtsindia", "indian-kanoon", "msg91", "meta-whatsapp"}
     assert by_provider["ecourtsindia"] == {
         "provider_key": "ecourtsindia",
         "label": "eCourtsIndia",
