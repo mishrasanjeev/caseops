@@ -7,11 +7,11 @@ describe("site ownership configuration", () => {
     expect(siteConfig.ownership).toEqual({
       legalOwner: "Orchestrum Technologies LLP",
       inventorOwner: "Sanjeev Kumar",
-      emails: ["sanjeev@orchestrum.in", "mishra.sanjeev@gmail.com"],
+      emails: ["sanjeev@orchestrum.in"],
     });
     expect(siteConfig.publisher).toBe(siteConfig.ownership.legalOwner);
     expect(siteConfig.author).toBe(siteConfig.ownership.inventorOwner);
     expect(siteConfig.contact.email).toBe(siteConfig.ownership.emails[0]);
-    expect(siteConfig.contact.alternateOwner).toBe(siteConfig.ownership.emails[1]);
+    expect(JSON.stringify(siteConfig)).not.toMatch(/@gmail\.com/i);
   });
 });

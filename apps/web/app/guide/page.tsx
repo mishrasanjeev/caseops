@@ -11,7 +11,7 @@ import { siteConfig } from "@/lib/site";
 export const metadata: Metadata = {
   title: "User guide",
   description:
-    "The current CaseOps user guide: daily priorities, intake and optional conflict review, matters, governed IP documents, notices and reply deadlines, communications, tracked case refresh, compliance review, drafting, hearings, contracts, outside counsel, billing, and safe source-backed intelligence.",
+    "The current CaseOps user guide: daily priorities, intake and optional conflict review, matters, teams, the IP workspace and governed IP documents, notices and reply deadlines, portals, court sync and case tracking, compliance review, drafting, hearings, contracts and redlines, the workspace assistant, outside counsel, billing, and safe source-backed intelligence.",
   alternates: { canonical: "/guide" },
   openGraph: {
     type: "article",
@@ -235,6 +235,12 @@ export default function GuidePage() {
                     hearings in a calendar — the matter is the folder <em>and</em> the
                     calendar.
                   </Callout>
+                  <Callout tone="warn" title="Phones, tablets and the mobile app">
+                    The web app works in a phone or tablet browser; the menu folds behind
+                    the button at the top left. The native iOS and Android app is a
+                    development candidate and is not yet in the App Store or Google Play.
+                    Until it ships, use the browser.
+                  </Callout>
                 </Section>
 
                 <Section id="status-labels" title="2 · Product status labels">
@@ -336,6 +342,33 @@ export default function GuidePage() {
                     <li>
                       <strong>Viewer.</strong> Read-oriented access where the capability grid
                       permits it. Custom roles can be configured from Admin → Roles.
+                    </li>
+                  </ul>
+                  <h3 className="mt-6 font-display text-lg text-[var(--color-ink)]">
+                    Teams and team leads
+                  </h3>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Create teams.</strong> Open{" "}
+                      <a className="underline" href="/app/admin/teams">Admin → Teams</a>,
+                      select <em>New team</em>, and choose its kind: team, department or
+                      practice area.
+                    </li>
+                    <li>
+                      <strong>Add members and leads.</strong> Select <em>Members</em> on a
+                      team, pick a colleague and tick <em>Team lead</em> where it applies.
+                      Leads show as &quot;(lead)&quot; in the list.
+                    </li>
+                    <li>
+                      <strong>Team-scoped matter visibility.</strong> When an admin turns
+                      scoping on, non-owners see only their teams&apos; matters plus
+                      firm-wide matters with no team. Owners always see every matter.
+                    </li>
+                    <li>
+                      <strong>What a lead flag does today.</strong> The flag is recorded,
+                      audited and carried over to a replacement during offboarding. It does
+                      not yet give the lead extra permissions; team changes stay with owners
+                      and admins.
                     </li>
                   </ul>
                   <Callout tone="warn" title="Roles do not replace matter access">
@@ -631,6 +664,14 @@ export default function GuidePage() {
                     audit entry records who uploaded and who retrieved it. The original PDF
                     stays in the document store and is served over a short-lived signed URL
                     when a user opens it.
+                  </Callout>
+                  <Callout tone="warn" title="IP workspace availability and registry data">
+                    The IP workspace is not part of the self-serve plans; CaseOps adds it to
+                    a workspace&apos;s plan on request, and a workspace admin then completes
+                    setup. Registry data is entered or imported by your team: there is no
+                    live IP India or WIPO feed, and journal watch compares the journal
+                    entries you record rather than fetching journals. Curated links to
+                    official IP India pages and forms are references, not live records.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Manual trademark applications
@@ -1241,6 +1282,40 @@ export default function GuidePage() {
                     uploaded. This workflow records filing state; it does not submit a filing
                     or send a document externally.
                   </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Retire an IP document
+                  </h3>
+                  <p>
+                    Retiring keeps the file, its versions and its audit trail, but stops it
+                    being offered or accepted as evidence anywhere in the IP workspace.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Open the document and select <strong>Retire</strong>. CaseOps first
+                        checks which records rely on it.
+                      </>,
+                      <>
+                        If a recordal, foreign-associate instruction, docket event, renewal
+                        certificate, client-portal publication or patent source still relies
+                        on it, each is listed with an Open link. Release them first.
+                      </>,
+                      <>
+                        When nothing relies on it, enter a reason of at least 10 characters
+                        and select <strong>Retire document</strong>. The reason is recorded
+                        with your name.
+                      </>,
+                      <>
+                        The document shows a Retired badge with the date, name and reason.
+                        Tick <em>Show retired documents</em> to see it.
+                      </>,
+                    ]}
+                  />
+                  <Callout title="Who can retire">
+                    Partners, admins, owners, or the person who uploaded the document.
+                    Retiring cannot be undone, and a document already published to a client
+                    cannot be retired.
+                  </Callout>
                 </Section>
 
                 <Section id="notices" title="8 · Notices and reply deadlines">
@@ -1448,6 +1523,15 @@ export default function GuidePage() {
                     not updated.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Court sync.</strong> Separately from provider tracking,
+                      partners and above can select <em>Run sync</em> on a matter&apos;s
+                      Hearings tab for the Supreme Court of India and the Delhi, Bombay,
+                      Karnataka, Madras and Telangana High Courts. The matter needs its court
+                      set and must not be disposed. Suggested next-hearing dates arrive with
+                      their source for a lawyer to accept or reject. Other courts use case
+                      tracking or hearings entered by hand.
+                    </li>
                     <li>
                       <strong>Daily window.</strong> Scheduled production runs start at
                       <strong> 6 PM IST</strong>, inside the 6 PM–8 PM execution window. No
@@ -1842,9 +1926,13 @@ export default function GuidePage() {
                       abstains when permitted verified evidence is insufficient and routes
                       legal-proposition research back here. It can suggest navigation,
                       searches, drafts, tasks, or field updates, but it does not execute a
-                      write without the separate preview-and-confirm workflow. Conversations
-                      can be exported, archived, or cleared; destructive deletion remains
-                      blocked until legal-hold-aware retention is implemented.
+                      write without the separate preview-and-confirm workflow. Opening a
+                      citation rechecks your access and the source version and is recorded in
+                      the audit log; if either changed, you are asked to ask again. The
+                      assistant is off until a workspace owner enables it under the workspace
+                      AI policy. Conversations can be exported, archived, or cleared;
+                      destructive deletion remains blocked until legal-hold-aware retention is
+                      implemented.
                     </li>
                     <li>
                       <strong>Licensed source.</strong> Indian Kanoon is available to
@@ -1889,12 +1977,14 @@ export default function GuidePage() {
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Upload.</strong> Drop the contract (.docx or .pdf). CaseOps
-                      extracts parties, effective dates, key covenants and payment terms.
+                      <strong>Upload.</strong> Add the contract (.pdf, .doc, .docx or .txt)
+                      with its role, such as primary contract, amendment or annexure. Clause
+                      extraction proposes clauses with a risk badge for review.
                     </li>
                     <li>
-                      <strong>Playbook compare.</strong> Pick a playbook; the system flags
-                      clauses that deviate from it and suggests an edit per deviation.
+                      <strong>Playbook compare.</strong> Install the default playbook or
+                      compare against a firm playbook; each position is marked matched,
+                      deviation or missing. Firm-wide playbooks are set up through the API.
                     </li>
                     <li>
                       <strong>Obligations.</strong> Payment, reporting, consent and
@@ -1902,9 +1992,14 @@ export default function GuidePage() {
                       dates and owners.
                     </li>
                     <li>
-                      <strong>Redlines.</strong> Upload a DOCX with tracked changes to parse
-                      and review additions/deletions in CaseOps. The current surface does not
-                      export a newly tracked Word document or claim version lineage.
+                      <strong>Redlines.</strong> Select <em>View redline</em> on a .docx the
+                      other side marked up. The viewer reads Word&apos;s own tracked changes:
+                      insertions, deletions, moved passages (counted once, not as a deletion
+                      plus an insertion) and formatting, with author and time. An amber
+                      warning means the file holds tracked changes it cannot display, such
+                      as images, tables, numbering, headers, footers, notes or comments;
+                      review those in Word. It does not compare two separate files, accept or
+                      reject changes, or export a newly tracked Word document.
                     </li>
                   </ul>
                 </Section>
