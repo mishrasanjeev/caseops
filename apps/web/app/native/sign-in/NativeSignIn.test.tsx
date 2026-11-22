@@ -7,12 +7,14 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NativeSignIn } from "./NativeSignIn";
+import type { ComponentProps } from "react";
 
 const mocks = vi.hoisted(() => ({
   query: "",
   api: vi.fn(),
   mfa: vi.fn(),
   open: vi.fn(),
+  connectCallbacks: [] as Array<() => void>,
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(mocks.query),
@@ -23,6 +25,18 @@ vi.mock("@/lib/native-authorization", async (original) => ({
   ...(await original<typeof import("@/lib/native-authorization")>()),
   openNativeApp: mocks.open,
 }));
+// Retain the actual page callback while rendering the original Button. A
+// detached React DOM button would not dispatch its old synthetic handler.
+vi.mock("@/components/ui/Button", async (original) => {
+  const actual = await original<typeof import("@/components/ui/Button")>();
+  const { createElement } = await import("react");
+  return { ...actual, Button(props: ComponentProps<typeof actual.Button>) {
+    const children = Array.isArray(props.children) ? props.children : [props.children];
+    if (children.includes("Connect app") && props.onClick)
+      mocks.connectCallbacks.push(props.onClick as () => void);
+    return createElement(actual.Button, props);
+  } };
+});
 vi.mock("@/components/marketing/Logo", () => ({
   Logo: () => <span>CaseOps</span>,
 }));
@@ -51,6 +65,7 @@ describe("native browser handoff consent", () => {
     mocks.api.mockReset();
     mocks.mfa.mockReset();
     mocks.open.mockReset();
+    mocks.connectCallbacks.length = 0;
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -338,49 +353,152 @@ describe("native browser handoff consent", () => {
     expect(mocks.api).toHaveBeenCalledTimes(2);
   });
 
-  it("recovers a typed native MFA refusal with the existing verifier and never reconnects automatically", async () => {
+  it("verifies MFA and prepares one native handoff within the explicit continue action", async () => {
     mocks.api
       .mockResolvedValueOnce(identity)
-      .mockRejectedValueOnce({
-        name: "ApiError",
-        status: 403,
-        problemType: "native_mfa_required",
-        detail: "Verify your authenticator.",
-        data: null,
-      })
-      .mockResolvedValueOnce(identity);
-    mocks.mfa.mockResolvedValue({
-      status: "verified",
-      expires_at: "2026-10-25T12:00:00Z",
-    });
+      .mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required",
+        detail: "Complete MFA in this browser session before native sign-in.", data: null })
+      .mockResolvedValueOnce(identity)
+      .mockResolvedValueOnce({ code: "c".repeat(43), state: "b".repeat(64),
+        redirect_uri: "caseops://oauth/callback", expires_in: 60 });
+    mocks.mfa.mockResolvedValue({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
     render(<NativeSignIn policy={LOCAL_POLICY} />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
     const field = await screen.findByLabelText("Six-digit code");
-    expect(
-      screen.queryByRole("button", { name: "Connect app" }),
-    ).not.toBeInTheDocument();
-    field.focus();
-    expect(field).toHaveFocus();
+    await waitFor(() => { expect(field).toBeEnabled(); expect(field).toHaveFocus(); });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Enter the six-digit code from your authenticator. Verify and continue connects this account to CaseOps.");
+    expect(screen.queryByRole("button", { name: "Connect app" })).not.toBeInTheDocument();
     fireEvent.change(field, { target: { value: "123456" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Code verified",
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    const open = await screen.findByRole("button", { name: "Open CaseOps" });
+    await waitFor(() => { expect(open).toBeEnabled(); expect(open).toHaveFocus(); });
     expect(mocks.mfa).toHaveBeenCalledExactlyOnceWith({ code: "123456" });
     expect(mocks.api.mock.calls.map((call) => call[0])).toEqual([
-      "/api/auth/me",
-      "/api/auth/native/authorize",
-      "/api/auth/me",
+      "/api/auth/me", "/api/auth/native/authorize", "/api/auth/me", "/api/auth/native/authorize",
     ]);
-    expect(screen.getByRole("button", { name: "Connect app" })).toBeEnabled();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Connect app" })).toHaveFocus(),
-    );
-    expect(
-      screen.getByRole("button", { name: "Connect app" }),
-    ).toHaveAccessibleDescription(
-      "Code verified. Select Connect app to continue.",
-    );
+    expect(open).toHaveAccessibleDescription("Sign-in is ready. Open CaseOps to finish.");
+    expect(mocks.open).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Connect app" })).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain("c".repeat(43));
+  });
+
+  it("holds one synchronous verification lease through identity and authorization completion", async () => {
+    let finishMfa!: (value: unknown) => void, finishIdentity!: (value: unknown) => void,
+      finishGrant!: (value: unknown) => void;
+    mocks.api.mockResolvedValueOnce(identity)
+      .mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required", detail: "Verify.", data: null })
+      .mockImplementationOnce(() => new Promise(resolve => { finishIdentity = resolve; }))
+      .mockImplementationOnce(() => new Promise(resolve => { finishGrant = resolve; }));
+    mocks.mfa.mockImplementationOnce(() => new Promise(resolve => { finishMfa = resolve; }));
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    const field = await screen.findByLabelText("Six-digit code");
+    fireEvent.change(field, { target: { value: "123456" } });
+    const verify = screen.getByRole("button", { name: "Verify and continue" });
+    act(() => { fireEvent.click(verify); fireEvent.click(verify); });
+    expect(mocks.mfa).toHaveBeenCalledTimes(1);
+    await act(async () => { finishMfa({ status: "verified", expires_at: "2099-01-01T00:00:00Z" }); });
+    expect(verify).toBeDisabled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+    await act(async () => { finishIdentity(identity); });
+    expect(verify).toBeDisabled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(2);
+    fireEvent.click(verify);
+    expect(mocks.mfa).toHaveBeenCalledTimes(1);
+    await act(async () => { finishGrant({ code: "c".repeat(43), state: "b".repeat(64), redirect_uri: "caseops://oauth/callback", expires_in: 60 }); });
+    expect(await screen.findByRole("button", { name: "Open CaseOps" })).toBeEnabled();
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(2);
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("keeps retained Connect blocked after MFA succeeds but the fresh identity read fails", async () => {
+    mocks.api.mockResolvedValueOnce(identity)
+      .mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required", detail: "Verify.", data: null })
+      .mockRejectedValueOnce(new Error("Synthetic identity read unavailable"))
+      .mockResolvedValue({ code: "c".repeat(43), state: "b".repeat(64), redirect_uri: "caseops://oauth/callback", expires_in: 60 });
+    mocks.mfa.mockResolvedValue({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    await screen.findByRole("button", { name: "Connect app" });
+    const retainedConnect = mocks.connectCallbacks.at(-1)!;
+    await act(async () => { retainedConnect(); });
+    fireEvent.change(await screen.findByLabelText("Six-digit code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("security check could not be verified");
+    await act(async () => { retainedConnect(); });
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+  });
+
+  it.each(["rejected code", "unknown verification acknowledgement"])("consumes the code before a retained Verify callback can replay after %s", async failure => {
+    mocks.api.mockResolvedValueOnce(identity).mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required", detail: "Verify.", data: null });
+    mocks.mfa.mockRejectedValue(failure === "rejected code"
+      ? { name: "ApiError", status: 403, problemType: "forbidden", detail: "The code was not accepted.", data: null }
+      : new Error("Synthetic verification acknowledgement unknown"));
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    fireEvent.change(await screen.findByLabelText("Six-digit code"), { target: { value: "123456" } });
+    // The form's real submit callback is retained after the code-bearing render.
+    const form = screen.getByRole("button", { name: "Verify and continue" }).closest("form")!;
+    const reactKey = Object.keys(form).find(key => key.startsWith("__reactProps$"))!;
+    const retainedSubmit = (form as unknown as Record<string, { onSubmit: (event: { preventDefault(): void }) => void }>)[reactKey].onSubmit;
+    await act(async () => { retainedSubmit({ preventDefault() {} }); });
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.getByLabelText("Six-digit code")).toHaveValue("");
+    await act(async () => { retainedSubmit({ preventDefault() {} }); });
+    expect(mocks.mfa).toHaveBeenCalledTimes(1);
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+  });
+
+  it.each(["expired browser session", "changed identity"])("invalidates retained Connect after %s during the fresh MFA identity read", async failure => {
+    mocks.api.mockResolvedValueOnce(identity).mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required", detail: "Verify.", data: null });
+    if (failure === "expired browser session") mocks.api.mockRejectedValueOnce({ name: "ApiError", status: 401, problemType: "invalid_token", detail: "Sign in again.", data: null });
+    else mocks.api.mockResolvedValueOnce({ ...identity, user: { ...identity.user, id: "different-person" } });
+    mocks.api.mockResolvedValue({ code: "c".repeat(43), state: "b".repeat(64), redirect_uri: "caseops://oauth/callback", expires_in: 60 });
+    mocks.mfa.mockResolvedValue({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    await screen.findByRole("button", { name: "Connect app" });
+    const retainedConnect = mocks.connectCallbacks.at(-1)!;
+    await act(async () => { retainedConnect(); });
+    fireEvent.change(await screen.findByLabelText("Six-digit code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    expect(await screen.findByRole("link", { name: "Sign in securely" })).toBeVisible();
+    await act(async () => { retainedConnect(); });
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+  });
+
+  it("invalidates a retained initial Connect callback after an unknown grant acknowledgement", async () => {
+    mocks.api.mockResolvedValueOnce(identity).mockRejectedValueOnce(new Error("Synthetic grant acknowledgement unknown"));
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    await screen.findByRole("button", { name: "Connect app" });
+    const connect = mocks.connectCallbacks.at(-1)!;
+    expect(connect).toBeTypeOf("function");
+    await act(async () => { connect(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("start sign-in again");
+    expect(screen.queryByRole("button", { name: "Connect app" })).not.toBeInTheDocument();
+    await act(async () => { connect(); connect(); });
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(1);
+    expect(mocks.mfa).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
+  });
+
+  it("does not replay an unknown grant acknowledgement as another verification or authorization", async () => {
+    mocks.api.mockResolvedValueOnce(identity)
+      .mockRejectedValueOnce({ name: "ApiError", status: 403, problemType: "native_mfa_required", detail: "Verify.", data: null })
+      .mockResolvedValueOnce(identity).mockRejectedValueOnce(new Error("Synthetic grant acknowledgement unknown"));
+    mocks.mfa.mockResolvedValue({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
+    render(<NativeSignIn policy={LOCAL_POLICY} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect app" }));
+    fireEvent.change(await screen.findByLabelText("Six-digit code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("start sign-in again");
+    expect(screen.queryByLabelText("Six-digit code")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect app" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open CaseOps" })).not.toBeInTheDocument();
+    expect(mocks.mfa).toHaveBeenCalledTimes(1);
+    expect(mocks.api.mock.calls.filter(([route]) => route === "/api/auth/native/authorize")).toHaveLength(2);
+    expect(mocks.open).not.toHaveBeenCalled();
   });
 
   it("does not mistake an ordinary forbidden response for an MFA challenge", async () => {
@@ -418,7 +536,7 @@ describe("native browser handoff consent", () => {
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
     });
-    const verify = screen.getByRole("button", { name: "Verify code" });
+    const verify = screen.getByRole("button", { name: "Verify and continue" });
     fireEvent.click(verify);
     fireEvent.click(verify);
     expect(mocks.mfa).toHaveBeenCalledTimes(1);
@@ -460,7 +578,7 @@ describe("native browser handoff consent", () => {
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "browser account changed",
     );
@@ -495,7 +613,7 @@ describe("native browser handoff consent", () => {
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
     mocks.query = new URLSearchParams({
       code_challenge: "c".repeat(43),
       state: "d".repeat(64),
@@ -514,7 +632,7 @@ describe("native browser handoff consent", () => {
       finish({ status: "verified", expires_at: "2099-01-01T00:00:00Z" });
     });
     await waitFor(() =>
-      expect(screen.queryByText(/Code verified/)).not.toBeInTheDocument(),
+      expect(screen.queryByText("Sign-in is ready. Open CaseOps to finish.")).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "Connect app" })).not.toHaveFocus();
     expect(anotherAccount).toHaveFocus();
@@ -544,7 +662,7 @@ describe("native browser handoff consent", () => {
     fireEvent.change(await screen.findByLabelText("Six-digit code"), {
       target: { value: "123456" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Verify code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Verify and continue" }));
     expect(
       await screen.findByRole("link", { name: "Sign in securely" }),
     ).toBeVisible();

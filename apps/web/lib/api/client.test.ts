@@ -177,6 +177,54 @@ describe("apiRequest", () => {
     });
   });
 
+  it.each([
+    ["/api/auth/native/authorize", "invalid_token"],
+    ["api/auth/native/authorize", "missing_bearer_token"],
+    ["http://localhost:8000/api/auth/native/authorize?fixture=expired", "expired_token"],
+  ])("never refreshes or replays native consent at %s after %s", async (path, problemType) => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    document.cookie = "caseops_csrf=synthetic-csrf; Path=/";
+    const assign = vi.fn();
+    vi.stubGlobal("window", {
+      localStorage: window.localStorage,
+      location: {
+        origin: "http://localhost:3000", pathname: "/native/sign-in",
+        search: "?fixture=expired", assign,
+      },
+    });
+    vi.mocked(fetch).mockResolvedValue(response({
+      type: problemType, detail: "Session expired.", status: 401,
+    }, 401, "application/problem+json"));
+
+    await expect(apiRequest(path, { method: "POST", body: { fixture: "consent" } }))
+      .rejects.toMatchObject({ status: 401, problemType });
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [receivedPath, init] = vi.mocked(fetch).mock.calls[0];
+    expect(new URL(String(receivedPath)).pathname).toBe("/api/auth/native/authorize");
+    expect(init).toMatchObject({ method: "POST", credentials: "include" });
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Authorization")).toBeNull();
+    expect(headers.get("X-CSRF-Token")).toBe("synthetic-csrf");
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      "/sign-in?next=%2Fnative%2Fsign-in%3Ffixture%3Dexpired",
+    );
+  });
+
+  it("preserves ordinary refresh for a path near the native consent endpoint", async () => {
+    window.localStorage.setItem("caseops.session.context", "{}");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(response({ type: "invalid_token", detail: "Expired." }, 401))
+      .mockResolvedValueOnce(response({
+        access_token: "fresh-token", token_type: "bearer", company: {}, user: {}, membership: {},
+      }, 200))
+      .mockResolvedValueOnce(response({ ok: true }, 200));
+
+    await expect(apiRequest("/api/auth/native/authorize-history")).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetch).mock.calls[1][0]).toBe("http://localhost:8000/api/auth/refresh");
+  });
+
   it("refreshes and retries an authenticated binary download after a 401", async () => {
     window.localStorage.setItem("caseops.session.context", "{}");
     vi.mocked(fetch)

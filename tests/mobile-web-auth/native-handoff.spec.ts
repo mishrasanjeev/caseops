@@ -35,7 +35,7 @@ test('MOB-WEB-01 malformed native request is noindex and exposes no account', as
   expect(reads).toBe(0);
 });
 
-test('MOB-WEB-02 names the exact account and workspace before explicit consent', async ({ page }) => {
+test('MOB-WEB-02 names the exact account and workspace before explicit consent', async ({ page }, testInfo) => {
   let authorizations = 0;
   page.on('request', request => { if (request.url().endsWith('/api/auth/native/authorize')) authorizations++; });
   await page.goto(`/native/sign-in?${query}`);
@@ -49,7 +49,7 @@ test('MOB-WEB-02 names the exact account and workspace before explicit consent',
   expect(size!.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const approval = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/api/auth/native/authorize'));
-  await connect.click();
+  if (testInfo.project.use.hasTouch) await connect.tap(); else await connect.click();
   expect((await approval).postDataJSON()).toEqual({ code_challenge: 'a'.repeat(43), state, platform: 'android', redirect_uri: 'caseops://oauth/callback' });
   await expect(page.getByRole('main').getByRole('alert')).toHaveText(/could not be completed/);
   expect(authorizations).toBe(1);
