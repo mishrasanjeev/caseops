@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 
@@ -210,7 +217,7 @@ class ContractClauseRecord(BaseModel):
 
 class ContractObligationCreateRequest(BaseModel):
     owner_membership_id: str | None = None
-    title: str = Field(min_length=2, max_length=255)
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=255)]
     description: str | None = Field(default=None, max_length=4000)
     due_on: date | None = None
     status: ContractObligationStatusLiteral = "pending"

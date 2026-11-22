@@ -124,12 +124,28 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     )
     assert second_clause_response.status_code == 200
 
+    obligations_path = f"/api/contracts/{contract_id}/obligations"
+    for title in ("  ", " \tA\r\n"):
+        invalid_obligation = client.post(
+            obligations_path,
+            headers=auth_headers(owner_token),
+            json={"title": title},
+        )
+        assert invalid_obligation.status_code == 422
+        assert invalid_obligation.json()["errors"] == [
+            {
+                "loc": ["body", "title"],
+                "msg": "String should have at least 2 characters",
+                "type": "string_too_short",
+            }
+        ]
+
     obligation_response = client.post(
-        f"/api/contracts/{contract_id}/obligations",
+        obligations_path,
         headers=auth_headers(owner_token),
         json={
             "owner_membership_id": owner_membership_id,
-            "title": "Deliver security schedule redlines",
+            "title": "  Deliver security schedule redlines  ",
             "description": "Send fallback confidentiality wording and SLA annexure edits.",
             "due_on": "2026-04-30",
             "status": "pending",
@@ -137,6 +153,7 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
         },
     )
     assert obligation_response.status_code == 200
+    assert obligation_response.json()["title"] == "Deliver security schedule redlines"
 
     client.post(
         f"/api/contracts/{contract_id}/playbook-rules",
@@ -196,6 +213,8 @@ def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     assert payload["owner"]["membership_id"] == owner_membership_id
     assert len(payload["clauses"]) == 2
     assert len(payload["obligations"]) == 1
+    assert payload["obligations"][0]["id"] == obligation_response.json()["id"]
+    assert payload["obligations"][0]["title"] == "Deliver security schedule redlines"
     assert payload["obligations"][0]["owner_name"] == "Aditi Counsel"
     assert len(payload["playbook_rules"]) == 3
 

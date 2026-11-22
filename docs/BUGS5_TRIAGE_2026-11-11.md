@@ -182,6 +182,17 @@ correctly bound migrated locator, a different bitstream, and malformed or
 unapproved URLs. The August 2026 edition remains a diagnostic candidate.
 Full runtime and release verification remain open.
 
+The BUG-008 review also reproduced a title-validation gap in the obligation
+request model. Surrounding whitespace let an empty or one-character title
+pass the two-character limit, after which the service trimmed it. The model
+now trims the title before checking its length, with the generated request
+schema unchanged. Exact locked Pydantic controls cover the old admission and
+the corrected boundary. The in-process HTTP control used the shared error
+handler and confirmed both typed refusals before its endpoint was called.
+The full workspace regression checks the same refusals and reads back the
+single valid obligation by its saved ID.
+The complete API and browser acceptance still need to run.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor
