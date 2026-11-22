@@ -1,3 +1,15 @@
+## November22 — walled admins can still change walls on their Matter
+
+**Missing.** Found while building the Admin ethical walls screen (J14/M13,
+SEC-004). `add_ethical_wall`, `remove_ethical_wall` and the grant/restricted
+writers in `services/matter_access.py` check only the owner/admin role and load
+the Matter by id without the actor's own visibility, so an admin who is walled
+from a Matter can lift that wall (or add others) through
+`/api/matters/{id}/access/walls` by id. The new directory read applies the
+actor's visibility, so the Admin screen does not offer it, but the API control
+fails open. Fix with a server-side rule and authorization, tenant and audit
+tests before calling SEC-004 Implemented for Matter walls.
+
 ## November18 — a green CI does not supersede failed local acceptance
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

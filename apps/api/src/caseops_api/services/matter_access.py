@@ -63,6 +63,10 @@ from caseops_api.schemas.ip_access import (
     RecordAccessFoundationContract,
     RecordAccessReconciliationReport,
 )
+from caseops_api.schemas.matter_access import (
+    MatterEthicalWallDirectoryRecord,
+    MatterEthicalWallDirectoryResponse,
+)
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
 )
@@ -2279,6 +2283,90 @@ def list_access_panel(
     return matter, grants, walls
 
 
+MATTER_WALL_DIRECTORY_LIMIT = 500
+
+
+def list_matter_ethical_wall_directory(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> MatterEthicalWallDirectoryResponse:
+    """Active Matter walls across the tenant, newest first, for the admin screen.
+
+    Only Matters the actor may open are listed: an admin who is walled from a
+    Matter does not learn its code or title, or the other walls on it, here.
+    Owners bypass walls and therefore see every wall. The read is audited.
+    """
+    _require_admin(context)
+    rows = session.execute(
+        select(EthicalWall, Matter)
+        .join(Matter, Matter.id == EthicalWall.matter_id)
+        .where(
+            Matter.company_id == context.company.id,
+            EthicalWall.excluded_membership_id.is_not(None),
+            EthicalWall.revoked_at.is_(None),
+            visible_matters_filter(session, context=context),
+        )
+        .order_by(EthicalWall.created_at.desc(), EthicalWall.id.desc())
+        .limit(MATTER_WALL_DIRECTORY_LIMIT + 1)
+    ).all()
+    truncated = len(rows) > MATTER_WALL_DIRECTORY_LIMIT
+    rows = rows[:MATTER_WALL_DIRECTORY_LIMIT]
+    membership_ids = {
+        membership_id
+        for wall, _matter in rows
+        for membership_id in (wall.excluded_membership_id, wall.created_by_membership_id)
+        if membership_id
+    }
+    memberships = {
+        membership.id: membership
+        for membership in session.scalars(
+            select(CompanyMembership)
+            .options(joinedload(CompanyMembership.user))
+            .where(
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.id.in_(membership_ids),
+            )
+        )
+    } if membership_ids else {}
+    records: list[MatterEthicalWallDirectoryRecord] = []
+    for wall, matter in rows:
+        excluded = memberships.get(wall.excluded_membership_id or "")
+        if excluded is None:
+            # The composite FK keeps the walled membership in this tenant.
+            continue
+        creator = memberships.get(wall.created_by_membership_id or "")
+        records.append(
+            MatterEthicalWallDirectoryRecord(
+                id=wall.id,
+                matter_id=matter.id,
+                matter_code=matter.matter_code,
+                matter_title=matter.title,
+                excluded_membership_id=excluded.id,
+                excluded_full_name=excluded.user.full_name,
+                excluded_email=excluded.user.email,
+                excluded_role=MembershipRole(excluded.role).value,
+                excluded_membership_active=bool(
+                    excluded.is_active and excluded.user.is_active
+                ),
+                enforced=MembershipRole(excluded.role) != MembershipRole.OWNER,
+                reason=wall.reason,
+                created_by_membership_id=wall.created_by_membership_id,
+                created_by_full_name=creator.user.full_name if creator else None,
+                created_at=wall.created_at,
+            )
+        )
+    record_from_context(
+        session,
+        context,
+        action="matter.ethical_walls_viewed",
+        target_type="ethical_wall_directory",
+        metadata={"wall_count": len(records), "truncated": truncated},
+    )
+    session.commit()
+    return MatterEthicalWallDirectoryResponse(walls=records, truncated=truncated)
+
+
 def set_restricted_access(
     session: Session,
     *,
@@ -2616,6 +2704,7 @@ __all__ = [
     "can_access",
     "can_access_ip_docket",
     "list_access_panel",
+    "list_matter_ethical_wall_directory",
     "get_ip_access_panel",
     "preview_ip_access_change",
     "remove_access_grant",
