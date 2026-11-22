@@ -345,7 +345,28 @@ def test_specific_manual_form_particulars_survive_real_word_and_pdf_output(templ
         explicit_key="generic" if template_type == "legal_notice_reply" else "delhi_hc",
     )
     pdf_data = _render(body, profile=profile, reference=reference)
-    assert compact(body) in compact(extracted(pdf_data))
+    pages = []
+    with pdfium.PdfDocument(pdf_data) as pdf:
+        for index in range(len(pdf)):
+            page = pdf[index]
+            text = page.get_textpage()
+            try:
+                footer = profile.page_number_format.format(n=index + 1, total=len(pdf))
+                main_text, separator, page_footer = text.get_text_range().rstrip().rpartition("\n")
+                assert separator and page_footer == footer
+                pages.append(main_text)
+            finally:
+                text.close()
+                page.close()
+    assert compact(body) in compact("".join(pages))
+    if template_type == "execution_application":
+        assert len(pages) >= 2
+        assert sum("DecreeHolderAdvocate" in compact(page) for page in pages) == 1
+        signature = {
+            p.text: p for p in document.paragraphs if p.text in {"Decree Holder", "Advocate"}
+        }
+        assert signature["Decree Holder"].paragraph_format.keep_with_next is True
+        assert signature["Advocate"].paragraph_format.keep_with_next is False
     (tmp_path / name).write_bytes(word_data)
     (tmp_path / (template_type + ".pdf")).write_bytes(pdf_data)
 

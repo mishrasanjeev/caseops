@@ -414,11 +414,15 @@ def test_term_review_requires_current_version_and_uses_shared_date_guard(client:
 def test_pending_term_edit_preserves_source_and_refuses_stale_review(client: TestClient) -> None:
     from tests.test_legalworkspace_contract_metadata import _upload_attachment
 
-    unauthenticated = client.patch(
-        "/api/contracts/missing-contract/term-suggestions/missing-suggestion",
-        json={"expected_updated_at": "2026-11-22T00:00:00Z", "suggested_duration_months": 12},
+    missing_path = "/api/contracts/missing-contract/term-suggestions/missing-suggestion"
+    probe = {"expected_updated_at": "2026-11-22T00:00:00Z", "suggested_duration_months": 12}
+    missing_csrf = client.patch(missing_path, json=probe)
+    assert missing_csrf.status_code == 403, missing_csrf.text
+    assert missing_csrf.json()["type"] == "https://caseops.ai/errors/csrf"
+    invalid_session = client.patch(
+        missing_path, headers=auth_headers("invalid-synthetic-session"), json=probe,
     )
-    assert unauthenticated.status_code == 401
+    assert invalid_session.status_code == 401, invalid_session.text
     actor = bootstrap_company(client)
     token = str(actor["access_token"])
     headers = auth_headers(token)

@@ -51,6 +51,15 @@ all seven identities and preserve the existing App skip list. The same run
 caught the counsel summary focus failure. The controls now have explicit tab
 stops. Both failures require a complete replacement web run.
 
+On `c441cdaf3`, API shard 6 showed the Delhi layout splitting the decree-holder
+and advocate signature labels across pages. The renderer now keeps consecutive
+signature labels together in PDF and Word. The regression checks the full source
+text, each numbered footer, and the signature labels on one page. API shard 9
+also stopped before the term-edit journey. Its anonymous PATCH hits the CSRF
+gate first. The fixture now checks both that 403 and the 401 returned for an
+invalid bearer session, then runs the full edit and stale-review assertions.
+Both hosted failures remain release evidence. A fresh run must verify the changes.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor
