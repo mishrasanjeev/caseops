@@ -179,16 +179,17 @@ def _clause_record(clause: ContractClause) -> ContractClauseRecord:
     )
 
 
-def _obligation_record(obligation: ContractObligation) -> ContractObligationRecord:
+def _obligation_record(
+    obligation: ContractObligation, *, company_id: str,
+) -> ContractObligationRecord:
+    owner = obligation.owner_membership
+    if owner is not None and owner.company_id != company_id:
+        owner = None
     return ContractObligationRecord(
         id=obligation.id,
         contract_id=obligation.contract_id,
-        owner_membership_id=obligation.owner_membership_id,
-        owner_name=(
-            obligation.owner_membership.user.full_name
-            if obligation.owner_membership and obligation.owner_membership.user
-            else None
-        ),
+        owner_membership_id=owner.id if owner is not None else None,
+        owner_name=owner.user.full_name if owner is not None and owner.user else None,
         title=obligation.title,
         description=obligation.description,
         due_on=obligation.due_on,
@@ -432,7 +433,9 @@ def _get_contract_model(session: Session, *, context: SessionContext, contract_i
             .joinedload(CompanyMembership.user),
             selectinload(Contract.attachments).selectinload(ContractAttachment.chunks),
             selectinload(Contract.obligations)
-            .joinedload(ContractObligation.owner_membership)
+            .joinedload(ContractObligation.owner_membership.and_(
+                CompanyMembership.company_id == context.company.id,
+            ))
             .joinedload(CompanyMembership.user),
             selectinload(Contract.playbook_rules)
             .joinedload(ContractPlaybookRule.created_by_membership)
@@ -1175,7 +1178,10 @@ def get_contract_workspace(
             session, contract.attachments, company_id=context.company.id
         ),
         clauses=[_clause_record(clause) for clause in contract.clauses],
-        obligations=[_obligation_record(obligation) for obligation in contract.obligations],
+        obligations=[
+            _obligation_record(obligation, company_id=context.company.id)
+            for obligation in contract.obligations
+        ],
         playbook_rules=[_playbook_rule_record(rule) for rule in contract.playbook_rules],
         playbook_hits=_build_playbook_hits(contract),
         legal_references=[
@@ -1767,12 +1773,14 @@ def create_contract_obligation(
     refreshed_obligation = session.scalar(
         select(ContractObligation)
         .options(
-            joinedload(ContractObligation.owner_membership).joinedload(CompanyMembership.user)
+            joinedload(ContractObligation.owner_membership.and_(
+                CompanyMembership.company_id == context.company.id,
+            )).joinedload(CompanyMembership.user)
         )
         .where(ContractObligation.id == obligation.id)
     )
     assert refreshed_obligation is not None
-    return _obligation_record(refreshed_obligation)
+    return _obligation_record(refreshed_obligation, company_id=context.company.id)
 
 
 def create_contract_playbook_rule(

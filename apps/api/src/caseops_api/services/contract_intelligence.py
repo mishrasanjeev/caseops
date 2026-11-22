@@ -717,9 +717,8 @@ def extract_obligations(
     removed = session.execute(
         delete(ContractObligation).where(generated_scope, replaceable)
     ).rowcount or 0
-    # A retained copy of the exact same suggestion should not lead to a new
-    # pending obligation when an existing record has already been acted on.
-    retained = set(session.execute(
+    # Do not duplicate acted-on duties or repeated suggestions in this batch.
+    seen = set(session.execute(
         select(
             ContractObligation.title, ContractObligation.description, ContractObligation.due_on,
         ).where(generated_scope)
@@ -743,8 +742,10 @@ def extract_obligations(
             f"AI extraction: {obligation.description.strip()}"[:2000]
             if obligation.description else "AI extraction"
         )
-        if (title, description, due) in retained:
+        identity = (title, description, due)
+        if identity in seen:
             continue
+        seen.add(identity)
         row = ContractObligation(
             contract_id=contract.id,
             title=title,

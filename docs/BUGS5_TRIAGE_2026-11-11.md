@@ -194,6 +194,34 @@ The withheld-text, pending-note and 360px layout checks remain in the same
 journey. Both full browser projects still require replacement evidence.
 [Hosted desktop job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262511)
 
+On `e18e6131`, the hosted API preflight passed the governance map and its
+change gate, then refused the compiled data-class projection. The main merge
+changed the reviewed map document, so the runtime needed its separate
+generator. The unchanged validator reproduced the refusal before regeneration
+and passed afterward. Only the map document fingerprint and projection ID
+changed. The schema fingerprints, admitted classes and disposition rules
+remain as reviewed. The earlier preflight did not run this separate gate.
+[Hosted API preflight](https://github.com/mishrasanjeev/caseops/actions/runs/45010756187/job/137172342102)
+
+For BUG-008, the extraction loop previously checked the stored duties but did
+not remember duplicates it had admitted from the current model response. An
+isolated replay of the old loop inserted both copies of a payment duty. The
+revised loop admits the first normalized title, evidence and due date, and
+still admits a duty with a different due date. It preserves acted-on duties.
+The contract extraction regression exercises the duplicate on initial and
+repeated extraction. The complete API and browser verification remains open.
+
+The bounded obligation read already withheld foreign owner details from
+inconsistent retained rows. The full workspace used a different serializer.
+Both reads now withhold those details, retain the duty and still show a valid
+owner on a sibling duty. The cross-dialect regression also checks that reading
+an inconsistent row never changes the stored association.
+
+Three focused SQLite API cases passed, covering the owner boundary, initial
+and repeated extraction, and exact workspace timestamp readback. All nine
+setup, call and teardown phases passed. PostgreSQL, the full browser suites
+and production acceptance are still pending for the follow-up.
+
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could

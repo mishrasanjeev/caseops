@@ -171,6 +171,7 @@ def test_extract_clauses_success_path_persists_rows(
     from caseops_api.services.llm import LLMCompletion, LLMMessage
     from caseops_api.services.session_context import SessionContext
 
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     session_data = _bootstrap(client)
     token = session_data["access_token"]
     contract_id = _create_contract(client, token)
@@ -430,6 +431,12 @@ def test_extract_obligations_success_path_persists_rows(
                         "description": "60 days before term ends",
                         "due_on_iso": None,
                         "priority": "medium",
+                    },
+                    {
+                        "title": self.title,
+                        "description": "  ₹5,00,000 within 30 days of milestone  ",
+                        "due_on_iso": "2026-12-31",
+                        "priority": "low",
                     },
                 ]
             }

@@ -48,6 +48,7 @@ def test_authenticated_user_can_create_and_list_contracts(client: TestClient) ->
 def test_contract_workspace_includes_playbook_hits_obligations_and_activity(
     client: TestClient,
 ) -> None:
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     bootstrap_payload = bootstrap_company(client)
     owner_token = str(bootstrap_payload["access_token"])
 
