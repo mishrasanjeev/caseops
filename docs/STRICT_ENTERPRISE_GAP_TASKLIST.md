@@ -1,3 +1,46 @@
+## November22 — walled admins could change walls and grants on their Matter
+
+**Implemented in code; release proof pending.** Found while building the Admin
+ethical walls screen (J14/M13, SEC-004). The Matter access writers in
+`services/matter_access.py` checked only the owner/admin role and loaded the
+Matter by id, so an admin walled from a Matter could lift its own wall, add
+walls, grant itself or others access, or read the access panel by id.
+
+Fix (PR #634): `_lock_matter_access_responsibility_fence`, the shared fence of
+`add_ethical_wall`, `remove_ethical_wall`, `add_access_grant`,
+`remove_access_grant` and `set_restricted_access`, and the `list_access_panel`
+read now call `assert_access`, the same visibility predicate every Matter read
+uses. A walled actor gets the audited `access_denied` row and the same
+"Matter not found" 404 as any read; owners bypass walls through that predicate.
+The check runs under the Company lock all access-policy writers take. Access
+review finalization (`services/access_reviews.py`) already resolved its target
+through that predicate before calling `remove_access_grant`; its denial is not
+committed mid-transaction. The admin wall directory applies the same predicate.
+
+Tests (`tests/test_ethical_walls.py`): a walled admin gets 404 on lifting its
+own wall, adding a wall, granting itself or a colleague, revoking a grant,
+toggling restriction and reading the panel, each audited, with the ACL
+unchanged; an unwalled admin and a self-walled owner still manage walls and
+grants; cross-tenant stays 404. Mutation probe: removing the fence check fails
+the walled-admin test.
+
+Consequence to note: an admin who restricts a Matter without being its assignee
+or holding a grant can no longer manage that Matter's access afterwards; an
+owner or a granted admin must. This follows the existing read policy.
+
+Still **Missing** on the same rule (inventory, not changed here):
+- IP docket access management (`get_ip_access_panel`, `preview_ip_access_change`,
+  `apply_ip_access_change` via `_load_ip_docket_for_access_management`) checks
+  role but not the actor's own docket visibility.
+- Employee off-boarding (`services/employees.py`
+  `_merge_or_reassign_matter_grants`) moves a departing member's Matter grants
+  without checking the acting admin's visibility of each Matter.
+- Read-only or system writers checked and unaffected: `services/teams.py`
+  (dependency probe only), `services/ip_operations.py` (initial IP creator
+  grants), `scripts/bootstrap_ip_production_qa.py` (owner QA context).
+
+Release proof still needed: hosted CI, PostgreSQL run and a deployed check.
+
 ## November18 — a green CI does not supersede failed local acceptance
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

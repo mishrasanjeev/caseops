@@ -11796,6 +11796,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/ethical-walls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active ethical walls across visible matters (admin/owner)
+         * @description Admin directory of active Matter ethical walls, newest first, with the walled member and the member who set the wall up. Lists only Matters the actor may open, so a walled admin cannot read walled Matter titles here. Bounded to 500 rows (`truncated` reports more). Audited.
+         */
+        get: operations["get_current_company_matter_ethical_walls_api_matters_ethical_walls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/hearing-follow-up": {
         parameters: {
             query?: never;
@@ -40385,6 +40405,53 @@ export interface components {
             };
             /** Subject */
             subject: string;
+        };
+        /**
+         * MatterEthicalWallDirectoryRecord
+         * @description One active Matter wall and the people it names, for the admin screen.
+         */
+        MatterEthicalWallDirectoryRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Full Name */
+            created_by_full_name: string | null;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Enforced */
+            enforced: boolean;
+            /** Excluded Email */
+            excluded_email: string;
+            /** Excluded Full Name */
+            excluded_full_name: string;
+            /** Excluded Membership Active */
+            excluded_membership_active: boolean;
+            /** Excluded Membership Id */
+            excluded_membership_id: string;
+            /**
+             * Excluded Role
+             * @enum {string}
+             */
+            excluded_role: "owner" | "admin" | "partner" | "member" | "paralegal" | "viewer";
+            /** Id */
+            id: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Reason */
+            reason: string | null;
+        };
+        /** MatterEthicalWallDirectoryResponse */
+        MatterEthicalWallDirectoryResponse: {
+            /** Truncated */
+            truncated: boolean;
+            /** Walls */
+            walls: components["schemas"]["MatterEthicalWallDirectoryRecord"][];
         };
         /**
          * MatterExecutiveSummary
@@ -76018,6 +76085,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_ethical_walls_api_matters_ethical_walls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterEthicalWallDirectoryResponse"];
                 };
             };
         };
