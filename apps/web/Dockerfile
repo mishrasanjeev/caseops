@@ -8,7 +8,7 @@
 
 # Keep the pinned Node root set except the compromised emSign ECC G3 root.
 # This store also applies to npm/build processes, before any package download.
-FROM node:22.23.4-alpine AS trusted-base
+FROM node:22.23.5-alpine AS trusted-base
 COPY apps/web/scripts/node-trust.cjs apps/web/scripts/node-trust-start.cjs /opt/caseops/trust/
 RUN node /opt/caseops/trust/node-trust.cjs --generate \
   && chmod 0444 /opt/caseops/trust/*.cjs \

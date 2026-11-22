@@ -423,7 +423,7 @@ export function renderIosHostBuildEntry(helper) {
 // modules are consumed from their checked descriptors, including the relative
 // registry import when this host helper itself was loaded from a held data URL.
 const NPM_INPUTS = Object.freeze({
-  tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: '71f562e89f9bc09d4c66a9011546eaae508bd02fc9f10a0c308b6b17bd306b5b', sizeBytes: 40040 }),
+  tooling: Object.freeze({ relative: 'scripts/mobile/npm-tooling.mjs', sha256: '7de2da46ca39cd7928b59de5046395402d2b8f16e2da14a0d6341bb5cfed9b5c', sizeBytes: 40062 }),
   registry: Object.freeze({ relative: 'scripts/mobile/npm-registry.mjs', sha256: 'f354a9d943ebcb78cb7afdb78c83bc0961fc01bbe183a6791486464cad6db9de', sizeBytes: 12058 }),
   archive: Object.freeze({ relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz', sha256: 'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b', sizeBytes: 4067054 }),
 });

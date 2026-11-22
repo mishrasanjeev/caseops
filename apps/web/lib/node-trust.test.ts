@@ -136,7 +136,7 @@ afterAll(() => {
 
 test("Docker generates trust before npm and inherits it into build and runtime", () => {
   const docker = fs.readFileSync(path.join(web, "Dockerfile"), "utf8");
-  expect(docker).toMatch(/FROM node:22\.23\.4-alpine AS trusted-base/);
+  expect(docker).toMatch(/FROM node:22\.23\.5-alpine AS trusted-base/);
   expect(docker.indexOf("node-trust.cjs --generate")).toBeLessThan(docker.indexOf("npm-tooling.mjs ci"));
   expect(docker).toMatch(/FROM trusted-base AS builder-tooling/);
   expect(docker).toMatch(/FROM builder-tooling AS deps/);
@@ -208,7 +208,7 @@ test("preserves every current upstream root when G3 is already absent", () => {
 });
 
 test("requires the exact shipping Node runtime for positive trust acceptance", () => {
-  expect(process.versions.node).toBe("22.23.4");
+  expect(process.versions.node).toBe("22.23.5");
 });
 
 test("ended native test scope cannot start a later child", async () => {
