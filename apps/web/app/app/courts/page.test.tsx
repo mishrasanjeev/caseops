@@ -60,6 +60,10 @@ describe("CourtsIndexPage", () => {
     render(withClient(<CourtsIndexPage />));
     // PageHeader title is visible immediately even while data loads.
     expect(screen.getAllByText(/Courts/i).length).toBeGreaterThan(0);
+    const official = screen.getByRole("link", { name: /^Official district court websites$/ });
+    expect(official).toHaveAttribute("href", "https://ecourts.gov.in/ecourts2.0/?p=dist_court");
+    expect(official).toHaveAttribute("target", "_blank");
+    expect(official).toHaveAttribute("rel", "noreferrer");
   });
 
   it("groups courts by forum level (Supreme Court, High Court order)", async () => {
