@@ -69,7 +69,7 @@ describe("third-party license notices", () => {
       ["nodemailer", "10.2.1"],
       ["pako", "1.0.11"],
       ["qrcode.react", "4.2.0"],
-      ["node", "22.23.4"],
+      ["node", "22.23.5"],
       ["next", "16.4.6"],
       ["liberation-fonts", "2.1.5"],
       ["NotoSansDevanagari", "2.002"],
@@ -97,7 +97,7 @@ describe("third-party license notices", () => {
         continue;
       }
       if (component.packageName === "node") {
-        expect(readFileSync(path.join(webRoot, "Dockerfile"), "utf8")).toContain("FROM node:22.23.4-alpine AS trusted-base");
+        expect(readFileSync(path.join(webRoot, "Dockerfile"), "utf8")).toContain("FROM node:22.23.5-alpine AS trusted-base");
         continue;
       }
       const installed = JSON.parse(readFileSync(path.join(repoRoot, "node_modules", component.packageName, "package.json"), "utf8"));
@@ -138,16 +138,16 @@ describe("third-party license notices", () => {
 
   it("pins the shipping Node license to the immutable upstream source", () => {
     const component = notices.components.find(({ packageName }) => packageName === "node")!;
-    expect(component.version).toBe("22.23.4");
+    expect(component.version).toBe("22.23.5");
     expect(component.notices).toHaveLength(1);
     expect(component.notices[0]).toMatchObject({
       sourceFile: "LICENSE",
-      sourceUrl: "https://raw.githubusercontent.com/nodejs/node/27f213124280b4db4cd1e3dd42f6f8afd01ceff7/LICENSE",
-      retainedSource: "license-policy/upstream/node_22.23.4/LICENSE",
-      filename: "node-22.23.4-LICENSE.txt",
+      sourceUrl: "https://raw.githubusercontent.com/nodejs/node/v22.23.5/LICENSE",
+      retainedSource: "license-policy/upstream/node_22.23.5/LICENSE",
+      filename: "node-22.23.5-LICENSE.txt",
       sha256: "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
     });
-    const original = readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.4/LICENSE"));
+    const original = readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.5/LICENSE"));
     expect(original).toHaveLength(145485);
     expect(sha256(original)).toBe("c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4");
     expect(component.notices[0].text).toBe(original.toString("utf8"));
@@ -207,7 +207,7 @@ describe("third-party license notices", () => {
       const installed = typeof retained === "string"
         ? readFileSync(path.join(repoRoot, retained))
         : component.packageName === "node"
-        ? readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.4/LICENSE"))
+        ? readFileSync(path.join(repoRoot, "license-policy/upstream/node_22.23.5/LICENSE"))
         : component.packageName === "qrcode.react" && notice.license === "MIT"
         ? readFileSync(path.join(repoRoot, "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt"))
         : readFileSync(path.join(repoRoot, "node_modules", component.packageName, notice.sourceFile));

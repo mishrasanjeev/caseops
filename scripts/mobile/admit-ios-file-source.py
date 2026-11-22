@@ -278,6 +278,7 @@ def measured_source_get(operation, byte_range, expected_status, diagnostics=None
         try:
             observation(None)
         except BaseException:
+            # Keep the original transport failure when its diagnostic also fails.
             pass
         raise
     elapsed_ms = observation(response[0])

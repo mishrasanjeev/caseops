@@ -19,7 +19,7 @@ function normalized(value) {
 }
 export function rebuildHostNodeBootstrap(bytes) {
   const end = performance.now() + 5000;
-  need(process.versions.node === '24.15.0' && Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 16384, 'BOOTSTRAP_GENERATOR_INPUT');
+  need(['22.23.5', '24.15.0'].includes(process.versions.node) && Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= 16384, 'BOOTSTRAP_GENERATOR_INPUT');
   const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   // Exact compiler input is already embedded in the accepted Node executable.
   // No package install, external parser, runtime require or downloaded source.
@@ -49,7 +49,7 @@ export function rebuildHostNodeBootstrap(bytes) {
   need(before === after && performance.now() < end, 'BOOTSTRAP_GENERATOR_AST_CHANGED');
   const output = Buffer.from(result), optionBytes = Buffer.byteLength('--use-openssl-ca --import=data:text/javascript;base64,' + output.toString('base64') + ' --enable-source-maps');
   need(optionBytes <= 8191, 'BOOTSTRAP_GENERATOR_WINDOWS_ENV_BOUND');
-  return { bytes: output, provenance: { schemaVersion: 1, kind: 'caseops-host-node-bootstrap-token-compaction', nodeVersion: '24.15.0',
+  return { bytes: output, provenance: { schemaVersion: 1, kind: 'caseops-host-node-bootstrap-token-compaction', compilerNodeVersions: ['22.23.5', '24.15.0'],
     parser: { nativeId: PARSER, version: acorn.version, sha256: PARSER_SHA256 }, inputSha256: sha(bytes), inputBytes: bytes.length,
     outputSha256: sha(output), outputBytes: output.length, normalizedAstSha256: sha(before), exactAstEqual: true,
     optionWithSourceMapsBytes: optionBytes, optionByteLimit: 8191,

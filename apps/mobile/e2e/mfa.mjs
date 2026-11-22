@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 
-export const CONSENT_MFA_VERIFIED = 'Code verified. Select Connect app to continue.';
+export const CONSENT_MFA_CONTINUE = 'Verify and continue';
+export const CONSENT_MFA_VERIFIED = 'Sign-in is ready. Open CaseOps to finish.';
 
 export function mfaStage(auth) {
   assert.ok(auth.mfaRequired === undefined || typeof auth.mfaRequired === 'boolean', 'EXPLICIT_MFA_REQUIREMENT_REQUIRED');

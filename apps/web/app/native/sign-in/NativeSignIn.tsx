@@ -16,10 +16,11 @@ import {
   openNativeApp,
   parseNativeAuthorization,
   prepareNativeHandoff,
+  type NativeAuthorization,
 } from "@/lib/native-authorization";
 import { DISABLED_NATIVE_LINK_POLICY, type NativeLinkPolicy } from '@/lib/native-link-policy.cjs';
 
-const MFA_VERIFIED_NOTICE = "Code verified. Select Connect app to continue.";
+const MFA_CHALLENGE_NOTICE = "Enter the six-digit code from your authenticator. Verify and continue connects this account to CaseOps.";
 
 export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?: NativeLinkPolicy }) {
   const params = useSearchParams();
@@ -34,8 +35,8 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
   const [loading, setLoading] = useState(true);
   const [signedOut, setSignedOut] = useState(false);
   const [pending, setPending] = useState(false);
-  const [mfaRequired, setMfaRequired] = useState(false);
-  const [mfaCode, setMfaCode] = useState("");
+  const [mfaRequired, setMfaRequiredState] = useState(false);
+  const [mfaCode, setMfaCodeState] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [handoffReady, setHandoffReady] = useState(false);
   const [handoffExpired, setHandoffExpired] = useState(false);
@@ -50,7 +51,25 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
   const openingRef = useRef(false);
   const submitting = useRef(false);
   const verifying = useRef(false);
+  const invalidatedAttempt = useRef(false);
+  const liveMfaRequired = useRef(false);
+  const liveMfaCode = useRef("");
+  // Retained event callbacks must use the current challenge and consumed code,
+  // even before React delivers the next render after a rejected request.
+  function setMfaRequired(required: boolean) {
+    liveMfaRequired.current = required;
+    setMfaRequiredState(required);
+  }
+  function setMfaCode(code: string) {
+    liveMfaCode.current = code;
+    setMfaCodeState(code);
+  }
+  const mfaInput = useRef<HTMLInputElement>(null);
+  const openPanel = useRef<HTMLDivElement>(null);
+  const mfaFocusRequested = useRef(false);
   const epoch = useRef(0);
+  const currentQuery = useRef(query);
+  currentQuery.current = query;
   const consent = contextQuery === query ? context : null;
   const hasHandoff =
     handoffReady &&
@@ -68,6 +87,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
   useEffect(() => {
     const leave = () => {
       if (handoff.current) {
+        invalidatedAttempt.current = true;
         discardHandoff();
         setHandoffExpired(true);
         setNotice(null);
@@ -90,6 +110,8 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     setHandoffExpired(false);
     submitting.current = false;
     verifying.current = false;
+    invalidatedAttempt.current = false;
+    mfaFocusRequested.current = false;
     setContext(null);
     setContextQuery("");
     setMfaCode("");
@@ -131,11 +153,98 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     };
   }, [query, discardHandoff]);
 
+  useEffect(() => {
+    if (!mfaRequired || pending || !consent || !mfaFocusRequested.current) return;
+    const owner = epoch.current;
+    const input = mfaInput.current;
+    if (!input || input.disabled || contextQuery !== query) return;
+    input.focus({ preventScroll: true });
+    if (owner !== epoch.current || input !== mfaInput.current || input.disabled) return;
+    mfaFocusRequested.current = false;
+    input.scrollIntoView?.({ block: "center", inline: "nearest", behavior: "auto" });
+  }, [mfaRequired, pending, consent, contextQuery, query]);
+
+  useEffect(() => {
+    const current = handoff.current;
+    const panel = openPanel.current;
+    const button = panel?.querySelector<HTMLButtonElement>("#native-app-open");
+    if (!hasHandoff || pending || opening || !panel || !button || button.disabled ||
+        !current || current.owner !== epoch.current || current.query !== query) return;
+    button.focus({ preventScroll: true });
+    if (current !== handoff.current || current.owner !== epoch.current || panel !== openPanel.current ||
+        button !== panel.querySelector("#native-app-open")) return;
+    button.scrollIntoView?.({ block: "center", inline: "nearest", behavior: "auto" });
+  }, [hasHandoff, pending, opening, query]);
+
+  async function authorize(owner: number, request: NativeAuthorization) {
+    if (owner !== epoch.current || currentQuery.current !== query) return;
+    // Only the caller holding the synchronous submission lease enters here.
+    // The grant lifetime starts at its own POST, after any MFA/identity reads.
+    const startedAt = performance.now();
+    const response = await apiRequest<unknown>("/api/auth/native/authorize", {
+      method: "POST",
+      body: request,
+    });
+    if (owner !== epoch.current || currentQuery.current !== query) return;
+    const prepared = prepareNativeHandoff(request, response, policy);
+    const deadline = startedAt + prepared.expiresIn * 1000;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) {
+      invalidatedAttempt.current = true;
+      setMfaRequired(false);
+      mfaFocusRequested.current = false;
+      setHandoffExpired(true);
+      return;
+    }
+    handoff.current = { callback: prepared.callback, query, owner, deadline };
+    setMfaRequired(false);
+    mfaFocusRequested.current = false;
+    setHandoffReady(true);
+    setNotice("Sign-in is ready. Open CaseOps to finish.");
+    handoffTimer.current = setTimeout(() => {
+      if (owner !== epoch.current) return;
+      invalidatedAttempt.current = true;
+      discardHandoff();
+      setHandoffExpired(true);
+      setNotice(null);
+    }, remaining);
+  }
+
+  function authorizationFailure(cause: unknown, owner: number) {
+    if (owner !== epoch.current || currentQuery.current !== query) return;
+    if (isApiErrorShape(cause) && cause.status === 401) {
+      setContext(null);
+      setContextQuery("");
+      setSignedOut(true);
+      setMfaRequired(false);
+      mfaFocusRequested.current = false;
+    }
+    if (isApiErrorShape(cause) && cause.status === 403 && cause.problemType === "native_mfa_required") {
+      mfaFocusRequested.current = true;
+      setMfaRequired(true);
+      setMfaCode("");
+      setError(null);
+      setNotice(null);
+      return;
+    }
+    // A terminal or unknown grant outcome belongs to this one PKCE attempt.
+    // Invalidate synchronously before releasing either interaction lease, so a
+    // retained callback cannot replay a possibly acknowledged authorization.
+    invalidatedAttempt.current = true;
+    setMfaRequired(false);
+    mfaFocusRequested.current = false;
+    setHandoffExpired(true);
+    setError(isApiErrorShape(cause) ? cause.detail :
+      "The app connection could not be completed. Return to the app and start sign-in again.");
+  }
+
   async function connect() {
     if (
       !parsed ||
       !consent ||
-      mfaRequired ||
+      currentQuery.current !== query ||
+      invalidatedAttempt.current ||
+      liveMfaRequired.current ||
       handoff.current ||
       handoffExpired ||
       submitting.current ||
@@ -143,55 +252,14 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     )
       return;
     const owner = epoch.current;
-    const startedAt = performance.now();
     submitting.current = true;
     setPending(true);
     setError(null);
     setNotice(null);
     try {
-      const response = await apiRequest<unknown>("/api/auth/native/authorize", {
-        method: "POST",
-        body: parsed,
-      });
-      if (owner !== epoch.current) return;
-      const prepared = prepareNativeHandoff(parsed, response, policy);
-      // Charge response latency to the server's lifetime, never extend a grant.
-      const deadline = startedAt + prepared.expiresIn * 1000;
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) {
-        setHandoffExpired(true);
-        return;
-      }
-      handoff.current = { callback: prepared.callback, query, owner, deadline };
-      setHandoffReady(true);
-      setNotice("Sign-in is ready. Open CaseOps to finish.");
-      handoffTimer.current = setTimeout(() => {
-        if (owner !== epoch.current) return;
-        discardHandoff();
-        setHandoffExpired(true);
-        setNotice(null);
-      }, remaining);
+      await authorize(owner, parsed);
     } catch (cause) {
-      if (owner !== epoch.current) return;
-      if (isApiErrorShape(cause) && cause.status === 401) {
-        setContext(null);
-        setContextQuery("");
-        setSignedOut(true);
-        setMfaRequired(false);
-      }
-      if (
-        isApiErrorShape(cause) &&
-        cause.status === 403 &&
-        cause.problemType === "native_mfa_required"
-      ) {
-        setMfaRequired(true);
-        setMfaCode("");
-      }
-      setError(
-        isApiErrorShape(cause)
-          ? cause.detail
-          : "The app connection could not be completed. Return to the app and start sign-in again.",
-      );
+      authorizationFailure(cause, owner);
     } finally {
       if (owner === epoch.current) {
         submitting.current = false;
@@ -204,12 +272,17 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     const current = handoff.current;
     if (
       !current ||
+      invalidatedAttempt.current ||
+      submitting.current ||
+      verifying.current ||
       current.owner !== epoch.current ||
       current.query !== query ||
+      currentQuery.current !== query ||
       openingRef.current
     )
       return;
     if (performance.now() >= current.deadline) {
+      invalidatedAttempt.current = true;
       discardHandoff();
       setHandoffExpired(true);
       setNotice(null);
@@ -221,6 +294,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
       // Synchronous user gesture: no awaited network operation before app launch.
       openNativeApp(current.callback, policy);
     } catch {
+      invalidatedAttempt.current = true;
       discardHandoff();
       setHandoffExpired(true);
       setNotice(null);
@@ -234,8 +308,12 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     if (
       !parsed ||
       !consent ||
-      !mfaRequired ||
-      !/^\d{6}$/.test(mfaCode) ||
+      currentQuery.current !== query ||
+      invalidatedAttempt.current ||
+      !liveMfaRequired.current ||
+      handoff.current ||
+      handoffExpired ||
+      !/^\d{6}$/.test(liveMfaCode.current) ||
       submitting.current ||
       verifying.current
     )
@@ -244,20 +322,23 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
     verifying.current = true;
     setPending(true);
     setError(null);
-    const code = mfaCode;
+    const code = liveMfaCode.current;
     setMfaCode("");
+    let authorizing = false;
     try {
       const result = await completeMfaLoginChallenge({ code });
-      if (owner !== epoch.current) return;
+      if (owner !== epoch.current || currentQuery.current !== query) return;
       if (result.status !== "verified")
         throw new Error("MFA verification was not confirmed.");
       const current = await apiRequest<AuthContext>("/api/auth/me");
-      if (owner !== epoch.current) return;
+      if (owner !== epoch.current || currentQuery.current !== query) return;
       if (!sameIdentity(consent, current)) {
+        invalidatedAttempt.current = true;
         setContext(null);
         setContextQuery("");
         setSignedOut(true);
         setMfaRequired(false);
+        mfaFocusRequested.current = false;
         setError(
           "Your browser account changed. Sign in again before connecting the app.",
         );
@@ -265,16 +346,30 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
       }
       setContext(current);
       setContextQuery(query);
-      setMfaRequired(false);
-      setNotice(MFA_VERIFIED_NOTICE);
+      // This is still the same explicit Verify and continue operation. Keep
+      // verifying.current held until its one authorization has completed.
+      authorizing = true;
+      await authorize(owner, parsed);
     } catch (cause) {
-      if (owner !== epoch.current) return;
+      if (owner !== epoch.current || currentQuery.current !== query) return;
+      if (authorizing) {
+        authorizationFailure(cause, owner);
+        return;
+      }
       if (isApiErrorShape(cause) && cause.status === 401) {
+        invalidatedAttempt.current = true;
         setContext(null);
         setContextQuery("");
         setSignedOut(true);
         setMfaRequired(false);
+        mfaFocusRequested.current = false;
       }
+      if (isApiErrorShape(cause) && cause.status === 403 && cause.problemType === "native_mfa_required") {
+        authorizationFailure(cause, owner);
+        return;
+      }
+      if (mfaRequired && !(isApiErrorShape(cause) && cause.status === 401))
+        mfaFocusRequested.current = true;
       setError(
         isApiErrorShape(cause)
           ? cause.detail
@@ -353,11 +448,11 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                   </p>
                 )}
                 {hasHandoff ? (
-                  <div className="space-y-3">
+                  <div ref={openPanel} className="space-y-3">
                     <Button
                       id="native-app-open"
                       className="min-h-12 w-full"
-                      disabled={opening}
+                      disabled={opening || pending}
                       aria-describedby={
                         notice ? "native-connection-notice" : undefined
                       }
@@ -381,9 +476,14 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                       void verifyMfa();
                     }}
                   >
+                    <p id="native-mfa-help" role="status" className="text-sm text-[var(--color-mute)]">
+                      {MFA_CHALLENGE_NOTICE}
+                    </p>
                     <Label htmlFor="native-mfa-code">Six-digit code</Label>
                     <Input
+                      ref={mfaInput}
                       id="native-mfa-code"
+                      className="min-h-12"
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       maxLength={6}
@@ -396,12 +496,6 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                       }
                       aria-describedby="native-mfa-help"
                     />
-                    <p
-                      id="native-mfa-help"
-                      className="text-sm text-[var(--color-mute)]"
-                    >
-                      Enter the current code from your authenticator.
-                    </p>
                     <Button
                       type="submit"
                       className="min-h-12 w-full"
@@ -413,7 +507,7 @@ export function NativeSignIn({ policy = DISABLED_NATIVE_LINK_POLICY }: { policy?
                           className="mr-2 h-4 w-4 animate-spin"
                         />
                       )}
-                      Verify code
+                      Verify and continue
                     </Button>
                   </form>
                 ) : !handoffExpired ? (

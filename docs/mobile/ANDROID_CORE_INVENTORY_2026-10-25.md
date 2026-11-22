@@ -110,10 +110,12 @@ receipt. No sample customer or invented legal record is admitted.
   For this observed optional-tenant setup, use `mfaRequired: true` and
   `mfaStage: "consent"`: initial login must not challenge. After checking
   account/workspace and PKCE, click Connect once, require the typed-error-only
-  `native-mfa-code` form, submit one current TOTP via Verify code, require
-  `Code verified. Select Connect app to continue.`, recheck identity and
-  unchanged PKCE, then explicitly click Connect a second time. No automatic
-  authorization/replay is accepted. The ledger must contain exactly
+  `native-mfa-code` form, submit one current TOTP via **Verify and continue**,
+  which verifies the code, refreshes and compares identity, then authorizes once.
+  Require `Sign-in is ready. Open CaseOps to finish.`, recheck identity and
+  unchanged PKCE, then explicitly select **Open CaseOps**. As of 2026-11-22
+  this supersedes the former verify-only notice and second manual Connect;
+  no hidden retry or replay of an uncertain authorization is accepted. The ledger must contain exactly
   authorize 403 -> one step-up 200 -> fresh identity 200 -> authorize 200 ->
   one token 200. Login-stage fixtures still require their actual login MFA
   challenge and only one successful authorization/token pair.
@@ -175,9 +177,9 @@ visible match. Required keys: `urlOpen`, `urlValue`, `companySlug`,
 `email`, `password`, `submit`, `principal`, `emailFact`, `workspace`, `connect`.
 Optional actual `signInLink` / `useAnotherAccount` locators enter the real form;
 MFA requires `mfaCode` / `mfaSubmit`. Consent specifically requires
-`mfaCode: {kind: "id", value: "native-mfa-code"}`, exact Verify code
+`mfaCode: {kind: "id", value: "native-mfa-code"}`, exact Verify and continue
 `mfaSubmit`, and `mfaVerified: {kind: "text", value:
-"Code verified. Select Connect app to continue."}` in the hash-bound observed
+"Sign-in is ready. Open CaseOps to finish."}` in the hash-bound observed
 recipe. A new unobserved control stays incomplete, not inferred from source.
 Use `urlCloseMode: "android-back"` only with its observed evidence; Back loops
 at most twice while the exact URL editor remains visible, stopping as soon as

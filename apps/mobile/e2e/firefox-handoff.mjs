@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { dispatchNativeClick, find, read, selector, swipe, visible } from './native-ui.mjs';
-import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
+import { CONSENT_MFA_CONTINUE, CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { verifiedFile } from './evidence.mjs';
 import { browserStep } from './browser-progress.mjs';
 
@@ -40,7 +40,7 @@ export function validateFirefoxRecipe(auth) {
   if (stage === 'consent') {
     assert.deepEqual(recipe.locators.mfaCode, { kind: 'id', value: 'native-mfa-code' }, 'EXACT_NATIVE_CONSENT_MFA_FIELD_REQUIRED');
     assert.ok(['text', 'buttonText'].includes(recipe.locators.mfaSubmit.kind), 'EXACT_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
-    assert.equal(recipe.locators.mfaSubmit.value, 'Verify code', 'EXACT_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    assert.equal(recipe.locators.mfaSubmit.value, CONSENT_MFA_CONTINUE, 'EXACT_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
     assert.deepEqual(recipe.locators.mfaVerified, { kind: 'text', value: CONSENT_MFA_VERIFIED }, 'EXACT_NATIVE_MFA_VERIFIED_NOTICE_REQUIRED');
   }
   for (const locator of [...Object.values(recipe.locators), ...(recipe.prepare || []), ...(recipe.afterConnect || [])]) {
@@ -261,7 +261,9 @@ async function resolveFirefoxEntryOnce(context, recipe) {
 // the viewport. Keep the original ten-second lookup budget and never swipe up
 // toward Firefox's pull-to-refresh edge.
 export const FIREFOX_SETTLED_CONNECT_MS = 10000;
-async function settledConnect(context, recipe) {
+async function settledConnect(context, recipe, key = 'connect') {
+  const locator = recipe.locators[key];
+  const label = key === 'appOpen' ? 'Open CaseOps' : 'Connect app';
   const deadline = Date.now() + FIREFOX_SETTLED_CONNECT_MS;
   let control, failure, scrolls = 0, active = true, keyboardDismissed = false;
   const check = () => {
@@ -273,7 +275,7 @@ async function settledConnect(context, recipe) {
     check();
     return value;
   };
-  browserStep(context, 'connect', 'find');
+  browserStep(context, key, 'find');
   try {
     await context.driver.waitUntil(async () => {
       try {
@@ -287,7 +289,7 @@ async function settledConnect(context, recipe) {
           await probe(() => context.driver.hideKeyboard());
           assert.equal(await probe(() => context.driver.isKeyboardShown()), false, 'FIREFOX_CONSENT_KEYBOARD_NOT_DISMISSED');
         }
-        control = await visible(context.driver, selector(context.platform, recipe.locators.connect.kind, recipe.locators.connect.value), probe);
+        control = await visible(context.driver, selector(context.platform, locator.kind, locator.value), probe);
         if (control) return true;
         if (scrolls < 3 && Date.now() < deadline) {
           scrolls++;
@@ -297,8 +299,8 @@ async function settledConnect(context, recipe) {
       } catch (error) { failure = error; return true; }
     }, { timeout: FIREFOX_SETTLED_CONNECT_MS, interval: 150, timeoutMsg: 'NATIVE_CONTROL_NOT_VISIBLE' });
     if (failure) throw failure;
-    browserStep(context, 'connect', 'read');
-    assert.equal((await probe(() => control.getText())).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
+    browserStep(context, key, 'read');
+    assert.equal((await probe(() => control.getText())).trim(), label, key === 'appOpen' ? 'REAL_NATIVE_APP_OPEN_CONTROL_REQUIRED' : 'REAL_CONNECT_CONTROL_REQUIRED');
     return control;
   } finally { active = false; }
 }
@@ -328,33 +330,34 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
     await fill(context, 'mfaCode', () => fixtureMfaCode(fixture.auth));
     await press(context, 'mfaSubmit');
   }
-  const verifyIdentity = async () => {
+  const verifyIdentity = async (action = 'connect') => {
     browserStep(context, 'identity', 'check');
-    await locate(context, 'connect');
+    await locate(context, action);
     assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
     for (const [key, expected] of Object.entries({ principal: fixture.principalLabel, emailFact: credentials.email,
       workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
       assert.equal((await text(context, key)).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');
     }
-    return settledConnect(context, recipe);
+    return settledConnect(context, recipe, action);
   };
   const connect = await verifyIdentity();
   browserStep(context, 'connect', 'click');
   await dispatchNativeClick(context, connect, recipe.locators.connect.kind, recipe.locators.connect.value);
+  let grantedOpen;
   if (stage === 'consent') {
     await locate(context, 'mfaCode');
     assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
     await fill(context, 'mfaCode', () => fixtureMfaCode(fixture.auth));
-    assert.equal((await text(context, 'mfaSubmit')).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+    assert.equal((await text(context, 'mfaSubmit')).trim(), CONSENT_MFA_CONTINUE, 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
     await press(context, 'mfaSubmit');
     await locate(context, 'mfaVerified');
-    const verifiedConnect = await verifyIdentity();
+    grantedOpen = await verifyIdentity('appOpen');
     assert.equal(await visible(driver, selector(platform, recipe.locators.mfaCode.kind, recipe.locators.mfaCode.value)), undefined,
       'NATIVE_CONSENT_MFA_NOT_COMPLETED');
-    browserStep(context, 'connect', 'click');
-    await dispatchNativeClick(context, verifiedConnect, recipe.locators.connect.kind, recipe.locators.connect.value);
+    // Verify and continue already dispatched the sole successful authorize.
+    // Preserve the final explicit Open gesture without a second Connect.
   }
-  const appOpen = await locate(context, 'appOpen');
+  const appOpen = grantedOpen || await locate(context, 'appOpen');
   browserStep(context, 'appOpen', 'read');
   assert.equal((await appOpen.getText()).trim(), 'Open CaseOps', 'REAL_NATIVE_APP_OPEN_CONTROL_REQUIRED');
   browserStep(context, 'appOpen', 'check');

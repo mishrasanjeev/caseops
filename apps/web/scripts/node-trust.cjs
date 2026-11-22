@@ -18,10 +18,10 @@ function refuse() {
 
 function checkNodeBuild() {
   // Reject a build-time system CA override; the pinned store must be selected.
-  if (process.version !== "v22.23.4" || process.config.variables.openssl_system_ca_path) refuse();
+  if (process.version !== "v22.23.5" || process.config.variables.openssl_system_ca_path) refuse();
 }
 
-// v22.23.4 already removed G3. Preserve every other root in this exact upstream set.
+// v22.23.5 already removed G3. Preserve every other root in this exact upstream set.
 function createBundle(roots) {
   checkNodeBuild();
   const fingerprints = roots.map((pem) => sha256(new X509Certificate(pem).raw));

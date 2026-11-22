@@ -21,8 +21,8 @@ QR_MATERIALS = {
     "license-policy/upstream/qrcode.react_4.2.0/qrcodegen-LICENSE.txt",
 }
 NODE_MATERIALS = {
-    "apps/web/public/third-party-notices/node-22.23.4-LICENSE.txt",
-    "license-policy/upstream/node_22.23.4/LICENSE",
+    "apps/web/public/third-party-notices/node-22.23.5-LICENSE.txt",
+    "license-policy/upstream/node_22.23.5/LICENSE",
 }
 NEXT_MATERIALS = {
     "apps/web/public/third-party-notices/next-16.4.6-LICENSE.txt",

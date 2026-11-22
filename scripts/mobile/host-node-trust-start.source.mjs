@@ -6,8 +6,8 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 // Public reviewed source identity, not a policy-supplied code authority.
-const APPROVED_HELPER_SHA256 = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18';
-const A_SHA = 'd1aaf1ca678f71d27ec3609a088a5f9f015acae484621b90a3c71499e22cdd39';
+const APPROVED_HELPER_SHA256 = '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e';
+const A_SHA = 'd150ae337d97ff8e1ce5b4bfb35871a1195f2d0f4f637bd0cf590d155dcdc8d0';
 const A_SIZE = 40696;
 const F = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
 const end = performance.now() + 20000;
