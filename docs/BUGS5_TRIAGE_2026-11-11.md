@@ -132,6 +132,15 @@ assignments and exact coverage. Only four cases move. Projected phase times
 are 460.16 and 422.82 seconds. The complete replacement CI remains pending.
 [Original cancelled job](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903/job/137118098559)
 
+In the replacement run on `ac07460d`, shard 6 passed in 10 minutes 36 seconds.
+The Windows web job reported 3,236 passing tests in 315 files and an
+unexpected worker exit. Comparison against the earlier 316-file report shows
+that `DraftPdfPreview.test.tsx` supplied none of its 23 case results. The
+separate offline browser-library worker passed. The fork now records the
+process exit code, signal and assigned test files on unexpected exits. The
+cause and the complete replacement Windows result remain unverified.
+[Windows job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140063090)
+
 For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
 section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
 to earlier tax years and proceedings. The official 2026 consolidation could
