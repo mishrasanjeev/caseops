@@ -4489,3 +4489,14 @@ the fixture and reported files before relative identity checks, retain explicit
 outside-root/missing-file rejection, and preserve every four-case role, pooled
 negative and phase timing assertion. Fresh installation and the complete local
 scheduling test pass; actual Windows acceptance remains the replacement CI job.
+
+2026-11-23 PR645 deadline-inventory follow-up: retain the hosted API shard9
+failure (1 failed/1463 passed/528 skipped). Move the existing npm Undici
+redirect regression to one explicit repository test fixture, preserving the
+actual npm client, two owned loopback endpoints, fixed public headers, received
+NoPaid markers, Authorization stripping and original 4500/3000/500ms bounds.
+The original default-runtime TLS probe and cross-language inventory remain
+unchanged. Reconcile the new fixture across exact builder COPY, upload, deploy
+and source-fingerprint inventories. Complete local regression, typing and
+contract-step outcomes are retained separately; current-source hosted and
+native qualification remain required before release.
