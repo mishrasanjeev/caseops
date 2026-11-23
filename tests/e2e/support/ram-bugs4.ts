@@ -325,6 +325,19 @@ export async function collectOpenPopoverOffenders(page: Page, gutter = 4): Promi
 }
 
 /** No horizontal page overflow at the current viewport. */
+export async function reportedDevicePress(
+  page: Page, info: TestInfo, mobile: boolean,
+): Promise<"tap" | "click"> {
+  const hasTouch = info.project.use.hasTouch === true;
+  expect(hasTouch).toBe(mobile);
+  expect(info.project.use.isMobile === true).toBe(mobile);
+  if (mobile) {
+    expect(page.viewportSize()).toEqual({ width: 393, height: 851 });
+    expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
+  }
+  return hasTouch ? "tap" : "click";
+}
+
 export async function expectNoPageOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
     "The page must not overflow the viewport horizontally").toBe(true);

@@ -59,6 +59,26 @@ def test_layout_digest_tracks_settings_without_claiming_legal_review():
         assert "FACTS" in text
 
 
+def test_delhi_review_pdf_uses_published_page_geometry_and_bundled_serif():
+    profile = resolve_profile(explicit_key="delhi_hc")
+    data = render(profile, body="Baseline line one\nBaseline line two")
+    assert b"LiberationSerif" in data and b"/FontFile2" in data
+    with pdfium.PdfDocument(data) as document:
+        page = document[0]
+        text = page.get_textpage()
+        try:
+            assert page.get_size() == pytest.approx((595.28, 841.89), abs=0.1)
+            extracted = text.get_text_range()
+            first = text.get_charbox(extracted.index("Baseline line one"))
+            second = text.get_charbox(extracted.index("Baseline line two"))
+            assert 113.38 <= first[0] <= 120
+            assert second[0] == pytest.approx(first[0], abs=0.2)
+            assert first[3] - second[3] == pytest.approx(21, abs=0.2)
+        finally:
+            text.close()
+            page.close()
+
+
 @pytest.mark.parametrize("profile_key", ("generic", "delhi_hc"))
 def test_finalized_two_citation_draft_preserves_nonbreaking_hyphen(profile_key):
     from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted

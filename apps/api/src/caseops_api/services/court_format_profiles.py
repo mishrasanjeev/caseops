@@ -1,10 +1,9 @@
-"""Legacy court-labelled layout presets, not verified filing requirements.
+"""Court-labelled layout presets for review drafts.
 
-These presets have no pinned official source bytes, rule edition, effective
-date, document-category applicability or legal-review record. Their numeric
-settings are application defaults, not a certification of current court rules.
+Some numeric settings follow a published direction. Filing applicability,
+required companion documents, exact font and legal review remain separate.
 Unknown courts use the generic preset. Lawyer review remains necessary even
-after content approval. A layout digest identifies settings, not legal validity.
+after content approval. A layout digest identifies the renderer settings.
 """
 from __future__ import annotations
 
@@ -465,19 +464,26 @@ _DELHI_HIGH_COURT = CourtFormatProfile(
     key="delhi_hc",
     display_name="High Court of Delhi",
     category="high_court",
-    layout_rules=_HIGH_COURT_LAYOUT_RULES,
+    layout_rules=(
+        "A4 with 40 mm left and right margins and 20 mm top and bottom margins.",
+        "14 pt serif body text with 1.5 line spacing.",
+        "Numeric layout follows Delhi High Court Practice Direction No. 90/Rules/DHC, "
+        "effective 1 November 2022. PDF uses the bundled Liberation Serif family. "
+        "Formatted Word exports request Times New Roman.",
+    ),
     heading_rules=(
         "First page header reads IN THE HIGH COURT OF DELHI AT NEW DELHI.",
         "Uppercase cause title with VERSUS separator.",
     ),
     required_field_rules=_HIGH_COURT_REQUIRED,
     page_format="A4",
-    margin_left_mm=25.4,  # 1"
-    margin_right_mm=25.4,
-    margin_top_mm=25.4,
-    margin_bottom_mm=25.4,
-    body_font_size_pt=12,
-    body_line_height_mm=6.5,  # ~1.5 line spacing at 12pt
+    margin_left_mm=40,
+    margin_right_mm=40,
+    margin_top_mm=20,
+    margin_bottom_mm=20,
+    body_font="Times",
+    body_font_size_pt=14,
+    body_line_height_mm=21 * 25.4 / 72,  # 1.5 times 14 pt, in mm.
     heading_font_size_pt=14,
     title_font_size_pt=16,
     page_number_position="right",

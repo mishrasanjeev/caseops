@@ -561,9 +561,11 @@ def test_contract_clause_fallback_records_actual_provider(client, monkeypatch, e
             results[label] = sorted(
                 (row.title, row.clause_type, row.clause_text)
                 for row in session.scalars(
-                    select(ContractClause).where(ContractClause.contract_id == contract_id)
+                    select(ContractClause).where(
+                        ContractClause.contract_id == contract_id,
+                        ContractClause.extracted_by_ai.is_(True),
+                    )
                 )
-                if (row.notes or "").startswith("[auto]")
             )
             results[label + "-runs"] = sorted(
                 (run.provider, run.model, run.status)

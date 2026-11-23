@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Gavel } from "lucide-react";
+import { ExternalLink, Gavel } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -63,7 +63,18 @@ export default function CourtsIndexPage() {
       <PageHeader
         eyebrow="Courts"
         title="Court directory"
-        description="Every court the catalog knows about, grouped by forum. Open a court for its judges, recent authorities, and your portfolio exposure there."
+        description="Browse courts in CaseOps. Open a court for its judges, recent authorities, and your matters there."
+        actions={
+          <a
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--color-line)] px-3 py-2 text-sm font-medium hover:bg-[var(--color-bg-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            href="https://ecourts.gov.in/ecourts2.0/?p=dist_court"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Official district court websites
+            <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+          </a>
+        }
       />
 
       <Input

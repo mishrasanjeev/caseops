@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `452ab0adaba23105d094d0aefd3c41bcae707db407e4f0bc88302fe95e88d48f`
+- Canonical map SHA-256: `fdd58d4ba49b2e61fd6e72c93e30c7d881f8193533aac7cf0ce87aef5d9a49d6`
 - SQL tables: `370`
-- SQL columns: `5888`
+- SQL columns: `5890`
 - ORM indexes: `1838`
 - Alembic/raw index declarations: `1615`
 - Non-SQL data classes: `17`
@@ -105,9 +105,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `contract_activity` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `contract_attachment_chunks` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
 | `contract_attachments` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
-| `contract_clauses` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
+| `contract_clauses` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `contract_legal_references` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
-| `contract_obligations` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `contract_obligations` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `contract_playbook_rules` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `contract_term_suggestions` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `contracts` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |

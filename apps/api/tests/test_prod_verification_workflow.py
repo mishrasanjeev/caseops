@@ -694,11 +694,13 @@ def test_scheduled_prod_verification_is_read_only() -> None:
         'name: "statute-source-prod-chromium",\n'
         '      testMatch: /ram-2026-09-07-statute-source-data\\.spec\\.ts$/,'
     ) in config
+    # The Motor Vehicles cases reuse the original bounded GET-only loop.
+    # The checkout pins these exact reviewed bytes on both host platforms.
     statute_spec = (
         REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts"
-    ).read_text(encoding="utf-8")
-    spec_digest = hashlib.sha256(statute_spec.replace("\r\n", "\n").encode()).hexdigest()
-    assert spec_digest == "60f2583d845e5ee8092777f3db4a551acbfe30419d14b65faff509dc101bdb41"
+    ).read_bytes()
+    spec_digest = hashlib.sha256(statute_spec).hexdigest()
+    assert spec_digest == "4cc43201f7e17ee22c370d1dcd0b2a9accc773a36cea77511090289136f273c4"
 
 
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:

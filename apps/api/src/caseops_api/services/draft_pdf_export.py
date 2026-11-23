@@ -340,6 +340,7 @@ def render_pdf_bytes(
 
     if presentation:
         previous_blank = False
+        signature_end = 0
         table_layouts: dict[int, list[ExecutionRowLayout]] = {}
         for block_index, block in enumerate(body_blocks):
             if isinstance(block, ExecutionTable):
@@ -363,7 +364,20 @@ def render_pdf_bytes(
                 size=profile.body_font_size_pt,
                 style="B" if line.bold else "",
             )
-            if line.keep_with_next:
+            if line.alignment == "R":
+                if line.keep_with_next and block_index >= signature_end:
+                    # Recognized signature labels are short, single-line paragraphs.
+                    # Reserve the whole contiguous block once, including its last line.
+                    signature_end = block_index + 1
+                    while signature_end < len(body_blocks):
+                        following = body_blocks[signature_end]
+                        if isinstance(following, ExecutionTable) or following.alignment != "R":
+                            break
+                        signature_end += 1
+                    signature_height = (signature_end - block_index) * height
+                    if signature_height <= pdf.eph and pdf.will_page_break(signature_height):
+                        pdf.add_page()
+            elif line.keep_with_next:
                 # Measure the actual wrapped heading; two assumed physical
                 # lines cannot keep a long caption with the next body line.
                 heading_height = pdf.multi_cell(

@@ -3,8 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Banknote, Briefcase, Users } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
+import { CounselCurrencyTotals, formatCounselAmount, sumCounselAmounts } from "@/components/app/CounselCurrencyTotals";
 import { NewCounselDialog } from "@/components/app/NewCounselDialog";
 import { Card, CardContent } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -14,15 +15,16 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fetchOutsideCounselWorkspace } from "@/lib/api/endpoints";
-import type { OutsideCounsel } from "@/lib/api/schemas";
+import type { OutsideCounsel, OutsideCounselWorkspace } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 
-function formatMoney(minor: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-  }).format(minor / 100);
+type SpendRecord = OutsideCounselWorkspace["spend_records"][number];
+
+function approvedByCurrency(records: SpendRecord[], recordedTotal: number) {
+  if (sumCounselAmounts(records, (row) => row.approved_amount_minor) !== recordedTotal) return "Unavailable";
+  return <CounselCurrencyTotals rows={records} renderAmount={(group, code) => (
+    formatCounselAmount(sumCounselAmounts(group, (row) => row.approved_amount_minor), code)
+  )} />;
 }
 
 export default function OutsideCounselPage() {
@@ -34,6 +36,18 @@ export default function OutsideCounselPage() {
 
   const currency = data?.summary.currency ?? "INR";
   const profiles = data?.profiles ?? [];
+  const summary = data?.summary;
+  const hasMultipleCurrencies = summary?.multi_currency ?? false;
+  const records = data?.spend_records;
+  const spendByCounsel = useMemo(() => {
+    const grouped = new Map<string, SpendRecord[]>();
+    for (const record of records ?? []) {
+      const current = grouped.get(record.counsel_id);
+      if (current) current.push(record);
+      else grouped.set(record.counsel_id, [record]);
+    }
+    return grouped;
+  }, [records]);
 
   const columns = useMemo<ColumnDef<OutsideCounsel>[]>(
     () => [
@@ -77,10 +91,13 @@ export default function OutsideCounselPage() {
       {
         accessorKey: "approved_spend_minor",
         header: "Approved spend",
+        enableSorting: !hasMultipleCurrencies,
         cell: (ctx) => (
-          <span className="tabular">
-            {formatMoney(ctx.getValue<number>(), currency)}
-          </span>
+          <div className="tabular">
+            {hasMultipleCurrencies
+              ? approvedByCurrency(spendByCounsel.get(ctx.row.original.id) ?? [], ctx.getValue<number>())
+              : formatCounselAmount(ctx.getValue<number>(), currency)}
+          </div>
         ),
       },
       {
@@ -89,15 +106,15 @@ export default function OutsideCounselPage() {
         cell: (ctx) => <StatusBadge status={ctx.getValue<string>()} />,
       },
     ],
-    [currency],
+    [currency, hasMultipleCurrencies, spendByCounsel],
   );
 
-  const summary = data?.summary;
   const approved = summary?.approved_spend_minor ?? 0;
   const paid = summary?.total_paid_minor ?? 0;
   const pending = summary?.total_pending_minor ?? 0;
-  const currencyCodes = summary?.currency_codes ?? [currency];
-  const hasMultipleCurrencies = summary?.multi_currency ?? false;
+  const paymentRecords = records ?? [];
+  const paidMatches = sumCounselAmounts(paymentRecords, (record) => record.paid_amount_minor) === paid;
+  const pendingMatches = sumCounselAmounts(paymentRecords, (record) => record.pending_amount_minor) === pending;
   const activeAssignments = summary?.active_assignment_count ?? 0;
   const profileCount = summary?.profile_count ?? profiles.length;
 
@@ -124,19 +141,22 @@ export default function OutsideCounselPage() {
         <KpiCard
           icon={Banknote}
           label="Approved spend"
-          value={formatMoney(approved, currency)}
+          value={hasMultipleCurrencies ? approvedByCurrency(paymentRecords, approved) : formatCounselAmount(approved, currency)}
         />
         <KpiCard
           icon={Banknote}
           label="Paid / pending"
-          value={`${formatMoney(paid, currency)} / ${formatMoney(pending, currency)}`}
+          value={hasMultipleCurrencies ? (
+            <CounselCurrencyTotals rows={paymentRecords} empty={paidMatches && pendingMatches ? "No amounts recorded" : "Unavailable"}
+              renderAmount={(group, code) => (
+                `${formatCounselAmount(paidMatches ? sumCounselAmounts(group, (row) => row.paid_amount_minor) : null, code)} / ${formatCounselAmount(pendingMatches ? sumCounselAmounts(group, (row) => row.pending_amount_minor) : null, code)}`
+              )} />
+          ) : `${formatCounselAmount(paid, currency)} / ${formatCounselAmount(pending, currency)}`}
         />
       </section>
       {hasMultipleCurrencies ? (
         <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
-          Multiple currencies are present ({currencyCodes.join(", ")}). Totals
-          are shown in stored minor units and should be reviewed by currency;
-          this view does not execute payments.
+          Recorded amounts are grouped by currency.
         </p>
       ) : null}
 
@@ -181,7 +201,7 @@ function KpiCard({
 }: {
   icon: typeof Users;
   label: string;
-  value: string;
+  value: ReactNode;
 }) {
   return (
     <Card>

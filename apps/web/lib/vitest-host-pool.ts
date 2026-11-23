@@ -79,6 +79,58 @@ export function selectHostForkArguments(execArgv: readonly string[], warningFile
   return [execArgv[0], ...execArgv.slice(3)];
 }
 
+type WorkerRequest = Parameters<ForksPoolWorker["send"]>[0];
+
+class ObservedForkWorker extends ForksPoolWorker {
+  private stopping = false;
+  private startupAcknowledged = false;
+  private task: { workerId: number; phase: "start" | "collect" | "run"; files: string[] } | null = null;
+
+  constructor(private readonly poolOptions: PoolOptions) {
+    super(poolOptions);
+  }
+
+  override async start() {
+    await super.start();
+    this.on("message", (message: unknown) => {
+      if (typeof message === "object" && message !== null
+        && "__vitest_worker_response__" in message && message.__vitest_worker_response__ === true
+        && "type" in message && message.type === "started" && !("error" in message && message.error)) {
+        this.startupAcknowledged = true;
+      }
+    });
+    this.on("exit", (code: number | null, signal?: NodeJS.Signals | null) => {
+      if (this.stopping) return;
+      const evidence = { code, signal: signal ?? null, startupAcknowledged: this.startupAcknowledged, task: this.task };
+      this.poolOptions.project.vitest.logger.errorStream.write(
+        `CaseOps Vitest fork exited unexpectedly ${JSON.stringify(evidence)}\n`,
+      );
+    });
+  }
+
+  override send(message: WorkerRequest) {
+    if (message.type === "start") {
+      this.task = { workerId: message.workerId, phase: "start", files: [] };
+    } else if (message.type === "run" || message.type === "collect") {
+      const root = this.poolOptions.project.config.root;
+      const files = message.context.files.slice(0, 8).map(({ filepath }) => {
+        const relative = path.relative(root, filepath);
+        return path.isAbsolute(relative) || relative.split(path.sep)[0] === ".."
+          ? path.basename(filepath) : relative.replaceAll(path.sep, "/");
+      });
+      this.task = { workerId: message.context.workerId, phase: message.type, files };
+    } else if (message.type === "stop") {
+      this.stopping = true;
+    }
+    super.send(message);
+  }
+
+  override stop() {
+    this.stopping = true;
+    return super.stop();
+  }
+}
+
 export const hostTrustedForks: PoolRunnerInitializer = {
   // A distinct initializer name is necessary: "forks" selects Vitest's built-in
   // switch and bypasses createPoolWorker. The returned worker still reports forks.
@@ -89,6 +141,6 @@ export const hostTrustedForks: PoolRunnerInitializer = {
     requireThat(fs.realpathSync(root) === root && options.distPath === path.join(root, "dist"));
     for (const [relative, digest] of Object.entries(reviewedFiles)) checkFile(path.join(root, relative), digest);
     const execArgv = selectHostForkArguments(options.execArgv, path.join(root, "suppress-warnings.cjs"));
-    return new ForksPoolWorker({ ...options, execArgv });
+    return new ObservedForkWorker({ ...options, execArgv });
   },
 };

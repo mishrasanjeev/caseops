@@ -74,6 +74,7 @@ class EmailTemplateCreateRequest(BaseModel):
 
 
 class EmailTemplateUpdateRequest(BaseModel):
+    expected_updated_at: datetime | None = None
     name: str | None = Field(default=None, min_length=2, max_length=120)
     kind: str | None = Field(default=None, min_length=2, max_length=40)
     description: str | None = Field(default=None, max_length=400)

@@ -150,6 +150,8 @@ test.describe("M2 polish — password toggle, counsel recs, team picker, judge p
     await expect(
       page.getByRole("heading", { name: /Court directory/i }),
     ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("link", { name: "Official district court websites", exact: true }))
+      .toHaveAttribute("href", "https://ecourts.gov.in/ecourts2.0/?p=dist_court");
 
     // The seed catalog includes Supreme Court of India — click into it.
     await page.getByText(/Supreme Court of India/i).first().click();

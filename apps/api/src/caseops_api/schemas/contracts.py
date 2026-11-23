@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
 
@@ -16,6 +23,9 @@ ContractStatusLiteral = Literal[
     "terminated",
 ]
 ContractClauseRiskLevelLiteral = Literal["low", "medium", "high"]
+ContractObligationTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=2, max_length=255)
+]
 ContractObligationStatusLiteral = Literal["pending", "in_progress", "completed", "waived"]
 ContractObligationPriorityLiteral = Literal["low", "medium", "high"]
 ContractPlaybookSeverityLiteral = Literal["low", "medium", "high"]
@@ -210,7 +220,7 @@ class ContractClauseRecord(BaseModel):
 
 class ContractObligationCreateRequest(BaseModel):
     owner_membership_id: str | None = None
-    title: str = Field(min_length=2, max_length=255)
+    title: ContractObligationTitle
     description: str | None = Field(default=None, max_length=4000)
     due_on: date | None = None
     status: ContractObligationStatusLiteral = "pending"
@@ -410,8 +420,22 @@ class ContractTermSuggestionCreateRequest(BaseModel):
         return self
 
 
+class ContractTermSuggestionUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_updated_at: datetime
+    suggested_effective_on: date | None = None
+    suggested_expires_on: date | None = None
+    suggested_renewal_on: date | None = None
+    suggested_duration_months: int | None = Field(default=None, ge=0, le=1200)
+
+
 class ContractTermReviewRequest(BaseModel):
     expected_updated_at: datetime
+
+
+class ContractTermRejectRequest(BaseModel):
+    expected_updated_at: datetime | None = None
 
 
 class ContractTermSuggestionRecord(BaseModel):

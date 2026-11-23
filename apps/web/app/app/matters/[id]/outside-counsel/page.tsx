@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Banknote, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { CounselCurrencyTotals, formatCounselAmount as formatMoney, sumCounselAmounts } from "@/components/app/CounselCurrencyTotals";
 import {
   Card,
   CardContent,
@@ -92,9 +93,7 @@ export default function PerMatterOutsideCounselPage() {
     [workspaceQuery.data, matterId],
   );
   const currency =
-    workspaceQuery.data?.summary.currency ??
-    (matterAssignments[0]?.currency ?? "INR");
-  const currencyCodes = matterSummary?.currency_codes ?? [currency];
+    matterSummary?.currency ?? matterAssignments[0]?.currency ?? matterSpend[0]?.currency ?? "INR";
   const hasMultipleCurrencies = matterSummary?.multi_currency ?? false;
 
   const totalBudget = matterAssignments.reduce(
@@ -156,26 +155,48 @@ export default function PerMatterOutsideCounselPage() {
         <KpiCard
           icon={Banknote}
           label="Fee agreed"
-          value={formatMoney(totalBudget, currency)}
+          value={hasMultipleCurrencies ? (
+            <CounselCurrencyTotals rows={matterAssignments} renderAmount={(group, code) => (
+              formatMoney(sumCounselAmounts(group, (row) => row.budget_amount_minor), code)
+            )} />
+          ) : formatMoney(totalBudget, currency)}
         />
         <KpiCard
           icon={Banknote}
           label="Recorded spend"
-          value={formatMoney(totalSpend, currency)}
+          value={hasMultipleCurrencies ? (
+            <CounselCurrencyTotals rows={matterSpend} renderAmount={(group, code) => (
+              formatMoney(sumCounselAmounts(group, (row) => row.amount_minor), code)
+            )} />
+          ) : formatMoney(totalSpend, currency)}
         />
         <KpiCard
           icon={Banknote}
           label="Paid"
-          value={formatMoney(totalPaid, currency)}
+          value={hasMultipleCurrencies ? (
+            sumCounselAmounts(matterSpend, (row) => row.paid_amount_minor) === totalPaid ? (
+              <CounselCurrencyTotals rows={matterSpend} renderAmount={(group, code) => (
+                formatMoney(sumCounselAmounts(group, (row) => row.paid_amount_minor), code)
+              )} />
+            ) : "Unavailable"
+          ) : formatMoney(totalPaid, currency)}
         />
         <KpiCard
           icon={Banknote}
           label="Pending"
-          value={formatMoney(totalPending, currency)}
+          value={hasMultipleCurrencies ? (
+            sumCounselAmounts(matterSpend, (row) => row.pending_amount_minor) === totalPending ? (
+              <CounselCurrencyTotals rows={matterSpend} renderAmount={(group, code) => (
+                formatMoney(sumCounselAmounts(group, (row) => row.pending_amount_minor), code)
+              )} />
+            ) : "Unavailable"
+          ) : formatMoney(totalPending, currency)}
         />
       </section>
       {hasMultipleCurrencies ? (
-        <CurrencyWarning currencyCodes={currencyCodes} />
+        <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
+          Recorded amounts are grouped by currency.
+        </p>
       ) : null}
 
       <CrossVisibilityCard
@@ -325,21 +346,6 @@ export default function PerMatterOutsideCounselPage() {
 }
 
 
-function CurrencyWarning({
-  currencyCodes,
-}: {
-  currencyCodes: string[];
-}): React.JSX.Element {
-  return (
-    <p className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
-      Multiple currencies are present ({currencyCodes.join(", ")}). Totals are
-      shown in stored minor units and should be reviewed by currency; this view
-      does not execute payments.
-    </p>
-  );
-}
-
-
 function KpiCard({
   icon: Icon,
   label,
@@ -347,7 +353,7 @@ function KpiCard({
 }: {
   icon: typeof Users;
   label: string;
-  value: string;
+  value: ReactNode;
 }): React.JSX.Element {
   return (
     <Card>
@@ -716,15 +722,6 @@ function LogSpendDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-
-function formatMoney(minor: number, currency = "INR"): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-  }).format(minor / 100);
 }
 
 

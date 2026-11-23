@@ -409,3 +409,90 @@ def test_term_review_requires_current_version_and_uses_shared_date_guard(client:
     workspace = client.get(path + "/workspace", headers=headers).json()
     assert workspace["term_suggestions"][0]["status"] == "suggested"
     assert workspace["contract"]["expires_on"] is None
+
+
+def test_pending_term_edit_preserves_source_and_refuses_stale_review(client: TestClient) -> None:
+    from tests.test_legalworkspace_contract_metadata import _upload_attachment
+
+    missing_path = "/api/contracts/missing-contract/term-suggestions/missing-suggestion"
+    probe = {"expected_updated_at": "2026-11-22T00:00:00Z", "suggested_duration_months": 12}
+    missing_csrf = client.patch(missing_path, json=probe)
+    assert missing_csrf.status_code == 403, missing_csrf.text
+    assert missing_csrf.json()["type"] == "https://caseops.ai/errors/csrf"
+    invalid_session = client.patch(
+        missing_path, headers=auth_headers("invalid-synthetic-session"), json=probe,
+    )
+    assert invalid_session.status_code == 401, invalid_session.text
+    actor = bootstrap_company(client)
+    token = str(actor["access_token"])
+    headers = auth_headers(token)
+    contract = _create_contract(client, token)
+    path = f"/api/contracts/{contract['id']}"
+    source = _upload_attachment(client, token, contract["id"])
+    created = client.post(path + "/term-suggestions", headers=headers, json={
+        "source_attachment_id": source["id"],
+        "suggested_expires_on": "2028-01-01",
+        "suggested_duration_months": 12,
+        "evidence_json": {"quote": "Expires 1 January 2029.", "page": 1},
+    })
+    assert created.status_code == 200, created.text
+    before = created.json()
+    contract_before = client.get(path, headers=headers).json()
+    suggestion_path = f"/api/contracts/{contract['id']}/term-suggestions/{before['id']}"
+    edited = client.patch(suggestion_path, headers=headers, json={
+        "expected_updated_at": before["updated_at"],
+        "suggested_expires_on": "2029-01-01",
+        "suggested_duration_months": None,
+    })
+    assert edited.status_code == 200, edited.text
+    after = edited.json()
+    assert after == {
+        **before,
+        "suggested_expires_on": "2029-01-01",
+        "suggested_duration_months": None,
+        "updated_at": after["updated_at"],
+    }
+    assert after["updated_at"] != before["updated_at"]
+    workspace = client.get(path + "/workspace", headers=headers).json()
+    assert workspace["term_suggestions"] == [after]
+    assert workspace["contract"]["expires_on"] == contract_before["expires_on"]
+    new_contract_version = workspace["contract"]["updated_at"]
+    assert new_contract_version != contract_before["updated_at"]
+
+    stale_edit = client.patch(suggestion_path, headers=headers, json={
+        "expected_updated_at": before["updated_at"], "suggested_expires_on": "2030-01-01",
+    })
+    assert stale_edit.status_code == 409
+    for action in ("accept", "reject"):
+        stale_review = client.post(suggestion_path + "/" + action, headers=headers, json={
+            "expected_updated_at": contract_before["updated_at"],
+        })
+        assert stale_review.status_code == 409, stale_review.text
+
+    clear_all = client.patch(suggestion_path, headers=headers, json={
+        "expected_updated_at": after["updated_at"], "suggested_expires_on": None,
+    })
+    assert clear_all.status_code == 422
+    assert client.get(path + "/workspace", headers=headers).json()["term_suggestions"] == [after]
+    with get_session_factory()() as session:
+        edit_audits = list(session.scalars(select(AuditEvent).where(
+            AuditEvent.target_id == before["id"],
+            AuditEvent.action == "contract.term_suggestion.updated",
+        )))
+        assert len(edit_audits) == 1
+        assert edit_audits[0].actor_membership_id == actor["membership"]["id"]
+        audit = json.loads(edit_audits[0].metadata_json)
+        assert audit == {
+            "source_attachment_id": source["id"],
+            "before": {"suggested_expires_on": "2028-01-01", "suggested_duration_months": 12},
+            "after": {"suggested_expires_on": "2029-01-01", "suggested_duration_months": None},
+        }
+    accepted = client.post(suggestion_path + "/accept", headers=headers, json={
+        "expected_updated_at": new_contract_version,
+    })
+    assert accepted.status_code == 200 and accepted.json()["status"] == "accepted"
+    after_review = client.patch(suggestion_path, headers=headers, json={
+        "expected_updated_at": accepted.json()["updated_at"], "suggested_expires_on": "2030-01-01",
+    })
+    assert after_review.status_code == 409
+    assert client.get(path, headers=headers).json()["expires_on"] == "2029-01-01"

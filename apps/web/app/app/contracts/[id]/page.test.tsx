@@ -11,6 +11,8 @@ const {
   listTenantPlaybooksMock,
   tenantCompareMock,
   redlineMock,
+  listCompanyUsersMock,
+  createObligationMock,
 } = vi.hoisted(() => ({
   fetchWorkspaceMock: vi.fn(),
   useCapabilityMock: vi.fn(),
@@ -18,6 +20,8 @@ const {
   listTenantPlaybooksMock: vi.fn(),
   tenantCompareMock: vi.fn(),
   redlineMock: vi.fn(),
+  listCompanyUsersMock: vi.fn(),
+  createObligationMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -48,6 +52,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   acceptContractTermSuggestion: vi.fn(),
   rejectContractTermSuggestion: vi.fn(),
   updateContractAttachmentMetadata: vi.fn(),
+  listCompanyUsers: listCompanyUsersMock,
+  createContractObligation: createObligationMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -79,6 +85,8 @@ describe("ContractDetailPage", () => {
     listTenantPlaybooksMock.mockReset();
     tenantCompareMock.mockReset();
     redlineMock.mockReset();
+    listCompanyUsersMock.mockReset();
+    createObligationMock.mockReset();
     listTenantPlaybooksMock.mockResolvedValue([]);
     useCapabilityMock.mockImplementation(() => false);
     fetchWorkspaceMock.mockResolvedValue({
@@ -105,6 +113,72 @@ describe("ContractDetailPage", () => {
       legal_references: [],
       term_suggestions: [],
     });
+  });
+
+  it("saves a pending obligation with an active owner and shows the refreshed record", async () => {
+    const user = userEvent.setup();
+    useCapabilityMock.mockImplementation((cap) => cap === "contracts:edit");
+    const record = {
+      id: "o1", contract_id: "c1", title: "Send the notice", description: "Use the address in the contract.",
+      owner_membership_id: "m1", owner_name: "Ria Shah", due_on: "2027-01-16",
+      status: "pending", priority: "high", completed_at: null, created_at: "2026-11-22T05:00:00Z",
+    };
+    const member = {
+      membership_id: "m1", full_name: "Ria Shah", email: "ria@example.test", role: "member",
+      membership_active: true, user_active: true,
+    };
+    listCompanyUsersMock.mockResolvedValue({ users: [member, {
+      ...member, membership_id: "m2", full_name: "Inactive colleague", user_active: false,
+    }] });
+    const workspace = await fetchWorkspaceMock();
+    createObligationMock.mockRejectedValueOnce(new Error("Save refused"));
+    createObligationMock.mockImplementationOnce(async () => {
+      fetchWorkspaceMock.mockResolvedValue({ ...workspace, obligations: [record] });
+      return record;
+    });
+
+    render(withClient(<ContractDetailPage />));
+    await user.click(await screen.findByRole("tab", { name: /^Obligations \(0\)$/ }));
+    await user.click(screen.getByRole("button", { name: /^Add obligation$/ }));
+    const form = screen.getByRole("form", { name: /^Add obligation$/ });
+    const fields = within(form);
+    await fields.findByRole("option", { name: /^Ria Shah — ria@example\.test$/ });
+    expect(fields.queryByRole("option", { name: /Inactive colleague/ })).not.toBeInTheDocument();
+    await user.type(fields.getByLabelText(/^Obligation title$/), record.title);
+    await user.type(fields.getByLabelText(/^Obligation details$/), record.description);
+    await user.type(fields.getByLabelText(/^Due date$/), record.due_on);
+    await user.selectOptions(fields.getByLabelText(/^Priority$/), record.priority);
+    await user.selectOptions(fields.getByLabelText(/^Owner$/), "m1");
+    await user.click(fields.getByRole("button", { name: /^Save obligation$/ }));
+    await fields.findByRole("alert");
+    expect(fields.getByLabelText(/^Obligation title$/)).toHaveValue(record.title);
+    expect(fields.getByLabelText(/^Owner$/)).toHaveValue("m1");
+    expect(screen.queryByRole("heading", { name: /^Send the notice$/ })).not.toBeInTheDocument();
+
+    await user.click(fields.getByRole("button", { name: /^Save obligation$/ }));
+    expect(createObligationMock).toHaveBeenCalledTimes(2);
+    expect(createObligationMock).toHaveBeenLastCalledWith("c1", {
+      title: record.title, description: record.description, due_on: record.due_on,
+      owner_membership_id: "m1", priority: "high", status: "pending",
+    });
+    await waitFor(() => expect(form).not.toBeInTheDocument());
+    const row = (await screen.findByRole("heading", { name: /^Send the notice$/ })).closest("li");
+    expect(row).not.toBeNull();
+    const saved = within(row!);
+    expect(saved.getByText("Ria Shah")).toBeVisible();
+    expect(saved.getByText("2027-01-16")).toBeVisible();
+    expect(saved.getByText("pending")).toBeVisible();
+    expect(saved.getByText("high")).toBeVisible();
+  });
+
+  it("has no obligation creation control for readers", async () => {
+    const user = userEvent.setup();
+    render(withClient(<ContractDetailPage />));
+    await user.click(await screen.findByRole("tab", { name: /^Obligations \(0\)$/ }));
+    expect(screen.getByText("No obligations recorded yet")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Add obligation$/ })).not.toBeInTheDocument();
+    expect(listCompanyUsersMock).not.toHaveBeenCalled();
+    expect(createObligationMock).not.toHaveBeenCalled();
   });
 
   async function openRedline(redline: Record<string, unknown>) {

@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { loadJSZip } from "./support/external-journey-loaders";
 
-import { expectNoPageOverflow, json, prepareTester } from "./support/ram-bugs4";
+import { expectNoPageOverflow, json, prepareTester, reportedDevicePress } from "./support/ram-bugs4";
 import { repoRoot } from "./support/env";
 import { runId } from "./support/run-id";
 import { verifyReportedContractControls } from "./support/bugs5_contract_reported_20261111";
@@ -26,6 +26,7 @@ for (const mobile of [false, true]) {
   }, async ({ page, request, baseURL }, info) => {
     test.setTimeout(240_000);
     const rt = await prepareTester(page, request, baseURL, mobile ? { width: 393, height: 851 } : { width: 1366, height: 900 });
+    const press = await reportedDevicePress(page, info, mobile);
     await verifyReportedContractControls(page, request, rt, info);
     const title = `Synthetic contract B5 ${runId()}`;
     await page.goto(`${rt.web.origin}/app/contracts`);
@@ -148,11 +149,32 @@ for (const mobile of [false, true]) {
       await page.getByLabel("Suggested effective date", { exact: true }).fill("2026-11-15");
       await page.getByLabel("Suggested expiry date", { exact: true }).fill("2027-11-14");
       await page.getByLabel("Suggested renewal date", { exact: true }).fill("2027-10-01");
-      await page.getByLabel("Suggested duration (months)", { exact: true }).fill("12");
+      await page.getByLabel("Suggested duration (months)", { exact: true }).fill("11");
       await page.getByLabel("Source document", { exact: true }).selectOption(docxId);
       await page.getByLabel("Source evidence", { exact: true }).fill("Effective on 15 November 2026. Expires on 14 November 2027. Renewal on 1 October 2027.");
       await page.getByRole("button", { name: "Save suggestion", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Term suggestions (1)", exact: true })).toBeVisible();
+      await expect(page.getByText("11 months", { exact: true })).toBeVisible();
+      const editSuggestion = page.getByRole("button", { name: "Edit suggestion", exact: true });
+      await expect(editSuggestion).toBeVisible();
+      await editSuggestion[press]();
+      const termEdit = page.getByRole("form", { name: "Edit term suggestion" });
+      await expect(termEdit.getByLabel("Suggested effective date", { exact: true })).toHaveValue("2026-11-15");
+      await expect(termEdit.getByLabel("Suggested duration (months)", { exact: true })).toHaveValue("11");
+      await termEdit.getByLabel("Suggested duration (months)", { exact: true }).fill("12");
+      const [edited] = await Promise.all([
+        page.waitForResponse((response) => response.url().startsWith(`${apiPath}/term-suggestions/`)
+          && response.request().method() === "PATCH"),
+        termEdit.getByRole("button", { name: "Save suggestion", exact: true })[press](),
+      ]);
+      expect(edited.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      expect(await json(edited, "Persist reviewed correction to pending term")).toMatchObject({
+        suggested_duration_months: 12, source_attachment_id: docxId, status: "suggested",
+      });
+      await expect(termEdit).toHaveCount(0);
+      await page.reload();
+      await page.getByRole("tab", { name: "Terms", exact: true }).click();
+      await expect(page.getByText("12 months", { exact: true })).toBeVisible();
       expect((await json(await request.get(apiPath, { headers: rt.headers }), "Canonical terms before acceptance")).effective_on).toBe(details.effective_on);
       const accepting = page.waitForResponse((r) => r.url().startsWith(`${apiPath}/term-suggestions/`) && r.url().endsWith("/accept") && r.request().method() === "POST");
       await page.getByRole("button", { name: "Accept", exact: true }).click();
@@ -175,6 +197,49 @@ for (const mobile of [false, true]) {
       expect((await json(await request.get(apiPath, { headers: rt.headers }), "Rejected term retains canonical renewal")).renewal_on).toBe("2027-10-01");
       await expectNoPageOverflow(page);
       if (rt.local) await page.screenshot({ path: info.outputPath(`contract-terms-${mobile ? "mobile" : "desktop"}.png`) });
+
+      await page.getByRole("tab", { name: "Obligations (0)", exact: true })[press]();
+      await page.getByRole("button", { name: "Add obligation", exact: true })[press]();
+      const obligationForm = page.getByRole("form", { name: "Add obligation", exact: true });
+      const obligation = {
+        title: "Send the synthetic renewal notice",
+        description: "Use the address in the synthetic contract.",
+        due_on: "2027-09-15",
+        priority: "high",
+        status: "pending",
+        owner_membership_id: rt.actor.membership.id,
+      };
+      await obligationForm.getByLabel("Obligation title", { exact: true }).fill(obligation.title);
+      await obligationForm.getByLabel("Obligation details", { exact: true }).fill(obligation.description);
+      await obligationForm.getByLabel("Due date", { exact: true }).fill(obligation.due_on);
+      await obligationForm.getByLabel("Priority", { exact: true }).selectOption(obligation.priority);
+      await obligationForm.getByLabel("Owner", { exact: true }).selectOption(obligation.owner_membership_id);
+      await expectNoPageOverflow(page);
+      const [obligationResponse] = await Promise.all([
+        page.waitForResponse((response) => response.url() === `${apiPath}/obligations`
+          && response.request().method() === "POST"),
+        obligationForm.getByRole("button", { name: "Save obligation", exact: true })[press](),
+      ]);
+      expect(obligationResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+      expect(obligationResponse.request().postDataJSON()).toEqual(obligation);
+      const savedObligation = await json(obligationResponse, "Save manual contract obligation");
+      expect(savedObligation).toMatchObject({ ...obligation, contract_id: contractId, completed_at: null });
+      expect(savedObligation.owner_name).toEqual(expect.any(String));
+      expect(savedObligation.owner_name).not.toBe("");
+      await expect(obligationForm).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: obligation.title, exact: true })).toBeVisible();
+      await page.reload();
+      await page.getByRole("tab", { name: "Obligations (1)", exact: true })[press]();
+      const obligationRow = page.getByRole("tabpanel").getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: obligation.title, exact: true }),
+      });
+      for (const value of [obligation.description, obligation.due_on, obligation.priority,
+        obligation.status, savedObligation.owner_name]) {
+        await expect(obligationRow.getByText(value, { exact: true })).toBeVisible();
+      }
+      const savedWorkspace = await json(await request.get(`${apiPath}/workspace`, { headers: rt.headers }), "Read persisted obligation");
+      expect(savedWorkspace.obligations).toEqual([savedObligation]);
+      await expectNoPageOverflow(page);
       await rt.release();
     } finally {
       await json(await request.patch(apiPath, { headers: rt.headers, data: { status: "terminated" } }), "Retire only the new synthetic QA contract");

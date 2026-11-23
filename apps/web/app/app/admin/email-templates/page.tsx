@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -20,6 +20,7 @@ import {
   archiveEmailTemplate,
   createEmailTemplate,
   listEmailTemplates,
+  updateEmailTemplate,
 } from "@/lib/api/endpoints";
 import type {
   EmailTemplateRecord,
@@ -28,9 +29,14 @@ import type {
 
 // {{var_name}} parser — mirrors the backend regex so the editor can
 // auto-detect variables without an extra round-trip.
-const PLACEHOLDER_RE = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+const PLACEHOLDER_RE = /(?<!\{)\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}(?!\})/g;
 
-function detectVariables(subject: string, body: string): EmailTemplateVariable[] {
+function detectVariables(
+  subject: string,
+  body: string,
+  previous: EmailTemplateVariable[] = [],
+): EmailTemplateVariable[] {
+  const byName = new Map(previous.map((variable) => [variable.name, variable]));
   const seen = new Set<string>();
   const out: EmailTemplateVariable[] = [];
   for (const text of [subject, body]) {
@@ -38,41 +44,67 @@ function detectVariables(subject: string, body: string): EmailTemplateVariable[]
     while ((m = PLACEHOLDER_RE.exec(text)) !== null) {
       if (!seen.has(m[1])) {
         seen.add(m[1]);
-        out.push({ name: m[1], label: null, required: true });
+        out.push(byName.get(m[1]) ?? { name: m[1], label: null, required: true });
       }
     }
   }
   return out;
 }
 
+type TemplateFields = Parameters<typeof createEmailTemplate>[0];
+
 export default function AdminEmailTemplatesPage() {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState(false);
+  const [editor, setEditor] = useState<EmailTemplateRecord | "new" | null>(null);
 
   const query = useQuery({
     queryKey: ["admin", "email-templates"],
     queryFn: () => listEmailTemplates(),
   });
 
-  const createMutation = useMutation({
-    mutationFn: createEmailTemplate,
-    onSuccess: async () => {
-      toast.success("Template saved.");
-      setEditing(false);
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "email-templates"],
+  async function refreshTemplateLists() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["admin", "email-templates"] }),
+      queryClient.invalidateQueries({
+        predicate: ({ queryKey }) => queryKey[0] === "matters"
+          && queryKey[2] === "communications" && queryKey[3] === "templates",
+      }),
+    ]);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: ({ input, original }: { input: TemplateFields; original?: EmailTemplateRecord }) => {
+      if (!original) return createEmailTemplate(input);
+      const { name, kind, description, subject_template, body_template, variables } = input;
+      const subjectChanged = subject_template !== original.subject_template;
+      const bodyChanged = body_template !== original.body_template;
+      return updateEmailTemplate({
+        templateId: original.id,
+        expected_updated_at: original.updated_at,
+        ...(name !== original.name && { name }),
+        ...(kind !== original.kind && { kind }),
+        ...(description !== original.description && { description }),
+        ...(subjectChanged && { subject_template }),
+        ...(bodyChanged && { body_template }),
+        ...((subjectChanged || bodyChanged) && { variables }),
       });
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Could not save template.")),
+    onSuccess: async () => {
+      toast.success("Template saved.");
+      setEditor(null);
+      await refreshTemplateLists();
+    },
+    onError: async (err) => {
+      toast.error(apiErrorMessage(err, "Could not save template."));
+      if (editor !== "new") await refreshTemplateLists();
+    },
   });
 
   const archiveMutation = useMutation({
     mutationFn: archiveEmailTemplate,
     onSuccess: async () => {
       toast.success("Template archived.");
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "email-templates"],
-      });
+      await refreshTemplateLists();
     },
     onError: (err) => toast.error(apiErrorMessage(err, "Could not archive.")),
   });
@@ -92,18 +124,19 @@ export default function AdminEmailTemplatesPage() {
         </div>
         <Button
           type="button"
-          onClick={() => setEditing((c) => !c)}
+          disabled={saveMutation.isPending || archiveMutation.isPending || (editor !== null && editor !== "new")}
+          onClick={() => setEditor(editor === "new" ? null : "new")}
           data-testid="email-template-new-toggle"
         >
           <Plus className="h-4 w-4" aria-hidden />
-          {editing ? "Cancel" : "New template"}
+          {editor === "new" ? "Cancel" : "New template"}
         </Button>
       </header>
 
-      {editing ? (
-        <NewTemplateForm
-          submitting={createMutation.isPending}
-          onSubmit={(input) => createMutation.mutate(input)}
+      {editor === "new" ? (
+        <TemplateForm
+          submitting={saveMutation.isPending}
+          onSubmit={(input) => saveMutation.mutate({ input })}
         />
       ) : null}
 
@@ -120,14 +153,27 @@ export default function AdminEmailTemplatesPage() {
         </div>
       ) : query.data && query.data.templates.length > 0 ? (
         <ul className="flex flex-col gap-2">
-          {query.data.templates.map((t) => (
-            <TemplateRow
-              key={t.id}
-              template={t}
-              archiving={archiveMutation.isPending}
-              onArchive={() => archiveMutation.mutate(t.id)}
-            />
-          ))}
+          {query.data.templates.map((template) => {
+            const original = editor && editor !== "new" && editor.id === template.id ? editor : undefined;
+            return (
+              <TemplateRow
+                key={template.id}
+                template={template}
+                busy={saveMutation.isPending || archiveMutation.isPending || editor !== null}
+                onEdit={() => setEditor(template)}
+                onArchive={() => archiveMutation.mutate(template.id)}
+              >
+                {original ? (
+                  <TemplateForm
+                    original={original}
+                    submitting={saveMutation.isPending}
+                    onCancel={() => setEditor(null)}
+                    onSubmit={(input) => saveMutation.mutate({ input, original })}
+                  />
+                ) : null}
+              </TemplateRow>
+            );
+          })}
         </ul>
       ) : (
         <EmptyState
@@ -142,19 +188,23 @@ export default function AdminEmailTemplatesPage() {
 
 function TemplateRow({
   template,
-  archiving,
+  busy,
+  onEdit,
   onArchive,
+  children,
 }: {
   template: EmailTemplateRecord;
-  archiving: boolean;
+  busy: boolean;
+  onEdit: () => void;
   onArchive: () => void;
+  children?: ReactNode;
 }) {
   return (
     <li
       className="rounded-md border border-[var(--color-line)] bg-white p-4"
       data-testid={`email-template-${template.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="font-semibold text-[var(--color-ink)]">
@@ -189,48 +239,46 @@ function TemplateRow({
             </div>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={archiving}
-          onClick={onArchive}
-          data-testid={`email-template-archive-${template.id}`}
-        >
-          <Archive className="h-4 w-4" aria-hidden /> Archive
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={busy || !!children}
+            onClick={onEdit} data-testid={`email-template-edit-${template.id}`} aria-label={`Edit ${template.name}`}>
+            Edit
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={busy || !!children}
+            onClick={onArchive} data-testid={`email-template-archive-${template.id}`}>
+            <Archive className="h-4 w-4" aria-hidden /> Archive
+          </Button>
+        </div>
       </div>
+      {children ? <div className="mt-4">{children}</div> : null}
     </li>
   );
 }
 
-function NewTemplateForm({
+function TemplateForm({
+  original,
   submitting,
+  onCancel,
   onSubmit,
 }: {
+  original?: EmailTemplateRecord;
   submitting: boolean;
-  onSubmit: (input: {
-    name: string;
-    kind: string;
-    subject_template: string;
-    body_template: string;
-    description?: string | null;
-    variables: EmailTemplateVariable[];
-  }) => void;
+  onCancel?: () => void;
+  onSubmit: (input: TemplateFields) => void;
 }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState("general");
-  const [description, setDescription] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [name, setName] = useState(original?.name ?? "");
+  const [kind, setKind] = useState(original?.kind ?? "general");
+  const [description, setDescription] = useState(original?.description ?? "");
+  const [subject, setSubject] = useState(original?.subject_template ?? "");
+  const [body, setBody] = useState(original?.body_template ?? "");
 
-  const detectedVars = detectVariables(subject, body);
+  const detectedVars = detectVariables(subject, body, original?.variables);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle as="h2" className="text-base">
-          New template
+          {original ? "Edit template" : "New template"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -309,6 +357,11 @@ function NewTemplateForm({
               data-testid="email-template-body"
             />
           </label>
+          <p className="text-xs text-[var(--color-mute)]">
+            Use <code>{'{{case_number}}'}</code>, <code>{'{{court_name}}'}</code> and{" "}
+            <code>{'{{advocate_name}}'}</code> to fill the saved case number, court and
+            responsible lawyer from the matter.
+          </p>
           {detectedVars.length > 0 ? (
             <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3 text-xs">
               <div className="font-medium text-[var(--color-ink)]">
@@ -323,11 +376,12 @@ function NewTemplateForm({
                 ))}
               </div>
               <p className="mt-1 text-[var(--color-mute)]">
-                The Compose dialog will require these at send time.
+                Preview shows any values you still need to supply before sending.
               </p>
             </div>
           ) : null}
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
+            {onCancel ? <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>Cancel editing</Button> : null}
             <Button
               type="submit"
               disabled={submitting || !name.trim() || !subject.trim() || !body.trim()}

@@ -261,7 +261,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head == "20261122_0003"
+        assert current_head == "20261122_0631"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)
@@ -281,11 +281,11 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
-        # The current head (the restore-forward phone contacts migration) refuses
+        # The current extraction-provenance head refuses
         # before any provenance or indexes change. The historical index's own
         # conflict guard is exercised separately.
         assert str(refused.value) == (
-            "Phone consent and opt-out evidence is retained; restore-forward only."
+            "Contract extraction provenance is restore-forward. Restore the reviewed backup."
         )
         retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting
