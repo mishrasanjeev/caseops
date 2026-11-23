@@ -130,6 +130,23 @@ def test_runner_retains_public_notices_and_nonpublic_operator_materials():
     assert "FROM node:22.23.5-alpine AS trusted-base" in dockerfile
     runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
     copies = [shlex.split(line) for line in runner.splitlines() if line.startswith("COPY ")]
+    # npm can retain production dependencies beside the workspace manifest.
+    # Copy every locked production root, not only the hoisted root tree.
+    lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    workspace_roots = {
+        location.split("/node_modules/", 1)[0] + "/node_modules"
+        for location, metadata in lock["packages"].items()
+        if "/node_modules/" in location and not location.startswith("node_modules/")
+        and metadata.get("dev") is not True
+    }
+    assert workspace_roots == {"apps/web/node_modules"}
+    dependency_copies = [tokens for tokens in copies if "--from=prod-deps" in tokens]
+    assert {tokens[-2]: tokens[-1] for tokens in dependency_copies} == {
+        "/app/node_modules": "/app/node_modules",
+        **{f"/app/{root}": "./node_modules" for root in workspace_roots},
+    }
+    assert len(dependency_copies) == len(workspace_roots) + 1
+    assert all("--chown=nextjs:nodejs" in tokens for tokens in dependency_copies)
     public = [tokens for tokens in copies if tokens[-2:] == ["/app/apps/web/public", "./public"]]
     assert len(public) == 1 and "--from=builder" in public[0]
     expected = {

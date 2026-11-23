@@ -147,6 +147,7 @@ COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/
 COPY --chown=nextjs:nodejs docs/security/js-license-compliance-review-2026-10-12.md /app/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public/third-party-notices /app/third-party-compliance/apps/web/public/third-party-notices
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
+COPY --from=prod-deps --chown=nextjs:nodejs /app/apps/web/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 
 ARG CASEOPS_RELEASE_SHA=unavailable
