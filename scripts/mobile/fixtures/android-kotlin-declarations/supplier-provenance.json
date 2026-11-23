@@ -1,0 +1,76 @@
+{
+  "kind": "caseops-kotlin-overlay-official-preimage-byte-closure-v1",
+  "packages": [
+    {
+      "package": "@react-native/gradle-plugin",
+      "version": "0.88.0",
+      "resolved": "https://registry.npmjs.org/@react-native/gradle-plugin/-/gradle-plugin-0.88.0.tgz",
+      "integrity": "sha512-4jPSKslOfJj8NKY/jv9qmWkxZYmqPyamoS3Vs0JOFxw9t4PM6L/ea0fUsjNV0LxC9zJlvWilPJOCTOf7h8wlyw==",
+      "archiveSha256": "472aa2062138af0f84ad36fc76bf3f503d92347c79223fd2c92a0f085d810d69",
+      "archiveSizeBytes": 92029,
+      "license": "MIT",
+      "licenseFileAbsentInArchive": true
+    },
+    {
+      "package": "expo-modules-autolinking",
+      "version": "58.0.16",
+      "resolved": "https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-58.0.16.tgz",
+      "integrity": "sha512-YglXoBBc3QwqqFfFQD1XVfpxXdF9RkuZOVxWTn5uHPiyvXSMFiVO16GnV+VSd+njKld1EJt7vQucCsDiLp4xVA==",
+      "archiveSha256": "c493b0070ffa24a3bffb2db2736388e1b5df874923b80853537d04c56a384869",
+      "archiveSizeBytes": 255392,
+      "license": "MIT",
+      "licenseFileAbsentInArchive": false
+    },
+    {
+      "package": "expo-dev-launcher",
+      "version": "58.0.17",
+      "resolved": "https://registry.npmjs.org/expo-dev-launcher/-/expo-dev-launcher-58.0.17.tgz",
+      "integrity": "sha512-z2/F90do1q7Jgs6hnsY6Xjc1Sd7vKPMvw7Pp5Iv6M2qGHWprfydMCaUcwOkAQFoXqE2rLvd5hC1aSDFbH4oqRQ==",
+      "archiveSha256": "bbaf18bb08802587150595f06eccca711d614bf01f4eae68c6cf9b50b0ff451b",
+      "archiveSizeBytes": 265674,
+      "license": "MIT",
+      "licenseFileAbsentInArchive": false
+    },
+    {
+      "package": "expo-modules-core",
+      "version": "58.0.28",
+      "resolved": "https://registry.npmjs.org/expo-modules-core/-/expo-modules-core-58.0.28.tgz",
+      "integrity": "sha512-2FCnT8mIubdQAHVtX9fVMN9qajF7hGDC3CjxxBG0HlyK7NEsxUDKkukiNVzqQpwiI+jJx7ysG0YvATwKKlu1sw==",
+      "archiveSha256": "04a6fc752473a7bd47e2326615729635a12880970db99c8e93be30fb3eb9bc9e",
+      "archiveSizeBytes": 34738878,
+      "license": "MIT",
+      "licenseFileAbsentInArchive": false
+    }
+  ],
+  "targetCount": 5,
+  "allFiveFixtureBytesMatchOfficialIntegrityPinnedArchives": true,
+  "supplierNotices": [
+    {
+      "package": "expo-modules-autolinking",
+      "source": "integrity-pinned official archive",
+      "fixture": "expo-modules-autolinking-LICENSE.txt",
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    },
+    {
+      "package": "expo-dev-launcher",
+      "source": "integrity-pinned official archive",
+      "fixture": "expo-dev-launcher-LICENSE.txt",
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    },
+    {
+      "package": "expo-modules-core",
+      "source": "integrity-pinned official archive",
+      "fixture": "expo-modules-core-LICENSE.txt",
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+      "sizeBytes": 1106
+    }
+  ],
+  "reactNativeCatalogOriginalCopyrightAndMitHeaderRetained": true,
+  "noRuntimeCodeOrNoticeChanges": true,
+  "archiveEntries": 1633,
+  "readBytes": 35351973,
+  "seconds": 0.12007837486453354,
+  "sdkAcceptance": false
+}

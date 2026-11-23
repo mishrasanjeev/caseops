@@ -4,6 +4,7 @@ const { createHash, X509Certificate } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const observer = require('./qa-observer.cjs');
+const { applyKotlinDeclarations } = require('./kotlin-declaration-overlay.cjs');
 const { withAppBuildGradle, withDangerousMod } = require('@expo/config-plugins');
 
 const ANDROID_PROFILE = 'android-local-acceptance';
@@ -247,6 +248,7 @@ function withLocalAcceptance(config) {
   });
   config = withDangerousMod(config, ['android', (mod) => {
     assert.ok(!settings || settings.platform === 'android', 'IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID');
+    applyKotlinDeclarations(mod.modRequest.projectRoot);
     pinGradleWrapper(mod.modRequest.platformProjectRoot);
     writeAndroidOverlay(mod.modRequest.platformProjectRoot, settings);
     observer.overlay(mod.modRequest.platformProjectRoot, path.resolve(mod.modRequest.projectRoot, '../..'), settings?.observer ?? null, settings?.releaseSha);

@@ -1,0 +1,85 @@
+{
+  "kind": "caseops-pinned-kotlin-declaration-overlay-v1",
+  "kotlinVersion": "2.4.21",
+  "packages": {
+    "@react-native/gradle-plugin": {
+      "version": "0.88.0",
+      "resolved": "https://registry.npmjs.org/@react-native/gradle-plugin/-/gradle-plugin-0.88.0.tgz",
+      "integrity": "sha512-4jPSKslOfJj8NKY/jv9qmWkxZYmqPyamoS3Vs0JOFxw9t4PM6L/ea0fUsjNV0LxC9zJlvWilPJOCTOf7h8wlyw=="
+    },
+    "expo-modules-autolinking": {
+      "version": "58.0.16",
+      "resolved": "https://registry.npmjs.org/expo-modules-autolinking/-/expo-modules-autolinking-58.0.16.tgz",
+      "integrity": "sha512-YglXoBBc3QwqqFfFQD1XVfpxXdF9RkuZOVxWTn5uHPiyvXSMFiVO16GnV+VSd+njKld1EJt7vQucCsDiLp4xVA=="
+    },
+    "expo-dev-launcher": {
+      "version": "58.0.17",
+      "resolved": "https://registry.npmjs.org/expo-dev-launcher/-/expo-dev-launcher-58.0.17.tgz",
+      "integrity": "sha512-z2/F90do1q7Jgs6hnsY6Xjc1Sd7vKPMvw7Pp5Iv6M2qGHWprfydMCaUcwOkAQFoXqE2rLvd5hC1aSDFbH4oqRQ=="
+    },
+    "expo-modules-core": {
+      "version": "58.0.28",
+      "resolved": "https://registry.npmjs.org/expo-modules-core/-/expo-modules-core-58.0.28.tgz",
+      "integrity": "sha512-2FCnT8mIubdQAHVtX9fVMN9qajF7hGDC3CjxxBG0HlyK7NEsxUDKkukiNVzqQpwiI+jJx7ysG0YvATwKKlu1sw=="
+    }
+  },
+  "targets": [
+    {
+      "package": "@react-native/gradle-plugin",
+      "relative": "gradle/libs.versions.toml",
+      "beforeSha256": "c7a028cdee90f490de9493ca9de92b61b994844836161871091c340c568f109e",
+      "afterSha256": "44a27d41062a7c01889fac1bc7666f8235ee14060de8588d66660830f8484c7d",
+      "beforeSize": 854,
+      "afterSize": 855,
+      "from": "kotlin = \"2.2.0\"",
+      "to": "kotlin = \"2.4.21\"",
+      "fixture": "1-original.txt"
+    },
+    {
+      "package": "expo-modules-autolinking",
+      "relative": "android/expo-gradle-plugin/build.gradle.kts",
+      "beforeSha256": "f43a78068aaa078c40a55f6d165be415971e80cd98e0993046933953561a209f",
+      "afterSha256": "8812fc1036fbdc3f266297f080448a882081ebb015ab4ef05c879c540b94fd6b",
+      "beforeSize": 84,
+      "afterSize": 84,
+      "from": "kotlin(\"jvm\") version \"2.2.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "fixture": "2-original.txt"
+    },
+    {
+      "package": "expo-modules-autolinking",
+      "relative": "android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts",
+      "beforeSha256": "e6876c3e2795e5bf9e6d9910d09ce75135e1ec14c33b0ddf41d4a549cac9d704",
+      "afterSha256": "7754691d71bc552d027cf07bb655ea41ae31a68a6f69d85c15220a327f1f5b34",
+      "beforeSize": 884,
+      "afterSize": 884,
+      "from": "kotlin(\"plugin.serialization\") version \"1.9.24\"",
+      "to": "kotlin(\"plugin.serialization\") version \"2.4.21\"",
+      "fixture": "3-original.txt"
+    },
+    {
+      "package": "expo-dev-launcher",
+      "relative": "expo-dev-launcher-gradle-plugin/build.gradle.kts",
+      "beforeSha256": "fa57e74a7179891b599886d21141772b9676bee985bbe46f5b1c7304ae7633ef",
+      "afterSha256": "2c19a8ec2db0244b9ee4a54050dda8e9c07e4309bb2b08c929d62de179a3166d",
+      "beforeSize": 812,
+      "afterSize": 812,
+      "from": "kotlin(\"jvm\") version \"2.2.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "fixture": "4-original.txt"
+    },
+    {
+      "package": "expo-modules-core",
+      "relative": "expo-module-gradle-plugin/build.gradle.kts",
+      "beforeSha256": "e882b17f84fc6b343b571dea8b5c7147584d795e0ebbb6b242c453984a2101aa",
+      "afterSha256": "758a6825a7436c95817675caa1894d342f4e6b467498b92961744cad48a16016",
+      "beforeSize": 2083,
+      "afterSize": 2083,
+      "from": "kotlin(\"jvm\") version \"2.2.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "fixture": "5-original.txt"
+    }
+  ],
+  "onlyVersionDeclarationsChanged": true,
+  "noRuntimeCodeOrNoticeChanges": true
+}

@@ -16,6 +16,7 @@ const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 const repo = path.resolve(app, '../..');
 const require = createRequire(path.join(app, 'package.json'));
 const plugin = require(path.join(app, 'plugins/with-local-acceptance.cjs'));
+const kotlinOverlay = require(path.join(app, 'plugins/kotlin-declaration-overlay.cjs'));
 const linkPolicy = require(path.join(repo, 'apps/web/lib/native-link-policy.cjs'));
 const { readNativeLinkConfig } = require(path.join(repo, 'apps/web/lib/native-link-config.cjs'));
 const { compileModsAsync, XML } = require('@expo/config-plugins');
@@ -1218,6 +1219,7 @@ test('overlay creation, replacement and cleanup never touch main, release or uno
 
 test('actual Expo Android mod compiler applies the plugin and removes QA output on default replay', async (t) => {
   const { env, dir } = fixture(t);
+  seedKotlinOverlay(dir);
   const gradle = path.join(dir, 'android/app/build.gradle');
   mkdirSync(path.dirname(gradle), { recursive: true });
   writeFileSync(gradle, "apply plugin: 'com.android.application'\n");
@@ -1231,15 +1233,186 @@ test('actual Expo Android mod compiler applies the plugin and removes QA output 
     projectRoot: dir, platforms: ['android'],
   }));
   await run(env);
+  assertKotlinOverlay(dir);
   assert.match(readFileSync(gradle, 'utf8'), /localAcceptance/);
   assert.ok(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')));
   const pinnedWrapper = readFileSync(wrapper, 'utf8');
   assert.match(pinnedWrapper, /gradle-9\.9\.2-bin\.zip/);
   assert.match(pinnedWrapper, /distributionSha256Sum=971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b/);
   await run({});
+  assertKotlinOverlay(dir);
   assert.equal(readFileSync(wrapper, 'utf8'), pinnedWrapper);
   assert.equal(readFileSync(gradle, 'utf8'), "apply plugin: 'com.android.application'\n");
   assert.equal(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')), false);
+});
+
+function seedKotlinOverlay(dir) {
+  const manifest = JSON.parse(readFileSync(new URL('./fixtures/android-kotlin-declarations/manifest.json', import.meta.url)));
+  const put = (relative, bytes) => {
+    const target = path.join(dir, relative);
+    mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, bytes);
+  };
+  put('package-lock.json', JSON.stringify({ lockfileVersion: 3, packages: Object.fromEntries(
+    Object.entries(manifest.packages).map(([name, row]) => ['node_modules/' + name, row])) }));
+  for (const [name, row] of Object.entries(manifest.packages))
+    put('node_modules/' + name + '/package.json', JSON.stringify({ name, version: row.version }));
+  for (const row of manifest.targets)
+    put('node_modules/' + row.package + '/' + row.relative,
+      readFileSync(new URL('./fixtures/android-kotlin-declarations/' + row.fixture, import.meta.url)));
+  return manifest;
+}
+function assertKotlinOverlay(dir) {
+  for (const row of kotlinOverlay.policy.targets)
+    assert.equal(digest(readFileSync(path.join(dir, 'node_modules', row.package, row.relative))), row.afterSha256);
+}
+function overlayFixture(t) {
+  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-kotlin-overlay-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const manifest = seedKotlinOverlay(dir);
+  return { dir, manifest, files: manifest.targets.map(row => path.join(dir, 'node_modules', row.package, row.relative)) };
+}
+function assertNoOverlayTemps(dir) {
+  for (const row of kotlinOverlay.policy.targets)
+    assert.deepEqual(readdirSync(path.dirname(path.join(dir, 'node_modules', row.package, row.relative)))
+      .filter(name => name.startsWith('.caseops-kotlin-')), []);
+}
+test('KOTLIN-OVERLAY-01 exact supplier declarations project once and remain idempotent', (t) => {
+  const { dir, manifest, files } = overlayFixture(t);
+  assert.deepEqual(kotlinOverlay.policy, manifest);
+  const untouched = path.join(dir, 'node_modules/expo-modules-core/runtime-and-notices.txt');
+  writeFileSync(untouched, 'UNCHANGED_RUNTIME_AND_NOTICES');
+  const result = kotlinOverlay.applyKotlinDeclarations(dir);
+  assert.equal(result.changed, 5); assert.equal(result.records.length, 5);
+  assert.equal(result.kotlinVersion, '2.4.21'); assertKotlinOverlay(dir);
+  for (let i = 0; i < files.length; i++) {
+    const source = readFileSync(new URL('./fixtures/android-kotlin-declarations/' + manifest.targets[i].fixture, import.meta.url), 'utf8');
+    assert.equal(readFileSync(files[i], 'utf8'), source.replace(manifest.targets[i].from, manifest.targets[i].to));
+  }
+  const frames = files.map(file => lstatSync(file, { bigint: true }).ino);
+  assert.equal(kotlinOverlay.applyKotlinDeclarations(dir).changed, 0);
+  assert.deepEqual(files.map(file => lstatSync(file, { bigint: true }).ino), frames);
+  assert.equal(readFileSync(untouched, 'utf8'), 'UNCHANGED_RUNTIME_AND_NOTICES'); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-02 unknown final input rejects before any vendor replacement', (t) => {
+  const { dir, files } = overlayFixture(t);
+  appendFileSync(files.at(-1), '\n// unknown supplier change\n');
+  const before = files.map(file => readFileSync(file));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_UNKNOWN_PREIMAGE/);
+  assert.deepEqual(files.map(file => readFileSync(file)), before); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-03 wrong locked integrity or installed version rejects before writes', (t) => {
+  const { dir, files } = overlayFixture(t), lockPath = path.join(dir, 'package-lock.json');
+  const initial = readFileSync(lockPath), lock = JSON.parse(initial);
+  lock.packages['node_modules/expo-modules-core'].integrity = 'sha512-UNKNOWN';
+  writeFileSync(lockPath, JSON.stringify(lock));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_PINNED_LOCK/);
+  writeFileSync(lockPath, initial);
+  writeFileSync(path.join(dir, 'node_modules/expo-modules-core/package.json'), JSON.stringify({ name: 'expo-modules-core', version: '999.0.0' }));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_PINNED_PACKAGE/);
+  for (let i = 0; i < files.length; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-04 symbolic and multiply linked supplier files are rejected', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), retained = target + '.original';
+  renameSync(target, retained); symlinkSync(retained, target);
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir));
+  fs.unlinkSync(target); fs.linkSync(retained, target);
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_OWNED_REGULAR/); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-05 replacing a pathname after descriptor read cannot supply output bytes', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), retained = target + '.original';
+  const originalOpen = fs.openSync, originalRead = fs.readFileSync; let selected, replaced = false;
+  fs.openSync = function (file, ...args) { const fd = originalOpen(file, ...args); if (file === target) selected = fd; return fd; };
+  fs.readFileSync = function (file, ...args) {
+    const bytes = originalRead(file, ...args);
+    if (file === selected && !replaced) { replaced = true; renameSync(target, retained); writeFileSync(target, 'UNREVIEWED_REPLACEMENT'); }
+    return bytes;
+  };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(PATH|DESCRIPTOR)_CHANGED/); }
+  finally { fs.openSync = originalOpen; fs.readFileSync = originalRead; }
+  assert.equal(replaced, true);
+  for (let i = 0; i < files.length - 1; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-06 a changed held input during private staging refuses all replacements', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), originalWrite = fs.writeSync; let changed = false;
+  fs.writeSync = function (...args) {
+    if (!changed) { changed = true; appendFileSync(target, '\nUNEXPECTED_CHANGE\n'); }
+    return originalWrite(...args);
+  };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(PATH|DESCRIPTOR)_CHANGED/); }
+  finally { fs.writeSync = originalWrite; }
+  assert.equal(changed, true);
+  for (let i = 0; i < files.length - 1; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-07 original staging errors retain identity and close every descriptor', (t) => {
+  const { dir } = overlayFixture(t), sentinel = new Error('ORIGINAL_PRIVATE_STAGE_FAILURE');
+  const originalWrite = fs.writeSync, originalOpen = fs.openSync, descriptors = [];
+  fs.openSync = function (...args) { const fd = originalOpen(...args); descriptors.push(fd); return fd; };
+  fs.writeSync = () => { throw sentinel; };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), error => error === sentinel); }
+  finally { fs.writeSync = originalWrite; fs.openSync = originalOpen; }
+  assert.ok(descriptors.length >= 11);
+  for (const fd of descriptors) assert.throws(() => fstatSync(fd), { code: 'EBADF' }); assertNoOverlayTemps(dir);
+});
+
+test('KOTLIN-OVERLAY-08 real Gradle regression projects retain catalog and Expo DSL requests', (t) => {
+  const { dir, manifest, files } = overlayFixture(t);
+  const { projectFiles } = require(path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations/project-files.cjs'));
+  const before = projectFiles(files.map(file => readFileSync(file)));
+  assert.match(before.get('gradle/libs.versions.toml'), /kotlin = "2\.2\.0"/);
+  for (const name of ['expo-autolinking', 'expo-core', 'expo-launcher'])
+    assert.match(before.get(name + '/build.gradle.kts'), /version "2\.2\.21"/);
+  assert.match(before.get('serialization-child/build.gradle.kts'), /serialization"\) version "1\.9\.24"/);
+  kotlinOverlay.applyKotlinDeclarations(dir);
+  const after = projectFiles(files.map(file => readFileSync(file)));
+  assert.match(after.get('gradle/libs.versions.toml'), /kotlin = "2\.4\.21"/);
+  for (const name of ['expo-autolinking', 'expo-core', 'expo-launcher', 'serialization-child'])
+    assert.match(after.get(name + '/build.gradle.kts'), /version "2\.4\.21"/);
+  assert.equal(after.size, 9);
+  assert.throws(() => projectFiles(manifest.targets.map(() => Buffer.from('UNKNOWN'))), /NATIVE_KOTLIN_FIXTURE_UNKNOWN_SUPPLIER/);
+});
+
+test('KOTLIN-OVERLAY-09 Windows named dev0 keeps full descriptor and nonzero device checks', (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const helperPath = require.resolve(path.join(app, 'plugins/kotlin-declaration-overlay.cjs'));
+  const priorModule = require.cache[helperPath];
+  const originalLstat = fs.lstatSync, originalFstat = fs.fstatSync, originalOpen = fs.openSync;
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    delete require.cache[helperPath];
+    const windowsHelper = require(helperPath);
+    for (const scenario of ['named-zero', 'named-nonzero-drift', 'fd-dev-drift']) {
+      const { dir, files } = overlayFixture(t), selected = files.at(-1);
+      let selectedFd, observations = 0;
+      fs.openSync = function (file, ...args) {
+        const fd = originalOpen(file, ...args); if (file === selected) selectedFd = fd; return fd;
+      };
+      fs.lstatSync = function (file, ...args) {
+        const value = originalLstat(file, ...args);
+        return file === selected ? new Proxy(value, { get(target, key) {
+          return key === 'dev' ? scenario === 'named-nonzero-drift' ? value.dev + 1n : 0n : Reflect.get(target, key);
+        } }) : value;
+      };
+      fs.fstatSync = function (fd, ...args) {
+        const value = originalFstat(fd, ...args);
+        return fd === selectedFd && ++observations > 1 && scenario === 'fd-dev-drift'
+          ? new Proxy(value, { get: (target, key) => key === 'dev' ? value.dev + 1n : Reflect.get(target, key) }) : value;
+      };
+      try {
+        if (scenario === 'named-zero') {
+          assert.equal(windowsHelper.applyKotlinDeclarations(dir).changed, 5);
+          assertKotlinOverlay(dir);
+        } else assert.throws(() => windowsHelper.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(NAMED|PATH|DESCRIPTOR)/, scenario);
+      } finally { fs.lstatSync = originalLstat; fs.fstatSync = originalFstat; fs.openSync = originalOpen; }
+      assertNoOverlayTemps(dir);
+    }
+  } finally {
+    fs.lstatSync = originalLstat; fs.fstatSync = originalFstat; fs.openSync = originalOpen;
+    Object.defineProperty(process, 'platform', platform);
+    require.cache[helperPath] = priorModule;
+  }
 });
 
 test('installed RN and Expo use non-debug dev=false bundling and release launcher stubs', () => {

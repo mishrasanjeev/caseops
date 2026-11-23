@@ -109,6 +109,32 @@ body successes and failed postflight observation bound remain retained as an
 incomplete invocation. These controls use API-shaped Gradle doubles; they are
 not actual Android dependency resolution or native app acceptance.
 
+The first actual 9.9.2 online preparation passed the marked transport and
+patched-JDK checks, then failed in React Native's Kotlin plugin request.
+Gradle compares the original declared request even after `useVersion` changes
+the displayed version: the installed catalog still declared 2.2.0 while the
+classpath contained 2.4.21. The failed invocation and its cleanup are retained.
+
+The next candidate adds an Android prebuild declaration overlay for exactly
+five integrity-pinned vendor files: React Native's Kotlin catalog, the Expo
+autolinking root and serialization plugin declarations, and the Expo launcher
+and modules-core plugin declarations. All preimages match the official npm
+archives. The overlay admits all inputs before replacing any vendor file,
+transfers descriptor-verified buffers through private staging, accepts the
+exact known result on replay, and refuses unknown inputs. Runtime sources,
+package manifests and bundled notices are unchanged. The same Android mod
+applies this projection to production and local QA. Actual Gradle regression,
+complete repaired resolution and native acceptance remain required; this
+overlay does not bypass Gradle's version tracker.
+
+The complete seven affected and adjacent Node modules passed 728 cases with
+two existing Windows-only skips (730 total). All nine new overlay controls
+passed, including a simulated Windows named-device-zero exception that still
+checks the full descriptor device and nonzero named devices. This simulation
+is not actual Windows acceptance. The earlier environment-incomplete wrapper
+replay and the device-comparison regression's red result remain retained.
+The actual Expo mod compiler replay covers both QA and default cleanup.
+
 Remaining acceptance: resolve the repaired graph on the actual candidate,
 close every supplier and notice
 inventory, rebuild the release APK/AAB, execute the complete 83-case/249-phase

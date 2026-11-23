@@ -4,7 +4,7 @@ import path from 'node:path';
 import { verifiedFile } from '../../apps/mobile/e2e/evidence.mjs';
 import { androidLocalProfile } from '../../apps/mobile/e2e/android-local-profile.mjs';
 
-export const OBSERVER_SOURCE_INPUTS = Object.freeze(['scripts/mobile/android-qa-observer.mjs','scripts/mobile/android-observer-manifest.py','apps/mobile/plugins/qa-observer.cjs','apps/mobile/plugins/with-local-acceptance.cjs','apps/mobile/qa-observer/QaPrivacyReader.java','apps/mobile/qa-observer/QaPrivacyService.java','apps/mobile/qa-observer/QaLifecycleWitness.java','apps/mobile/qa-observer/sidecar/AndroidManifest.xml','apps/mobile/qa-observer/sidecar/ObserverInstrumentation.java']);
+export const OBSERVER_SOURCE_INPUTS = Object.freeze(['scripts/mobile/android-qa-observer.mjs','scripts/mobile/android-observer-manifest.py','apps/mobile/plugins/qa-observer.cjs','apps/mobile/plugins/with-local-acceptance.cjs','apps/mobile/plugins/kotlin-declaration-overlay.cjs','apps/mobile/qa-observer/QaPrivacyReader.java','apps/mobile/qa-observer/QaPrivacyService.java','apps/mobile/qa-observer/QaLifecycleWitness.java','apps/mobile/qa-observer/sidecar/AndroidManifest.xml','apps/mobile/qa-observer/sidecar/ObserverInstrumentation.java']);
 export const QA_APP = 'ai.caseops.mobile.dev.localacceptance';
 export const QA_OBSERVER_APP = 'ai.caseops.qa.privacyobserver';
 export const QA_OBSERVER_DOMAIN = 'qa-main-preserved-observer-running';

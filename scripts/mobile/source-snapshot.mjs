@@ -88,6 +88,7 @@ export function sourceSnapshot(root = fileURLToPath(new URL('../../', import.met
     'scripts/mobile/build-android-local-acceptance.sh',
     'scripts/mobile/android-host-launch.mjs', 'scripts/mobile/android-no-paid.gradle',
     'scripts/mobile/fixtures/android-dependency-security/controls.groovy',
+    'scripts/mobile/fixtures/android-kotlin-declarations',
     'scripts/mobile/host-platform-trust.py', 'scripts/mobile/fixtures/host-platform-trust/HostPlatformTrust.java',
     'scripts/mobile/generate-app-icons.mjs',
     'scripts/mobile/build-ios-simulator-acceptance.sh', 'scripts/mobile/source-snapshot.mjs',
