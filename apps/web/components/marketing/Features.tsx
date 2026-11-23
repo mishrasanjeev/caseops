@@ -4,9 +4,12 @@ import {
   FileSignature,
   Gavel,
   IndianRupee,
+  Landmark,
   ListTodo,
   MailCheck,
+  MessageSquare,
   Scale,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -38,6 +41,11 @@ const features = [
     body: "Hybrid retrieval across available statutes, judgments and internal precedents. Inspect retrieved sources and generated answers; source links do not guarantee correctness or complete coverage.",
   },
   {
+    icon: MessageSquare,
+    title: "Ask this Workspace",
+    body: "Ask factual questions about the matters, IP records and documents you are permitted to see. Answers cite the exact record, and opening a citation rechecks access and is audited. Off until a workspace owner enables it; legal questions go to Research.",
+  },
+  {
     icon: FileSignature,
     title: "Drafting Studio",
     body: "Generate first drafts from templates and matter context, with inline citations, version history, and reviewer approval.",
@@ -55,17 +63,27 @@ const features = [
   {
     icon: Scale,
     title: "Contract & Playbooks",
-    body: "Clause extraction, playbook comparison, obligation tracking, and parsed review of DOCX tracked changes.",
+    body: "Clause extraction, playbook comparison and obligation tracking. The redline viewer reads Word's own tracked changes, counts a moved passage once, and warns when a file holds changes it cannot display.",
+  },
+  {
+    icon: Landmark,
+    title: "IP Workspace",
+    body: "Trade mark and patent docket, portfolio views, renewals with recorded client instructions, journal watch, Madrid, recordals, controlled documents and client reports. Registry data is entered or imported; there is no live IP India or WIPO feed. Added to a plan on request.",
   },
   {
     icon: Users,
     title: "Outside Counsel & Spend",
-    body: "Assign, evaluate, and budget outside counsel with matter-scoped spend, realization, panel status, and audited invoice review.",
+    body: "Keep a counsel panel, assign counsel to a matter with a budget ceiling, and log and review spend against it.",
+  },
+  {
+    icon: Share2,
+    title: "Client & Counsel Portals",
+    body: "Clients see only the matters and IP records you share, reply, submit KYC and send instructions. Outside counsel see assigned matters and submit work product, time and invoices for your review.",
   },
   {
     icon: ListTodo,
     title: "Case Tracking & Ops",
-    body: "Refresh eligible and explicitly tracked cases from 6 PM IST, surface skipped/blocked/provider-disabled states, and resume bounded backlog fairly by tenant.",
+    body: "Court sync for the Supreme Court and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts suggests dates for lawyer review. eCourts tracking refreshes eligible cases from 6 PM IST with skipped and blocked states visible.",
   },
   {
     icon: IndianRupee,
@@ -75,7 +93,7 @@ const features = [
   {
     icon: ShieldCheck,
     title: "Trust Plane",
-    body: "Tenant isolation, matter-level access controls, audit on material actions, and agent grant readiness. Autonomous scoped-agent execution is planned, not live.",
+    body: "Tenant isolation, matter-level access controls and ethical walls, teams with optional team-scoped matter visibility, and audit on material actions. Autonomous scoped-agent execution is planned, not live.",
   },
 ] as const;
 

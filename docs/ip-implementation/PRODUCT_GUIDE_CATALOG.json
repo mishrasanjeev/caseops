@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.09.07.1",
-  "display_version": "v5",
+  "content_version": "2026.11.22.1",
+  "display_version": "v6",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-09-07",
+  "updated_on": "2026-11-22",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",

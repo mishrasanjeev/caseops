@@ -3436,6 +3436,53 @@ export const notificationPreferenceResponse = z.object({
   provider_configured: z.record(z.string(), z.boolean()),
 });
 
+export const phoneChannelSchema = z.enum(["sms", "whatsapp"]);
+
+export const phoneChannelConsentRecord = z.object({
+  channel: phoneChannelSchema,
+  opted_in: z.boolean(),
+  consent_at: z.string().nullable().optional(),
+  opted_out_at: z.string().nullable().optional(),
+  opt_out_source: z.string().nullable().optional(),
+  tenant_enabled: z.boolean(),
+  provider_ready: z.boolean(),
+  deliverable: z.boolean(),
+  blocked_reason: z.string().nullable().optional(),
+});
+
+export const phoneContactStatusResponse = z.object({
+  phone_masked: z.string().nullable().optional(),
+  verified: z.boolean(),
+  verified_at: z.string().nullable().optional(),
+  verification_pending: z.boolean(),
+  verification_channel: phoneChannelSchema.nullable().optional(),
+  verification_expires_at: z.string().nullable().optional(),
+  consent_text_version: z.string(),
+  channels: z.object({
+    sms: phoneChannelConsentRecord,
+    whatsapp: phoneChannelConsentRecord,
+  }),
+});
+
+export const phoneChannelAdminRecord = z.object({
+  channel: phoneChannelSchema,
+  provider: z.enum(["msg91", "meta-whatsapp"]),
+  tenant_enabled: z.boolean(),
+  provider_ready: z.boolean(),
+  kill_switch_active: z.boolean(),
+  transport: z.enum(["mock", "live"]),
+  missing_configuration: z.array(z.string()),
+  not_ready_reason: z.string().nullable().optional(),
+  opted_in_members: z.number().int().min(0),
+});
+
+export const phoneChannelAdminResponse = z.object({
+  channels: z.object({
+    sms: phoneChannelAdminRecord,
+    whatsapp: phoneChannelAdminRecord,
+  }),
+});
+
 export const microsoft365TenantConfigurationResponse = z.object({
   provider: z.literal("microsoft_365").default("microsoft_365"),
   configured: z.boolean(),
@@ -3896,6 +3943,9 @@ export type InboundEmailEventListResponse =
   z.infer<typeof inboundEmailEventListResponse>;
 export type NotificationPreferenceResponse =
   z.infer<typeof notificationPreferenceResponse>;
+export type PhoneChannel = z.infer<typeof phoneChannelSchema>;
+export type PhoneContactStatusResponse = z.infer<typeof phoneContactStatusResponse>;
+export type PhoneChannelAdminResponse = z.infer<typeof phoneChannelAdminResponse>;
 export type Microsoft365TenantConfigurationResponse = z.infer<
   typeof microsoft365TenantConfigurationResponse
 >;
@@ -4081,6 +4131,8 @@ export const billingPlanRecord = z.object({
   trial_eligible: z.boolean(),
   prices: z.array(billingPriceRecord),
   entitlements: z.record(z.string(), z.unknown()),
+  // Base-plan segments an add-on is sold on; null means every plan.
+  eligible_segments: z.array(z.string()).nullable().optional(),
 });
 
 export const billingPlansResponse = z.object({

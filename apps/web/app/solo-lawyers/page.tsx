@@ -183,13 +183,13 @@ export default function SoloLawyersPage() {
           tone="brand"
           eyebrow="Case diary + hearings"
           title="Morning opens with the day already compiled."
-          description="Sign in. See today's listings as soon as they're imported into your matter record. One-click hearing pack for the matters you are arguing — chronology and last order already pinned. The bench-name resolver links each scheduled judge to their profile (Supreme Court + Delhi HC live; other High Courts as their judge data lands)."
+          description="Sign in. See the week's hearings from dates you enter, court sync and eCourts case tracking. Generate a hearing pack for the matters you are arguing, with chronology and last order from the matter file; it stays marked review required until you sign it off. Bench names link to judge profiles where judge data is available."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={Gavel}
-              title="Cause-list import — manual today, automated incrementally"
-              body="Review imported cause-list entries against their current court source. Bench names can resolve to mapped judge profiles where identities and coverage are available. Automated court adapters remain subject to lawful source access and readiness evidence."
+              title="Court sync and case tracking"
+              body="Court sync covers the Supreme Court of India and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts; suggested dates arrive with their source for you to accept or reject. Other courts use eCourts tracking through a paid provider within your plan's budget, or dates you enter."
             />
             <PitchCard
               icon={Layers}
@@ -199,7 +199,7 @@ export default function SoloLawyersPage() {
             <PitchCard
               icon={Smartphone}
               title="iPad-ready in court"
-              body="Responsive work areas support smaller screens. Check the workflows and controls you need during a pilot; confirm destructive actions before proceeding."
+              body="Every page works in a phone or tablet browser. A native iOS and Android app is a development candidate, not yet in the App Store or Google Play. Check the workflows you need during a pilot."
             />
           </div>
         </Slide>
@@ -300,8 +300,8 @@ export default function SoloLawyersPage() {
             />
             <PitchCard
               icon={Briefcase}
-              title="Tenant-private annotations"
-              body="Flag or shortlist an authority for your matter. Annotations travel with the matter, not you."
+              title="Workspace-private notes"
+              body="Save an authority to your research notebook, add a note or flag, or freeze a result set as a report. Saved research stays private to your workspace."
             />
             <PitchCard
               icon={BookOpenText}
@@ -325,13 +325,13 @@ export default function SoloLawyersPage() {
                 inverse
                 icon={IndianRupee}
                 title="Time → invoice → paid, without re-keying"
-                body="Log time from the matter. Draft the invoice. Send. Get paid. Every state change on the audit trail."
+                body="Log time from the matter, draft and issue the invoice, then record payments against it. Every state change is on the audit trail."
               />
               <ReviewRow
                 inverse
                 icon={Wallet}
                 title="India GST on the line item"
-                body="GST on the invoice row. Monthly report exports to the format your accountant already uses."
+                body="Firm and client GST fields, SAC/HSN, the CGST/SGST/IGST split and TDS adjustments on a server-rendered invoice PDF."
               />
               <ReviewRow
                 inverse

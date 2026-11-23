@@ -8,17 +8,21 @@ import { siteConfig } from "@/lib/site";
 
 const body = `# CaseOps - Indian legal operating system
 
-> CaseOps is a matter-native legal operating system for Indian law firms and corporate legal teams. It unifies intake and optional conflict review, matter management, notices and reply deadlines, drafting, hearing preparation, tracked case refresh, court-order compliance review, cause-list PDFs, contracts, outside counsel, and India-ready matter billing into a single citation-grounded workspace.
+> CaseOps is a matter-native legal operating system for Indian law firms and corporate legal teams. It unifies intake and optional conflict review, matter management, notices and reply deadlines, drafting, hearing preparation, court sync and tracked case refresh, court-order compliance review, cause-list PDFs, contracts and redlines, an IP workspace for trade marks and patents, client and outside-counsel portals, outside counsel, and India-ready matter billing into a single citation-grounded workspace.
 
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
 - Legal matter management checklist: ${siteConfig.url}/resources/legal-matter-management-india
+- For law firms: ${siteConfig.url}/law-firms
+- For general counsels: ${siteConfig.url}/general-counsels
+- For solo lawyers: ${siteConfig.url}/solo-lawyers
+- Pricing: ${siteConfig.url}/pricing
 - Tagline: ${siteConfig.tagline}
 - Product owner: ${siteConfig.ownership.legalOwner}
 - Inventor/Owner: ${siteConfig.ownership.inventorOwner}
 - Primary jurisdictions: Supreme Court of India, High Courts, lower courts, tribunals, and forums where lawful source access and source-quality proof exist
 - Built around Indian statute names (BNS, BNSS, BSA, CrPC, CPC) - not retrofitted from a US product
-- Grounding: every substantive legal answer is backed by a citation from an indexed authority or source document; no fabricated case law
+- Grounding: substantive AI work cites indexed authorities or source documents and is marked for lawyer review; a cited authority can still be wrong or not support the point, so verify it before use
 
 ## What the product does
 
@@ -36,12 +40,20 @@ const body = `# CaseOps - Indian legal operating system
 - **Trademark oppositions**: distinct application/opposition identifiers, applicant and opponent TM-O work, Rules 45-47 affidavit packages, authorized deadline replacement, shared hearing preparation, sourced orders, compliance directions, and order-linked appeal records
 - **IP and Matter linkage**: effective-dated operational, litigation, advisory, appeal, enforcement, billing, and other relationships; side-by-side independent lifecycle state; access-mismatch warnings; and accessible IP events referenced in Matter timelines without copied activity
 - **Outside counsel**: panel profiles, matter assignments, budgets/fee arrangements, spend logging, and payment state where supported
+- **IP workspace**: trade mark and patent docket, portfolio list/grid/family/deadline-tracker views, team deadline control, renewals with recorded client instructions, journal watch with manual journal intake, Madrid international registrations, post-registration recordals, foreign associates, controlled IP documents with versioning and retirement, and client reporting; added to a plan on request
+- **Contract redline**: reads Word's own tracked changes in one .docx (insertions, deletions, moves counted once, formatting) by author, and warns when the file holds tracked changes it cannot display; accept or reject changes in Word
+- **Teams**: teams, departments and practice areas with team leads; optional team-scoped matter visibility (owners always see every matter); the lead flag is recorded and audited but grants no extra permissions yet
+- **Workspace assistant**: factual answers about permitted matters, IP records and documents with record-level citations; opening a citation rechecks access and source version and is audited; off until a workspace owner enables it; legal questions are routed to Research
+- **Portals**: emailed 30-minute sign-in links; clients see only shared matters and IP records and can reply, submit KYC and send instructions; outside counsel see assigned matters and submit work product, time and invoices
+- **Court sync**: Supreme Court of India and the Delhi, Bombay, Karnataka, Madras and Telangana High Courts; suggested dates arrive with their source for lawyer acceptance; other courts use eCourts case tracking or manual entry
+- **Mobile app**: native iOS and Android app is a development candidate, not yet in the App Store or Google Play; the web app works in phone and tablet browsers
 - **Matter billing**: law-firm billing profiles, rates, fixed fees, milestones, expenses, retainers/advances, firm/client GST fields, place of supply, SAC/HSN/service classification, CGST/SGST/IGST split, TDS adjustments, amount paid/outstanding, and server-rendered invoice PDFs
 - **Access recovery**: /sign-in links to /account/forgot-password for anti-enumeration reset requests; reset completion uses single-use 60-minute links and never emails raw passwords
 
 ## Safety limits
 
 - CaseOps does not bypass captcha, login, or session-gated court sources.
+- There is no live IP India or WIPO feed: registry data is entered or imported, and journal watch compares journals the team records.
 - CaseOps does not make unapproved external provider calls.
 - Pine Labs production payments are disabled until UAT evidence and founder go/no-go are complete.
 - OIDC/SAML SSO, SCIM, private enterprise deployment, and autonomous scoped-agent execution are planned/readiness-only, not live.
@@ -53,7 +65,6 @@ const body = `# CaseOps - Indian legal operating system
 ## Contact
 
 - ${siteConfig.ownership.emails[0]}
-- ${siteConfig.ownership.emails[1]}
 - Sign-in / try the product: ${siteConfig.url}/sign-in
 - Forgot password: ${siteConfig.url}/account/forgot-password
 `;

@@ -92,4 +92,46 @@ describe("PricingPage", () => {
     });
     expect(screen.getByRole("status")).toHaveTextContent(/request saved/i);
   });
+
+  it("shows the IP workspace add-on with its price and Firm/GC rule, and requests it", async () => {
+    const user = userEvent.setup();
+    render(<PricingPage />);
+
+    const solo = within(await screen.findByTestId("addon-addon_ip_workspace"));
+    expect(solo.getByRole("heading", { name: "IP workspace" })).toBeInTheDocument();
+    expect(solo.getByText(/Trademark, patent and design dockets/)).toBeInTheDocument();
+    expect(solo.getByText("₹9,999")).toBeInTheDocument();
+    expect(solo.getByText("per month + GST")).toBeInTheDocument();
+    // Annual is ten months of the monthly price.
+    expect(solo.getByText("Annual ₹99,990, saves ₹19,998")).toBeInTheDocument();
+    expect(solo.getByText("Firm and GC plans only")).toBeInTheDocument();
+    // Never offered where the API would refuse it.
+    expect(solo.getByText("Not available on Solo plans.")).toBeInTheDocument();
+    expect(solo.queryByRole("button", { name: "Request add-on" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /law firms/i }));
+    const firm = within(screen.getByTestId("addon-addon_ip_workspace"));
+    expect(firm.queryByText("Not available on Solo plans.")).not.toBeInTheDocument();
+    await user.click(firm.getByRole("button", { name: "Request add-on" }));
+
+    await user.type(screen.getByLabelText("Full name"), "Partner One");
+    await user.type(screen.getByLabelText("Work email"), "partner@example.com");
+    await user.selectOptions(screen.getByLabelText("Role"), "general_counsel");
+    await user.click(screen.getByRole("button", { name: "Request a conversation" }));
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === "/api/demo-request")).toBe(true),
+    );
+    const [, init] = fetchMock.mock.calls.find(([input]) => String(input) === "/api/demo-request")!;
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      contact_email: "partner@example.com",
+      selected_plan: "addon_ip_workspace",
+      segment: "firm",
+      intent: "pricing",
+    });
+
+    await user.click(screen.getByRole("button", { name: /general counsel/i }));
+    const gc = within(screen.getByTestId("addon-addon_ip_workspace"));
+    expect(gc.getByRole("button", { name: "Request add-on" })).toBeInTheDocument();
+  });
 });

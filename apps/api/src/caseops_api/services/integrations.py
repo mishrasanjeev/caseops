@@ -246,32 +246,17 @@ def _max_drive_times(
 
 
 def _sms_missing() -> list[str]:
-    settings = get_settings()
-    if settings.twilio_enabled:
-        return _config_missing(
-            [
-                ("TWILIO_ACCOUNT_SID", settings.twilio_account_sid),
-                ("TWILIO_AUTH_TOKEN", settings.twilio_auth_token),
-                ("TWILIO_FROM_NUMBER", settings.twilio_from_number),
-            ]
-        )
-    return _config_missing(
-        [
-            ("TWILIO_ENABLED_OR_MSG91_AUTH_KEY", settings.msg91_auth_key),
-            ("MSG91_SENDER_ID", settings.msg91_sender_id),
-        ]
-    )
+    from caseops_api.services.phone_providers import phone_channel_readiness
+
+    return [name.removeprefix("CASEOPS_") for name in phone_channel_readiness("sms").missing]
 
 
 def _whatsapp_missing() -> list[str]:
-    settings = get_settings()
-    return _config_missing(
-        [
-            ("WHATSAPP_ACCESS_TOKEN", settings.whatsapp_access_token),
-            ("WHATSAPP_PHONE_NUMBER_ID", settings.whatsapp_phone_number_id),
-            ("WHATSAPP_TEMPLATE_NAME", settings.whatsapp_template_name),
-        ]
-    )
+    from caseops_api.services.phone_providers import phone_channel_readiness
+
+    return [
+        name.removeprefix("CASEOPS_") for name in phone_channel_readiness("whatsapp").missing
+    ]
 
 
 def _pine_labs_required_config() -> list[str]:
@@ -712,17 +697,21 @@ def connector_registry(
             key="sms",
             name="SMS",
             category="messaging",
-            provider="twilio_or_msg91",
-            enabled=settings.twilio_enabled and not sms_missing,
+            provider="msg91",
+            enabled=settings.msg91_enabled and not sms_missing,
             configured=not sms_missing,
-            blocked=bool(sms_missing) or not settings.twilio_enabled,
+            blocked=bool(sms_missing) or not settings.msg91_enabled,
             webhook_status="not_enabled",
             required_config_names=[
-                "TWILIO_ACCOUNT_SID",
-                "TWILIO_AUTH_TOKEN",
-                "TWILIO_FROM_NUMBER",
+                "MSG91_ENABLED",
                 "MSG91_AUTH_KEY",
                 "MSG91_SENDER_ID",
+                "MSG91_HEARING_TEMPLATE_ID",
+                "MSG91_HEARING_DLT_TEMPLATE_ID",
+                "MSG91_ALERT_TEMPLATE_ID",
+                "MSG91_ALERT_DLT_TEMPLATE_ID",
+                "MSG91_OTP_TEMPLATE_ID",
+                "MSG91_OTP_DLT_TEMPLATE_ID",
             ],
             runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
             internal_cost_label="SMS message cost",
@@ -737,11 +726,15 @@ def connector_registry(
             enabled=settings.whatsapp_enabled and not whatsapp_missing,
             configured=not whatsapp_missing,
             blocked=bool(whatsapp_missing) or not settings.whatsapp_enabled,
-            webhook_status="not_enabled",
+            webhook_status="configured" if settings.whatsapp_app_secret else "missing",
             required_config_names=[
+                "WHATSAPP_ENABLED",
                 "WHATSAPP_ACCESS_TOKEN",
                 "WHATSAPP_PHONE_NUMBER_ID",
-                "WHATSAPP_TEMPLATE_NAME",
+                "WHATSAPP_HEARING_TEMPLATE_NAME",
+                "WHATSAPP_ALERT_TEMPLATE_NAME",
+                "WHATSAPP_OTP_TEMPLATE_NAME",
+                "WHATSAPP_APP_SECRET",
             ],
             runbook_link="docs/runbooks/provider-operations-readiness-2026-06-02.md",
             internal_cost_label="WhatsApp conversation cost",

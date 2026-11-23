@@ -19,7 +19,7 @@ vi.mock("sonner", () => ({
 }));
 
 import TenantBillingPage from "@/app/app/admin/billing/page";
-import { mockBillingFetch } from "@/test/billing-fixtures";
+import { currentBilling, jsonResponse, mockBillingFetch } from "@/test/billing-fixtures";
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({
@@ -115,6 +115,79 @@ describe("TenantBillingPage", () => {
         ),
       ).toBe(true),
     );
+  });
+
+  it("shows the IP workspace add-on but does not offer it on a Solo plan", async () => {
+    renderWithQuery(<TenantBillingPage />);
+
+    const panel = within(await screen.findByTestId("ip-workspace-addon"));
+    expect(panel.getByRole("heading", { name: "IP workspace add-on" })).toBeInTheDocument();
+    expect(panel.getByText("Not included")).toBeInTheDocument();
+    expect(panel.getByText("₹9,999 + GST")).toBeInTheDocument();
+    expect(panel.getByText("₹99,990 + GST")).toBeInTheDocument();
+    expect(panel.getByText("Firm and GC plans only")).toBeInTheDocument();
+    expect(panel.getByText("Not available on the Solo Pro plan.")).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: /add ip workspace/i })).not.toBeInTheDocument();
+    const picker = screen.getByLabelText("Add-on");
+    expect(within(picker).queryByRole("option", { name: /IP workspace/ })).not.toBeInTheDocument();
+  });
+
+  it("starts an IP workspace checkout for the chosen term on a Firm plan", async () => {
+    const user = userEvent.setup();
+    const catalogFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/api/billing/current")
+        ? Promise.resolve(jsonResponse({
+            ...currentBilling,
+            subscription: {
+              ...currentBilling.subscription,
+              plan_code: "firm_growth",
+              plan_name: "Firm Growth",
+              segment: "firm",
+            },
+          }))
+        : catalogFetch(input, init),
+    );
+    renderWithQuery(<TenantBillingPage />);
+
+    const panel = within(await screen.findByTestId("ip-workspace-addon"));
+    await user.selectOptions(panel.getByLabelText("Billing"), "month");
+    await user.click(panel.getByRole("button", { name: /add ip workspace/i }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes("/api/billing/add-ons/checkout"),
+        ),
+      ).toBe(true),
+    );
+    const [, init] = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/api/billing/add-ons/checkout"),
+    )!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      add_on_code: "addon_ip_workspace",
+      interval: "month",
+      quantity: 1,
+    });
+  });
+
+  it("shows an active IP workspace without offering a second purchase", async () => {
+    const catalogFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/api/billing/current")
+        ? Promise.resolve(jsonResponse({
+            ...currentBilling,
+            subscription: { ...currentBilling.subscription, segment: "gc", plan_name: "GC Starter" },
+            entitlements: { ip_workspace: true },
+          }))
+        : catalogFetch(input, init),
+    );
+    renderWithQuery(<TenantBillingPage />);
+
+    const panel = within(await screen.findByTestId("ip-workspace-addon"));
+    expect(panel.getByText("Active")).toBeInTheDocument();
+    expect(panel.getByText("The IP workspace is included in this workspace.")).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: /add ip workspace/i })).not.toBeInTheDocument();
   });
 
   it("shows a billing access message for non-admin users", async () => {

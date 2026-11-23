@@ -255,9 +255,62 @@ test.describe("Public landing page and user guide", () => {
     ).toBeVisible();
 
     await page.goto("/guide");
-    await expect(page.getByText("User guide · v5 · 2026", { exact: true })).toBeVisible();
-    await expect(page.locator("main > header")).toContainText(/Updated\s+7 September 2026/);
+    await expect(page.getByText("User guide · v6 · 2026", { exact: true })).toBeVisible();
+    await expect(page.locator("main > header")).toContainText(/Updated\s+22 November 2026/);
   });
+
+  for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} November 22 product claims show their limits`, async ({ page, request }) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const ipCard = page.locator("#product article").filter({
+        has: page.getByRole("heading", { name: "IP Workspace", exact: true }),
+      });
+      await ipCard.scrollIntoViewIfNeeded();
+      await expect(ipCard).toBeVisible();
+      await expect(ipCard).toContainText("there is no live IP India or WIPO feed");
+      await expect(ipCard).toContainText("Added to a plan on request.");
+      await expect(page.locator("#product")).toContainText("opening a citation rechecks access and is audited");
+      await expect(page.locator("#product")).toContainText("Madras and Telangana High Courts");
+      await expect(page.locator("#product")).not.toContainText(/realization|realisation/i);
+
+      await page.goto("/general-counsels", { waitUntil: "domcontentloaded" });
+      const counselCopy = await page.locator("#counsel").innerText();
+      expect(counselCopy).not.toMatch(/realisation|historical outcomes|GC override|MatterPortalGrant|\/portal\/oc/i);
+      await expect(page.locator("#counsel")).toContainText("Budget per assignment");
+
+      await page.goto("/law-firms", { waitUntil: "domcontentloaded" });
+      const lead = page.getByText("does not yet grant extra permissions", { exact: false });
+      await lead.scrollIntoViewIfNeeded();
+      await expect(lead).toBeVisible();
+      await expect(page.locator("#platform")).toContainText("not yet in the App Store or Google Play");
+
+      await page.goto("/guide", { waitUntil: "domcontentloaded" });
+      const availability = page.locator("#documents").getByRole("note").filter({
+        hasText: "IP workspace availability and registry data",
+      });
+      await availability.scrollIntoViewIfNeeded();
+      await expect(availability).toBeVisible();
+      await expect(availability).toContainText("there is no live IP India or WIPO feed");
+      await expect(page.locator("#contracts")).toContainText("It does not compare two separate files");
+      await expect(page.locator("#getting-started")).toContainText("not yet in the App Store or Google Play");
+
+      // /third-party-notices is excluded: it reproduces upstream license texts,
+      // including their authors' addresses, byte for byte.
+      for (const pathname of PUBLIC_SITEMAP_PATHS) {
+        await page.goto(pathname, { waitUntil: "domcontentloaded" });
+        expect(await page.content(), `${pathname} must not publish a personal address`).not.toMatch(/@gmail\.com/i);
+      }
+
+      for (const path of ["/llms.txt", "/llms-full.txt"]) {
+        const body = await (await request.get(path)).text();
+        expect(body, path).not.toMatch(/@gmail\.com/i);
+        expect(body, path).toContain("no live IP India or WIPO");
+        expect(body, path).toContain("not yet in the App Store or Google Play");
+        expect(body, path).not.toMatch(/every substantive legal answer is backed by a citation|no fabricated case law/i);
+      }
+    });
+  }
 
   for (const pathname of PUBLIC_CONTENT_PAGES) {
     test(`${pathname} has no dead internal links or fragments`, async ({

@@ -47,6 +47,7 @@ from caseops_api.services.calendar_projection_safety import (
 from caseops_api.services.calendar_sync import (
     materialize_expired_calendar_upsert_claims,
 )
+from caseops_api.services.phone_providers import PROVIDER_KEY_BY_CHANNEL, PhoneChannelReadiness
 from caseops_api.services.provider_operations import update_provider_operation_state
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -1638,16 +1639,21 @@ def test_configuration_alone_is_not_reported_as_provider_connection(
         sendgrid_api_key="configured-key",
         sendgrid_sender_email="sender@example.test",
         sendgrid_webhook_public_key="",
-        twilio_enabled=True,
-        twilio_account_sid="configured-account",
-        twilio_auth_token="configured-token",
-        twilio_from_number="+10000000000",
-        whatsapp_enabled=True,
-        whatsapp_access_token="configured-token",
-        whatsapp_phone_number_id="configured-phone",
-        whatsapp_template_name="configured-template",
+        whatsapp_app_secret="configured-secret",
     )
     monkeypatch.setattr("caseops_api.services.connector_health.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "caseops_api.services.phone_providers.phone_channel_readiness",
+        lambda channel: PhoneChannelReadiness(
+            channel=channel,
+            provider_key=PROVIDER_KEY_BY_CHANNEL[channel],
+            ready=True,
+            transport="live",
+            kill_switch_active=False,
+            missing=(),
+            reason=None,
+        ),
+    )
     monkeypatch.setattr(
         "caseops_api.services.connector_health.google_workspace_connector_missing_config_names",
         lambda session, context, connector: [],

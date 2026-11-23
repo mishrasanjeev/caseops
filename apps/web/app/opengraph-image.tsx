@@ -67,8 +67,8 @@ export default async function OgImage() {
               maxWidth: 980,
             }}
           >
-            Matters, research, drafting, hearings, contracts, recommendations, and billing —
-            on one citation-grounded workspace.
+            Matters, IP dockets, research, drafting, hearings, contracts and billing — on
+            one citation-grounded workspace.
           </div>
         </div>
 

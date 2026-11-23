@@ -21,6 +21,7 @@ import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
 import { IpDocketPicker } from "@/components/ip/IpDocketPicker";
+import { JournalFeedPanel, feedActive } from "@/components/ip/JournalFeedPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -45,11 +46,13 @@ import {
   createIpWatchProfile,
   decideIpWatchHit,
   fetchIpCoreRecords,
+  fetchIpJournalFeedStatus,
   fetchIpWatchWorkspace,
   fetchIpWorkspaceReadiness,
   ingestIpJournal,
   listCompanyUsers,
   searchIpJournalPublications,
+  updateIpJournalFeedSetting,
   updateIpWatchProfileStatus,
   type IpCoreRecords,
   type IpFeatureReadiness,
@@ -211,6 +214,22 @@ export default function IpJournalWatchPage() {
     queryFn: fetchIpWorkspaceReadiness,
     enabled: canRead,
   });
+  const journalFeed = useQuery({
+    queryKey: ["ip", "watch-journal-feed"],
+    queryFn: fetchIpJournalFeedStatus,
+    enabled: canRead,
+  });
+  const journalFeedSetting = useMutation({
+    mutationFn: (input: { enabled: boolean; expectedVersion: number | null }) => updateIpJournalFeedSetting(input),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["ip", "watch-journal-feed"], result);
+      toast.success(result.setting?.enabled ? "Journal feed turned on for this workspace." : "Journal feed turned off for this workspace.");
+    },
+    onError: (error) => {
+      toast.error(apiErrorMessage(error, "The journal feed setting was not changed."));
+      void journalFeed.refetch();
+    },
+  });
 
   useEffect(() => {
     const hits = data?.hits ?? [];
@@ -271,6 +290,20 @@ export default function IpJournalWatchPage() {
         error={readiness.isError ? readiness.error : null}
         onRetry={() => readiness.refetch()}
         canManage={canManage}
+        feedOn={
+          feedActive(journalFeed.data) &&
+          Boolean(readiness.data?.features.find((item) => item.feature_id === "watch_operations")?.available)
+        }
+      />
+
+      <JournalFeedPanel
+        status={journalFeed.data}
+        loading={journalFeed.isPending}
+        error={journalFeed.isError ? journalFeed.error : null}
+        canManage={canManage}
+        saving={journalFeedSetting.isPending}
+        onRetry={() => void journalFeed.refetch()}
+        onToggle={(enabled, expectedVersion) => journalFeedSetting.mutate({ enabled, expectedVersion })}
       />
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--color-line)] pb-4">
@@ -412,12 +445,14 @@ function WatchReadiness({
   error,
   onRetry,
   canManage,
+  feedOn = false,
 }: {
   feature: IpFeatureReadiness | null;
   loading: boolean;
   error: unknown;
   onRetry: () => void;
   canManage: boolean;
+  feedOn?: boolean;
 }) {
   const reasons: BlockedReason[] = feature
     ? feature.blocked_reasons?.length
@@ -453,7 +488,9 @@ function WatchReadiness({
             <span className="text-[var(--color-mute)]" role="status">Checking availability…</span>
           ) : error ? null : (
             <>
-              <Badge tone="neutral">No journal source connected</Badge>
+              {feedOn
+                ? <Badge tone="success">Public Trade Marks Journal feed on</Badge>
+                : <Badge tone="neutral">No journal source connected</Badge>}
               {categories.map((category) => <Badge key={category} tone="warning">{category}</Badge>)}
             </>
           )}
@@ -466,7 +503,9 @@ function WatchReadiness({
         ) : loading ? null : (
           <>
             <p className="mt-1 break-words text-[var(--color-mute)]">
-              No automated journal source is connected to CaseOps, so scheduled checks never contact a journal. Record each official journal entry through manual intake.
+              {feedOn
+                ? "New issues of the public Trade Marks Journal are downloaded and compared with your active watch profiles automatically. Pages the feed cannot read are listed for review; record those through manual intake."
+                : "No automated journal source is connected to CaseOps, so scheduled checks never contact a journal. Record each official journal entry through manual intake."}
             </p>
             {reasons.length ? (
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[var(--color-mute)]" aria-label="Closed automation gates">
