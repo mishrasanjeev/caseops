@@ -67,6 +67,24 @@ describe("StatuteSectionDetailPage", () => {
     expect(screen.queryByTestId("statute-section-text")).not.toBeInTheDocument();
   });
 
+  it("shows the exact quarantine reason and withholds the section", async () => {
+    const fixture = fixtures["ndps-1985"];
+    fetchStatuteSectionMock.mockResolvedValue({
+      ...fixture,
+      section: {
+        ...fixture.section,
+        verification_status: "quarantined",
+        quarantine_reason: "Credible source conflict.",
+      },
+    });
+    render(withClient(<StatuteSectionDetailPage />));
+
+    const card = await screen.findByTestId("statute-section-text-card");
+    expect(within(card).getByText("Quarantined. The text is withheld. Credible source conflict.")).toBeVisible();
+    expect(within(card).getByText("Verified statutory text unavailable")).toBeVisible();
+    expect(within(card).queryByTestId("statute-section-text")).not.toBeInTheDocument();
+  });
+
   it("renders bare text when present", async () => {
     fetchStatuteSectionMock.mockResolvedValue({
       statute: {

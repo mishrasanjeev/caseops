@@ -81,6 +81,81 @@ def _preview_message(
     return {**payload, "preview_token": preview.json()["preview_token"]}
 
 
+def test_compose_resolves_recorded_case_court_and_active_responsible_lawyer(
+    client: TestClient,
+) -> None:
+    from caseops_api.db.models import User
+    from caseops_api.db.session import get_session_factory
+
+    bootstrap = bootstrap_company(client)
+    headers = {
+        **auth_headers(str(bootstrap["access_token"])),
+        "X-CaseOps-Automated-Test": "no-paid-providers",
+    }
+    matter = client.post("/api/matters", headers=headers, json={
+        "matter_code": "M11-CASE-FIELDS",
+        "title": "Synthetic correspondence matter",
+        "practice_area": "Civil",
+        "forum_level": "high_court",
+        "case_number": "WP(C) 14/2026",
+        "court_name": "Delhi High Court",
+        "responsible_lawyer_membership_id": bootstrap["membership"]["id"],
+    })
+    assert matter.status_code == 200, matter.text
+    original = matter.json()
+    path = f"/api/matters/{original['id']}"
+    message = {
+        "recipient_email": "client@example.com",
+        "subject": "Case {{ case_number }}",
+        "body": "Our responsible lawyer {{advocate_name}} will review {{court_name}}.",
+        "variables": {
+            "case_number": "WRONG-001", "court_name": "Wrong court",
+            "advocate_name": "Wrong lawyer",
+        },
+    }
+    preview = client.post(f"{path}/communications/preview-email", headers=headers, json=message)
+    assert preview.status_code == 200, preview.text
+    approved = preview.json()
+    assert approved["subject"] == "Case WP(C) 14/2026"
+    assert approved["body"] == (
+        "Our responsible lawyer Sanjay Mishra will review Delhi High Court."
+    )
+    assert approved["missing_variables"] == approved["invalid_placeholders"] == []
+    assert approved["preview_token"]
+
+    # The lawyer name is an independently stored source. Changing the name
+    # must invalidate the preview without an artificial Matter version change.
+    with get_session_factory()() as session:
+        lawyer = session.get(User, bootstrap["user"]["id"])
+        lawyer.full_name = "Updated QA Lawyer"
+        session.commit()
+    readback = client.get(path, headers=headers)
+    assert readback.status_code == 200, readback.text
+    assert readback.json()["updated_at"] == original["updated_at"]
+    with patch("caseops_api.services.communications._send_via_sendgrid") as transport:
+        stale = client.post(f"{path}/communications/send-email", headers=headers, json={
+            **message, "preview_token": approved["preview_token"],
+        })
+    transport.assert_not_called()
+    assert stale.status_code == 409, stale.text
+    assert "Email preview expired or changed." in stale.json()["detail"]
+    rerender = client.post(f"{path}/communications/preview-email", headers=headers, json=message)
+    assert rerender.status_code == 200, rerender.text
+    assert rerender.json()["body"] == (
+        "Our responsible lawyer Updated QA Lawyer will review Delhi High Court."
+    )
+
+    # A second, sparse matter cannot be filled from caller overrides.
+    sparse_id = _create_matter(client, headers, "M11-MISSING-CASE-FIELDS")
+    missing = client.post(
+        f"/api/matters/{sparse_id}/communications/preview-email", headers=headers, json=message,
+    )
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["missing_variables"] == ["advocate_name", "case_number", "court_name"]
+    assert missing.json()["preview_token"] is None
+    assert missing.json()["resolved_variables"]["advocate_name"] == ""
+
+
 def test_template_crud_round_trip(client: TestClient) -> None:
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
@@ -135,6 +210,50 @@ def test_template_name_uniqueness_409(client: TestClient) -> None:
     )
     assert dup.status_code == 409
     assert "already exists" in dup.json()["detail"].lower()
+
+
+def test_existing_template_edit_preserves_identity_and_refuses_stale_saves(
+    client: TestClient,
+) -> None:
+    headers = auth_headers(str(bootstrap_company(client)["access_token"]))
+    original = _create_template(client, headers)
+    path = f"/api/admin/email-templates/{original['id']}"
+    named = client.patch(path, headers=headers, json={"description": "Previous purpose."})
+    assert named.status_code == 200, named.text
+    baseline = named.json()
+
+    edited = client.patch(path, headers=headers, json={
+        "expected_updated_at": baseline["updated_at"],
+        "description": None,
+        "subject_template": "Revised hearing update",
+    })
+    assert edited.status_code == 200, edited.text
+    current = edited.json()
+    assert current == {
+        **baseline, "description": None, "subject_template": "Revised hearing update",
+        "updated_at": current["updated_at"],
+    }
+    assert current["updated_at"] != baseline["updated_at"]
+
+    stale = client.patch(path, headers=headers, json={
+        "expected_updated_at": baseline["updated_at"],
+        "body_template": "An older editor must not replace the current template.",
+    })
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["detail"] == (
+        "This template changed after you opened it. Reload it before saving."
+    )
+    persisted = client.get(path, headers=headers)
+    assert persisted.status_code == 200 and persisted.json() == current
+
+    archived = client.delete(path, headers=headers)
+    assert archived.status_code == 200 and archived.json()["is_active"] is False
+    stale_after_archive = client.patch(path, headers=headers, json={
+        "expected_updated_at": current["updated_at"], "subject_template": "Stale after archive",
+    })
+    assert stale_after_archive.status_code == 409, stale_after_archive.text
+    retained = client.get(path, headers=headers)
+    assert retained.status_code == 200 and retained.json() == archived.json()
 
 
 def test_render_endpoint_substitutes_and_reports_missing(

@@ -5,6 +5,7 @@ import {
   getCsrfHeaders,
 } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
+import type { components } from "./openapi-types";
 import {
   type AuthContext,
   type AuthSession,
@@ -1929,6 +1930,8 @@ export type OutsideCounselRecommendation = {
   total_matters_count: number;
   active_matters_count: number;
   approved_spend_minor: number;
+  // Earlier API revisions omitted the currency breakdown during rolling deployment.
+  approved_spend_by_currency?: components["schemas"]["OutsideCounselRecommendationRecord"]["approved_spend_by_currency"];
   evidence: string[];
 };
 
@@ -6185,6 +6188,19 @@ export async function fetchContractWorkspace(contractId: string): Promise<unknow
   return apiRequest<unknown>(`/api/contracts/${contractId}/workspace`);
 }
 
+export type ContractObligationRecord =
+  components["schemas"]["caseops_api__schemas__contracts__ContractObligationRecord"];
+
+export async function createContractObligation(
+  contractId: string,
+  body: components["schemas"]["ContractObligationCreateRequest"],
+): Promise<ContractObligationRecord> {
+  return apiRequest<ContractObligationRecord>(
+    `/api/contracts/${encodeURIComponent(contractId)}/obligations`,
+    { method: "POST", body },
+  );
+}
+
 export async function createContract(input: {
   title: string;
   contractCode: string;
@@ -6308,6 +6324,22 @@ export async function createContractTermSuggestion(input: {
   );
 }
 
+export async function updateContractTermSuggestion(input: {
+  contractId: string;
+  suggestionId: string;
+  expected_updated_at: string;
+  suggested_effective_on?: string | null;
+  suggested_expires_on?: string | null;
+  suggested_renewal_on?: string | null;
+  suggested_duration_months?: number | null;
+}): Promise<ContractTermSuggestionRecord> {
+  const { contractId, suggestionId, ...body } = input;
+  return apiRequest<ContractTermSuggestionRecord>(
+    `/api/contracts/${contractId}/term-suggestions/${suggestionId}`,
+    { method: "PATCH", body },
+  );
+}
+
 export async function acceptContractTermSuggestion(input: {
   contractId: string;
   suggestionId: string;
@@ -6322,10 +6354,11 @@ export async function acceptContractTermSuggestion(input: {
 export async function rejectContractTermSuggestion(input: {
   contractId: string;
   suggestionId: string;
+  expected_updated_at?: string;
 }): Promise<ContractTermSuggestionRecord> {
   return apiRequest<ContractTermSuggestionRecord>(
     `/api/contracts/${input.contractId}/term-suggestions/${input.suggestionId}/reject`,
-    { method: "POST", body: {} },
+    { method: "POST", body: { expected_updated_at: input.expected_updated_at } },
   );
 }
 
@@ -8351,6 +8384,24 @@ export async function createEmailTemplate(input: {
     method: "POST",
     body: input,
   });
+  return emailTemplateRecord.parse(data);
+}
+
+export async function updateEmailTemplate(input: {
+  templateId: string;
+  expected_updated_at: string;
+  name?: string;
+  kind?: string;
+  subject_template?: string;
+  body_template?: string;
+  description?: string | null;
+  variables?: EmailTemplateVariable[];
+}): Promise<EmailTemplateRecord> {
+  const { templateId, ...body } = input;
+  const data = await apiRequest<unknown>(
+    `/api/admin/email-templates/${templateId}`,
+    { method: "PATCH", body },
+  );
   return emailTemplateRecord.parse(data);
 }
 

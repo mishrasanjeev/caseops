@@ -29,6 +29,7 @@ def obligation_client(request):
 
 
 def fixture(client, count=3):
+    client.headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     seeded = bootstrap_company(client)
     headers = auth_headers(seeded["access_token"])
     created = client.post(
@@ -156,7 +157,7 @@ def test_current_tenant_read_does_not_require_contract_edit_authority(obligation
 
 
 def test_missing_foreign_parent_and_foreign_owner_do_not_reveal_identity(obligation_client):
-    seeded, headers, contract, identities = fixture(obligation_client, 1)
+    seeded, headers, contract, identities = fixture(obligation_client, 2)
     foreign_company, foreign_member, foreign_user = str(uuid4()), str(uuid4()), str(uuid4())
     with get_session_factory()() as session:
         session.add(
@@ -201,9 +202,22 @@ def test_missing_foreign_parent_and_foreign_owner_do_not_reveal_identity(obligat
         f"/api/contracts/{contract['id']}/obligations", headers=headers
     )
     assert response.status_code == 200, response.text
-    record = response.json()["obligations"][0]
-    assert record["owner_membership_id"] is None and record["owner_name"] is None
-    assert "Foreign private owner" not in response.text and foreign_member not in response.text
+    workspace_path = f"/api/contracts/{contract['id']}/workspace"
+    workspace = obligation_client.get(workspace_path, headers=headers)
+    assert workspace.status_code == 200, workspace.text
+    for read in (response, workspace):
+        records = {record["id"]: record for record in read.json()["obligations"]}
+        assert set(records) == set(identities)
+        assert records[identities[0]]["owner_membership_id"] is None
+        assert records[identities[0]]["owner_name"] is None
+        assert records[identities[1]]["owner_membership_id"] == seeded["membership"]["id"]
+        assert records[identities[1]]["owner_name"] == seeded["user"]["full_name"]
+        assert "Foreign private owner" not in read.text and foreign_member not in read.text
+    reloaded = obligation_client.get(workspace_path, headers=headers)
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["obligations"] == workspace.json()["obligations"]
+    with get_session_factory()() as session:
+        assert session.get(ContractObligation, identities[0]).owner_membership_id == foreign_member
     missing = obligation_client.get(f"/api/contracts/{uuid4()}/obligations", headers=headers)
     assert missing.status_code == 404
 

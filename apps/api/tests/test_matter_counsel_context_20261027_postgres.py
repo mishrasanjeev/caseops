@@ -21,6 +21,12 @@ from tests.test_matter_counsel_context_20261027 import (
     uid,
 )
 from tests.test_outside_counsel import _create_matter
+from tests.test_outside_counsel import (
+    test_recommendation_history_follows_live_matter_access as exercise_recommendation_access,
+)
+from tests.test_outside_counsel import (
+    test_recommendations_keep_currency_subtotals_out_of_ranking as exercise_recommendation_currency,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -36,6 +42,14 @@ def test_postgres_matter_counsel_bounded_complete_pages(isolated_postgres_client
 @pytest.mark.parametrize("boundary", ["restricted", "wall", "team", "foreign", "closed"])
 def test_postgres_matter_counsel_current_acl(isolated_postgres_client, boundary):
     exercise_acl(isolated_postgres_client, boundary)
+
+
+def test_postgres_counsel_recommendation_keeps_currency_subtotals(isolated_postgres_client):
+    exercise_recommendation_currency(isolated_postgres_client)
+
+
+def test_postgres_counsel_recommendation_reads_live_matter_access(isolated_postgres_client):
+    exercise_recommendation_access(isolated_postgres_client)
 
 
 def _nodes(plan):

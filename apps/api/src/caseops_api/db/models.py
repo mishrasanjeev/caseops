@@ -9956,6 +9956,9 @@ class ContractClause(Base):
         default=ContractClauseRiskLevel.MEDIUM,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_by_ai: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -9988,6 +9991,9 @@ class ContractObligation(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_by_ai: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(),
+    )
     due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(
         String(24),

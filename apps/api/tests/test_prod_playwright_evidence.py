@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 730, "app-mobile": 64}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 738, "app-mobile": 65}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,6 +3083,26 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
 APP_COUNTS = {"app-chromium": 721, "app-mobile": 55}
+COMPACT_MATTER_CASES = (
+    ("app-chromium", "matter-compact-cards.spec.ts", (
+        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
+        "populated counsel and bench disclosures",
+    )),
+    ("app-mobile", "matter-compact-cards.spec.ts", (
+        "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
+        "[mobile] populated counsel and bench disclosures",
+    )),
+)
+MOTOR_STATUTE_FILE = "ram-2026-09-07-statute-source-data.spec.ts"
+MOTOR_STATUTE_CASES = (
+    "BUG-018 Motor Vehicles source records 1-40 of 259",
+    "BUG-018 Motor Vehicles source records 41-80 of 259",
+    "BUG-018 Motor Vehicles source records 81-120 of 259",
+    "BUG-018 Motor Vehicles source records 121-160 of 259",
+    "BUG-018 Motor Vehicles source records 161-200 of 259",
+    "BUG-018 Motor Vehicles source records 201-240 of 259",
+    "BUG-018 Motor Vehicles source records 241-259 of 259",
+)
 BATCH5_BUGS_FILE = "ram-2026-11-11-bugs.spec.ts"
 BATCH5_BUGS_CASES = (
     (
@@ -3103,7 +3123,9 @@ BATCH5_BUGS_CASES = (
 
 
 def _app_reviewed_counts():
-    return {project: count + 4 + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
+    return {project: count + 4 + (7 if project == "app-chromium" else 0)
+            + sum(owner == project for owner, _, _ in COMPACT_MATTER_CASES)
+            + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
@@ -3113,6 +3135,14 @@ APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "watch-acl-query-states.spec.ts", (
         "watch-acl-query-states.spec.ts",
         "Watch removes revoked source evidence from the workspace and report after reload",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "desktop November 22 product claims show their limits",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts", "Public landing page and user guide",
+        "mobile November 22 product claims show their limits",
     )),
 )
 
@@ -3158,16 +3188,24 @@ def test_app_required_cases_keep_their_independent_literal_identities():
 
 
 @pytest.mark.parametrize("damage", ["file", "title"])
-@pytest.mark.parametrize("required_file", [item[1] for item in APP_REQUIRED_NATIVE_CASES])
+@pytest.mark.parametrize(
+    "required_case",
+    [
+        pytest.param(APP_REQUIRED_NATIVE_CASES[0], id="control-crawl-contract.spec.ts"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[1], id="watch-acl-query-states.spec.ts"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[2], id="public-content-desktop-claims"),
+        pytest.param(APP_REQUIRED_NATIVE_CASES[3], id="public-content-mobile-claims"),
+    ],
+)
 def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
-    app_envelopes, damage, required_file
+    app_envelopes, damage, required_case
 ):
     canonical = evidence._json(
         app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
     )
     required = [
         row for row in canonical["tests"]
-        if row["file"] == required_file
+        if (row["project_name"], row["file"], tuple(row["title_path"])) == required_case
     ]
     assert len(required) == 1
     if damage == "file":
@@ -3176,6 +3214,34 @@ def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
         required[0]["title_path"][-1] = "replaced required App case"
     assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
     with pytest.raises(evidence.EvidenceError, match="app_canonical_inventory_mismatch"):
+        evidence._app_inventory(canonical)
+
+
+def test_app_inventory_requires_every_motor_vehicles_range_at_unchanged_counts(app_envelopes):
+    canonical = evidence._json(
+        app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
+    )
+    motor = [row for row in canonical["tests"] if row["file"] == MOTOR_STATUTE_FILE]
+    assert [row["title_path"][-1] for row in motor] == list(MOTOR_STATUTE_CASES)
+    motor[-1]["title_path"] = list(motor[-2]["title_path"])
+    assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
+    with pytest.raises(evidence.EvidenceError, match="motor_vehicles_statute_inventory_mismatch"):
+        evidence._app_inventory(canonical)
+
+
+@pytest.mark.parametrize("case", COMPACT_MATTER_CASES)
+@pytest.mark.parametrize("damage", ["title", "suite", "expected_skip"])
+def test_app_inventory_requires_both_compact_matter_disclosures(app_envelopes, case, damage):
+    canonical = evidence._json(
+        app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
+    )
+    (row,) = [row for row in canonical["tests"] if evidence._app_skip_identity(row) == case]
+    if damage == "expected_skip":
+        row["expected_status"] = "skipped"
+    else:
+        row["title_path"][-1 if damage == "title" else -2] += " changed"
+    assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
+    with pytest.raises(evidence.EvidenceError, match="compact_matter_inventory_mismatch"):
         evidence._app_inventory(canonical)
 
 
@@ -3250,12 +3316,17 @@ def app_capture(capture):
                  for number in range(pair[width])]
         added += [(file, title) for owner, file, title in NOV14_REVIEWED_CASES if owner == project]
         added += [(file, title) for owner, file, title in NOV15_REVIEWED_CASES if owner == project]
+        if project == "app-chromium":
+            added += [(MOTOR_STATUTE_FILE, title) for title in MOTOR_STATUTE_CASES]
+        added_paths = [(file, (file, title)) for file, title in added]
+        added_paths += [
+            (file, titles) for owner, file, titles in COMPACT_MATTER_CASES if owner == project
+        ]
         for index in range(count):
             if index < len(pinned):
                 _, file, titles = pinned[index]
             elif index >= APP_COUNTS[project]:
-                file, title = added[index - APP_COUNTS[project]]
-                titles = (file, title)
+                file, titles = added_paths[index - APP_COUNTS[project]]
             else:
                 file, titles = "offline.spec.ts", ("offline.spec.ts", f"App {project} case {index}")
             (state.root / file).touch(exist_ok=True)

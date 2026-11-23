@@ -244,6 +244,11 @@ class OutsideCounselRecommendationRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=10)
 
 
+class OutsideCounselRecommendationSpend(BaseModel):
+    currency: str
+    approved_spend_minor: int
+
+
 class OutsideCounselRecommendationRecord(BaseModel):
     counsel_id: str
     counsel_name: str
@@ -251,7 +256,13 @@ class OutsideCounselRecommendationRecord(BaseModel):
     score: float
     total_matters_count: int
     active_matters_count: int
-    approved_spend_minor: int
+    approved_spend_minor: int = Field(
+        deprecated=True,
+        description=(
+            "INR subtotal for earlier clients. Use approved_spend_by_currency for all subtotals."
+        ),
+    )
+    approved_spend_by_currency: list[OutsideCounselRecommendationSpend]
     evidence: list[str]
 
 

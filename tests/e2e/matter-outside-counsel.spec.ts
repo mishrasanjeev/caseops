@@ -10,6 +10,7 @@
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
+import { createNoPaidApiContext } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
 
 const PASSWORD = "MatterOCAssign2026!";
@@ -52,7 +53,7 @@ test.describe("Per-matter Outside Counsel", () => {
   test("workspace OC page renders canonical assignment + spend statuses", async ({
     page,
   }) => {
-    const api = await request.newContext();
+    const api = await createNoPaidApiContext(apiBaseUrl);
     const slug = unique("ocws");
     const { token } = await bootstrap(api, slug);
     const headers = { Authorization: `Bearer ${token}` };
@@ -67,6 +68,7 @@ test.describe("Per-matter Outside Counsel", () => {
         status: "intake",
       },
     });
+    expect(matterResp.status()).toBe(200);
     const matter = (await matterResp.json()) as { id: string };
 
     // Counsel with panel_status = inactive (the third panel value
@@ -122,6 +124,14 @@ test.describe("Per-matter Outside Counsel", () => {
       },
     );
     expect(spendResp.status()).toBe(200);
+    const usdSpend = await api.post(`${apiBaseUrl}/api/outside-counsel/spend-records`, {
+      headers, maxRetries: 0, maxRedirects: 0,
+      data: { matter_id: matter.id, counsel_id: counsel.id, assignment_id: assignment.id,
+        description: "Drift smoke USD approved spend", currency: "USD", amount_minor: 23,
+        approved_amount_minor: 23, status: "approved" },
+    });
+    expect(usdSpend.status()).toBe(200);
+    expect(await usdSpend.json()).toMatchObject({ currency: "USD", approved_amount_minor: 23 });
 
     await page.goto("/sign-in");
     await page.locator("#company-slug").fill(slug);
@@ -138,6 +148,18 @@ test.describe("Per-matter Outside Counsel", () => {
     ).toBeVisible({ timeout: 15_000 });
     // The seeded counsel name appears → workspace.profiles[] parsed.
     await expect(page.getByText(/Drift Smoke Counsel/i)).toBeVisible();
+    const approved = page.getByText("Approved spend", { exact: true }).first().locator("..");
+    await expect(approved.getByText("₹3,000", { exact: true })).toBeVisible();
+    await expect(approved.getByText("$0.23", { exact: true })).toBeVisible();
+    const counselRow = page.getByRole("row").filter({ hasText: "Drift Smoke Counsel" });
+    await expect(counselRow.getByText("$0.23", { exact: true })).toBeVisible();
+
+    await page.goto(`/app/matters/${matter.id}/outside-counsel`);
+    await expect(page.getByText("Recorded amounts are grouped by currency.")).toBeVisible();
+    const recorded = page.getByText("Recorded spend", { exact: true }).locator("..");
+    await expect(recorded.getByText("₹5,000", { exact: true })).toBeVisible();
+    await expect(recorded.getByText("$0.23", { exact: true })).toBeVisible();
+    await api.dispose();
   });
 
   test("renders assignments + KPIs for the matter (not a redirect)", async ({

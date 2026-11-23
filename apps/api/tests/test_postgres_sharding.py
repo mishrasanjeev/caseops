@@ -820,6 +820,65 @@ def test_thirty_two_children_keep_every_measured_parent_and_balance_its_prefix(s
         actual.update({node: parent for node in first})
         actual.update({node: parent + 16 for node in second})
     assert actual == expected
+
+
+@pytest.mark.parametrize("missing_partner", [None, 0, 1])
+def test_measured_parent_six_exchanges_keep_child_and_parent_inventories(missing_partner):
+    drive = (
+        "tests/test_drive_attachment_admission_postgres.py::"
+        "test_drive_metadata_review_preserves_dirty_caller[ignore]"
+    )
+    backfill = (
+        "tests/test_matter_readthrough_page_migration_20261028.py::"
+        "test_named_0007_to_0008_backfill_old_column_crud_and_restart_preserve_every_source[postgres]"
+    )
+    worker = (
+        "tests/test_matter_readthrough_page_worker_20261028_postgres.py::"
+        "test_named_0008_waits_for_acknowledged_historical_source_writer_before_current_head[hearing_packs]"
+    )
+    notice = (
+        "tests/test_notice_upload_admission_postgres.py::"
+        "test_upload_cannot_release_an_externally_owned_connection_transaction"
+        "[False-True-create_savepoint-ip-False]"
+    )
+    pairs = ((backfill, drive), (worker, notice))
+    nodes = (
+        [f"tests/test_a.py::test_case[{i:02}]" for i in range(5)]
+        + [drive]
+        + [f"tests/test_g.py::test_case[{i:02}]" for i in range(15)]
+        + [backfill]
+        + [f"tests/test_matter_readthrough_page_p.py::test_case[{i:02}]" for i in range(15)]
+        + [worker]
+        + [f"tests/test_mid.py::test_case[{i:02}]" for i in range(15)]
+        + [notice]
+        + [f"tests/test_z.py::test_case[{i:02}]" for i in range(64)]
+    )
+    if missing_partner is not None:
+        missing = pairs[missing_partner][1]
+        nodes[nodes.index(missing)] = missing.split("::")[0] + "::test_alternate"
+    assert nodes == sorted(nodes)
+    baseline = {
+        node: parent + (16 if index % 4 in (1, 2) else 0)
+        for parent in range(1, 17)
+        for index, node in enumerate(nodes[parent - 1 :: 16])
+    }
+    expected = dict(baseline)
+    for index, (heavy, light) in enumerate(pairs):
+        assert baseline[heavy] == 22
+        if index != missing_partner:
+            assert baseline[light] == 6
+            expected[heavy], expected[light] = 6, 22
+    actual = {}
+    for child in range(1, 33):
+        selected = partition(list(reversed(nodes)), child, 32)
+        assert selected == [node for node in nodes if expected[node] == child]
+        assert len(selected) == sum(value == child for value in baseline.values())
+        for node in selected:
+            assert node not in actual
+            actual[node] = child
+    assert actual == expected
+    for parent in range(1, 17):
+        assert partition(nodes, parent, 16) == nodes[parent - 1 :: 16]
     assert len(actual) == len(nodes)
 
 
