@@ -1,3 +1,15 @@
+## November23 — Android release supplier closure
+
+**Partially implemented; replacement release remains NO-GO.** Actual native
+Gradle resolution and fresh advisory queries found affected app runtime and
+build suppliers, including an obsolete WebView AGP classpath and suppliers
+bundled in Gradle itself. A scoped minimum-version repair is being verified;
+the supporting Maven/local plugin outputs and bundled tools also require
+complete supplier and licence reconciliation. Candidate metadata is not proof
+of resolved, rebuilt or tested Android bytes. Full 83-case native acceptance,
+the replacement signed AAB and submission remain open. See
+[the measured finding and acceptance requirements](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md).
+
 ## November23 — targeted root dependency security repair
 
 Partially implemented. The new candidate replaces affected Vite/Undici and the

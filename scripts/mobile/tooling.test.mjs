@@ -6300,7 +6300,41 @@ test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every lo
   assert.match(source, /assert\.equal\(sourceOpens,1\)/);
 });
 
+function restoreAndroidDependencySecurity(source) {
+  const begin = '\n// BEGIN CASEOPS ANDROID DEPENDENCY SECURITY\n';
+  const end = '// END CASEOPS ANDROID DEPENDENCY SECURITY\n';
+  assert.equal(source.split(begin).length - 1, 1, 'EXACT_ANDROID_SECURITY_LAYER_BEGIN');
+  assert.equal(source.split(end).length - 1, 1, 'EXACT_ANDROID_SECURITY_LAYER_END');
+  const at = source.indexOf(begin), layer = source.slice(at + 1);
+  assert.ok(layer.endsWith(end));
+  assert.equal(createHash('sha256').update(layer).digest('hex'), 'b9e7ae3a000994bb31cdbd84f5b320793b67fb402f7f0d5c029f37ce3cff7f9c', 'EXACT_REVIEWED_ANDROID_DEPENDENCY_SECURITY_LAYER');
+  const original = source.slice(0, at);
+  assert.equal(createHash('sha256').update(original).digest('hex'), '4ec6f38c3ea083d66d8880d729ee7b165bc5f6d750495dae69d82cc72031d1c1', 'ALL_PRIOR_ANDROID_TRANSPORT_BYTES_PRESERVED');
+  return original;
+}
+
+test('ANDROID-SECURITY-01 dependency repairs preserve every original transport and ownership fence', () => {
+  const source = fs.readFileSync(new URL('./android-no-paid.gradle', import.meta.url), 'utf8');
+  assert.ok(Buffer.byteLength(source) <= 32768, 'EXISTING_NATIVE_MARKER_INPUT_BOUND');
+  const original = restoreAndroidDependencySecurity(source);
+  assert.equal(Buffer.byteLength(original), 29310);
+  assert.equal(createHash('sha256').update(original).digest('hex'), '4ec6f38c3ea083d66d8880d729ee7b165bc5f6d750495dae69d82cc72031d1c1');
+  assert.match(source, /project\.path == ':react-native-webview'/);
+  assert.match(source, /settings\.pluginManagement\.resolutionStrategy\.eachPlugin/);
+});
+
+test('ANDROID-SECURITY-02 the independently executed JVM fixture retains every dependency control', () => {
+  const source = fs.readFileSync(new URL('./fixtures/android-dependency-security/controls.groovy', import.meta.url), 'utf8');
+  const match = source.match(/CASE_IDS = (?:Collections\.unmodifiableList\()?\s*(\[[^\n]+\])/);
+  assert.ok(match, 'LITERAL_NATIVE_CONTROL_INVENTORY_REQUIRED');
+  const cases = JSON.parse(match[1]);
+  assert.deepEqual(cases, Array.from({ length: 10 }, (_, i) => `ANDROID-SECURITY-CONTROL-${String(i + 1).padStart(2, '0')}`));
+  assert.equal(new Set(cases).size, 10);
+  assert.ok(Buffer.byteLength(source) <= 16384);
+});
+
 function restoreAndroidEmptyMavenRepository(source) {
+  source = restoreAndroidDependencySecurity(source);
   const begin = '// BEGIN CASEOPS EXACT EMPTY MAVEN REPOSITORY\n', end = '// END CASEOPS EXACT EMPTY MAVEN REPOSITORY\n\n';
   assert.equal(source.split(begin).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_BEGIN');
   assert.equal(source.split(end).length - 1, 1, 'EXACT_EMPTY_MAVEN_LAYER_END');

@@ -225,8 +225,8 @@ test('mobile CI selects every tooling module and audits before either platform e
     ts.forEachChild(node, toolingCase);
   }
   toolingCase(toolingTree);
-  assert.deepEqual({literalCases, parameterCases, total:toolingTitles.length}, {literalCases:429, parameterCases:46, total:475});
-  assert.equal(new Set(toolingTitles).size, 475, 'UNIQUE_COMPLETE_TOOLING_CASE_INVENTORY_REQUIRED');
+  assert.deepEqual({literalCases, parameterCases, total:toolingTitles.length}, {literalCases:431, parameterCases:46, total:477});
+  assert.equal(new Set(toolingTitles).size, 477, 'UNIQUE_COMPLETE_TOOLING_CASE_INVENTORY_REQUIRED');
   const harness = steps.find(step => step.name === 'Verify the native evidence harness');
   assert.equal(harness.run, `node --test ${expected.join(' ')}`);
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');

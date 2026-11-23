@@ -1,0 +1,89 @@
+# Android supplier repair — 23 November 2026
+
+Release verdict: **NO-GO for the replacement Android release**. Implementation
+status: **Partially implemented**. The existing public version 1.0.0 (3) and
+its production login diagnostic do not certify this replacement. Neither a new
+signed AAB nor full native acceptance is established by this record.
+
+The actual FAF production inspection resolved five Gradle roots and 17
+projects. Its two successful offline phases retained 54 used views, 2,409
+artifact references, 511 unique Maven artifact paths, and all 135 distinct final
+resolution metadata objects. The metadata had 169 notifications; that is not
+169 distinct configurations. All 511 payloads matched official verification
+metadata. A fresh OSV query of the 510 unique coordinates returned 100 advisory
+rows affecting 28 coordinates. Journal budgets and the original failed capture
+attempts remain unchanged.
+
+Gson 2.8.6 and Commons IO 2.6 occur in the app's release runtime configuration.
+Okio 2.9.0 occurs in compile configurations; the observed app runtime instead
+selected Okio JVM 3.16.0. This is not proof that Okio 2.9.0 shipped in the APK.
+The remaining affected coordinates belong to build configurations. In
+particular, React Native WebView resolved its own AGP 7.0.4 classpath, even
+though the build applied AGP 9.2.1. Its old classpath introduced legacy Netty,
+Bouncy Castle and Protobuf suppliers. Root and included build configurations
+also selected affected Guava and Kotlin plugin versions.
+
+The proposed repair appends a scoped policy to `android-no-paid.gradle`,
+preserving every byte of its previous 29,310-byte transport policy. It aligns
+only WebView's AGP classpath with the applied 9.2.1 version, repairs affected
+build coordinates and Kotlin plugin requests, and sets release compile/runtime
+minimums for Gson, Commons IO and Okio. Numeric newer selections remain newer;
+unreviewed selectors and flavours are rejected. Debug/test configuration rules
+and unrelated coordinates are preserved.
+
+Official Maven metadata and fresh candidate OSV queries establish these
+current stable candidate minimums: Gson 2.15.0, Commons IO 2.22.0, Okio and
+Okio JVM 3.18.2, Guava 33.8.0-jre, Commons Lang 3.22.0, jose4j 0.9.7,
+JDOM 2.0.6.1, Kotlin Gradle plugin 2.4.21 and Bouncy Castle jdk18on 1.86.
+Candidate publication and empty advisory responses do not establish actual
+resolution, Android compatibility, licence closure or release acceptance.
+
+The bundled Gradle supplier also needs repair. The original official Gradle
+9.4.1 distribution includes Guava 33.4.6 and Bouncy Castle 1.81. The chosen
+replacement is the complete official Gradle 9.9.2 distribution, rather than
+modified JARs inside the old distribution. Its official release SHA-256 is
+`971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b`.
+The retained ZIP has been downloaded and verified; installed supplier,
+compatibility, source pin and rebuilt APK verification remain separate gates.
+
+The original 510-coordinate result is not a complete SDK audit. Supporting
+origins additionally contain 21 Maven plugin/compiler suppliers and six local
+included-build plugin outputs. These, all used bundled Gradle tools, exact
+licences and native observer compatibility must be reconciled before signing.
+
+Evidence is retained under the native release evidence root
+`native-release-20261111-ZzEIol4V`, in:
+
+- `current-android-production-inspection-faf7be8f-preparation-01/sdk-used-two-phase-actual-08`:
+  actual successful graph capture and complete metadata reconciliation.
+- `current-android-production-inspection-faf7be8f-preparation-01/sdk-supplier-actual-02`:
+  official payload hashes, fresh advisories, exact native owner scopes and
+  dependency parent paths.
+- `current-android-production-inspection-faf7be8f-preparation-01/latest-stable-maven-policy-01`:
+  official metadata and fresh changed-candidate advisory queries.
+- `official-gradle-9.9.2-qualified-input-01`: official replacement distribution.
+
+The complete local tooling module passed 477 cases with no failures or skips.
+Build configuration tests passed 98 cases; their two declared Windows CLI
+cases remain skipped on this Mac. Ten independent Groovy policy contract
+controls passed under the qualified official 9.9.2 distribution. The complete
+replacement control invocation exited zero with verified process-group
+cleanup and unchanged observation/byte budgets. The first invocation's ten
+body successes and failed postflight observation bound remain retained as an
+incomplete invocation. These controls use API-shaped Gradle doubles; they are
+not actual Android dependency resolution or native app acceptance.
+
+Remaining acceptance: resolve the repaired graph on the actual candidate,
+close every supplier and notice
+inventory, rebuild the release APK/AAB, execute the complete 83-case/249-phase
+Android native inventory with independent hardware checks, and complete every
+store qualification and promotion gate. Do not transfer FAF binary, backend,
+Simulator, JavaScript or public-version evidence to a changed Android binary.
+
+The earlier native producer and local-run preparation guards require the
+binary, API and Web commit identities to match. Later fixture fields that
+record these identities separately do not override those guards. The final
+repair head therefore needs canonical API and both platform Web builds and
+qualified backend epochs, together with matching rebuilt native artifacts.
+Unchanged scoped source fingerprints do not authorize relabelling old images
+with a new commit.
