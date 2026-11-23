@@ -198,6 +198,35 @@ test('mobile CI selects every tooling module and audits before either platform e
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
+  // Count actual top-level Node cases, including each literal parameter row;
+  // a count of test(...) call sites misses the 46 source-observer cases.
+  const ts = require('typescript');
+  const toolingTree = ts.createSourceFile('tooling.test.mjs', readFileSync(path.join(repo, 'scripts/mobile/tooling.test.mjs'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  assert.equal(toolingTree.parseDiagnostics.length, 0);
+  const toolingTitles = []; let literalCases = 0, parameterCases = 0;
+  function toolingCase(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'test') {
+      const title = node.arguments[0];
+      if (ts.isStringLiteral(title)) { literalCases++; toolingTitles.push(title.text); }
+      else {
+        assert.ok(ts.isTemplateExpression(title) && title.templateSpans.length === 1, 'LITERAL_TOOLING_CASE_TITLE_REQUIRED');
+        let loop = node.parent;
+        while (loop && !ts.isForOfStatement(loop)) loop = loop.parent;
+        assert.ok(loop && ts.isArrayLiteralExpression(loop.expression), 'FINITE_TOOLING_PARAMETER_ROWS_REQUIRED');
+        const binding = loop.initializer.declarations[0].name;
+        assert.ok(ts.isArrayBindingPattern(binding) && binding.elements[0].name.text === title.templateSpans[0].expression.text);
+        for (const row of loop.expression.elements) {
+          assert.ok(ts.isArrayLiteralExpression(row) && ts.isStringLiteral(row.elements[0]));
+          toolingTitles.push(title.head.text + row.elements[0].text + title.templateSpans[0].literal.text); parameterCases++;
+        }
+      }
+    }
+    ts.forEachChild(node, toolingCase);
+  }
+  toolingCase(toolingTree);
+  assert.deepEqual({literalCases, parameterCases, total:toolingTitles.length}, {literalCases:429, parameterCases:46, total:475});
+  assert.equal(new Set(toolingTitles).size, 475, 'UNIQUE_COMPLETE_TOOLING_CASE_INVENTORY_REQUIRED');
   const harness = steps.find(step => step.name === 'Verify the native evidence harness');
   assert.equal(harness.run, `node --test ${expected.join(' ')}`);
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');

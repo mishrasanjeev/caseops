@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { authorizationUrl, parseCallback } from '../../apps/mobile/src/auth/handoff.ts';
+import { LOCAL_NATIVE_LINK_POLICY } from '../../apps/web/lib/native-link-policy.cjs';
 import { createHash, X509Certificate } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import http from 'node:http';
@@ -1496,7 +1498,7 @@ test('authorization receipts distinguish the consent 403 attempt from the sole s
 // Their recipe is deliberately synthetic and is never a native observation.
 function firefoxDouble(t, foreign = false, options = {}) {
   const auth = firefoxRecipe(t, options);
-  let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false;
+  let stage = 'app', editing = false, verified = false, backCount = 0, consentCodeEntered = false, grantInvalidated = false;
   let consentViewport = 'bottom', keyboardShown = false, keyboardDismissedAt = -Infinity, keyboardChecksAfterDismissal = 0;
   const consentScrolls = [], keyboardDismissals = [];
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
@@ -1571,11 +1573,12 @@ function firefoxDouble(t, foreign = false, options = {}) {
     $$: async (query) => {
       const preparationIndex = auth.firefoxUi.prepare.findIndex((locator) => query === selector('android', locator.kind, locator.value));
       const afterConnectIndex = auth.firefoxUi.afterConnect.findIndex((locator) => query === selector('android', locator.kind, locator.value));
-      const key = query === 'id=sign-in' ? 'sign-in' : query === 'id=account-open' ? 'account-open'
-        : Object.keys(values).find((name) => query === selector('android', values[name].kind, values[name].value))
+      const key = ['sign-in', 'signed-out'].find(key => query === 'id='+key) || ['account-open', 'account-principal', 'account-workspace', 'back'].find(key => query === 'id='+key)
+        || Object.keys(values).find((name) => query === selector('android', values[name].kind, values[name].value))
           || (preparationIndex >= 0 ? `prepare-${preparationIndex}` : afterConnectIndex >= 0 ? `prompt-${afterConnectIndex}` : undefined);
       lastLookup = key;
-      const shown = key === 'sign-in' ? stage === 'app' : key === 'account-open' ? stage === 'complete'
+      const shown = grantInvalidated && !['fullBrowser', 'urlOpen', 'urlValue', 'urlClose'].includes(key) ? false
+        : ['sign-in', 'signed-out'].includes(key) ? stage === 'app' : ['account-open', 'account-principal', 'account-workspace', 'back'].includes(key) ? stage === 'complete'
         : key === 'fullBrowser' ? fullBrowser && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : key === 'urlOpen' ? (fullBrowser || options.customTabUrlShared) && stage !== 'app' && stage !== 'complete' && !editing && clock >= (options.chromeDelayMs ?? 0)
         : ['urlValue', 'urlClose'].includes(key) ? editing
@@ -1606,29 +1609,39 @@ function firefoxDouble(t, foreign = false, options = {}) {
           if (key === 'workspace' && options.restoreKeyboardAfterWorkspace) keyboardShown = true;
           if (Object.hasOwn(typed, key)) return typed[key];
           if (key === 'urlValue') {
-            const target = new URL(authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
+            const target = new URL(options.callbackAuthority?.authorizationUrl || authUrl(foreign ? 'https://example.com' : fixture.auth.webOrigin));
             if (verified && options.changedAfterMfa) target.searchParams.set('state', 'c'.repeat(64));
             return stage === 'login' ? `${target.origin}/sign-in?${new URLSearchParams({ next: target.pathname + target.search })}` : target.href;
           }
           return { principal: verified && options.wrongAfterMfa ? 'Wrong' : fixture.principalLabel, emailFact: 'unit@example.invalid',
             workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: CONSENT_MFA_CONTINUE, mfaVerified: CONSENT_MFA_VERIFIED,
-            appOpen: options.wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps' }[key] || '';
+            appOpen: options.wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps',
+            'account-principal': options.wrongNativePrincipal ? 'Different native principal' : fixture.principalLabel,
+            'account-workspace': options.wrongNativeWorkspace ? 'Different native workspace' : fixture.workspaceLabel }[key] || '';
         },
         click: async () => {
           clicks.push(key);
           if (key === 'sign-in') stage = options.directForm ? 'login' : 'landing';
           if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
-          if (key === 'urlOpen') { editing = true; backCount = 0; }
+          if (key === 'urlOpen') {
+            if (stage === 'grant' && options.urlEditorInvalidatesGrant) grantInvalidated = true;
+            editing = true; backCount = 0;
+          }
           if (key === 'urlClose') { editing = false; keyboardShown = ['connect', 'grant'].includes(stage) && !!options.restoreConsentKeyboard; }
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') { stage = 'connect'; connectedAt = clock; }
           if (key === 'connect') {
             request('POST', '/api/auth/native/authorize', options.consent && !verified ? 403 : 200);
             stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
-            if (stage === 'grant') grantAt = clock;
+            if (stage === 'grant') { grantAt = clock; options.callbackAuthority?.issue(); }
           }
-          if (key === 'appOpen') { request('POST', '/api/auth/native/token', 200); stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete'; promptAt = clock; }
+          if (key === 'appOpen') {
+            if (options.callbackAuthority) options.callbackAuthority.exchange(request);
+            else request('POST', '/api/auth/native/token', 200);
+            stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete'; promptAt = clock;
+            if (options.appOpenDispatchFailure) throw options.appOpenDispatchFailure;
+          }
           if (key?.startsWith('prompt-')) {
             promptAt = clock;
             if (++promptIndex === auth.firefoxUi.afterConnect.length) stage = 'complete';
@@ -1637,13 +1650,17 @@ function firefoxDouble(t, foreign = false, options = {}) {
             request('POST', '/api/auth/mfa/step-up', 200); request('GET', '/api/auth/me', 200);
             request('POST', '/api/auth/native/authorize', 200);
             verified = true; verifiedAt = clock; grantAt = clock; stage = options.autoConnect ? 'complete' : 'grant';
+            options.callbackAuthority?.issue();
+            // NativeSignIn binds the held grant to the exact current query. A
+            // real query replacement discards it; it is not merely new editor text.
+            if (options.changedAfterMfa) grantInvalidated = true;
             if (options.consentDispatchFailure) throw options.consentDispatchFailure;
           }
         } }];
     },
   };
   return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes, requests, consentScrolls, keyboardDismissals,
-    elapsed: () => clock };
+    elapsed: () => clock, grantInvalidated: () => grantInvalidated };
 }
 
 function firefoxPreparation({ menuInitiallyOpen = false, fullAfterMenu = false, missingConversion = false, dispatchFailure,
@@ -6592,7 +6609,7 @@ test('Firefox restores settled Connect then explicit Open after consent identity
     assert.equal(fake.clicks.filter(x=>x==='connect').length, 1);
     assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length, 1);
     assert.equal(fake.clicks.filter(x=>x==='appOpen').length, 1);
-    assert.equal(fake.keyboardDismissals.length, restoreConsentKeyboard ? 2 : 0);
+    assert.equal(fake.keyboardDismissals.length, restoreConsentKeyboard ? 1 : 0);
   }
 });
 
@@ -6622,7 +6639,7 @@ test('Firefox settled consent recovery never scrolls down or reconnects after a 
   for (const options of [{ wrongAfterMfa: true }, { changedAfterMfa: true }]) {
     const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, ...options });
     t.mock.method(Date, 'now', () => fake.elapsed());
-    await assert.rejects(browserLogin(fake.context), /WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE|BROWSER_HANDOFF_CHANGED/);
+    await assert.rejects(browserLogin(fake.context), /WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE|NATIVE_CONTROL_NOT_VISIBLE|UNIT_WAIT_UNSATISFIED/);
     assert.equal(fake.clicks.filter(x => x === 'connect').length, 1);
     assert.equal(fake.consentScrolls.filter(x => x.direction === 'down' && x.verified).length, 0);
     assert.equal(fake.clicks.includes('appOpen'), false);
@@ -6791,4 +6808,111 @@ test('combined consent verification preserves lost acknowledgements without anot
     assert.deepEqual(fake.requests.filter(row => row.route === '/api/auth/native/authorize').map(row => row.status), [403, 200]);
     assert.equal(fake.requests.some(row => row.route === '/api/auth/native/token'), false);
   }
+});
+
+
+// Composed test authority: actual native URL construction + callback parser,
+// with a finite in-memory one-use token endpoint double. This is not API proof.
+function firefoxCallbackAuthority(options = {}) {
+  const state = 'b'.repeat(64), verifier = 'owned-unit-verifier-'.padEnd(64, 'v');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const code = 'g'.repeat(64);
+  let issued = false, consumed = false, callbacks = 0, exchanges = 0;
+  const authority = {
+    authorizationUrl: authorizationUrl('https://10.0.2.2:3443', {state, verifier, challenge, platform:'android'}, LOCAL_NATIVE_LINK_POLICY),
+    issue() { assert.equal(issued, false, 'UNIT_GRANT_ALREADY_ISSUED'); issued = true; },
+    exchange(record = () => {}) {
+      callbacks++;
+      const valid = `caseops://oauth/callback?code=${code}&state=${state}`;
+      const callback = options.callback ? options.callback(valid) : valid;
+      // Same actual parseCallback call and expected-state binding as App.tsx.
+      const returnedCode = parseCallback(callback, state, LOCAL_NATIVE_LINK_POLICY);
+      exchanges++;
+      const submittedVerifier = options.wrongVerifier ? verifier+'different' : verifier;
+      const accepted = issued && !consumed && returnedCode === code
+        && createHash('sha256').update(submittedVerifier).digest('base64url') === challenge;
+      record('POST', '/api/auth/native/token', accepted ? 200 : 401);
+      assert.equal(accepted, true, 'UNIT_NATIVE_TOKEN_REFUSED');
+      consumed = true;
+    },
+    observed: () => ({issued, consumed, callbacks, exchanges}),
+  };
+  return authority;
+}
+
+test('Firefox grant-backed Open survives normal consent without opening the post-grant URL editor', async t => {
+  browserEnvironment(t);
+  const authority = firefoxCallbackAuthority();
+  const fake = firefoxDouble(t, false, {consent:true, callbackAuthority:authority, urlEditorInvalidatesGrant:true});
+  await authenticate(fake.context);
+  validateAuthorizationTraffic(fake.requests, fake.context.fixture.auth, {single:true});
+  assert.deepEqual(authority.observed(), {issued:true, consumed:true, callbacks:1, exchanges:1});
+  assert.equal(fake.grantInvalidated(), false);
+  const verified = fake.clicks.indexOf('mfaSubmit');
+  assert.ok(verified > 0);
+  assert.equal(fake.clicks.slice(verified+1).includes('urlOpen'), false);
+  assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
+  assert.equal(fake.records.filter(row => row.type === 'browser_step' && row.key === 'principal' && row.action === 'read').length, 2);
+});
+
+test('Firefox post-grant callbacks retain actual native wrong-state and forged callback refusal before token exchange', async t => {
+  browserEnvironment(t);
+  for (const callback of [url => url.replace('state='+ 'b'.repeat(64), 'state='+ 'c'.repeat(64)),
+    url => url.replace('caseops://oauth/callback', 'caseops://other/callback'),
+    url => url+'&state='+ 'b'.repeat(64), url => url+'&token=forged']) {
+    const authority = firefoxCallbackAuthority({callback});
+    const fake = firefoxDouble(t, false, {consent:true, callbackAuthority:authority});
+    await assert.rejects(browserLogin(fake.context));
+    assert.equal(authority.observed().callbacks, 1);
+    assert.equal(authority.observed().exchanges, 0);
+    assert.equal(fake.requests.some(row => row.route === '/api/auth/native/token'), false);
+    assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
+  }
+});
+
+test('Firefox native verifier and single-use token guards cannot be replaced by successful browser consent', async t => {
+  browserEnvironment(t);
+  const wrong = firefoxCallbackAuthority({wrongVerifier:true});
+  const rejected = firefoxDouble(t, false, {consent:true, callbackAuthority:wrong});
+  await assert.rejects(browserLogin(rejected.context), /UNIT_NATIVE_TOKEN_REFUSED/);
+  assert.equal(wrong.observed().consumed, false);
+  assert.equal(rejected.requests.filter(row => row.route === '/api/auth/native/token').length, 1);
+  assert.equal(rejected.requests.at(-1).status, 401);
+  assert.throws(() => validateAuthorizationTraffic(rejected.requests, rejected.context.fixture.auth, {single:true}));
+  const once = firefoxCallbackAuthority(), accepted = firefoxDouble(t, false, {consent:true, callbackAuthority:once});
+  await authenticate(accepted.context);
+  validateAuthorizationTraffic(accepted.requests, accepted.context.fixture.auth, {single:true});
+  assert.throws(() => once.exchange(), /UNIT_NATIVE_TOKEN_REFUSED/);
+});
+
+test('Firefox completed callback still requires exact native identity and never replays a lost Open acknowledgement', async t => {
+  browserEnvironment(t);
+  for (const wrong of [{wrongNativePrincipal:true}, {wrongNativeWorkspace:true}]) {
+    const authority = firefoxCallbackAuthority(), fake = firefoxDouble(t, false, {consent:true, callbackAuthority:authority, ...wrong});
+    await assert.rejects(authenticate(fake.context), /WRONG_PRINCIPAL|WRONG_WORKSPACE/);
+    assert.equal(authority.observed().consumed, true);
+    assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
+  }
+  const failure = new Error('UNIT_OPEN_ACK_UNKNOWN'), authority = firefoxCallbackAuthority();
+  const lost = firefoxDouble(t, false, {consent:true, callbackAuthority:authority, appOpenDispatchFailure:failure});
+  await assert.rejects(browserLogin(lost.context), error => error === failure);
+  assert.equal(authority.observed().consumed, true);
+  assert.equal(lost.clicks.filter(key => key === 'appOpen').length, 1);
+  assert.equal(lost.requests.filter(row => row.route === '/api/auth/native/token').length, 1);
+});
+
+test('Firefox query replacement after MFA discards the held grant and cannot click or exchange it', async t => {
+  browserEnvironment(t);
+  const authority = firefoxCallbackAuthority();
+  const fake = firefoxDouble(t, false, {consent:true, callbackAuthority:authority, changedAfterMfa:true});
+  await assert.rejects(browserLogin(fake.context));
+  assert.equal(fake.grantInvalidated(), true);
+  assert.equal(fake.clicks.includes('appOpen'), false);
+  assert.equal(authority.observed().callbacks, 0);
+  assert.equal(fake.requests.some(row => row.route === '/api/auth/native/token'), false);
+  const web = readFileSync(new URL('../../apps/web/app/native/sign-in/NativeSignIn.tsx', import.meta.url), 'utf8');
+  assert.match(web, /handoff\.current\?\.query === query/);
+  assert.match(web, /\}, \[query, discardHandoff\]\)/);
+  assert.match(web, /window\.addEventListener\("pagehide", leave\)/);
+  assert.match(web, /document\.visibilityState === "hidden"/);
 });

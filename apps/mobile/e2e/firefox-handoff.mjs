@@ -333,7 +333,12 @@ export async function firefoxLogin(context, credentials, authorizationIdentity) 
   const verifyIdentity = async (action = 'connect') => {
     browserStep(context, 'identity', 'check');
     await locate(context, action);
-    assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
+    // Opening Firefox's URL editor can hide the document and discard its live
+    // one-use grant. Inspect PKCE before granting, then let App.tsx validate the
+    // original callback state/verifier. authenticate() checks native identity;
+    // NATIVE-01 independently requires the exact successful token ledger.
+    if (action !== 'appOpen')
+      assert.deepEqual(authorizationIdentity(await location(context, recipe), fixture.auth.webOrigin, platform), handoff, 'BROWSER_HANDOFF_CHANGED');
     for (const [key, expected] of Object.entries({ principal: fixture.principalLabel, emailFact: credentials.email,
       workspace: `${fixture.workspaceLabel} / ${credentials.companySlug}` })) {
       assert.equal((await text(context, key)).replace(/\s+/g, ' ').trim(), expected, 'WRONG_BROWSER_PRINCIPAL_OR_WORKSPACE');

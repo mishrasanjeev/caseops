@@ -1,3 +1,12 @@
+## November 23 — Firefox handoff inspection and scoped store history
+
+Partially fixed; native acceptance remains open. The isolated harness candidate
+avoids URL-editor inspection after a grant and retains callback/state/verifier,
+identity, ledger, one-click and original deadline requirements. Store execution
+must observe and reserve only its selected platform; legacy helper callers keep
+joint behavior. See [dated evidence](mobile/NATIVE_FIREFOX_POSTGRANT_2026-11-23.md).
+No current86 failure or artifact is relabeled as successor acceptance.
+
 ## November23 — root dependency release prerequisite
 
 The targeted source repair is locally verified, with the original parser
