@@ -4468,3 +4468,17 @@ manual connection step. The new flow is not yet deployed; actual native and
 production acceptance remain pending. Existing Android version 3 went live November
 17; Managed publishing now holds future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+2026-11-23 PR645 dependency-release follow-up: the actual hosted licence scan
+selected Vite's development-only Nanoid copy for a production identity. Preserve
+that failed report and the strict installed-path guard. The host producer now
+uses canonical production pruning before inventory, scan and verification,
+matching the shipped production stage; both inventory and verification require
+a pruned tree. All 153 offline controls pass, including both duplicate-copy
+orders and missing/reordered pruning. The actual Darwin production phase passes
+125 identities/161 physical paths with no denied licence; Linux's 129-identity
+replacement remains separate hosted evidence. The original local supervisor
+exit1 is retained: acknowledged pruning changed only the root lock timestamps,
+with all 4,392 source byte maps unchanged. Governance rendering and the complete
+12-command contract step pass on committed inputs; no release/store acceptance
+is inferred from these component checks.
