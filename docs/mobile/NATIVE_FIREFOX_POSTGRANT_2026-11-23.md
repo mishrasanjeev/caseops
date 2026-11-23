@@ -48,4 +48,23 @@ Actual isolated test/install records are retained under the dated
 canonical-firefox-postgrant-20261123-01 evidence namespace. Initial fixture
 syntax/dependency setup failures and the complete red regression are retained.
 Current86 artifacts and native attempts remain bound to current86, not this
-uncommitted successor. Full native and production callback acceptance remain due.
+committed candidate. Full native and production callback acceptance remain due.
+
+
+## Verified source candidate
+
+Commit `51ff14cc6898ca14f002ac80dee93e6aa6a074fd` contains the reviewed code
+repair. The complete affected local modules executed 642 cases: 640 passed and
+two declared Windows-only cases were not executed on Darwin. Tooling accounts
+for 475 passing cases; build configuration accounts for 98 passes and the two
+Windows exclusions; packaging and execution account for 31 and 36 passes.
+The original outside-controller count error remains retained; an independent
+AST/native-report reconciliation established these exact totals without a test
+replay or a source change.
+
+Fresh isolated root and mobile installation, installed-graph health and all six
+advisory checks passed. The canonical clean native fingerprint is
+`0c68d1d1310ee16ae3c2d814fc118fc4e178423a772f4db784dfc47ce1d3e7f8`;
+API and Web role fingerprints are unchanged from current86. These checks prove
+the source repair and its local regression coverage. They do not prove native
+execution, a signed store artifact, hosted CI, or a new store submission.
