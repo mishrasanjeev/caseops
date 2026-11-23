@@ -132,6 +132,24 @@ APP_REQUIRED_CASES = (
         "watch-acl-query-states.spec.ts",
         "Watch removes revoked source evidence from the workspace and report after reload",
     )),
+    ("app-chromium", "matter-ethical-walls-admin-2026-11-22.spec.ts", (
+        "matter-ethical-walls-admin-2026-11-22.spec.ts",
+        "admin walls a colleague off a Matter and lifts the wall at 1280px",
+    )),
+    ("app-mobile", "matter-ethical-walls-admin-2026-11-22.spec.ts", (
+        "matter-ethical-walls-admin-2026-11-22.spec.ts",
+        "[mobile] admin walls a colleague off a Matter and lifts the wall at 393px",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts",
+        "Public landing page and user guide",
+        "desktop November 22 product claims show their limits",
+    )),
+    ("app-chromium", "public-content.spec.ts", (
+        "public-content.spec.ts",
+        "Public landing page and user guide",
+        "mobile November 22 product claims show their limits",
+    )),
 )
 # Exact pre-existing capability/provider skips retained from the complete
 # source-bound partial run; discovery's empty-result status is never a skip.
