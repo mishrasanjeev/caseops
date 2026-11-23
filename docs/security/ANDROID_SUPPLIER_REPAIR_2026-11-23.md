@@ -56,6 +56,26 @@ descriptor; unknown templates, duplicate properties and wrong checksums
 are rejected. Complete supplier advisories, actual Gradle compatibility
 and rebuilt APK verification remain separate gates.
 
+The JDK supplier refresh separately selects official Temurin 21.0.13.1+2
+and 17.0.21.1+2. Both macOS ARM archives and installed files have complete
+publisher-checksum, byte and mode reconciliation. The Windows installer pins
+use the corresponding official Windows x64 URLs and checksums; those archives
+have not been installed or accepted on this Mac. Previous JDKs and policies
+remain preserved.
+
+Both new vendor trust stores contain exactly 117 unique public certificates,
+exclude the denied root, and have set SHA-256
+`cef81225c6ee4493b78527f09fc422ee50d5160feb4d8b8c0b334b4ef5c0180f`.
+Their exact set changes four removed and four added roots relative to the
+previous cleaned set. The new helper admits that exact vendor set, not merely
+its count; its negative control rejects the earlier equal-count set. Global
+stores and personal-device trust remain untouched. The complete five changed
+Node modules passed 681 cases with two declared Windows skips (683 total),
+and all 49 host-platform Python methods passed with independently reconciled
+native identities. The original 50-percent prechild refusal is retained;
+this pure control replay used the separate approved light-unit class. Actual
+new-JDK shared-store and Gradle execution remain distinct required proofs.
+
 The original 510-coordinate result is not a complete SDK audit. Supporting
 origins additionally contain 21 Maven plugin/compiler suppliers and six local
 included-build plugin outputs. These, all used bundled Gradle tools, exact

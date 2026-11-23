@@ -21,6 +21,26 @@ SPEC.loader.exec_module(trust)
 
 
 class HostTrust(unittest.TestCase):
+    def test_patched_java_contract_rejects_the_previous_equal_count_root_set(self):
+        current = "cef81225c6ee4493b78527f09fc422ee50d5160feb4d8b8c0b334b4ef5c0180f"
+        self.assertEqual(trust.CONTRACTS["java"], (117, current, 117, current))
+        old = {"count": 117, "setSha256": "a5c7424bd0772d7a8f310ecd14d83293a188de3145f3a850a82483c6338441e2", "deniedCount": 0}
+        with self.assertRaisesRegex(ValueError, "GRADLE_EXACT_EFFECTIVE_DEFAULT_REQUIRED"):
+            trust._gradle_default_report(old, 117, current)
+
+    def test_patched_java_pins_bind_the_qualified_executables_and_runtime_versions(self):
+        for runtime, version, digest in [
+            ("java21", "21.0.13.1+2", "8261edc44ac1643e7aba9f0df5155b6d81f7977cc8a0374bb7630d838d2a3910"),
+            ("java17", "17.0.21.1+2", "5713ed335b3828ef9294ce4a091acad7ee24af1db2622587b6f5ff0a9bd98bb3"),
+        ]:
+            self.assertEqual(trust.JDKS[runtime], trust.JDK_BASE / ("jdk-" + version + "/Contents/Home"))
+            self.assertEqual(trust.TOOL_PINS[runtime][1], digest)
+        source = trust.JAVA_SOURCE.read_text()
+        self.assertNotIn('version+"+1"', source)
+        self.assertIn('version+"+2"', source)
+        self.assertNotIn("21.0.12.1", source)
+        self.assertNotIn("17.0.20.1", source)
+
     def fake_contract(self):
         certs = [b"public-root-one", b"denied-test-root", b"public-root-two"]
         denied = trust.sha(certs[1])

@@ -51,8 +51,8 @@ trap 'printf "Raw build evidence retained: %s\n" "$run"' EXIT
 node - "$run" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const root = process.argv[2];
-assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.12\.1\+1\b/, 'PINNED_TEMURIN_21_REQUIRED');
-assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.20\.1\+1\b/, 'PINNED_TEMURIN_17_REQUIRED');
+assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.13\.1\+2\b/, 'PINNED_TEMURIN_21_REQUIRED');
+assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.21\.1\+2\b/, 'PINNED_TEMURIN_17_REQUIRED');
 NODE
 if [[ -n "${CASEOPS_ANDROID_HOST_POLICY_FILE:-}" || -n "${CASEOPS_ANDROID_HOST_POLICY_SHA256:-}" ]]; then
   : "${CASEOPS_ANDROID_HOST_POLICY_FILE:?Supply the admitted Android role policy}"

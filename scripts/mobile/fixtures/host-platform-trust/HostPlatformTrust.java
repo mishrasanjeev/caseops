@@ -14,8 +14,7 @@ import javax.net.ssl.*;
 /** Public fixed-JDK cacerts only. This program never reads an owner keystore. */
 public class HostPlatformTrust {
   static final String DENIED="86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b";
-  static final String ORIGINAL="dd829eff9efb6ceb6de8f403f34bb4758707952e55e0da800cc8f6be768771cc";
-  static final String CLEAN="a5c7424bd0772d7a8f310ecd14d83293a188de3145f3a850a82483c6338441e2";
+  static final String CLEAN="cef81225c6ee4493b78527f09fc422ee50d5160feb4d8b8c0b334b4ef5c0180f";
   static void need(boolean value,String code)throws Exception {if(!value)throw new Exception(code);}
   static String sha(byte[] value)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));}
   static String quote(String value){return "\""+value.replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n").replace("\r","\\r")+"\"";}
@@ -50,8 +49,8 @@ public class HostPlatformTrust {
     }
   }
   static void checkSet(Collection<String> values)throws Exception {
-    String hash=setHash(values);need(values.size()==118&&hash.equals(ORIGINAL)||values.size()==117&&hash.equals(CLEAN),"UNKNOWN_TRUST_SET_REFUSED");
-    need(Collections.frequency(new ArrayList<>(values),DENIED)==(hash.equals(ORIGINAL)?1:0),"DENIED_ROOT_STATE_REFUSED");
+    String hash=setHash(values);need(values.size()==117&&hash.equals(CLEAN),"UNKNOWN_TRUST_SET_REFUSED");
+    need(Collections.frequency(new ArrayList<>(values),DENIED)==0,"DENIED_ROOT_STATE_REFUSED");
   }
   static TreeSet<String> defaults()throws Exception {
     TrustManagerFactory factory=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());need(factory.getAlgorithm().equals("PKIX"),"PINNED_PKIX_REQUIRED");factory.init((KeyStore)null);
@@ -61,7 +60,7 @@ public class HostPlatformTrust {
     TreeSet<String> values=defaults();checkSet(values);System.out.println("{\"count\":"+values.size()+",\"setSha256\":"+quote(setHash(values))+",\"deniedCount\":"+(values.contains(DENIED)?1:0)+"}");
   }
   static void fixture(Path destination)throws Exception {
-    String version=System.getProperty("java.version"),type=version.equals("21.0.12.1")?"PKCS12":version.equals("17.0.20.1")?"JKS":"";
+    String version=System.getProperty("java.version"),type=version.equals("21.0.13.1")?"PKCS12":version.equals("17.0.21.1")?"JKS":"";
     need(!type.isEmpty(),"PINNED_JDK_REQUIRED");List<byte[]> frames=publicFrames(2);KeyStore store=KeyStore.getInstance(type);store.load(new ByteArrayInputStream(frames.get(0)),"changeit".toCharArray());
     TreeMap<String,String> before=entries(store);need(before.size()==117&&setHash(before.values()).equals(CLEAN),"EXACT_QA_BASE_STORE_REQUIRED");
     X509Certificate ca;try(InputStream stream=new ByteArrayInputStream(frames.get(1))){ca=(X509Certificate)CertificateFactory.getInstance("X.509").generateCertificate(stream);byte[] remainder=stream.readNBytes(1025);need(remainder.length<=1024,"ONE_FIXTURE_CERTIFICATE_REQUIRED");for(byte value:remainder)need(value==10||value==13||value==32||value==9,"ONE_FIXTURE_CERTIFICATE_REQUIRED");}
@@ -72,8 +71,8 @@ public class HostPlatformTrust {
     System.out.println("{\"outputCount\":118,\"fixtureSha256\":"+quote(fingerprint)+",\"outputSetSha256\":"+quote(setHash(after.values()))+",\"baseAliasesPreserved\":true,\"outputSizeBytes\":"+retained.length+",\"outputSha256\":"+quote(sha(retained))+",\"aliases\":"+aliases+"}");
   }
   static void prepare(Path destination)throws Exception {
-    String version=System.getProperty("java.version");String type=version.equals("21.0.12.1")?"PKCS12":version.equals("17.0.20.1")?"JKS":"";
-    need(!type.isEmpty()&&System.getProperty("java.runtime.version").startsWith(version+"+1"),"PINNED_JDK_REQUIRED");
+    String version=System.getProperty("java.version");String type=version.equals("21.0.13.1")?"PKCS12":version.equals("17.0.21.1")?"JKS":"";
+    need(!type.isEmpty()&&System.getProperty("java.runtime.version").startsWith(version+"+2"),"PINNED_JDK_REQUIRED");
     need(System.getProperty("javax.net.ssl.trustStore")==null,"INHERITED_TRUSTSTORE_REFUSED");
     Path home=Path.of(System.getProperty("java.home")).toRealPath();Path source=home.resolve("lib/security/cacerts");
     need(!Files.exists(home.resolve("lib/security/jssecacerts"))&&Files.isRegularFile(source,LinkOption.NOFOLLOW_LINKS)&&Files.size(source)<=1048576,"FIXED_PUBLIC_CACERTS_REQUIRED");
@@ -93,7 +92,7 @@ public class HostPlatformTrust {
     need(clean.size()==117&&setHash(clean).equals(CLEAN)&&values.size()==(fixture.equals("-")?117:118),"SHARED_OTHER_ANCHORS_CHANGED");return setHash(values);
   }
   static void sharedRuntime()throws Exception {
-    String version=System.getProperty("java.version");need(Set.of("21.0.12.1","17.0.20.1").contains(version)&&System.getProperty("java.runtime.version").startsWith(version+"+1"),"PINNED_SHARED_JDK_REQUIRED");
+    String version=System.getProperty("java.version");need(Set.of("21.0.13.1","17.0.21.1").contains(version)&&System.getProperty("java.runtime.version").startsWith(version+"+2"),"PINNED_SHARED_JDK_REQUIRED");
   }
   static void decodeShared(String fixture)throws Exception {
     sharedRuntime();byte[] retained=publicFrames(1).get(0);KeyStore store=KeyStore.getInstance("PKCS12");store.load(new ByteArrayInputStream(retained),"changeit".toCharArray());TreeMap<String,String> aliases=entries(store);String hash=sharedSet(aliases.values(),fixture);StringJoiner encoded=new StringJoiner(",","{","}");for(var entry:aliases.entrySet())encoded.add(quote(entry.getKey())+":"+quote(entry.getValue()));

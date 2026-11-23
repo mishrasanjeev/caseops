@@ -122,7 +122,7 @@ export function validateAndroidNativeProof(fixture, receipt, actualHash) {
     const bytes = verifiedFile(path.join(directory, relative.replaceAll('/', '-')), input.sha256, 1048576);
     assert.equal(bytes.length, input.sizeBytes, 'ANDROID_NATIVE_GENERATED_INPUT_SIZE_MISMATCH');
   }
-  jdk(reports['java21.log'], '21.0.12.1+1');
-  jdk(reports['java17.log'], '17.0.20.1+1');
+  jdk(reports['java21.log'], '21.0.13.1+2');
+  jdk(reports['java17.log'], '17.0.21.1+2');
   return proof;
 }
