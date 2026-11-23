@@ -50,6 +50,22 @@ BUILD_TOOL_SOURCES = {
         "f3003567866767f2685b97136c99c47886a09be0b2d82ad9818b5b390cc38988",
     "license-policy/upstream/brace-expansion_5.0.13/brace-expansion-5.0.13.tgz":
         "015c8761629e59fc31f3a6e472a940f6d759fc8227e67882c399dfb9a703ae6e",
+    "license-policy/upstream/vite_8.2.6/package.json":
+        "f1102d5b963ba5120abb1efbaceee5ae0dea89b4b1ed3d965c6bc9e77c965606",
+    "license-policy/upstream/vite_8.2.6/LICENSE.md":
+        "387dd7baa307083401a27c58c362c30832f5ba1dba84f10cc22c33401523f45c",
+    "license-policy/upstream/rolldown_1.2.19/LICENSE":
+        "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+    "license-policy/upstream/rolldown_1.2.19/THIRD-PARTY-LICENSE":
+        "a877291d800ed43692f3f9ae09d8e01cc6f7293ad39d43896059c188ffbb8b7c",
+    "license-policy/upstream/rolldown_1.2.19/package.json":
+        "73ea5ca898ac22574e23d66e54dc9c5b3714f9d8c1be934412824d62f25e21fc",
+    "license-policy/upstream/undici_7.30.2/lib/web/fetch/LICENSE":
+        "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+    "license-policy/upstream/undici_7.30.2/LICENSE":
+        "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+    "license-policy/upstream/undici_7.30.2/package.json":
+        "f413840d65b1b99ea0993e161f31055b924bf5bc9a06d11e7a3fb1d1ba177bef",
 }
 
 
@@ -166,11 +182,11 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         relative = path.relative_to(ROOT).as_posix()
         assert relative in expected, "Undeclared operator material must not enter the image"
         actual.add(relative)
-        assert len(actual) <= 71
+        assert len(actual) <= 79
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 71
+    assert len(actual) == 79
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
 

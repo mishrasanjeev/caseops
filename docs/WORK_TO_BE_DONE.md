@@ -1,3 +1,11 @@
+## November23 — root dependency release prerequisite
+
+The targeted source repair is locally verified, with the original parser
+fixture failure retained. Complete current-source CI and current-built public
+notice browser acceptance before claiming the14 distribution prerequisites.
+No qualification build or signing has run. Details and remaining conditional
+supplier scope are in [the dated record](security/ROOT_DEPENDENCY_SECURITY_2026-11-23.md).
+
 ## November23 - source reconciliation before dependency repair
 
 The security repair branch combines deployed main `66f687380dda` with the five

@@ -208,3 +208,7 @@ apps/mobile/vendor/glob-14.0.6-caseops.2/*.json text eol=lf
 apps/mobile/vendor/glob-14.0.6-caseops.2/*.md text eol=lf
 apps/mobile/vendor/glob-14.0.6-caseops.2/*.txt text eol=lf
 /apps/mobile/vendor/glob-14.0.6-caseops.2/BUNDLED-LICENSES.txt whitespace=-blank-at-eof
+
+# Preserve the exact official Vite8.2.6 licence text and its quoted whitespace.
+apps/web/public/third-party-notices/vite-8.2.6-LICENSE.txt whitespace=-blank-at-eol,-blank-at-eof
+license-policy/upstream/vite_8.2.6/LICENSE.md whitespace=-blank-at-eol,-blank-at-eof

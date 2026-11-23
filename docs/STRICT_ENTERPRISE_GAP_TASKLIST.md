@@ -1,3 +1,12 @@
+## November23 — targeted root dependency security repair
+
+Partially implemented. The new candidate replaces affected Vite/Undici and the
+associated Rolldown supplier, with actual local ci, strict audits, complete
+parser/notice regressions and web/E2E typing. Full current-source CI, normal CSS
+build, public-content browser replay and all14 qualification gates remain open;
+no native, signing or deployment credit transfers from FDD. See
+[the dated evidence record](security/ROOT_DEPENDENCY_SECURITY_2026-11-23.md).
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Missing (root cause).** In release CI run 45000524482 the Admin page's API calls
