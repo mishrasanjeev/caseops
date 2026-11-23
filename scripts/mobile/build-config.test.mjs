@@ -1221,6 +1221,9 @@ test('actual Expo Android mod compiler applies the plugin and removes QA output 
   const gradle = path.join(dir, 'android/app/build.gradle');
   mkdirSync(path.dirname(gradle), { recursive: true });
   writeFileSync(gradle, "apply plugin: 'com.android.application'\n");
+  const wrapper = path.join(dir, 'android/gradle/wrapper/gradle-wrapper.properties');
+  mkdirSync(path.dirname(wrapper), { recursive: true });
+  writeFileSync(wrapper, 'distributionUrl=https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip\n');
   const main=path.join(dir,'android/app/src/main/java/ai/caseops/mobile/dev/MainApplication.kt');
   mkdirSync(path.dirname(main),{recursive:true});
   writeFileSync(main,'package ai.caseops.mobile.dev\nclass MainApplication : Application(), ReactApplication {\n}\n');
@@ -1230,7 +1233,11 @@ test('actual Expo Android mod compiler applies the plugin and removes QA output 
   await run(env);
   assert.match(readFileSync(gradle, 'utf8'), /localAcceptance/);
   assert.ok(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')));
+  const pinnedWrapper = readFileSync(wrapper, 'utf8');
+  assert.match(pinnedWrapper, /gradle-9\.9\.2-bin\.zip/);
+  assert.match(pinnedWrapper, /distributionSha256Sum=971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b/);
   await run({});
+  assert.equal(readFileSync(wrapper, 'utf8'), pinnedWrapper);
   assert.equal(readFileSync(gradle, 'utf8'), "apply plugin: 'com.android.application'\n");
   assert.equal(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')), false);
 });
@@ -1372,4 +1379,53 @@ test('cross-platform profile guards reject prebuilding the wrong native platform
       modRequest: { projectRoot: dir, platformProjectRoot: path.join(dir, 'android'), platform: 'android', modName: 'dangerous' } }),
     /IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID/);
   });
+});
+
+const REVIEWED_OLD_GRADLE_URL = String.raw`https\://services.gradle.org/distributions/gradle-9.4.1-bin.zip`;
+const REVIEWED_NEW_GRADLE_URL = String.raw`https\://services.gradle.org/distributions/gradle-9.9.2-bin.zip`;
+const REVIEWED_OLD_GRADLE_SHA = '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
+const REVIEWED_NEW_GRADLE_SHA = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b';
+function wrapperFixture(t) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-reviewed-gradle-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'gradle/wrapper/gradle-wrapper.properties');
+  mkdirSync(path.dirname(file), { recursive: true });
+  return { root, file };
+}
+test('reviewed Gradle wrapper transition preserves unrelated properties and is idempotent', t => {
+  const { root, file } = wrapperFixture(t);
+  for (const checksum of ['', `distributionSha256Sum=${REVIEWED_OLD_GRADLE_SHA}\n`]) {
+    const unrelated = '# public template\nnetworkTimeout=10000\nvalidateDistributionUrl=true\n';
+    writeFileSync(file, `${unrelated}distributionUrl=${REVIEWED_OLD_GRADLE_URL}\n${checksum}`);
+    plugin.pinGradleWrapper(root);
+    const expected = `${unrelated}distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\n`;
+    assert.equal(readFileSync(file, 'utf8'), expected);
+    plugin.pinGradleWrapper(root);
+    assert.equal(readFileSync(file, 'utf8'), expected);
+  }
+});
+test('reviewed Gradle wrapper rejects unknown source and ambiguous or incorrect checksums before mutation', t => {
+  const { root, file } = wrapperFixture(t);
+  for (const input of [
+    'distributionUrl=https://unreviewed.invalid/gradle.zip\n',
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\n distributionUrl=https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionUrl:https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistribution\\Url=https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionUrl=${REVIEWED_OLD_GRADLE_URL}\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionSha256Sum=${'0'.repeat(64)}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_OLD_GRADLE_SHA}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\n`,
+  ]) {
+    writeFileSync(file, input);
+    assert.throws(() => plugin.pinGradleWrapper(root));
+    assert.equal(readFileSync(file, 'utf8'), input);
+  }
+});
+test('reviewed Gradle wrapper rejects missing and oversized input without changing other files', t => {
+  const { root, file } = wrapperFixture(t);
+  assert.throws(() => plugin.pinGradleWrapper(root), { code: 'ENOENT' });
+  writeFileSync(file, 'x'.repeat(32769));
+  assert.throws(() => plugin.pinGradleWrapper(root), /GRADLE_WRAPPER_OWNED_REGULAR_INPUT/);
+  assert.equal(readFileSync(file, 'utf8'), 'x'.repeat(32769));
 });

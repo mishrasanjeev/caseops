@@ -106,7 +106,7 @@ function fixture(t, extra = {}) {
 fs.appendFileSync(process.env.CASEOPS_TEST_TRACE,'expo:'+JSON.stringify(process.argv.slice(2))+'\\n');
 const root=path.join(process.cwd(),'android');fs.mkdirSync(path.join(root,'gradle/wrapper'),{recursive:true});fs.mkdirSync(path.join(root,'app'),{recursive:true});
 for(const file of ['build.gradle','settings.gradle','gradle.properties','app/build.gradle'])fs.writeFileSync(path.join(root,file),'// synthetic offline native input\\n');
-fs.writeFileSync(path.join(root,'gradle/wrapper/gradle-wrapper.properties'),'distributionUrl=https\\\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip\\n');
+fs.writeFileSync(path.join(root,'gradle/wrapper/gradle-wrapper.properties'),'distributionUrl=https\\\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip\\n');
 fs.copyFileSync(process.env.CASEOPS_TEST_GRADLE,path.join(root,'gradlew'));fs.chmodSync(path.join(root,'gradlew'),0o700);
 `);
   file('tools/uname', '#!/bin/bash\nif [[ "$1" = -s ]]; then echo "${CASEOPS_TEST_OS:-Darwin}"; else echo arm64; fi\n', true);
@@ -189,7 +189,7 @@ test('actual shell orchestration binds portable source/CA receipt, ARM64 ELF and
   const trace = readFileSync(f.trace, 'utf8'); assert.match(trace, /prebuild.*--platform.*android.*--no-install/);
   assert.match(trace, /assembleLocalAcceptance.*reactNativeArchitectures=arm64-v8a/); assert.match(trace, /android.builder.sdkDownload=false/);
   assert.match(trace, /org.gradle.java.installations.auto-download=false/); assert.doesNotMatch(trace, /adb|emulator|--licenses|sdkmanager|expo.*start/);
-  assert.match(readFileSync(path.join(output, 'gradle-wrapper-gradle-wrapper.properties'), 'utf8'), /distributionSha256Sum=2ab2958f/);
+  assert.match(readFileSync(path.join(output, 'gradle-wrapper-gradle-wrapper.properties'), 'utf8'), /distributionSha256Sum=971fcd71/);
 });
 
 test('actual preflight order verifies generated public renderer bytes before source snapshots, prebuild and Gradle', t => {

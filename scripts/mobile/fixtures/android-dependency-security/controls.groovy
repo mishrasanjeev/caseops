@@ -87,8 +87,8 @@ final class GradleContract {
 
 final List<String> CASE_IDS = ["ANDROID-SECURITY-CONTROL-01", "ANDROID-SECURITY-CONTROL-02", "ANDROID-SECURITY-CONTROL-03", "ANDROID-SECURITY-CONTROL-04", "ANDROID-SECURITY-CONTROL-05", "ANDROID-SECURITY-CONTROL-06", "ANDROID-SECURITY-CONTROL-07", "ANDROID-SECURITY-CONTROL-08", "ANDROID-SECURITY-CONTROL-09", "ANDROID-SECURITY-CONTROL-10"]
 assert CASE_IDS.size() == 10 && CASE_IDS.toSet().size() == 10
-final int MAX_WIRE = 65536, MAX_SOURCE = 32768, PREFIX_BYTES = 29310
-final String PREFIX_SHA = '4ec6f38c3ea083d66d8880d729ee7b165bc5f6d750495dae69d82cc72031d1c1'
+final int MAX_WIRE = 65536, MAX_SOURCE = 32768, PREFIX_BYTES = 29316
+final String PREFIX_SHA = 'c63f8bfd68e2dedd8e7ad037d02c8281dc14b4fdadc9a56921a975bdeeba2fc2'
 def sha = { byte[] value -> MessageDigest.getInstance('SHA-256').digest(value).encodeHex().toString() }
 def wire = new ByteArrayOutputStream()
 byte[] buffer = new byte[4096]

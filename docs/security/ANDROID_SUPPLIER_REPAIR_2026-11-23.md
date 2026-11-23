@@ -23,8 +23,14 @@ though the build applied AGP 9.2.1. Its old classpath introduced legacy Netty,
 Bouncy Castle and Protobuf suppliers. Root and included build configurations
 also selected affected Guava and Kotlin plugin versions.
 
-The proposed repair appends a scoped policy to `android-no-paid.gradle`,
-preserving every byte of its previous 29,310-byte transport policy. It aligns
+The dependency repair appends a scoped policy to `android-no-paid.gradle`.
+Its security suffix remains byte-identical through the separate reviewed
+Gradle transition. That transition changes only the exact Gradle version,
+the moved transport class import and its three changed JAR origins. The
+source oracle reverses those explicit changes and verifies the original
+29,310-byte transport policy hash. Exact native code origins, classloader
+identity, private-final reflection fields, authentication scopes and redirect
+checks remain fail-closed and require actual Gradle execution. It aligns
 only WebView's AGP classpath with the applied 9.2.1 version, repairs affected
 build coordinates and Kotlin plugin requests, and sets release compile/runtime
 minimums for Gson, Commons IO and Okio. Numeric newer selections remain newer;
@@ -43,8 +49,12 @@ The bundled Gradle supplier also needs repair. The original official Gradle
 replacement is the complete official Gradle 9.9.2 distribution, rather than
 modified JARs inside the old distribution. Its official release SHA-256 is
 `971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b`.
-The retained ZIP has been downloaded and verified; installed supplier,
-compatibility, source pin and rebuilt APK verification remain separate gates.
+The retained ZIP and every installed file/mode have been verified against
+the official archive (720 files and 350 JARs). Production and QA Expo
+prebuilds pin its exact URL and checksum through the same opened wrapper
+descriptor; unknown templates, duplicate properties and wrong checksums
+are rejected. Complete supplier advisories, actual Gradle compatibility
+and rebuilt APK verification remain separate gates.
 
 The original 510-coordinate result is not a complete SDK audit. Supporting
 origins additionally contain 21 Maven plugin/compiler suppliers and six local
@@ -64,8 +74,14 @@ Evidence is retained under the native release evidence root
 - `official-gradle-9.9.2-qualified-input-01`: official replacement distribution.
 
 The complete local tooling module passed 477 cases with no failures or skips.
-Build configuration tests passed 98 cases; their two declared Windows CLI
-cases remain skipped on this Mac. Ten independent Groovy policy contract
+The updated build configuration module passed 101 cases; its two declared
+Windows CLI cases remain skipped on this Mac. The complete Android wrapper
+module passed 49 cases. All three requested modules were present in the
+native reporter; 629 cases comprised 627 passes and those two skips.
+A first fresh-checkout run lacked root Next dependencies, and a later new
+positive fixture used an incorrect JavaScript escape. Both failures remain
+retained; the complete three-module replacement passed after canonical
+root installation and correction of that fixture. Ten independent Groovy policy contract
 controls passed under the qualified official 9.9.2 distribution. The complete
 replacement control invocation exited zero with verified process-group
 cleanup and unchanged observation/byte budgets. The first invocation's ten

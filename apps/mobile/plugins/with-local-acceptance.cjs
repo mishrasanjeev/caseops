@@ -188,6 +188,56 @@ function writeAndroidOverlay(androidRoot, settings) {
   }
 }
 
+// Pin the reviewed runtime for both production and local Android projects.
+function pinGradleWrapper(androidRoot) {
+  const file = path.join(androidRoot, 'gradle/wrapper/gradle-wrapper.properties');
+  const fd = fs.openSync(file, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
+  try {
+    const before = fs.fstatSync(fd, { bigint: true });
+    const frame = value => ['ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'mtimeNs', 'ctimeNs', ...(process.platform === 'win32' ? [] : ['dev'])].map(key => String(value[key]));
+    assert.ok(before.isFile() && before.nlink === 1n && before.uid === BigInt(process.getuid?.() ?? 0) && before.size > 0n && before.size <= 32768n, 'GRADLE_WRAPPER_OWNED_REGULAR_INPUT');
+    assert.deepEqual(frame(fs.lstatSync(file, { bigint: true })), frame(before));
+    const input = fs.readFileSync(fd, 'utf8');
+    assert.equal(BigInt(Buffer.byteLength(input)), before.size);
+    assert.deepEqual(frame(fs.fstatSync(fd, { bigint: true })), frame(before));
+    assert.deepEqual(frame(fs.lstatSync(file, { bigint: true })), frame(before));
+    const keys = new Set();
+    for (const line of input.split('\n')) {
+      if (line === '' || /^\s*[#!]/.test(line)) continue;
+      const row = /^(distributionBase|distributionPath|distributionUrl|zipStoreBase|zipStorePath|networkTimeout|validateDistributionUrl|distributionSha256Sum)=([^\r\n\0]*)$/.exec(line);
+      assert.ok(row && !row[2].endsWith('\\') && !keys.has(row[1]), 'CANONICAL_UNAMBIGUOUS_GRADLE_WRAPPER_PROPERTIES');
+      keys.add(row[1]);
+    }
+    const urls = [...input.matchAll(/^distributionUrl=(.*)$/gm)];
+    const sums = [...input.matchAll(/^distributionSha256Sum=(.*)$/gm)];
+    assert.equal(urls.length, 1, 'EXACT_GRADLE_WRAPPER_URL');
+    assert.ok(sums.length <= 1, 'EXACT_GRADLE_WRAPPER_CHECKSUM');
+    const oldUrl = 'https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip';
+    const newUrl = 'https\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip';
+    const oldSha = '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
+    const newSha = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b';
+    assert.ok(urls[0][1] === oldUrl || urls[0][1] === newUrl, 'REVIEWED_GRADLE_WRAPPER_SOURCE');
+    if (urls[0][1] === newUrl) assert.equal(sums[0]?.[1], newSha, 'PINNED_GRADLE_CHECKSUM_REQUIRED');
+    else if (sums.length) assert.equal(sums[0][1], oldSha, 'REVIEWED_GRADLE_TEMPLATE_CHECKSUM');
+    let output = input.replace(urls[0][0], 'distributionUrl=' + newUrl);
+    output = sums.length ? output.replace(sums[0][0], 'distributionSha256Sum=' + newSha) : output + (output.endsWith('\n') ? '' : '\n') + 'distributionSha256Sum=' + newSha + '\n';
+    assert.ok(Buffer.byteLength(output) <= 32768, 'GRADLE_WRAPPER_OUTPUT_BOUND');
+    if (output !== input) {
+      const bytes = Buffer.from(output);
+      let written = 0;
+      while (written < bytes.length) written += fs.writeSync(fd, bytes, written, bytes.length - written, written);
+      fs.ftruncateSync(fd, bytes.length);
+    }
+    const after = fs.fstatSync(fd, { bigint: true });
+    assert.equal(after.ino, before.ino);
+    const verified = Buffer.alloc(Buffer.byteLength(output) + 1);
+    assert.equal(fs.readSync(fd, verified, 0, verified.length, 0), Buffer.byteLength(output));
+    assert.equal(verified.subarray(0, Buffer.byteLength(output)).toString('utf8'), output);
+    assert.deepEqual(frame(fs.fstatSync(fd, { bigint: true })), frame(after));
+    assert.deepEqual(frame(fs.lstatSync(file, { bigint: true })), frame(after));
+  } finally { fs.closeSync(fd); }
+}
+
 function withLocalAcceptance(config) {
   const settings = acceptanceSettings(process.env);
   config = withAppBuildGradle(config, (mod) => {
@@ -197,6 +247,7 @@ function withLocalAcceptance(config) {
   });
   config = withDangerousMod(config, ['android', (mod) => {
     assert.ok(!settings || settings.platform === 'android', 'IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID');
+    pinGradleWrapper(mod.modRequest.platformProjectRoot);
     writeAndroidOverlay(mod.modRequest.platformProjectRoot, settings);
     observer.overlay(mod.modRequest.platformProjectRoot, path.resolve(mod.modRequest.projectRoot, '../..'), settings?.observer ?? null, settings?.releaseSha);
     return mod;
@@ -210,4 +261,4 @@ function withLocalAcceptance(config) {
 module.exports = withLocalAcceptance;
 Object.assign(module.exports, { acceptanceSettings, localOrigin, readPublicCa,
   networkSecurityXml, updateGradle, writeAndroidOverlay,
-  ANDROID_PROFILE, IOS_PROFILE, ANDROID_APP_ID, IOS_BUNDLE_ID });
+  pinGradleWrapper, ANDROID_PROFILE, IOS_PROFILE, ANDROID_APP_ID, IOS_BUNDLE_ID });

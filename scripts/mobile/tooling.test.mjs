@@ -6308,7 +6308,20 @@ function restoreAndroidDependencySecurity(source) {
   const at = source.indexOf(begin), layer = source.slice(at + 1);
   assert.ok(layer.endsWith(end));
   assert.equal(createHash('sha256').update(layer).digest('hex'), 'b9e7ae3a000994bb31cdbd84f5b320793b67fb402f7f0d5c029f37ce3cff7f9c', 'EXACT_REVIEWED_ANDROID_DEPENDENCY_SECURITY_LAYER');
-  const original = source.slice(0, at);
+  let original = source.slice(0, at);
+  assert.equal(createHash('sha256').update(original).digest('hex'), 'c63f8bfd68e2dedd8e7ad037d02c8281dc14b4fdadc9a56921a975bdeeba2fc2', 'EXACT_REVIEWED_GRADLE_992_TRANSPORT_PREFIX');
+  const origins = [
+    ["import org.gradle.internal.resource.transport.RepositoryTransportFactory", "import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory"],
+    ["(RepositoryTransportFactory):'lib/plugins/gradle-dependency-management-resources-9.9.2.jar'", "(RepositoryTransportFactory):'lib/plugins/gradle-dependency-management-9.9.2.jar'"],
+    ["(AuthenticationInternal):'lib/gradle-credentials-9.9.2.jar'", "(AuthenticationInternal):'lib/gradle-core-9.9.2.jar'"],
+    ["(HttpHeaderCredentials):'lib/gradle-credentials-api-9.9.2.jar'", "(HttpHeaderCredentials):'lib/gradle-core-api-9.9.2.jar'"],
+  ];
+  for (const [current, prior] of origins) {
+    assert.equal(original.split(current).length - 1, 1, 'EXACT_GRADLE_992_ORIGIN_TRANSITION');
+    original = original.replace(current, prior);
+  }
+  assert.equal(original.split('9.9.2').length - 1, 14, 'EXACT_GRADLE_992_VERSION_TRANSITIONS');
+  original = original.replaceAll('9.9.2', '9.4.1');
   assert.equal(createHash('sha256').update(original).digest('hex'), '4ec6f38c3ea083d66d8880d729ee7b165bc5f6d750495dae69d82cc72031d1c1', 'ALL_PRIOR_ANDROID_TRANSPORT_BYTES_PRESERVED');
   return original;
 }

@@ -76,8 +76,8 @@ node - "$PWD/android" "$run" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const [android, output] = process.argv.slice(2), file = path.join(android, 'gradle/wrapper/gradle-wrapper.properties');
 let body = fs.readFileSync(file, 'utf8');
-assert.equal(/^distributionUrl=(.+)$/m.exec(body)?.[1], 'https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip', 'PINNED_GRADLE_DISTRIBUTION_REQUIRED');
-const digest = '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
+assert.equal(/^distributionUrl=(.+)$/m.exec(body)?.[1], 'https\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip', 'PINNED_GRADLE_DISTRIBUTION_REQUIRED');
+const digest = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b';
 const existing = /^distributionSha256Sum=(.*)$/m.exec(body);
 if (existing) assert.equal(existing[1], digest, 'PINNED_GRADLE_CHECKSUM_REQUIRED');
 else { body += `\ndistributionSha256Sum=${digest}\n`; fs.writeFileSync(file, body); }
