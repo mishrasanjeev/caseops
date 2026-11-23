@@ -4482,3 +4482,10 @@ exit1 is retained: acknowledged pruning changed only the root lock timestamps,
 with all 4,392 source byte maps unchanged. Governance rendering and the complete
 12-command contract step pass on committed inputs; no release/store acceptance
 is inferred from these component checks.
+
+2026-11-23 PR645 Windows scheduling follow-up: retained actual native discovery
+reports prove short 8.3 and long paths for the same owned fixture. Canonicalize
+the fixture and reported files before relative identity checks, retain explicit
+outside-root/missing-file rejection, and preserve every four-case role, pooled
+negative and phase timing assertion. Fresh installation and the complete local
+scheduling test pass; actual Windows acceptance remains the replacement CI job.
