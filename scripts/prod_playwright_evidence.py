@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 738, "app-mobile": 65}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 721, "app-mobile": 55}
+APP_PROJECT_COUNTS = {"app-chromium": 739, "app-mobile": 66}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 722, "app-mobile": 56}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -140,6 +140,14 @@ APP_REQUIRED_CASES = (
     ("app-chromium", "watch-acl-query-states.spec.ts", (
         "watch-acl-query-states.spec.ts",
         "Watch removes revoked source evidence from the workspace and report after reload",
+    )),
+    ("app-chromium", "matter-ethical-walls-admin-2026-11-22.spec.ts", (
+        "matter-ethical-walls-admin-2026-11-22.spec.ts",
+        "admin walls a colleague off a Matter and lifts the wall at 1280px",
+    )),
+    ("app-mobile", "matter-ethical-walls-admin-2026-11-22.spec.ts", (
+        "matter-ethical-walls-admin-2026-11-22.spec.ts",
+        "[mobile] admin walls a colleague off a Matter and lifts the wall at 393px",
     )),
     ("app-chromium", "public-content.spec.ts", (
         "public-content.spec.ts", "Public landing page and user guide",

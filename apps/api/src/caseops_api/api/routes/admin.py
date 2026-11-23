@@ -758,7 +758,7 @@ def get_tenant_ai_policy(
     session: DbSession,
 ) -> TenantAIPolicyResponse:
     row = _ensure_policy_row(session, context.company.id)
-    return TenantAIPolicyResponse(
+    response = TenantAIPolicyResponse(
         company_id=row.company_id,
         predictive_bench_strategy_enabled=bool(
             getattr(row, "predictive_bench_strategy_enabled", False)
@@ -773,6 +773,11 @@ def get_tenant_ai_policy(
         assistant_retention_days=int(row.assistant_retention_days),
         policy_version=int(row.policy_version),
     )
+    # A read never persists the flushed default row; closing the session
+    # discarded it anyway. Discard it here so the SQLite write lock is not
+    # held until the request's teardown runs on the event loop.
+    session.rollback()
+    return response
 
 
 @router.patch(

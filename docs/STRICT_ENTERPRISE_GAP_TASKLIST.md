@@ -21,15 +21,29 @@ no native, signing or deployment credit transfers from FDD. See
 
 ## November22 — intermittent Admin API stall under SQLite release CI
 
-**Missing (root cause).** In release CI run 45000524482 the Admin page's API calls
-(Matters, walls directory, storage, AI policy, token governance, enterprise
-readiness) stayed pending for more than 15 s on desktop and 30 s at 393px. A local
-SQLite run reproduced it once in 14 attempts, after a walled member's audited
-"Matter not found" and the owner's next sign-in; the 13 instrumented reruns found
-no event-loop block. The SQLite busy timeout and the session pool timeout are both
-30 s, so lock or pool waits on the event loop are the leading hypothesis, not a
-finding. The Admin ethical walls card is held from the 2026-11-22 release until
-this is explained. Production uses PostgreSQL; whether the stall can occur there is unproven.
+**Implemented in code; release proof pending.** Root cause found 2026-11-23. In
+release CI run 45000524482 the Admin page's API calls stayed pending for more than
+15 s on desktop and 30 s at 393px, so the Admin ethical walls card was held from
+the 2026-11-22 release. Two Admin reads formed a deadlock in the single API process:
+
+- `GET /api/matters/ethical-walls` was `async def`. Its audit write waited for
+  SQLite's write lock on the event loop, freezing every request teardown.
+- `GET /api/admin/tenant-ai-policy` flushed a default policy row and never
+  committed. It held the write lock until its teardown, which needed that loop.
+
+While the loop was frozen, finished requests could not return their connections,
+so the rest of the burst failed with `database_capacity_exhausted` and
+`database_temporarily_unavailable` 503s after 30 s. A concurrent burst of the
+Admin page's 17 reads reproduced it on every run (60 of 153 requests were 503s).
+Each fix alone removes it. Both ship: the walls read is now sync, and the policy
+read rolls back its unsaved default row before returning, so it no longer holds
+the write lock. `apps/api/tests/test_admin_concurrent_reads_20261123.py` fails on
+the old routes and passes on the fix. The walls card is mounted again. Production
+is not exposed: the API runs at Cloud Run concurrency 1, so one instance never
+serves the concurrent reads the deadlock needs. Open, not fixed: other `async def`
+routes still write synchronously on the event loop, and a read that leaves an
+uncommitted write holds SQLite's lock until teardown. Both remain possible
+CI-only stall sources.
 
 ## November22 — walled admins could change walls and grants on their Matter
 
