@@ -829,7 +829,9 @@ async def check_matter_code_available(
         "Bounded to 500 rows (`truncated` reports more). Audited."
     ),
 )
-async def get_current_company_matter_ethical_walls(
+# Sync like the other Admin reads: its audit write must wait for the database
+# in a worker thread, never on the event loop.
+def get_current_company_matter_ethical_walls(
     context: MatterAccessManager,
     session: DbSession,
 ) -> MatterEthicalWallDirectoryResponse:
