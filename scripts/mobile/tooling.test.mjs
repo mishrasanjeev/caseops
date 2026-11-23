@@ -6290,6 +6290,11 @@ test('IOS-ARCHIVE-04 the separately executed actual CLI fixture retains every lo
   assert.ok(match); const actual = JSON.parse(match[1]);
   assert.deepEqual(actual, ["ARCHIVE-01-absent-and-empty-targets","ARCHIVE-02-original-filesystem-archive","ARCHIVE-03-unsafe-uri-and-argv","ARCHIVE-04-changed-manifest-and-archive","ARCHIVE-05-source-replacement-keeps-reviewed-bytes","ARCHIVE-06-target-link-content-and-replacement","ARCHIVE-07-original-write-error-identity","ARCHIVE-08-https-path-and-marker-unchanged"]); assert.equal(new Set(actual).size, 8);
   assert.match(source, /m\.iosHostCli\(\['curl',\.\.\.args\]\)/);
+  const helperSource = fs.readFileSync(new URL('./ios-host-launch.mjs', import.meta.url), 'utf8');
+  const runnerNode = source.match(/process\.versions\.node === '([0-9.]+)'/);
+  const helperNode = helperSource.match(/process\.versions\.node === '([0-9.]+)'/);
+  assert.ok(runnerNode && helperNode);
+  assert.equal(runnerNode[1], helperNode[1], 'ARCHIVE_RUNNER_ACCEPTS_THE_CANONICAL_IOS_HOST_NODE');
   assert.match(source, /phases:24/); assert.match(source, /actualChildren:0,httpRequests:0/);
   assert.match(source, /assert\.equal\(r\.error,sentinel\)/);
   assert.match(source, /assert\.equal\(sourceOpens,1\)/);
