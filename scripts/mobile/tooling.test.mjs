@@ -6307,7 +6307,7 @@ function restoreAndroidDependencySecurity(source) {
   assert.equal(source.split(end).length - 1, 1, 'EXACT_ANDROID_SECURITY_LAYER_END');
   const at = source.indexOf(begin), layer = source.slice(at + 1);
   assert.ok(layer.endsWith(end));
-  assert.equal(createHash('sha256').update(layer).digest('hex'), '830e35b0befbbfa0f9ebfa0a4b56931c6fffafef0265dc53533001dbd6f63c8f', 'EXACT_REVIEWED_ANDROID_DEPENDENCY_SECURITY_LAYER');
+  assert.equal(createHash('sha256').update(layer).digest('hex'), 'ed4b7b925627830e7ac20b4f7910e43b30a43cbe3fadb5fab52753b0e5d77a6b', 'EXACT_REVIEWED_ANDROID_DEPENDENCY_SECURITY_LAYER');
   let original = source.slice(0, at);
   assert.equal(createHash('sha256').update(original).digest('hex'), 'c63f8bfd68e2dedd8e7ad037d02c8281dc14b4fdadc9a56921a975bdeeba2fc2', 'EXACT_REVIEWED_GRADLE_992_TRANSPORT_PREFIX');
   const origins = [

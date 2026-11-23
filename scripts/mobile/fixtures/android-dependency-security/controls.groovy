@@ -130,12 +130,12 @@ shell.evaluate(block, 'verified-android-dependency-security-contract.groovy')
 Class policy = shell.classLoader.loadClass('CaseOpsAndroidDependencySecurity')
 assert gradleContract.settingsHooks.size() == 1 && gradleContract.projectHooks.size() == 1
 final Map<String,String> BUILD = [
-'com.google.guava:guava':'33.8.0-jre', 'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.21',
+'com.google.guava:guava':'33.8.0-jre', 'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.20',
 'org.bouncycastle:bcprov-jdk18on':'1.86', 'org.bouncycastle:bcpkix-jdk18on':'1.86',
 'org.bouncycastle:bcutil-jdk18on':'1.86', 'org.apache.commons:commons-lang3':'3.22.0',
 'org.bitbucket.b_c:jose4j':'0.9.7', 'org.jdom:jdom2':'2.0.6.1']
 final Map<String,String> OLD = [
-'com.google.guava:guava':'33.7.1-jre', 'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.20',
+'com.google.guava:guava':'33.7.1-jre', 'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.10',
 'org.bouncycastle:bcprov-jdk18on':'1.85', 'org.bouncycastle:bcpkix-jdk18on':'1.85',
 'org.bouncycastle:bcutil-jdk18on':'1.85', 'org.apache.commons:commons-lang3':'3.17.0',
 'org.bitbucket.b_c:jose4j':'0.9.5', 'org.jdom:jdom2':'2.0.6']
@@ -179,7 +179,7 @@ BUILD.each { key, fixed ->
 assert c.resolutionStrategy.resolve(key, fixed, fixed).selected.empty
 assert c.resolutionStrategy.resolve(key, OLD[key], NEWER[key]).selected.empty
 }
-assert c.resolutionStrategy.resolve('org.jetbrains.kotlin:kotlin-gradle-plugin', '2.4.22', '2.4.20').selected == ['2.4.21']
+assert c.resolutionStrategy.resolve('org.jetbrains.kotlin:kotlin-gradle-plugin', '2.4.22', '2.4.10').selected == ['2.4.20']
 },
 { // 03: numeric ordering and missing trailing zeros are semantic, not lexical.
 assert policy.minimum('3.9.99', '3.10.0') == '3.10.0'
@@ -187,8 +187,8 @@ assert policy.minimum('3.10', '3.10.0') == null
 assert policy.minimum('3.10.0.0', '3.10') == null
 assert policy.minimum('3.11.0', '3.10.99') == null
 assert policy.minimum('33.7.10-jre', '33.7.2-jre') == null
-assert policy.minimum(null, '2.4.21') == '2.4.21'
-assert policy.minimum('', '2.4.21') == '2.4.21'
+assert policy.minimum(null, '2.4.20') == '2.4.20'
+assert policy.minimum('', '2.4.20') == '2.4.20'
 ['18.0','23.0'].each { value ->
 assert policy.buildMinimum('com.google.guava:guava', value, '33.8.0-jre') == '33.8.0-jre'
 assert settingsClasspath().resolutionStrategy.resolve('com.google.guava:guava', value, value).selected == ['33.8.0-jre']
@@ -253,7 +253,7 @@ assert p.buildscript.configurations.add('releaseRuntimeClasspath').resolutionStr
 },
 { // 09: only the six exact Kotlin plugin IDs participate in plugin resolution.
 def s = new SettingsContract(); gradleContract.settings(s)
-KOTLIN_IDS.each { id -> assert s.pluginManagement.resolutionStrategy.resolve(id, '2.4.20').selected == ['2.4.21'] }
+KOTLIN_IDS.each { id -> assert s.pluginManagement.resolutionStrategy.resolve(id, '2.4.10').selected == ['2.4.20'] }
 ['org.jetbrains.kotlin.jvm.extra', 'org.jetbrains.kotlin.plugin.allopen', 'com.android.application', 'org.jetbrains.kotlinx.serialization'].each { id ->
 assert s.pluginManagement.resolutionStrategy.resolve(id, '2.4.20').selected.empty
 }
@@ -261,11 +261,11 @@ assert s.pluginManagement.resolutionStrategy.resolve(id, '2.4.20').selected.empt
 { // 10: nullable plugin versions stay untouched; lazy configurations still get hooks.
 def s = new SettingsContract(); gradleContract.settings(s)
 KOTLIN_IDS.each { id ->
-[null, '', '2.4.21', '2.5.0'].each { version -> assert s.pluginManagement.resolutionStrategy.resolve(id, version).selected.empty }
+[null, '', '2.4.20', '2.4.21', '2.5.0'].each { version -> assert s.pluginManagement.resolutionStrategy.resolve(id, version).selected.empty }
 expectSelectorRefusal { s.pluginManagement.resolutionStrategy.resolve(id, '2.+') }
 }
 def later = s.buildscript.configurations.add('classpath')
-assert later.resolutionStrategy.resolve('org.jetbrains.kotlin:kotlin-gradle-plugin', '2.4.20', null).selected == ['2.4.21']
+assert later.resolutionStrategy.resolve('org.jetbrains.kotlin:kotlin-gradle-plugin', '2.4.10', null).selected == ['2.4.20']
 def p = project(':app')
 assert p.configurations.add('laterReleaseRuntimeClasspath').resolutionStrategy.resolve('com.google.code.gson:gson', '2.8.8', '2.8.8').selected == ['2.15.0']
 }

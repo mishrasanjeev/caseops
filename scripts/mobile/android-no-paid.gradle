@@ -389,7 +389,7 @@ gradle.projectsEvaluated {
 final class CaseOpsAndroidDependencySecurity {
 static final Map<String,String> BUILD = Collections.unmodifiableMap([
 'com.google.guava:guava':'33.8.0-jre',
-'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.21',
+'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.20',
 'org.bouncycastle:bcprov-jdk18on':'1.86',
 'org.bouncycastle:bcpkix-jdk18on':'1.86',
 'org.bouncycastle:bcutil-jdk18on':'1.86',
@@ -436,7 +436,7 @@ settings.pluginManagement.resolutionStrategy.eachPlugin { plugin ->
 if (plugin.requested.id.id in ['org.jetbrains.kotlin.jvm', 'org.jetbrains.kotlin.android',
 'org.jetbrains.kotlin.multiplatform', 'org.jetbrains.kotlin.kapt',
 'org.jetbrains.kotlin.plugin.serialization', 'org.jetbrains.kotlin.plugin.compose'] && plugin.requested.version) {
-def v = CaseOpsAndroidDependencySecurity.minimum(plugin.requested.version, '2.4.21')
+def v = CaseOpsAndroidDependencySecurity.minimum(plugin.requested.version, '2.4.20')
 if (v) plugin.useVersion(v)
 }
 }

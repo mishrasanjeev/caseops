@@ -24,7 +24,7 @@ function projectFiles(buffers) {
     + 'include(":rn-child", ":expo-autolinking", ":expo-core", ":expo-launcher", ":serialization-child")\n');
   files.set('gradle/libs.versions.toml', inputs[0]);
   files.set('build.gradle.kts', 'plugins {\n alias(libs.plugins.kotlin.jvm) apply false\n'
-    + ' kotlin("plugin.serialization") version "2.4.21" apply false\n}\n'
+    + ' kotlin("plugin.serialization") version "2.4.20" apply false\n}\n'
     + 'tasks.register("verifyKotlinDeclarations") { doLast {\n'
     + ' val expected = setOf(":rn-child", ":expo-autolinking", ":expo-core", ":expo-launcher", ":serialization-child")\n'
     + ' check(subprojects.map { it.path }.toSet() == expected)\n'
@@ -38,7 +38,7 @@ function projectFiles(buffers) {
   files.set('expo-autolinking/build.gradle.kts', 'plugins { ' + literal(1, 'jvm') + ' }\n');
   files.set('expo-core/build.gradle.kts', 'plugins { ' + literal(4, 'jvm') + ' }\n');
   files.set('expo-launcher/build.gradle.kts', 'plugins { ' + literal(3, 'jvm') + ' }\n');
-  files.set('serialization-child/build.gradle.kts', 'plugins { kotlin("jvm") version "2.4.21"; '
+  files.set('serialization-child/build.gradle.kts', 'plugins { kotlin("jvm") version "2.4.20"; '
     + literal(2, 'plugin.serialization') + ' }\n');
   files.set('gradle.properties', 'org.gradle.daemon=false\norg.gradle.workers.max=2\norg.gradle.jvmargs=-Xmx512m\n');
   return files;

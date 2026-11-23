@@ -1,3 +1,25 @@
+## November24 — Android compiler classpath gap
+
+**Not fixed; replacement release remains NO-GO.** The actual `a782b66d`
+Android QA build failed before native compilation because the retained Expo
+compiler plug-ins do not publish their current base versions for Kotlin
+2.4.21. The earlier successful dependency inventory covered compile/runtime
+and buildscript views, omitting compiler plug-in classpaths. Its QA-scoped
+supplier closure does not establish full SDK or APK acceptance. A plug-in-only
+V2 upgrade also changes generated runtime APIs and is incompatible with the
+retained runtime. Preserve the failed build, repair the supported version
+combination, extend the actual task-input inventory, then complete the actual
+APK/AAB and unchanged native acceptance. See
+[the exact failure and retained evidence](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md#24-november-actual-compiler-dependency-failure).
+
+The isolated source repair selects the published Kotlin 2.4.20 intersection
+without changing the Expo runtime or plug-in base versions. The maintainer's
+fixed boundary, immutable fix ancestry and 19 fresh zero-finding candidate
+queries support that deliberate pin supersession. Complete affected Node
+modules report 638 passes and two existing Windows-only skips. Native-build
+verification remains **Inconclusive**; full selected compiler/task supplier
+capture, Groovy controls and actual APK/AAB acceptance are still required.
+
 ## November23 — Android release supplier closure
 
 **Partially implemented; replacement release remains NO-GO.** Actual native

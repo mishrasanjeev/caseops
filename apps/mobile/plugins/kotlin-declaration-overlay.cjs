@@ -7,7 +7,7 @@ const { createHash, randomBytes } = require('node:crypto');
 // Package runtime code, dependency manifests and bundled notices are untouched.
 const policy = {
   "kind": "caseops-pinned-kotlin-declaration-overlay-v1",
-  "kotlinVersion": "2.4.21",
+  "kotlinVersion": "2.4.20",
   "packages": {
     "@react-native/gradle-plugin": {
       "version": "0.88.0",
@@ -35,55 +35,55 @@ const policy = {
       "package": "@react-native/gradle-plugin",
       "relative": "gradle/libs.versions.toml",
       "beforeSha256": "c7a028cdee90f490de9493ca9de92b61b994844836161871091c340c568f109e",
-      "afterSha256": "44a27d41062a7c01889fac1bc7666f8235ee14060de8588d66660830f8484c7d",
+      "afterSha256": "0f9f689c3362badd36d301ffe21a5f32b34c058dd425b529ad176bfcf14fd8c6",
       "beforeSize": 854,
       "afterSize": 855,
       "from": "kotlin = \"2.2.0\"",
-      "to": "kotlin = \"2.4.21\"",
+      "to": "kotlin = \"2.4.20\"",
       "fixture": "1-original.txt"
     },
     {
       "package": "expo-modules-autolinking",
       "relative": "android/expo-gradle-plugin/build.gradle.kts",
       "beforeSha256": "f43a78068aaa078c40a55f6d165be415971e80cd98e0993046933953561a209f",
-      "afterSha256": "8812fc1036fbdc3f266297f080448a882081ebb015ab4ef05c879c540b94fd6b",
+      "afterSha256": "17b81588947564e6f500f6a22ebc53132f57a39d734fdb61be44044a9ec40c39",
       "beforeSize": 84,
       "afterSize": 84,
       "from": "kotlin(\"jvm\") version \"2.2.21\"",
-      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.20\"",
       "fixture": "2-original.txt"
     },
     {
       "package": "expo-modules-autolinking",
       "relative": "android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts",
       "beforeSha256": "e6876c3e2795e5bf9e6d9910d09ce75135e1ec14c33b0ddf41d4a549cac9d704",
-      "afterSha256": "7754691d71bc552d027cf07bb655ea41ae31a68a6f69d85c15220a327f1f5b34",
+      "afterSha256": "b4a33f4505e01d067407ee9f70a04078c1cbf876de6bfc935296468476db73d6",
       "beforeSize": 884,
       "afterSize": 884,
       "from": "kotlin(\"plugin.serialization\") version \"1.9.24\"",
-      "to": "kotlin(\"plugin.serialization\") version \"2.4.21\"",
+      "to": "kotlin(\"plugin.serialization\") version \"2.4.20\"",
       "fixture": "3-original.txt"
     },
     {
       "package": "expo-dev-launcher",
       "relative": "expo-dev-launcher-gradle-plugin/build.gradle.kts",
       "beforeSha256": "fa57e74a7179891b599886d21141772b9676bee985bbe46f5b1c7304ae7633ef",
-      "afterSha256": "2c19a8ec2db0244b9ee4a54050dda8e9c07e4309bb2b08c929d62de179a3166d",
+      "afterSha256": "3ffa942b673568acffb2a759d73c4f638511f5383be0a49265228fc6c0a86853",
       "beforeSize": 812,
       "afterSize": 812,
       "from": "kotlin(\"jvm\") version \"2.2.21\"",
-      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.20\"",
       "fixture": "4-original.txt"
     },
     {
       "package": "expo-modules-core",
       "relative": "expo-module-gradle-plugin/build.gradle.kts",
       "beforeSha256": "e882b17f84fc6b343b571dea8b5c7147584d795e0ebbb6b242c453984a2101aa",
-      "afterSha256": "758a6825a7436c95817675caa1894d342f4e6b467498b92961744cad48a16016",
+      "afterSha256": "625df7436d0714aa4bb075bfb03bb362c1b73292ec4d499fc52fdb6cd4bd5b44",
       "beforeSize": 2083,
       "afterSize": 2083,
       "from": "kotlin(\"jvm\") version \"2.2.21\"",
-      "to": "kotlin(\"jvm\") version \"2.4.21\"",
+      "to": "kotlin(\"jvm\") version \"2.4.20\"",
       "fixture": "5-original.txt"
     }
   ],

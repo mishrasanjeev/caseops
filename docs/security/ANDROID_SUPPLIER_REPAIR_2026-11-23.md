@@ -179,6 +179,82 @@ Android native inventory with independent hardware checks, and complete every
 store qualification and promotion gate. Do not transfer FAF binary, backend,
 Simulator, JavaScript or public-version evidence to a changed Android binary.
 
+## 24 November: actual compiler dependency failure
+
+Bug verdict: **Not fixed** at `a782b66d`. The actual current Android QA build
+executed 32 Gradle tasks, then failed while determining dependencies for
+`:expo:compileReleaseKotlin`. The unchanged Expo plug-ins derived two
+unpublished artifacts from the selected Kotlin version:
+
+- `io.github.expo.pika:pika-compiler:1.1.0-2.4.21`
+- `io.github.expo:expo-modules-v2-compiler-plugin:0.2.6-2.4.21`
+
+The failed build and original cleanup are retained in
+`android-qa-a782b66d-preparation-01/monitored-a782-02` and
+`build/android-arm64-5i2vjtWP` under the release evidence root. The supervised
+invocation exited one after 48.298 seconds; its owned process group was reaped
+and absent, without a resource abort. It produced no APK or native compiler
+acceptance. The retained NDK advisory condition remains open.
+
+The earlier successful 54-view dependency capture covered project buildscript
+and release compile/runtime configurations. It did not materialize the Kotlin
+compiler plug-in classpaths. That capture and its supplier proofs remain valid
+only for their recorded scope; they do not establish complete build-input or
+production SDK acceptance. The replacement capture must explicitly reconcile
+the compiler and compiler-plug-in inputs used by the selected tasks, retaining
+the existing observation, byte and time limits.
+
+The newer V2 compiler `0.3.1-2.4.21` is not a safe plug-in-only substitution:
+its generated four-argument `SharedObjectRegistry.register` call is incompatible
+with the retained `0.2.6` runtime's three-argument API, and it names additional
+runtime symbols. The official source comparison and publication matrices are
+retained in
+`android-gradle-992-source-transition-01/android-kotlin-compiler-plugin-compatibility-review-01`.
+No runtime replacement, feature disablement or unsupported compiler substitution
+is accepted by this record. A compatible, advisory-patched published Kotlin
+intersection is required before actual build replay.
+
+The isolated source repair deliberately supersedes the project's 2.4.21 pin
+with Kotlin **2.4.20**, retaining Pika 1.1.0 and Expo V2 0.2.6. Both unchanged
+plug-ins publish compiler artifacts for that exact Kotlin version. This is a
+reviewed policy change, not a claim that 2.4.21 remained selected. The original
+maintainer advisory GHSA-r937-wjx7-w2jp / CVE-2026-53914 identifies
+2.4.20-Beta1 as the first patched release. The official JetBrains comparison
+proves fix `bf51df665b458fda7c3eaf436c4d88dc119d7ec6` is an ancestor of stable
+2.4.20, whose source retains the guarded cache deserialization. Nineteen fresh
+targeted candidate advisory queries returned zero findings. These queries do
+not replace actual selected-graph, artifact or complete SDK reconciliation.
+
+All five overlay preimages, package pins and supplier notices remain unchanged;
+only their Kotlin projection and expected hashes change. The security marker
+remains 32,644 bytes under the original 32,768-byte limit, with its transport
+prefix unchanged. The new security-layer hash was independently projected
+from the immutable `a782b66d` Git blob before comparison with the candidate.
+A new regression derives the two exact compiler coordinates from the projected
+vendor declarations and pinned official publication metadata, and rejects the
+unpublished 2.4.21 pair. It does not claim compiler execution.
+
+Verification of this uncommitted repair is **Inconclusive** for the native
+build. Canonical isolated root/mobile dependency installation completed in
+14.678 seconds with complete source byte/metadata equality. The three complete
+affected/adjacent Node modules then reported 640 cases: 638 passed and the two
+existing Windows-only cases skipped, with zero failures, cancellations or
+todos. All requested modules were present in their native reports. The
+supervised parent exited zero after 87.655 seconds, with its owned group reaped
+and absent. Evidence is retained in
+`supported-kotlin-dirty-unit-dependencies-20261124-01` and
+`supported-kotlin-complete-node3-20261124-01`. This is explicitly a dirty source
+candidate, not a frozen build or store artifact. Fresh complete supplier/task
+capture, Groovy controls and the actual Android build remain required.
+
+The independent current iOS Simulator build passed in 332.822 seconds and its
+artifact tree was reconciled completely. Its five family inventories contain
+83 cases and 249 phases; collection and a successful build are not native
+journey execution. The current API and two platform Web images also passed
+isolated runtime probes. Those results retain their own revision, binary and
+backend bindings. Full native journeys, physical-device checks, production
+signing and store submission remain separate, incomplete gates.
+
 The earlier native producer and local-run preparation guards require the
 binary, API and Web commit identities to match. Later fixture fields that
 record these identities separately do not override those guards. The final

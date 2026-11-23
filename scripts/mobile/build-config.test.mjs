@@ -1283,7 +1283,7 @@ test('KOTLIN-OVERLAY-01 exact supplier declarations project once and remain idem
   writeFileSync(untouched, 'UNCHANGED_RUNTIME_AND_NOTICES');
   const result = kotlinOverlay.applyKotlinDeclarations(dir);
   assert.equal(result.changed, 5); assert.equal(result.records.length, 5);
-  assert.equal(result.kotlinVersion, '2.4.21'); assertKotlinOverlay(dir);
+  assert.equal(result.kotlinVersion, '2.4.20'); assertKotlinOverlay(dir);
   for (let i = 0; i < files.length; i++) {
     const source = readFileSync(new URL('./fixtures/android-kotlin-declarations/' + manifest.targets[i].fixture, import.meta.url), 'utf8');
     assert.equal(readFileSync(files[i], 'utf8'), source.replace(manifest.targets[i].from, manifest.targets[i].to));
@@ -1367,9 +1367,9 @@ test('KOTLIN-OVERLAY-08 real Gradle regression projects retain catalog and Expo 
   assert.match(before.get('serialization-child/build.gradle.kts'), /serialization"\) version "1\.9\.24"/);
   kotlinOverlay.applyKotlinDeclarations(dir);
   const after = projectFiles(files.map(file => readFileSync(file)));
-  assert.match(after.get('gradle/libs.versions.toml'), /kotlin = "2\.4\.21"/);
+  assert.match(after.get('gradle/libs.versions.toml'), /kotlin = "2\.4\.20"/);
   for (const name of ['expo-autolinking', 'expo-core', 'expo-launcher', 'serialization-child'])
-    assert.match(after.get(name + '/build.gradle.kts'), /version "2\.4\.21"/);
+    assert.match(after.get(name + '/build.gradle.kts'), /version "2\.4\.20"/);
   assert.equal(after.size, 9);
   assert.throws(() => projectFiles(manifest.targets.map(() => Buffer.from('UNKNOWN'))), /NATIVE_KOTLIN_FIXTURE_UNKNOWN_SUPPLIER/);
 });
@@ -1435,6 +1435,50 @@ test('KOTLIN-OVERLAY-10 every copied supplier declaration retains its exact attr
   const names = readdirSync(directory).sort().map(name => 'scripts/mobile/fixtures/android-kotlin-declarations/' + name);
   const attrs = execFileSync('git', ['check-attr', 'text', '--', ...names], { cwd: repo, encoding: 'utf8', timeout: 5000 });
   assert.equal(attrs, names.map(name => name + ': text: unset\n').join(''));
+});
+
+test('KOTLIN-OVERLAY-11 declared Kotlin matches both published compiler plugins without changing their runtimes', (t) => {
+  const directory = path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations');
+  const compatibility = JSON.parse(readFileSync(path.join(directory, 'compiler-compatibility.json')));
+  assert.equal(compatibility.kotlinVersion, kotlinOverlay.policy.kotlinVersion);
+  assert.equal(compatibility.kotlinVersion, '2.4.20');
+  assert.equal(compatibility.supersededProjectPin, '2.4.21');
+  assert.equal(compatibility.security.firstFixed, '2.4.20-Beta1');
+  assert.equal(compatibility.security.maintainerFix, 'bf51df665b458fda7c3eaf436c4d88dc119d7ec6');
+  const { dir } = overlayFixture(t);
+  kotlinOverlay.applyKotlinDeclarations(dir);
+  const supplier = readFileSync(path.join(dir, 'node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts'), 'utf8');
+  const published = compatibility.compilerPlugins.map(row => {
+    const bytes = readFileSync(path.join(directory, row.metadata.fixture));
+    assert.equal(digest(bytes), row.metadata.sha256); assert.equal(bytes.length, row.metadata.sizeBytes);
+    assert.equal(row.metadata.url, `https://repo.maven.apache.org/maven2/${row.group.replaceAll('.', '/')}/${row.module}/maven-metadata.xml`);
+    const xml = bytes.toString('utf8');
+    assert.doesNotMatch(xml, /<!DOCTYPE|<!ENTITY/i);
+    assert.ok(xml.includes(`<groupId>${row.group}</groupId>`));
+    assert.ok(xml.includes(`<artifactId>${row.module}</artifactId>`));
+    const versions = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map(match => match[1]);
+    assert.equal(new Set(versions).size, versions.length);
+    // These declarations feed the actual KotlinCompilerPluginSupportPlugin
+    // providers' ${base}-${project.getKotlinPluginVersion()} coordinates.
+    const declaration = `implementation("${row.group}:${row.declaredGradlePlugin}:${row.pluginVersion}")`;
+    assert.equal(supplier.split(declaration).length - 1, 1);
+    return { ...row, versions };
+  });
+  const derive = kotlin => published.map(row => {
+    const version = `${row.pluginVersion}-${kotlin}`;
+    assert.ok(row.versions.includes(version), 'KOTLIN_COMPILER_PLUGIN_VERSION_UNPUBLISHED');
+    return `${row.group}:${row.module}:${version}`;
+  });
+  assert.deepEqual(derive(kotlinOverlay.policy.kotlinVersion), [
+    'io.github.expo.pika:pika-compiler:1.1.0-2.4.20',
+    'io.github.expo:expo-modules-v2-compiler-plugin:0.2.6-2.4.20'
+  ]);
+  // Reproduce the failed candidate's exact missing coordinate derivation.
+  assert.throws(() => derive('2.4.21'), /KOTLIN_COMPILER_PLUGIN_VERSION_UNPUBLISHED/);
+  for (const row of published)
+    assert.equal(row.versions.includes(`${row.pluginVersion}-2.4.21`), false);
+  assert.equal(readFileSync(path.join(directory, '5-original.txt'), 'utf8').includes('pika-gradle:1.1.0'), true);
+  assert.equal(readFileSync(path.join(directory, '5-original.txt'), 'utf8').includes('expo-modules-v2-gradle-plugin:0.2.6'), true);
 });
 
 test('installed RN and Expo use non-debug dev=false bundling and release launcher stubs', () => {
