@@ -201,3 +201,4 @@ apps/mobile/package-lock.json text eol=lf
 # Root manifests and lockfiles also feed the reviewed build inputs.
 /package.json text eol=lf
 /package-lock.json text eol=lf
+tests/e2e/ram-2026-09-07-statute-source-data.spec.ts text eol=lf

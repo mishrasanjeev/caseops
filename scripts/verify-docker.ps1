@@ -329,7 +329,8 @@ $WebPort = ($PortBase + 2).ToString()
 $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
-$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.app.config.ts playwright.docker.config.ts tests/e2e/support/oauth scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
+# Playwright is run from the checkout and reads suites and fixtures outside the image.
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.app.config.ts playwright.docker.config.ts tests/e2e scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }

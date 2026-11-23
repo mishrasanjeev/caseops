@@ -112,6 +112,7 @@ export default defineConfig({
     /ram-2026-09-03-prod\.spec\.ts/,
     /notice-module\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
+    /matter-compact-cards\.spec\.ts$/,
     /mobile-responsive\.spec\.ts/,
   ],
   fullyParallel: false,
@@ -163,6 +164,7 @@ export default defineConfig({
       grep: /\[mobile\]/,
       testMatch: [
         /mobile-responsive\.spec\.ts/,
+        /matter-compact-cards\.spec\.ts$/,
         /ram-2026-10-22-bugs\.spec\.ts$/,
         /ram-2026-10-22-drafting\.spec\.ts$/,
         /platform-report-admin-\d{4}-\d{2}-\d{2}\.spec\.ts$/,

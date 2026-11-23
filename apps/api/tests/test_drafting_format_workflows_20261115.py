@@ -16,11 +16,12 @@ from caseops_api.core.automated_test_context import (
 )
 from caseops_api.db.models import AuditEvent, Draft, DraftVersion, ModelRun
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.court_format_profiles import resolve_profile
 from caseops_api.services.drafting_formats import format_manifest
 from caseops_api.services.llm import LLMCompletion, MockProvider
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_drafting_studio import _create_matter, _seed_authority
-from tests.test_pdf_unicode_fidelity_20261104 import compact, extracted
+from tests.test_pdf_unicode_fidelity_20261104 import compact, numbered_pdf_body_pages
 
 INVALID_DEED_FACTS = (
     None, {}, {"instrument_type": "unsupported", "private_fact": "PRIVATE-FACT-NEVER-REFLECT"},
@@ -290,11 +291,17 @@ def test_new_format_preview_generation_review_history_and_real_exports(
     assert document.core_properties.identifier == expected_reference["source_sha256"]
     pdf = client.get(f"{base}/export.pdf", headers=headers, params={"version_id": third["id"]})
     assert pdf.status_code == 200, pdf.text
-    assert compact(edited_body) in compact(extracted(pdf.content))
+    profile = resolve_profile(explicit_key=pdf.headers["x-caseops-court-profile"])
+    pages = numbered_pdf_body_pages(pdf.content, profile.page_number_format)
+    pdf_text = "\n".join(pages)
+    assert compact(edited_body) in compact(pdf_text)
+    if template_type == "execution_application":
+        assert len(pages) >= 2
+        assert sum("DecreeHolderAdvocate" in compact(page) for page in pages) == 1
     assert b"/FontFile2" in pdf.content
     if family in {"notice", "correspondence_reply", "deed"}:
         assert pdf.headers["x-caseops-court-profile"] == "generic"
-        assert "IN THE HIGH COURT OF DELHI" not in extracted(pdf.content)
+        assert "IN THE HIGH COURT OF DELHI" not in pdf_text
         bundle = client.get(f"{base}/filing-bundle.zip", headers=headers)
         assert bundle.status_code == 422, bundle.text
     frozen_counts = _counts(matter_id)
@@ -509,7 +516,11 @@ def test_incomplete_execution_table_cannot_be_approved_finalized_or_exported(
         assert result.status_code == 200, result.text
     pdf = client.get(f"{base}/export.pdf", headers=headers)
     assert pdf.status_code == 200, pdf.text
-    assert compact(fixed_body) in compact(extracted(pdf.content))
+    profile = resolve_profile(explicit_key=pdf.headers["x-caseops-court-profile"])
+    pages = numbered_pdf_body_pages(pdf.content, profile.page_number_format)
+    assert compact(fixed_body) in compact("\n".join(pages))
+    assert len(pages) >= 2
+    assert sum("DecreeHolderAdvocate" in compact(page) for page in pages) == 1
     persisted = client.get(base, headers=headers)
     assert persisted.status_code == 200, persisted.text
     assert persisted.json()["current_version_id"] == current["id"]

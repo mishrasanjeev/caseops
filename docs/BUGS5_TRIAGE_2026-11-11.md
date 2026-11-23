@@ -1,5 +1,303 @@
 # Ram Workbook 5: Triage And Acceptance
 
+## November 22 follow-up on the 17 open reports
+
+The follow-up starts at main `1b6ba0f6c7f5306c574f2602d784a9ccbb4fa84b`.
+The November 11 Bug Fix Summary identifies the 17 reports below. The November 7
+AI Requirements Summary supplies the related acceptance scenarios. Its 84 finding
+groups and 60 scenarios include feature requirements and external dependencies.
+Production QA 44919885553 remains the baseline evidence. A scenario listed below
+has no new execution credit until its case results are recorded.
+
+| Open report | What the current evidence establishes | Required follow-up |
+| --- | --- | --- |
+| BUG-001 | Retained original PDF preview and export matched on desktop and phone. The Delhi preset used 12 pt body text and one-inch margins. [Practice Direction 90/Rules/DHC](https://delhihighcourt.nic.in/files/announcements/publicnotice_gj9mke1bqs0.pdf) specifies 14 pt, 1.5 line spacing, 40 mm side margins and 20 mm top and bottom margins. | DR-T01–05. Candidate aligns these numeric settings. PDF embeds Liberation Serif and formatted Word requests Times New Roman. Validate actual line geometry and export parity, review the bail [affidavit directions](https://delhihighcourt.nic.in/files/2026-05/notifications-and-practice-directions/practice_direction_183_dated_26.05.pdf) and keep legal and filing approval open. |
+| BUG-003 | Baseline admin exposes create and archive. The existing PATCH API supplies the reusable-template write boundary. Earlier guarded composition and stale-send evidence remains valid. | Candidate adds a prefilled, versioned editor and an optional personal default on the current browser. Run the extended desktop/phone journey and SQLite/PostgreSQL checks. Additional automatic fields and verified actual inbox delivery remain open. |
+| BUG-004 | The [Delhi High Court judgment dated 6 November](https://delhihighcourt.nic.in/app/showFileJudgment/68006112026RCR3402024_174221.pdf) confirms the exact CNR and case number and dismisses that High Court revision. Current code distinguishes unavailability, depleted balance, ambiguous match, and verified no-match. | TRK-T01–06. Use the authorized QA scope to verify provider eligibility, the exact match, judgment and disposed status. A verified next hearing belongs to a separate active-case fixture. Keep the underlying eviction proceeding separate from the reported High Court revision. |
+| BUG-007 | Clause extraction and basic tenant playbook rules exist. The reported legal drafting quality is unproven. | CON-T03–05 and J10/FT-051. Use a reviewed Indian-law scenario pack with documented transaction, dates, jurisdiction and independent legal assessment. Verify human editing and review separately. |
+| BUG-008 | Current extraction stores source quotes and manual obligations have a create path. The report asks for structured editing, assignment and approved promotion. | J10/J08, FT-052/054, CON-T05. Reconcile the stored fields and lifecycle with the original duty. Preserve the excerpt and require evidence or an explicit missing label for each extracted field. |
+| BUG-009 | Existing manual suggestions and reviewed canonical promotion passed. Pending suggestions have no edit route or control at main. | Candidate edits dates and duration while preserving source evidence and invalidating stale review. Run the amended desktop/phone and HTTP cases. Automated extraction still needs reviewed input and evidence. |
+| BUG-010 | Tenant playbook CRUD and comparison already exist. A mock missing-finding test supplies limited comparison evidence. | J10/FT-051. Use actual approved rules, check review decisions and source excerpts, and have replacement wording legally assessed. |
+| BUG-011 | DOCX import reads tracked revisions and preserves original bytes. No current native edit, decision or clean-export workflow is proved. | CON-T03/04. Establish original and proposed versions, per-change decisions and clean/tracked exports including tables. |
+| BUG-012 | Governance and current eligibility controls passed. The reported tenant's exact active rule/calendar state was not pinned. | CAL-T03 and J08. Verify the actual configured jurisdiction and supported versions. Exercise approved synthetic activation plus pending/mismatch/permission refusals. |
+| BUG-013 | Representative factual citation/reopen, legal abstention and research recovery passed. Generation used a deterministic provider fixture. | AST-T01–04 and RES-T02/03. Verify the workbook question, source availability and cited proposition support using an approved benchmark. |
+| BUG-014 | Browser query recovery, mode changes, Back and reload passed. The seven-mode desktop latency check is retained. | RES-T01–05. Verify relevant sources, explicit forum filters and complete phone interactions, then evaluate legal synthesis on a reviewed pack. |
+| BUG-015 | Retained full Docker, current main CI and production automation run bounded suites with explicit skips. | Map actual tests to the stated route and workflow inventory. This report asks for ongoing test coverage and independent review, which continue on each changed release. |
+| BUG-016 | The original workbook identifies Suggested Counsel and Bench Strategy on the Matter page. Both rendered all detail vertically, and Bench Strategy truncated long labels. | J03/J09/J13 and NFT-013/014. Candidate adds a compact expandable counsel layout and disclosure controls for Bench Strategy citation lists. Prove full details, keyboard open/close, touch targets and no overflow on desktop and phone. |
+| ENH-017 | Court hierarchy and a reviewed High Court pilot exist. The [Supreme Court e-Committee](https://ecommitteesci.gov.in/service/district-courts-portal/) identifies the official index of District Court websites and local officer lists. | J06/US-060/062. Candidate links directly to official district sites from the Court Directory. A maintained in-product roster still requires identity, date and transfer-history checks for each supported district. |
+| BUG-018 | Frozen release seeds expose 298 Income-tax Act, 1961 rows and 217 Motor Vehicles Act, 1988 rows with no text. The pinned 21 May 2025 India Code Motor Vehicles edition compiled into 259 identities: 250 verified, eight retired and one image-based First Schedule quarantined. | J05/MOD-TS-017 and FT-090. Replay the complete canonical compiler, seed and verify source text, attachment, reload and withheld states. The official CBDT 1961 PDF is listed but the direct download returned 403. Its exact bytes and 2025 repeal/savings scope remain open. |
+| BUG-019 | Static official IP references and manually recorded registry evidence work in their verified scope. The [10 November CGPDTM notice](https://ipindia.gov.in/storage/uploads/others/n5VgKh9iNvopzN2XoXnRP9yqWPS4wVXbrIPFxwt5.pdf) restricts commercial scraping and substantial extraction of the listed official resources. | REG-T01–04. Use only a supported channel with permission for the intended commercial use. Test exact identity, stale data, changes and fail-closed matching when such a channel is available. |
+| ENH-020 | Reviewed judge mapping exists. The reported prediction page has no positive comparable sample. | J06/J09. Verify source-backed descriptive results and honest low-sample behavior. Unsupported judge favorability and uncalibrated probabilities are excluded by the PRD. |
+
+The official Delhi layout PDF SHA-256 is
+`dc2676f21a8af5b8fd026ab73cbf99246e06fef97e568c648c7c52e9c874bbb1`.
+The separately retained bail directions PDF SHA-256 is
+`adf42117a3aace4c0b36ab5fab02f3a81d05bc332dfaf66f68f053908ed2e85e`.
+
+The local test window is shared. The UAE validation controller currently has
+active jobs. Static Python syntax, bundle checksum, exact manifest counts and
+the retained Motor Vehicles PDF digest are verified. The hosted [Security
+workflow](https://github.com/mishrasanjeev/caseops/actions/runs/44971063277/job/137050729084)
+ran the canonical OpenAPI generator. Its clean-diff check detected the expected
+uncommitted client changes. The generated patch was applied and checked against
+the emitted blob identity. The new head still needs the complete green CI run,
+local full Docker and runtime tests, and production acceptance.
+
+The first Linux web run found that combining the statute bundles changed the
+existing case names and increased the reviewed discovery count. The follow-up
+keeps all 113 original statute batches and adds seven named Motor Vehicles
+batches of at most 40 records. The Python and web admission contracts require
+all seven identities and preserve the existing App skip list. The same run
+caught the counsel summary focus failure. The controls now have explicit tab
+stops. Both failures require a complete replacement web run.
+
+The November 22 follow-up on BUG-016 isolated a second defect in the populated
+Suggested Counsel card. The ranking service returns weighted points and the
+card multiplied them by 100. An offline render of the same React component
+and fixture reproduced `800`, `-200` and `125`. The corrected card renders
+`8 pts`, `-2 pts` and `1.25 pts`. The new browser journeys seed an actual local
+counsel panel and verify its returned ranking, check keyboard and touch on the
+two cards, and use a synthetic Bench Strategy response for populated label and
+disclosure checks. The local and hosted browser executions and production
+verification remain pending for this separate follow-up.
+
+The same review reproduced inaccurate spend on the Suggested Counsel card.
+The original response combined 22 paise and 23 US cents into a single value
+of 45, and used that combined figure to break ranking ties. The follow-up
+returns a subtotal for each recorded currency, preserves paise and cents in
+the disclosure, and breaks equal experience scores by counsel name and ID.
+The earlier response field remains an INR subtotal for older clients. This
+change belongs to J13/M12, US-038 and FT-055. The compact-card browser journey
+uses real API records and asserts both literal visible amounts.
+
+A separate J13/M12 follow-up found the same currency problem in the portfolio
+and per-Matter spend displays. The portfolio fixture rendered ₹0.45 for 22
+paise and 23 US cents. Both pages now use the existing spend records to show
+amounts by currency. The Matter page uses its own currency for a single
+currency, and an incomplete retained response shows unavailable amounts. The
+portfolio disables sorting by the old mixed-currency sum. A synthetic React
+render and native TypeScript compilation covered these display boundaries.
+The amended browser journey still needs an actual run.
+
+On `c441cdaf3`, API shard 6 showed the Delhi layout splitting the decree-holder
+and advocate signature labels across pages. The renderer now keeps consecutive
+signature labels together in PDF and Word. The regression checks the full source
+text, each numbered footer, and the signature labels on one page. API shard 9
+also stopped before the term-edit journey. Its anonymous PATCH hits the CSRF
+gate first. The fixture now checks both that 403 and the 401 returned for an
+invalid bearer session, then runs the full edit and stale-review assertions.
+Both hosted failures remain release evidence. A fresh run must verify the changes.
+
+BUG-007 and BUG-008 also share a verified preservation gap. Both extraction
+paths selected rows for replacement using the editable `[auto]` text prefix.
+A synthetic SQL check of the original predicates selected a manually entered
+row as well as a previously generated row. The follow-up uses explicit
+extraction provenance for new rows and retains all historical records without
+guessing their origin. A repeat extraction must preserve manual records,
+tracked obligations and records on other contracts. This change does not
+establish legal drafting quality or satisfy the broader editing and review
+criteria. Cross-dialect migration and workflow acceptance remain pending.
+
+BUG-003 also asks for the saved case number, court and lawyer in template
+messages. The candidate resolves these from the authorized Matter and its
+active responsible lawyer. It refuses guessed values and retains the existing
+preview digest for messages that do not use the new fields. The added HTTP and
+desktop/phone cases still need execution. Actual inbox delivery remains open.
+
+On `4eda5599`, hosted API shard 7 retained 1,348 passes, 345 skips and one
+failure. Its read-only overnight workflow test still pinned the pre-Motor
+Vehicles statute spec. The new cases keep the original authenticated GET
+boundary, headers, response assertions and batch size. The new checksum binds
+the reviewed Git bytes, with LF enforced at checkout. The workflow-step
+checksum stays unchanged. Full replacement CI and release acceptance are
+still required.
+
+On `c899efe2`, the retained JUnit records confirm the execution-application
+Word and PDF regression and the email preview case with saved case, court and
+lawyer fields. Browser acceptance remains pending.
+
+PostgreSQL shards 10, 11 and 12 each retained a failure, with 131, 130 and
+130 passes respectively. The named October index-refusal, round-trip and
+retained downgrade cases
+shared a fixture that used the current ORM to insert historical obligations.
+Its implicit RETURNING clause referenced provenance that the named
+historical schema does not contain. The fixture now inserts the same duties
+through the table reflected at that boundary, with explicit old-shape values.
+The original schema revisions, index checks, complete row snapshots and
+catalog assertions remain. Both inserts compile against the old schema on
+each dialect. The native replay remains pending.
+
+API shard 11 on `c899efe2` retained three full drafting workflow failures.
+Each original assertion compared a continuous body against all extracted
+pages, including the numbered footer between pages. The revised assertions
+verify every exact footer, compare the complete original body across pages,
+and require the decree-holder and advocate labels to stay together. The
+original approval, finalization and persisted-reload checks are unchanged.
+The full workflow replay remains pending.
+
+BUG-008 follow-up found that the workspace had no manual entry control. The
+existing authorized API already saves obligations and validates an active
+owner in the current company. The workspace now offers this path to contract
+editors, displays the persisted owner and status, and records new entries as
+pending. The added unit and desktop/phone cases cover refusal, assignment, the
+exact new record and reload. Editing existing duties, approval, task/calendar
+promotion and separate structured source fields remain open.
+
+Hosted CI for `13890ebe3` confirms the exact execution-application workflow and
+both incomplete-table recovery cases. The three historical obligation-index
+cases passed on SQLite and PostgreSQL. The complete Windows web run passed
+3,259 cases in 316 files. The obligation browser journey and production
+acceptance remain open. [CI results](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903)
+
+PostgreSQL shard 22 recorded 132 passing cases, all 396 test phases and a
+successful native exit. GitHub still cancelled the job at the unchanged
+twelve-minute limit. Its sibling shard 6 spent 242.32 seconds in test phases,
+while shard 22 spent 640.65 seconds. Two readthrough cases accounted for
+217.96 seconds. The revised partition exchanges those two cases with measured
+short cases from shard 6 when each pair is still in the observed positions.
+The retained 4,205-case inventory verifies unchanged case counts, parent
+assignments and exact coverage. Only four cases move. Projected phase times
+are 460.16 and 422.82 seconds. The complete replacement CI remains pending.
+[Original cancelled job](https://github.com/mishrasanjeev/caseops/actions/runs/44993022903/job/137118098559)
+
+In the replacement run on `ac07460d`, shard 6 passed in 10 minutes 36 seconds
+and shard 22 passed in 8 minutes 33 seconds. Both retain 132 passing cases,
+396 passing test phases, the expected transferred cases, and native exit
+zero. Their jobs finished inside the unchanged twelve-minute limit.
+[Shard 6](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140063304) ·
+[Shard 22](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140064349)
+
+The Windows web job reported 3,236 passing tests in 315 files and an
+unexpected worker exit. Comparison against the earlier 316-file report shows
+that `DraftPdfPreview.test.tsx` supplied none of its 23 case results. The
+separate offline browser-library worker passed. The fork now records the
+process exit code, signal and assigned test files on unexpected exits. The
+cause and the complete replacement Windows result remain unverified.
+[Windows job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137140063090)
+
+The isolated Windows diagnostic on `28fd52a9` passed all 23 unchanged PDF
+preview tests without a worker exit. The full-repository coverage thresholds
+remained enabled and correctly failed on the one-file run. Its launcher had
+no hosted trust bootstrap. Comparing the retained hosted logs shows six
+bootstrap refusals in the earlier complete pass and seven in the failed run.
+The additional line appears between the prior completed test and the next
+reported results. The shared log cannot identify the process responsible for
+that line. The observer now distinguishes startup acknowledgment from an
+assigned collect or run request and retains the original unexpected-exit
+behavior. An exact-source complete Windows run must still pass.
+
+The same pool error occurred on PR 639 with three results missing from
+`app/platform/setup/page.test.tsx`. Its 23 PDF preview tests passed, and
+the later run completed all 3,300 cases in 325 files with unchanged setup
+test and trust sources. Both PR 639 logs contain six bootstrap refusals.
+These records confirm a separate worker loss and leave the root of either
+worker exit open. [PR 639 original job](https://github.com/mishrasanjeev/caseops/actions/runs/44988792499/job/137105171972) ·
+[PR 639 later job](https://github.com/mishrasanjeev/caseops/actions/runs/45000524482/job/137140836128)
+
+The hosted mobile run on `ac07460d` retained 61 passes, one expected skip
+and two failures. Both stopped at the viewport assertion before the
+communications or contract workflow. Playwright 1.60 reports a 393×851
+Pixel 5 screen and a 393×727 default viewport. Both journeys now apply
+their original explicit 393×851 viewport before the device assertion. The
+touch, mobile-mode, page-geometry and workflow assertions remain in place.
+The exact source-order check and targeted E2E typecheck passed. The
+complete mobile and desktop journeys still require a new run.
+[Hosted mobile job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262526)
+
+The hosted desktop run retained 713 passes, 20 expected skips and two
+failures. The contract journey reached creation and readback. Its complete
+DTO comparison differed only by the missing UTC offset on SQLite
+`created_at`. The same response projection now normalizes both persistence
+timestamps to UTC, preserves a null completion time and leaves legal dates
+as dates. The observed offset mismatch was reproduced with an actual
+SQLite round trip and the original serializer. The dated browser assertion
+still compares the entire DTO. The API regression now checks both pending
+and completed obligations after a fresh read.
+
+The other desktop failure came from the curator fixture. It supplied
+`Credible source conflict.` but expected the full legal-review explanation.
+The fixture supplies the specific reason and verifies it in the bare-text
+card. The page renders the supplied reason without appending a second period.
+The withheld-text, pending-note and 360px layout checks remain in the same
+journey. Both full browser projects still require replacement evidence.
+[Hosted desktop job](https://github.com/mishrasanjeev/caseops/actions/runs/45000271838/job/137160262511)
+
+On `e18e6131`, the hosted API preflight passed the governance map and its
+change gate, then refused the compiled data-class projection. The main merge
+changed the reviewed map document, so the runtime needed its separate
+generator. The unchanged validator reproduced the refusal before regeneration
+and passed afterward. Only the map document fingerprint and projection ID
+changed. The schema fingerprints, admitted classes and disposition rules
+remain as reviewed. The earlier preflight did not run this separate gate.
+[Hosted API preflight](https://github.com/mishrasanjeev/caseops/actions/runs/45010756187/job/137172342102)
+
+For BUG-008, the extraction loop previously checked the stored duties but did
+not remember duplicates it had admitted from the current model response. An
+isolated replay of the old loop inserted both copies of a payment duty. The
+revised loop admits the first normalized title, evidence and due date, and
+still admits a duty with a different due date. It preserves acted-on duties.
+The contract extraction regression exercises the duplicate on initial and
+repeated extraction. The complete API and browser verification remains open.
+
+The bounded obligation read already withheld foreign owner details from
+inconsistent retained rows. The full workspace used a different serializer.
+Both reads now withhold those details, retain the duty and still show a valid
+owner on a sibling duty. The cross-dialect regression also checks that reading
+an inconsistent row never changes the stored association.
+
+Three focused SQLite API cases passed, covering the owner boundary, initial
+and repeated extraction, and exact workspace timestamp readback. All nine
+setup, call and teardown phases passed. PostgreSQL, the full browser suites
+and production acceptance are still pending for the follow-up.
+
+For BUG-018, the Gazette records the repeal of the 1961 Act and the savings in
+section 536 of the 2025 Act. CBDT explains why the older Act remains relevant
+to earlier tax years and proceedings. The official 2026 consolidation could
+be identified, but its PDF and an individual official schedule returned HTTP
+403 on direct acquisition. On the new India Code site, the official item
+`123456789/620179` leads to the original Gazette dated 14 September 1961.
+The delivered scan contains an India Code watermark and differs in length
+and checksum from the catalogue's original bitstream metadata. The separate
+official text bitstream matches its listed checksum. The scan's first page
+identifies the as-enacted edition. The amended 1961 text inventory stays
+pending. [Gazette archive](https://indiacode.gov.in/server/api/core/bitstreams/2014b1cd-7c61-420b-9b63-dca1f478a253/content) ·
+[2025 Gazette](https://egazette.gov.in/WriteReadData/2025/265620.pdf) ·
+[CBDT transition guidance](https://www.incometaxindia.gov.in/documents/20117/43120/Updated-FQAs-on-Interplay%26Transitions.pdf/dda21cfd-28be-d931-ad5c-6459ecbd2ea7?t=1775128133037&version=2.0)
+
+India Code's new central Ministry record includes a Motor Vehicles Act edition
+dated 15 August 2026. Two direct downloads matched byte for byte. The source
+compiler needed eight exact heading locators and revised page ranges. It then
+reproduced all 259 provision identities in a diagnostic bundle, including the
+image-based First Schedule quarantine. It detected 179 provision text
+differences after whitespace normalization. These differences still need
+review against the published pages before the later edition is admitted.
+[New official PDF](https://indiacode.gov.in/server/api/core/bitstreams/031fe0a8-b3a6-4da2-b130-ec2e870fe4f2/content)
+
+The release validator previously refused the new India Code host. It now
+accepts the exact HTTPS bitstream path and binds every provision link to its
+manifest document and page. Source checks cover the retained catalogue, a
+correctly bound migrated locator, a different bitstream, and malformed or
+unapproved URLs. The August 2026 edition remains a diagnostic candidate.
+Full runtime and release verification remain open.
+
+The BUG-008 review also reproduced a title-validation gap in the obligation
+request model. Surrounding whitespace let an empty or one-character title
+pass the two-character limit, after which the service trimmed it. The model
+now trims the title before checking its length, with the generated request
+schema unchanged. Exact locked Pydantic controls cover the old admission and
+the corrected boundary. The in-process HTTP control used the shared error
+handler and confirmed both typed refusals before its endpoint was called.
+The full workspace regression checks the same refusals and reads back the
+single valid obligation by its saved ID.
+The complete API and browser acceptance still need to run.
+
+The AI response model admitted the same invalid obligation titles. It now
+uses the shared title constraint while keeping the provider JSON schema and
+other fields unchanged. The expanded route regression checks the existing
+single retry, a typed refusal and identical saved obligations before and
+after the failed extraction. The source-model controls passed. The full
+mocked-provider route must still execute.
+
 ## Evidence Boundary
 
 7b shared Linux source still retains1564P/1F/3S of1568: held npm constructor

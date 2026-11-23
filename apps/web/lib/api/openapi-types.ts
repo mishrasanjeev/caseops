@@ -4095,6 +4095,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/{contract_id}/term-suggestions/{suggestion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit terms on a pending contract suggestion */
+        patch: operations["patch_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__patch"];
+        trace?: never;
+    };
     "/api/contracts/{contract_id}/term-suggestions/{suggestion_id}/accept": {
         parameters: {
             query?: never;
@@ -22110,6 +22127,11 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ContractTermRejectRequest */
+        ContractTermRejectRequest: {
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
+        };
         /** ContractTermReviewRequest */
         ContractTermReviewRequest: {
             /**
@@ -22180,6 +22202,22 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ContractTermSuggestionUpdateRequest */
+        ContractTermSuggestionUpdateRequest: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Suggested Duration Months */
+            suggested_duration_months?: number | null;
+            /** Suggested Effective On */
+            suggested_effective_on?: string | null;
+            /** Suggested Expires On */
+            suggested_expires_on?: string | null;
+            /** Suggested Renewal On */
+            suggested_renewal_on?: string | null;
         };
         /** ContractUpdateRequest */
         ContractUpdateRequest: {
@@ -23688,6 +23726,8 @@ export interface components {
             body_template?: string | null;
             /** Description */
             description?: string | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Kind */
@@ -44011,7 +44051,13 @@ export interface components {
         OutsideCounselRecommendationRecord: {
             /** Active Matters Count */
             active_matters_count: number;
-            /** Approved Spend Minor */
+            /** Approved Spend By Currency */
+            approved_spend_by_currency: components["schemas"]["OutsideCounselRecommendationSpend"][];
+            /**
+             * Approved Spend Minor
+             * @deprecated
+             * @description INR subtotal for earlier clients. Use approved_spend_by_currency for all subtotals.
+             */
             approved_spend_minor: number;
             /** Counsel Id */
             counsel_id: string;
@@ -44054,6 +44100,13 @@ export interface components {
             matter_title: string;
             /** Results */
             results: components["schemas"]["OutsideCounselRecommendationRecord"][];
+        };
+        /** OutsideCounselRecommendationSpend */
+        OutsideCounselRecommendationSpend: {
+            /** Approved Spend Minor */
+            approved_spend_minor: number;
+            /** Currency */
+            currency: string;
         };
         /** OutsideCounselRecord */
         OutsideCounselRecord: {
@@ -59993,6 +60046,42 @@ export interface operations {
             };
         };
     };
+    patch_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractTermSuggestionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractTermSuggestionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     accept_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__accept_post: {
         parameters: {
             query?: never;
@@ -60039,7 +60128,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ContractTermRejectRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -1,6 +1,7 @@
-import { expect, request, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
+import { createNoPaidApiContext, localTransportHeaders } from "./support/cost-controls";
 import { apiBaseUrl } from "./support/env";
 
 const PASSWORD = "StatuteTrust123!";
@@ -34,11 +35,17 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
     throw new Error("Playwright baseURL is required for statute trust E2E.");
   }
   const webOrigin = new URL(baseURL).origin;
-  const api = await request.newContext();
+  const api = await createNoPaidApiContext(apiBaseUrl);
   const slug = unique("iplf006c");
-  const email = await bootstrap(api, slug);
+  let email: string;
+  try {
+    email = await bootstrap(api, slug);
+  } finally {
+    await api.dispose();
+  }
 
   const login = await page.request.post(`${apiBaseUrl}/api/auth/login`, {
+    headers: localTransportHeaders(apiBaseUrl),
     data: {
       company_slug: slug,
       email,
@@ -74,6 +81,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
   await page.setViewportSize({ width: 360, height: 800 });
 
   let failClosed = false;
+  const quarantineReason = "Credible source conflict is under legal review.";
   await page.route("**/api/statutes/trust-act-2026/sections/12", (route) =>
     route.fulfill({
       status: 200,
@@ -131,7 +139,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
           source_retrieved_at: "2026-08-04T09:00:00Z",
           source_version: 2,
           verified_at: failClosed ? null : "2026-08-04T10:01:00Z",
-          quarantine_reason: failClosed ? "Credible source conflict." : null,
+          quarantine_reason: failClosed ? quarantineReason : null,
           section_url: "https://www.indiacode.nic.in/show-data?actid=trust&orderno=12",
           parent_section_id: null,
           ordinal: 12,
@@ -140,7 +148,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
                 state: "quarantined",
                 open_url: null,
                 source_reference: null,
-                reason: "Credible source conflict.",
+                reason: quarantineReason,
                 target_type: "statute_section",
                 target_id: "section-12",
               }
@@ -223,7 +231,8 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
   failClosed = true;
   await page.reload();
   await expect(page.getByText("Verified statutory text unavailable")).toBeVisible();
-  await expect(page.getByText(/credible source conflict is under legal review/i)).toBeVisible();
+  const bareTextCard = page.getByTestId("statute-section-text-card");
+  await expect(bareTextCard.getByText(`Quarantined. The text is withheld. ${quarantineReason}`, { exact: true })).toBeVisible();
   await expect(page.getByTestId("statute-section-text")).toHaveCount(0);
   await expect(page.getByText(/Not activated:/)).toBeVisible();
   overflow = await page.evaluate(

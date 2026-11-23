@@ -29,9 +29,11 @@ from caseops_api.schemas.contracts import (
     ContractPlaybookRuleCreateRequest,
     ContractPlaybookRuleRecord,
     ContractRecord,
+    ContractTermRejectRequest,
     ContractTermReviewRequest,
     ContractTermSuggestionCreateRequest,
     ContractTermSuggestionRecord,
+    ContractTermSuggestionUpdateRequest,
     ContractUpdateRequest,
     ContractWorkspaceResponse,
     RedlineChangeRecord,
@@ -67,6 +69,7 @@ from caseops_api.services.contracts import (
     update_contract_attachment_metadata,
     update_contract_legal_reference,
     update_contract_metadata,
+    update_contract_term_suggestion,
 )
 from caseops_api.services.document_dispatch import dispatch_document_processing_job
 from caseops_api.services.session_context import SessionContext
@@ -367,6 +370,27 @@ def post_current_company_contract_term_suggestion(
     )
 
 
+@router.patch(
+    "/{contract_id}/term-suggestions/{suggestion_id}",
+    response_model=ContractTermSuggestionRecord,
+    summary="Edit terms on a pending contract suggestion",
+)
+def patch_current_company_contract_term_suggestion(
+    contract_id: str,
+    suggestion_id: str,
+    payload: ContractTermSuggestionUpdateRequest,
+    context: ContractEditor,
+    session: DbSession,
+) -> ContractTermSuggestionRecord:
+    return update_contract_term_suggestion(
+        session,
+        context=context,
+        contract_id=contract_id,
+        suggestion_id=suggestion_id,
+        payload=payload,
+    )
+
+
 @router.post(
     "/{contract_id}/term-suggestions/{suggestion_id}/accept",
     response_model=ContractTermSuggestionRecord,
@@ -399,6 +423,7 @@ def reject_current_company_contract_term_suggestion(
     suggestion_id: str,
     context: ContractEditor,
     session: DbSession,
+    payload: ContractTermRejectRequest | None = None,
 ) -> ContractTermSuggestionRecord:
     return review_contract_term_suggestion(
         session,
@@ -406,6 +431,7 @@ def reject_current_company_contract_term_suggestion(
         contract_id=contract_id,
         suggestion_id=suggestion_id,
         accepted=False,
+        expected_updated_at=payload.expected_updated_at if payload else None,
     )
 
 

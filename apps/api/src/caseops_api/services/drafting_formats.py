@@ -639,8 +639,9 @@ def document_lines(body: str) -> Iterator[DocumentLine]:
     No Markdown/HTML interpretation and no generated content. Original hard
     line breaks, blank lines and indentation remain represented in the result.
     """
-    for text in body.split("\n"):
-        normalized = text.strip().rstrip(":").upper()
+    lines = body.split("\n")
+    labels = [text.strip().rstrip(":").upper() for text in lines]
+    for index, (text, normalized) in enumerate(zip(lines, labels, strict=True)):
         if not normalized:
             yield DocumentLine(text)
         elif normalized in _CENTER_HEADINGS or (
@@ -650,6 +651,7 @@ def document_lines(body: str) -> Iterator[DocumentLine]:
         elif normalized in _SECTION_HEADINGS:
             yield DocumentLine(text, "L", True, True)
         elif normalized in _SIGNATURE_LABELS:
-            yield DocumentLine(text, "R")
+            has_next_signature = index + 1 < len(labels) and labels[index + 1] in _SIGNATURE_LABELS
+            yield DocumentLine(text, "R", keep_with_next=has_next_signature)
         else:
             yield DocumentLine(text)
