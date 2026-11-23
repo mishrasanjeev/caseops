@@ -214,3 +214,6 @@ apps/web/public/third-party-notices/vite-8.2.6-LICENSE.txt whitespace=-blank-at-
 license-policy/upstream/vite_8.2.6/LICENSE.md whitespace=-blank-at-eol,-blank-at-eof
 tests/e2e/ram-2026-09-07-statute-source-data.spec.ts text eol=lf
 scripts/mobile/fixtures/android-dependency-security/controls.groovy text eol=lf
+
+# Kotlin declaration fixtures and exact supplier notices retain official bytes.
+scripts/mobile/fixtures/android-kotlin-declarations/** -text

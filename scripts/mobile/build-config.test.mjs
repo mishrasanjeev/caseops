@@ -1415,6 +1415,28 @@ test('KOTLIN-OVERLAY-09 Windows named dev0 keeps full descriptor and nonzero dev
   }
 });
 
+test('KOTLIN-OVERLAY-10 every copied supplier declaration retains its exact attribution and bytes', () => {
+  const directory = path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations');
+  const provenance = JSON.parse(readFileSync(path.join(directory, 'supplier-provenance.json')));
+  assert.equal(provenance.reactNativeCatalogOriginalCopyrightAndMitHeaderRetained, false);
+  assert.equal(provenance.supplierNotices.length, 4);
+  for (const target of kotlinOverlay.policy.targets) {
+    const matches = provenance.supplierNotices.filter(row => row.package === target.package && row.appliesTo.includes(target.fixture));
+    assert.equal(matches.length, 1, target.fixture);
+    const notice = matches[0], bytes = readFileSync(path.join(directory, notice.fixture));
+    assert.equal(digest(bytes), notice.sha256); assert.equal(bytes.length, notice.sizeBytes);
+    assert.match(bytes.toString('utf8'), /Permission is hereby granted/);
+    assert.equal(digest(readFileSync(path.join(directory, target.fixture))), target.beforeSha256);
+  }
+  const rn = provenance.supplierNotices.find(row => row.package === '@react-native/gradle-plugin');
+  assert.equal(rn.officialGitHead, '5c35c82cf7dd322bf94d47501508c3de975c077b');
+  assert.equal(rn.sha256, 'da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93');
+  assert.match(readFileSync(path.join(directory, rn.fixture), 'utf8'), /Meta Platforms/);
+  const names = readdirSync(directory).sort().map(name => 'scripts/mobile/fixtures/android-kotlin-declarations/' + name);
+  const attrs = execFileSync('git', ['check-attr', 'text', '--', ...names], { cwd: repo, encoding: 'utf8', timeout: 5000 });
+  assert.equal(attrs, names.map(name => name + ': text: unset\n').join(''));
+});
+
 test('installed RN and Expo use non-debug dev=false bundling and release launcher stubs', () => {
   const gradle = readFileSync(path.join(app, 'node_modules/@react-native/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/TaskConfiguration.kt'), 'utf8');
   assert.match(gradle, /if \(!isDebuggableVariant\)/);

@@ -24,8 +24,8 @@ Bouncy Castle and Protobuf suppliers. Root and included build configurations
 also selected affected Guava and Kotlin plugin versions.
 
 The dependency repair appends a scoped policy to `android-no-paid.gradle`.
-Its security suffix remains byte-identical through the separate reviewed
-Gradle transition. That transition changes only the exact Gradle version,
+Its initial security suffix was byte-identical through the separate reviewed
+Gradle transition. That transition changed only the exact Gradle version,
 the moved transport class import and its three changed JAR origins. The
 source oracle reverses those explicit changes and verifies the original
 29,310-byte transport policy hash. Exact native code origins, classloader
@@ -127,13 +127,50 @@ applies this projection to production and local QA. Actual Gradle regression,
 complete repaired resolution and native acceptance remain required; this
 overlay does not bypass Gradle's version tracker.
 
-The complete seven affected and adjacent Node modules passed 728 cases with
+The 009e6342 replay of seven affected and adjacent Node modules passed 728 cases with
 two existing Windows-only skips (730 total). All nine new overlay controls
 passed, including a simulated Windows named-device-zero exception that still
 checks the full descriptor device and nonzero named devices. This simulation
 is not actual Windows acceptance. The earlier environment-incomplete wrapper
 replay and the device-comparison regression's red result remain retained.
 The actual Expo mod compiler replay covers both QA and default cleanup.
+
+The real Gradle parent/child regression subsequently rejected all five original
+vendor declaration inputs separately and accepted the repaired React Native
+catalog, all Expo JVM children and the serialization plugin. Twelve actual
+React Native/Expo plugin tasks then compiled successfully. The next QA graph
+attempt stopped before app selection: Jimfs 1.1 requested Guava 18.0, which
+the generic flavour comparison refused against the JRE floor. The retained
+FAF graph also contains unflavoured Guava 23.0. A module- and floor-specific
+buildscript rule now admits only those two published legacy requests to the
+reviewed 33.8.0-jre floor. Generic flavour checks, Android-flavoured and unknown
+selector refusals, and newer-version preservation remain required.
+
+The actual QA prebuild creates localAcceptance compile/runtime configurations
+that the earlier release-only predicate excluded. The scoped policy now covers
+both production release and localAcceptance compile/runtime names, preserving
+debug/test and outgoing-element exclusions. The failed attempt did not reach
+the selected QA GAV graph; it does not prove that a QA APK shipped vulnerable
+coordinates. Complete current graph and artifact verification remain pending.
+
+The original React Native catalog fixture has no copyright header. Its initial
+provenance assertion was incorrect and remains historical in 009e6342. The
+corrected provenance binds a separate exact MIT copyright/permission notice
+from the official 0.88.0 package's immutable repository commit to that catalog.
+All five copied declaration inputs now have explicit attribution mappings;
+their fixture subtree preserves upstream bytes on Windows. These changes
+revise only the dependency-security suffix; the 29,316-byte transport prefix
+and its exact historical back-projection are preserved.
+
+The scoped Guava/QA/notice follow-up passed all seven complete Node modules:
+729 passes and the same two Windows-only skips (731 total), with no failures,
+cancellations or todos. All ten expanded Groovy policy controls also passed
+under the qualified patched JDK and official Gradle JARs. Those controls are
+API-shaped resolution contracts, not a completed selected app dependency graph
+or an APK. The marker is 32,644 bytes under the unchanged 32,768-byte limit.
+Its expected layer hash was independently replayed from the immutable 009e6342
+Git blob and reviewed edits before comparison with the candidate. The first
+incorrect delimiter-inclusive oracle and its failed run remain retained.
 
 Remaining acceptance: resolve the repaired graph on the actual candidate,
 close every supplier and notice
