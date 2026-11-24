@@ -1291,3 +1291,38 @@ def test_translated_pdf_publish_rechecks_the_storage_quota(
     )
     assert translation["has_output_file"] is False
     assert stored_keys and not resolve_storage_path(stored_keys[0]).exists()
+
+
+_REGISTRATION_PROBE = """
+import json, sys
+from caseops_api.services import document_jobs
+before = sorted(document_jobs._TARGET_PROCESSORS)
+mode = sys.argv[1]
+if mode == "worker":
+    document_jobs.recover_stale_document_processing_jobs = lambda **_: 0
+    document_jobs.drain_document_processing_jobs = lambda **_: 0
+    from caseops_api.workers.document_processor import main
+    main(["--documents-only", "--once", "--skip-migrations", "--batch-size", "1"])
+else:
+    import caseops_api.main  # noqa: F401
+print(json.dumps({"before": before, "after": sorted(document_jobs._TARGET_PROCESSORS)}))
+"""
+
+
+@pytest.mark.parametrize("mode", ["worker", "api"])
+def test_every_entry_point_registers_the_rendition_processor(mode: str) -> None:
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, "CASEOPS_ENV": "local", "PYTHONUTF8": "1"}
+    result = subprocess.run(
+        [sys.executable, "-c", _REGISTRATION_PROBE, mode],
+        capture_output=True, text=True, env=env, timeout=300,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    probe = json.loads(result.stdout.strip().splitlines()[-1])
+    # document_jobs alone no longer imports the pipeline (no import cycle) ...
+    assert probe["before"] == []
+    # ... so each real entry point must load it before running jobs.
+    assert probe["after"] == ["matter_attachment_ocr", "matter_attachment_translation"]

@@ -60,6 +60,7 @@ from caseops_api.services.document_jobs import (
     _fence_attempt,
     _mark_job_failed,
     enqueue_processing_job,
+    register_document_target_processor,
 )
 from caseops_api.services.document_renditions import (
     LANGUAGE_NAMES,
@@ -1563,6 +1564,11 @@ def _finish_translation(
         except Exception:  # pragma: no cover - best-effort cleanup
             logger.warning("orphan translation PDF cleanup failed for %s", rendition_id)
         raise
+
+
+register_document_target_processor(
+    (OCR_TARGET_TYPE, TRANSLATION_TARGET_TYPE), process_rendition_job,
+)
 
 
 __all__ = [

@@ -13,6 +13,9 @@ from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import Settings, get_settings, is_non_local_env
+
+# Registers the OCR/translation job processor with document_jobs (local runs).
+from caseops_api.services import document_rendition_pipeline  # noqa: F401
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.matter_write_fence import require_read_only_upload_session
 

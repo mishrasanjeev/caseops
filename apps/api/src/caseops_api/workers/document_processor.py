@@ -32,6 +32,12 @@ class WorkerRunSummary:
         )
 
 
+def _load_document_job_processors() -> None:
+    """Register processors that document_jobs dispatches to but never imports."""
+
+    from caseops_api.services import document_rendition_pipeline  # noqa: F401
+
+
 def run_worker_iteration(
     *,
     batch_size: int,
@@ -53,6 +59,8 @@ def run_worker_iteration(
         enqueue_scheduled_document_reprocessing,
         recover_stale_document_processing_jobs,
     )
+
+    _load_document_job_processors()
 
     recovered_stale_jobs = recover_stale_document_processing_jobs(
         stale_after_minutes=stale_after_minutes
@@ -231,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
                 recover_stale_document_processing_jobs,
             )
 
+            _load_document_job_processors()
+
             summary = WorkerRunSummary(
                 recovered_stale_jobs=recover_stale_document_processing_jobs(
                     stale_after_minutes=15,
@@ -246,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
             from caseops_api.services.case_tracking_summary import drain_update_summaries
             from caseops_api.services.court_sync_jobs import drain_matter_court_sync_jobs
             from caseops_api.services.document_jobs import drain_document_processing_jobs
+
+            _load_document_job_processors()
 
             summary = WorkerRunSummary(
                 recovered_stale_jobs=0,
