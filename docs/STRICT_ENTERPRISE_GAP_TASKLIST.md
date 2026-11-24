@@ -6081,9 +6081,17 @@ compile, CI, production and recovery evidence remains pending.
 ## November 23 - assisted official trade mark search and TMview pre-search (IPLF-052D)
 
 **Partially implemented.** UJ-07/UJ-31, IP-REG-02/03, IP-CLR-02/03. Code,
-migration `20261123_0001` (down_revision `20261122_0631`, the current `main` head),
-governance map/projection, OpenAPI types and tests land on branch
-`feat/ip-assisted-search-tmview`; nothing is merged, deployed or migrated.
+migration `20261123_0001` (down_revision `20261122_0631`), governance
+map/projection, OpenAPI types and tests merged in PR #641 (fa4ad2e4e; main CI
+run 45322921246 passed). Released 2026-11-24: the pre-migration backup and
+migrate job caseops-migrate-job-7cxzc applied `20261123_0001`; API revision
+caseops-api-00533-88f and web revision caseops-web-00509-ksn serve 100%;
+exact-release prod-verify dispatch 45332944119 passed; the private projection
+cadence resumed through its guard after clean executions zcj6j (3 rebuilds)
+and jxcrc (0). No prod-verify journey covers this page yet, so production
+proof of the feature itself is limited to an unauthenticated probe: the
+imports route answers 401 (a sibling unknown path answers 404) and the page
+serves 200.
 
 - **Implemented in code:** assisted IP India search links and entry steps; saved
   page upload with extension/content-type/signature checks, a 5 MB cap, the
