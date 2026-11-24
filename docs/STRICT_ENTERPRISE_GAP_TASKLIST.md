@@ -1,6 +1,11 @@
 ## November22 — intermittent Admin API stall under SQLite release CI
 
-**Implemented in code; release proof pending.** Root cause found 2026-11-23. In
+**Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
+caseops-api-00532-zm4 and web revision caseops-web-00508-b67 serve 100%,
+exact-release prod-verify dispatch 45254312649 passed, and the private
+projection cadence resumed through its guard after clean executions drc56 and
+56cqz. The two Admin ethical walls journeys run in the app suite, not in
+prod-verify; both passed in main CI run 45191342078 on the merge commit. Root cause found 2026-11-23. In
 release CI run 45000524482 the Admin page's API calls stayed pending for more than
 15 s on desktop and 30 s at 393px, so the Admin ethical walls card was held from
 the 2026-11-22 release. Two Admin reads formed a deadlock in the single API process:
