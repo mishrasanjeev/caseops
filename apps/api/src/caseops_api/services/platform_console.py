@@ -37,6 +37,7 @@ from caseops_api.schemas.platform_console import (
     ConsoleAdminSelf,
     ConsoleAuthState,
     ConsoleInvitationResponse,
+    ConsoleInviteInspectResponse,
     ConsoleManagedAdminRecord,
     ConsoleMFAEnrollmentResponse,
 )
@@ -88,6 +89,9 @@ def _fail(code: str = "console_session_invalid", *, status: int = 401) -> None:
             "console_mfa_required": "Complete console MFA before continuing.",
             "console_step_up_required": "Verify MFA again before changing report administrators.",
             "console_link_invalid": "This link is invalid, expired or already used.",
+            "console_invitation_password_invalid": (
+                "This email already has a CaseOps account. Enter that account's current password."
+            ),
             "console_mfa_invalid": "The MFA code is invalid or was already used.",
             "console_mfa_locked": "Too many MFA attempts. Try again later.",
             "console_conflict": "This administrator change conflicts with current state.",
@@ -1022,6 +1026,17 @@ def _consume_link(
     raw: str,
     purpose: str,
 ) -> tuple[PlatformConsoleToken, PlatformReportAdmin, User]:
+    token, admin, user = _live_link(session, raw=raw, purpose=purpose)
+    token.consumed_at = _now()
+    return token, admin, user
+
+
+def _live_link(
+    session: Session,
+    *,
+    raw: str,
+    purpose: str,
+) -> tuple[PlatformConsoleToken, PlatformReportAdmin, User]:
     identity = session.execute(
         select(PlatformConsoleToken.id, PlatformConsoleToken.report_admin_id).where(
             PlatformConsoleToken.token_hash == _digest(raw),
@@ -1046,8 +1061,25 @@ def _consume_link(
         or not hmac.compare_digest(token.credential_hash, _digest(user.password_hash))
     ):
         _fail("console_link_invalid")
-    token.consumed_at = _now()
     return token, admin, user
+
+
+def inspect_invitation(session: Session, *, token: str) -> ConsoleInviteInspectResponse:
+    """Tell a link holder which setup form applies, without consuming the link.
+
+    An invitee who already has a CaseOps identity must confirm with that
+    identity's current password; only a new identity chooses a first password.
+    """
+    try:
+        _, admin, user = _live_link(session, raw=token, purpose="invite")
+        if admin.status != "pending":
+            _fail("console_link_invalid")
+        result = ConsoleInviteInspectResponse(
+            account="new" if admin.initializes_password else "existing", email=user.email
+        )
+    finally:
+        session.rollback()
+    return result
 
 
 def complete_invitation(
@@ -1055,20 +1087,36 @@ def complete_invitation(
     *,
     token: str,
     password: str,
-    full_name: str,
+    full_name: str | None,
 ) -> ConsoleIssuedSession:
     _, admin, user = _consume_link(session, raw=token, purpose="invite")
     if admin.status != "pending":
         _fail("console_link_invalid")
     if admin.initializes_password:
+        if not full_name:
+            session.rollback()
+            raise ProblemHTTPException(
+                422,
+                problem_type="console_validation_failed",
+                detail="Enter your full name to create the report console account.",
+                extras={"code": "console_validation_failed"},
+            )
         _password_policy(password)
         user.password_hash = hash_password(password)
         user.sessions_valid_after = _now()
         user.full_name = full_name.strip()
         admin.initializes_password = False
     elif not verify_password(password, user.password_hash):
+        # The link stays usable: the rollback also undoes its consumption.
+        # A wrong existing-account password is not an invalid link, and the
+        # invitee must be told which password is expected.
+        admin_id = admin.id
         session.rollback()
-        _fail("console_link_invalid")
+        denied = session.get(PlatformReportAdmin, admin_id)
+        _audit(session, denied, "console.invitation_completed", result="denied",
+               reason="existing_password_mismatch")
+        session.commit()
+        _fail("console_invitation_password_invalid")
     # Status alone never grants reports: every read also requires an enrolled
     # factor and an authenticated, credential/factor-bound session.
     admin.status = "active"

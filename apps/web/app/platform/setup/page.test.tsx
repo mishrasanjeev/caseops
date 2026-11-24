@@ -15,6 +15,10 @@ describe("platform invitation page composition", () => {
     fetcher = vi.fn(async (url: string) => {
       expect(url).toContain("/api/platform-console/");
       if (url.endsWith("/auth/session")) return new Response("{}", { status: 401 });
+      if (url.endsWith("/auth/invitations/inspect")) {
+        expect(window.location.hash).toBe("");
+        return new Response(JSON.stringify({ account: "new", email: "invitee@firm.example" }), { status: 200 });
+      }
       if (url.endsWith("/auth/invitations/complete")) {
         expect(window.location.hash).toBe("");
         return new Response(JSON.stringify({ state: "mfa_enrollment_required", admin: null, expires_at: "2099-01-01T00:00:00Z", recovery_codes: null }), { status: accepted ? 200 : 401 });
@@ -24,8 +28,8 @@ describe("platform invitation page composition", () => {
     vi.stubGlobal("fetch", fetcher);
   });
   afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, "", "/"); });
-  function fill() {
-    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Invitee" } });
+  async function fill() {
+    fireEvent.change(await screen.findByLabelText("Full name"), { target: { value: "Invitee" } });
     fireEvent.change(screen.getByLabelText("Password", { exact: true }), { target: { value: "form-input" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "form-input" } });
     fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
@@ -43,7 +47,7 @@ describe("platform invitation page composition", () => {
     window.history.replaceState(null, "", `/platform/setup#token=${token}`);
     render(<PlatformSessionProvider><Page /></PlatformSessionProvider>);
     expect(window.location.hash).toBe("");
-    fill();
+    await fill();
     await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/platform/security"));
     const calls = fetcher.mock.calls.filter(([url]) => String(url).endsWith("/auth/invitations/complete"));
     expect(calls).toHaveLength(1);
@@ -55,7 +59,7 @@ describe("platform invitation page composition", () => {
     accepted = false;
     window.history.replaceState(null, "", `/platform/setup#token=${"x".repeat(40)}`);
     render(<PlatformSessionProvider><Page /></PlatformSessionProvider>);
-    fill();
+    await fill();
     expect(await screen.findByRole("form", { name: "Resend setup email" })).toBeVisible();
     expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/auth/invitations/complete"))).toHaveLength(1);
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/auth/invitations/resend"))).toBe(false);
