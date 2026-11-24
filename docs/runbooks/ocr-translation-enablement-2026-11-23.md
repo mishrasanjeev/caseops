@@ -36,24 +36,104 @@ not create a service-account key.
 
 ## Enablement steps (owner-run)
 
-1. Enable the API: `gcloud services enable translate.googleapis.com --project <project>`.
+Production: project `perfect-period-305406`, region `asia-south1`, runtime
+service account `caseops-runtime@perfect-period-305406.iam.gserviceaccount.com`.
+
+### A. Sarvam API key (OCR)
+
+The key must reach two places. The `caseops-api` service needs it to report OCR
+as available; without it the dialog says scanned pages will be listed as unread.
+The `caseops-document-processing` job needs it because it makes the Sarvam
+calls.
+
+1. Create a key in the Sarvam AI dashboard (API keys) under the company account.
+   Treat it as a production credential: do not paste it into chat, tickets,
+   `.env` files or shell history.
+2. Store it in Secret Manager as `caseops-sarvam-api-key`, **with no trailing
+   newline**. The value is sent as the `api-subscription-key` header without
+   trimming, and a newline makes every request fail. Either paste it in the
+   Cloud Console (Secret Manager, Create secret), or from PowerShell:
+
+   ```powershell
+   gcloud secrets create caseops-sarvam-api-key --replication-policy=automatic --project perfect-period-305406
+   $secure = Read-Host "Sarvam API key" -AsSecureString
+   $tmp = New-TemporaryFile
+   [IO.File]::WriteAllText($tmp.FullName, [Net.NetworkCredential]::new("", $secure).Password.Trim())
+   gcloud secrets versions add caseops-sarvam-api-key --data-file="$($tmp.FullName)" --project perfect-period-305406
+   Remove-Item $tmp; Remove-Variable secure
+   ```
+
+3. Let the runtime service account read it:
+
+   ```powershell
+   gcloud secrets add-iam-policy-binding caseops-sarvam-api-key --member "serviceAccount:caseops-runtime@perfect-period-305406.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor --project perfect-period-305406
+   ```
+
+4. Confirm the version is enabled and is exactly the key length (no newline):
+
+   ```powershell
+   gcloud secrets versions describe latest --secret caseops-sarvam-api-key --project perfect-period-305406 --format "value(state)"
+   (gcloud secrets versions access latest --secret caseops-sarvam-api-key --project perfect-period-305406).Length
+   ```
+
+5. Bind it in the deploy contracts, in one change merged to `main`, **only after
+   steps 2 and 3 are done**. A release that references a missing or unreadable
+   secret fails. Do not bind it by hand with `gcloud run ... update`: every
+   release re-applies the job contract with `--set-secrets`, which would erase
+   a manual binding on the job.
+   - `infra/cloudrun/scheduler-inventory.json`, job
+     `caseops-document-processing`, `bootstrap`:
+     - add `"CASEOPS_SARVAM_API_KEY": "caseops-sarvam-api-key:latest"` to
+       `secrets`;
+     - add `"CASEOPS_SARVAM_DOCUMENT_AI_ENABLED": "true"` to `environment`.
+   - `scripts/deploy-prod.sh`, `caseops-api` deploy:
+     - add `CASEOPS_SARVAM_API_KEY=caseops-sarvam-api-key:latest` to
+       `--update-secrets`;
+     - add `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=true` to `--update-env-vars`;
+     - extend the service readback to fail the release unless
+       `CASEOPS_SARVAM_API_KEY` is bound to `caseops-sarvam-api-key` at
+       `latest` and the flag is `true` (same pattern as
+       `CASEOPS_INDIAN_KANOON_API_TOKEN`).
+   - Run `scripts/verify-backend.sh tests/test_scheduler_inventory.py
+     tests/test_cloudrun_manifest_secrets.py tests/test_deploy_prod_hardening.py`
+     and update any pinned secret or environment lists they assert.
+6. Record the Sarvam price as a cost profile (step C). Until then readiness
+   reports `cost_not_verified` and no Sarvam call is made.
+7. Release from `main`, then check the readback on both targets:
+
+   ```powershell
+   gcloud run services describe caseops-api --region asia-south1 --project perfect-period-305406 --format json | Select-String -Context 0,5 CASEOPS_SARVAM
+   gcloud run jobs describe caseops-document-processing --region asia-south1 --project perfect-period-305406 --format json | Select-String -Context 0,5 CASEOPS_SARVAM
+   ```
+
+   Each should show the enable flag and a `secretKeyRef` to
+   `caseops-sarvam-api-key`. Then run the live verification below.
+
+Rotation: add a new secret version and disable the old one. Both targets read
+`latest`; new job executions pick the key up at once, and the API picks it up
+on its next revision. Revocation: set `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=false`
+(see Rollback), then disable the secret version and the key in the dashboard.
+
+### B. Google Cloud Translation
+
+1. Enable the API: `gcloud services enable translate.googleapis.com --project perfect-period-305406`.
 2. Grant the runtime service account `roles/cloudtranslate.user` on the project.
-3. Create the secret `caseops-sarvam-api-key` in Secret Manager. Grant the
-   runtime service account `roles/secretmanager.secretAccessor` on it.
-4. Bind the secret and settings to both the API service and the
-   `caseops-document-processing` job. The worker makes the provider calls; the
-   API only reports readiness. `scripts/deploy-prod.sh` does not bind these yet
-   on purpose: binding a secret that does not exist would break every release.
-   Add `CASEOPS_SARVAM_API_KEY=caseops-sarvam-api-key:latest` to the
-   `--update-secrets` lists. Add the enable flags, project and location to
-   `--update-env-vars`. Add matching readback assertions in the same change.
-5. Record verified prices as provider cost profiles (Admin, Provider costs):
+3. Bind `CASEOPS_GOOGLE_TRANSLATION_ENABLED=true` and
+   `CASEOPS_GOOGLE_TRANSLATION_LOCATION=us-central1` the same way as A.5
+   (job `environment` and the `caseops-api` `--update-env-vars`, with
+   readback). The project falls back to `CASEOPS_GCP_PROJECT_ID`, which both
+   already set. No secret is needed: Google auth uses the runtime service
+   account.
+
+### C. Cost profiles and budgets
+
+1. Record verified prices as provider cost profiles (Admin, Provider costs):
    - category `ocr_page`, provider `sarvam`, unit = INR minor units per page,
      cost basis `actual`, confidence `high`, source URL and evidence ref.
    - category `translation_characters`, provider `google-translation`,
      unit = INR minor units per 1,000 source characters, same evidence rules.
    Without these, readiness reports `cost_not_verified` and no paid call is made.
-6. Confirm workspace provider budgets in Billing. OCR and translation reserve
+2. Confirm workspace provider budgets in Billing. OCR and translation reserve
    against the shared paid-provider budget scope.
 
 ## Live verification (needs real credentials; never with client documents)

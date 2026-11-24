@@ -6232,6 +6232,10 @@ deployed and verified.
 
 - **Status:** Missing (deploy). Settings and the `.env.example` placeholders
   exist, Google auth uses ADC, and no key file is committed.
-  `scripts/deploy-prod.sh` deliberately does not bind
-  `caseops-sarvam-api-key` until the secret exists. See
+  Neither `scripts/deploy-prod.sh` (`caseops-api`) nor the
+  `caseops-document-processing` contract in
+  `infra/cloudrun/scheduler-inventory.json` binds `caseops-sarvam-api-key`
+  yet, deliberately, until the secret exists. Releases re-apply that job
+  contract with `--set-secrets`, so a manual binding on the job would be
+  erased. See section A of
   `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
