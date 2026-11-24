@@ -340,7 +340,7 @@ def _mock_research_answer_response(prompt: str) -> str:
         {"key": "evidence", "paragraphs": [f"Keep the documents that prove each condition "
             f"{marker}."]},
         {"key": "defences", "paragraphs": [f"Material defences and qualifications can displace "
-            f"the general rule {second}."]},
+            f"the general rule [{second}]."]},
         {"key": "application", "paragraphs": ["The stated facts do not include the dates "
             "needed to calculate any deadline."]},
     ]

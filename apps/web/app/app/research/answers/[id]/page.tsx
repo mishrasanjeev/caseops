@@ -35,8 +35,8 @@ export default function ResearchAnswerPage() {
       {record ? <ResearchAnswerStatus record={record} /> : null}
       {record?.status === "answered" ? (
         <>
-          <ResearchAnswerActions record={record} />
           <ResearchAnswerView record={record} />
+          <ResearchAnswerActions record={record} />
         </>
       ) : null}
     </div>

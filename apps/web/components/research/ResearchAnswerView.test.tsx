@@ -161,6 +161,10 @@ describe("ResearchAnswerPanel", () => {
     await waitFor(() => expect(screen.getByTestId("research-answer")).toBeVisible(), { timeout: 6000 });
     expect(createMock).toHaveBeenCalledWith({ query: "Section 138 notice period and procedure?", contextMatterId: null });
     expect(screen.getByTestId("research-answer-actions")).toBeVisible();
+    // The Short Answer comes before every action control.
+    const short = screen.getByTestId("research-short-answer");
+    const actions = screen.getByTestId("research-answer-actions");
+    expect(short.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   }, 10_000);
 
   it("explains an abstained answer instead of showing a model response", async () => {

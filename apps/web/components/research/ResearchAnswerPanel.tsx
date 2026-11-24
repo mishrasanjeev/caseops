@@ -211,8 +211,8 @@ export function ResearchAnswerPanel({
         {record ? <ResearchAnswerStatus record={record} /> : null}
         {record?.status === "answered" ? (
           <>
-            <ResearchAnswerActions record={record} />
             <ResearchAnswerView record={record} />
+            <ResearchAnswerActions record={record} />
           </>
         ) : null}
         {recent.data?.items.length ? (
