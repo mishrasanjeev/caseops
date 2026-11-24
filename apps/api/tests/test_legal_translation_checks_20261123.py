@@ -194,3 +194,38 @@ def test_sarvam_rejects_unsupported_language_without_a_request() -> None:
             filename="a.pdf", content=b"%PDF", content_type="application/pdf", language="fr",
         )
     assert error.value.code == "unsupported_language"
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "retryable"),
+    [(429, "rate_limited", True), (403, "auth", False), (503, "unavailable", True)],
+)
+def test_google_non_json_error_bodies_are_classified_by_status(
+    status_code: int, code: str, retryable: bool,
+) -> None:
+    client = google_translation.GoogleTranslationClient(
+        project_id="p", location="us-central1", base_url="https://translate.googleapis.com",
+        timeout_seconds=5,
+        http=httpx.Client(transport=httpx.MockTransport(
+            lambda _request: httpx.Response(status_code, content=b"<html>proxy error</html>"),
+        )),
+        token_provider=lambda: "t",
+    )
+    with pytest.raises(google_translation.GoogleTranslationError) as error:
+        client.translate(["text"], source="en", target="hi")
+    assert (error.value.code, error.value.retryable) == (code, retryable)
+
+
+@pytest.mark.parametrize("body", [b"<html>accepted</html>", b"[1, 2]"])
+def test_sarvam_unreadable_successful_submit_is_possibly_charged(body: bytes) -> None:
+    client = sarvam_document_ai.SarvamDocumentClient(
+        api_key="k", base_url="https://api.sarvam.ai", timeout_seconds=5,
+        http=httpx.Client(transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, content=body),
+        )),
+    )
+    with pytest.raises(sarvam_document_ai.SarvamError) as error:
+        client.submit_parse(
+            filename="a.pdf", content=b"%PDF", content_type="application/pdf", language="hi",
+        )
+    assert (error.value.code, error.value.charge_possible) == ("bad_response", True)

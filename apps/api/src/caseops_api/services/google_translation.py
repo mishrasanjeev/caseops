@@ -80,7 +80,9 @@ def _error_from_response(response: httpx.Response) -> GoogleTranslationError:
             message = str(error.get("message") or "")
             status_name = str(error.get("status") or "")
     except ValueError:
-        pass
+        # A non-JSON error body (an HTML proxy page, say) is still classified
+        # below from the HTTP status alone.
+        message = status_name = ""
     lowered = message.lower()
     code = response.status_code
     if code == 429 or "rate limit" in lowered or "quota" in lowered or (

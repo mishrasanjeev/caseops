@@ -1006,3 +1006,288 @@ def test_translate_route_translates_an_existing_ocr_version(
     )
     assert detail.status_code == 200
     assert detail.json()["version"] == 1
+
+
+# ------------------------------------------ review hardening (PR #648, P1s)
+
+
+class _WorkerKilled(BaseException):
+    """Stands in for a process kill: no ``except Exception`` handler sees it."""
+
+
+def _dispose(client: TestClient, token: str, matter_id: str) -> None:
+    headers = auth_headers(token)
+    matter = client.get(f"/api/matters/{matter_id}", headers=headers).json()
+    response = client.patch(
+        f"/api/matters/{matter_id}/lifecycle/status",
+        headers=headers,
+        json={
+            "to_status": "disposed",
+            "expected_from_status": matter["status"],
+            "expected_updated_at": matter["updated_at"],
+            "reason": "Final judgment entered and all work concluded",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def _rendition_row(rendition_id: str) -> MatterAttachmentRendition:
+    with get_session_factory()() as session:
+        row = session.get(MatterAttachmentRendition, rendition_id)
+        session.expunge(row)
+        return row
+
+
+def test_disposal_cancels_an_open_ocr_run_and_its_resume_job(
+    client: TestClient, providers, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sarvam, _ = providers
+    _verify_costs()
+    monkeypatch.setenv("CASEOPS_SARVAM_JOB_MAX_WAIT_SECONDS", "1")
+    get_settings.cache_clear()
+    ticks = iter([0.0, 0.0])
+    monkeypatch.setattr(pipeline, "_monotonic", lambda: next(ticks, 100.0))
+    sarvam.running_polls = 1_000
+    boot, token, matter_id = _setup(client, "OCR-DISPOSE")
+    attachment_id = _upload(client, token, matter_id, "scan.pdf", _pdf([None]))
+    assert _start(client, token, matter_id, attachment_id, "hi", "en").status_code == 202
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert ocr["status"] == "ocr_processing"
+    # The review page polls this while OCR runs; unread pages show as pending.
+    in_progress = _detail(client, token, matter_id, attachment_id, ocr["id"])
+    assert [page["status"] for page in in_progress["pages"]] == ["pending"]
+    follow_up_id = _rendition_row(ocr["id"]).processing_job_id
+
+    _dispose(client, token, matter_id)
+
+    with get_session_factory()() as session:
+        follow_up = session.get(DocumentProcessingJob, follow_up_id)
+        assert follow_up.status == "failed"
+        assert follow_up.error_message == "Cancelled because the matter was disposed."
+    row = _rendition_row(ocr["id"])
+    assert (row.status, row.error_code) == ("failed", "matter_disposed")
+    sarvam.running_polls = 0
+    assert run_document_processing_job(follow_up_id) is False  # nothing left to claim
+    assert len(sarvam.submissions) == 1
+    assert "matter_attachment.ocr_completed" not in _audit_actions(boot["company"]["id"])
+    with get_session_factory()() as session:
+        assert session.scalars(select(MatterAttachmentRendition).where(
+            MatterAttachmentRendition.attachment_id == attachment_id,
+            MatterAttachmentRendition.kind == "translation",
+        )).all() == []
+
+
+def test_lifecycle_change_during_provider_call_publishes_nothing(
+    client: TestClient, providers,
+) -> None:
+    from caseops_api.db.models import Matter
+
+    sarvam, google = providers
+    _verify_costs()
+    boot, token, matter_id = _setup(client, "OCR-REOPEN")
+    attachment_id = _upload(client, token, matter_id, "scan.pdf", _pdf([None]))
+    original = sarvam.handler
+    bumped: list[bool] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # The matter is closed and reopened while Sarvam is working.
+        if request.url.path.endswith("/status") and not bumped:
+            with get_session_factory()() as session:
+                session.get(Matter, matter_id).lifecycle_version += 1
+                session.commit()
+            bumped.append(True)
+        return original(request)
+
+    sarvam.handler = handler
+    assert _start(client, token, matter_id, attachment_id, "hi", "en").status_code == 202
+
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert (ocr["status"], ocr["error_code"]) == ("failed", "matter_lifecycle_changed")
+    detail = _detail(client, token, matter_id, attachment_id, ocr["id"])
+    assert all(page["source"] != "ocr" for page in detail["pages"])
+    assert google.requests == []
+    assert "matter_attachment.ocr_completed" not in _audit_actions(boot["company"]["id"])
+
+
+def test_worker_killed_after_sarvam_accepts_is_not_resubmitted_on_recovery(
+    client: TestClient, providers, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.api.routes import matter_document_renditions as routes
+
+    sarvam, _ = providers
+    _verify_costs()
+    monkeypatch.setattr(routes, "dispatch_document_processing_job", lambda **_: None)
+    _, token, matter_id = _setup(client, "OCR-CRASH")
+    attachment_id = _upload(client, token, matter_id, "scan.pdf", _pdf([None]))
+    assert _start(client, token, matter_id, attachment_id, "hi").status_code == 202
+    rendition_id = _latest(_versions(client, token, matter_id, attachment_id), "ocr")["id"]
+    job_id = _rendition_row(rendition_id).processing_job_id
+    original = sarvam.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        response = original(request)
+        if request.method == "POST":
+            raise _WorkerKilled  # Sarvam accepted the file; the receipt is lost.
+        return response
+
+    sarvam.handler = handler
+    with pytest.raises(_WorkerKilled):
+        run_document_processing_job(job_id)
+    assert len(sarvam.submissions) == 1
+    entry = json.loads(_rendition_row(rendition_id).provider_jobs_json)[0]
+    assert entry["status"] == "dispatching" and entry["pages"] == [1]
+
+    # Stale-claim recovery hands the same job to a new worker.
+    sarvam.handler = original
+    with get_session_factory()() as session:
+        job = session.get(DocumentProcessingJob, job_id)
+        job.status, job.started_at = "queued", None
+        session.commit()
+    assert run_document_processing_job(job_id) is True
+
+    assert len(sarvam.submissions) == 1  # not paid for twice
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert ocr["pages_failed"] == 1 and ocr["retry_allowed"] is True
+    detail = _detail(client, token, matter_id, attachment_id, rendition_id)
+    assert "provider_submit_uncertain" in detail["pages"][0]["reasons"]
+    with get_session_factory()() as session:
+        holds = session.scalars(select(ProviderSpendReservation).where(
+            ProviderSpendReservation.provider_key == "sarvam",
+        )).all()
+    assert len(holds) == 1 and holds[0].status == "reserved"  # kept, not released
+
+    # A person may decide to send it again.
+    retried = client.post(
+        f"{_base(matter_id, attachment_id)}/{rendition_id}/retry", headers=auth_headers(token),
+    )
+    assert retried.status_code == 202, retried.text
+    with get_session_factory()() as session:
+        retry_job_id = session.get(MatterAttachmentRendition, rendition_id).processing_job_id
+    assert run_document_processing_job(retry_job_id) is True
+    assert len(sarvam.submissions) == 2
+    final = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert final["status"] == "ocr_completed", (final["error_code"], final["error_message"])
+
+
+def test_automatic_resume_does_not_resubmit_already_failed_pages(
+    client: TestClient, providers, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sarvam, _ = providers
+    _verify_costs()
+    monkeypatch.setenv("CASEOPS_SARVAM_JOB_MAX_WAIT_SECONDS", "1")
+    get_settings.cache_clear()
+    ticks = iter([0.0, 0.0, 0.0])
+    monkeypatch.setattr(pipeline, "_monotonic", lambda: next(ticks, 100.0))
+    _, token, matter_id = _setup(client, "OCR-RESUME-2")
+    # 21 scanned pages: batch 1 (20 pages) is rejected, batch 2 stays running.
+    attachment_id = _upload(client, token, matter_id, "long.pdf", _pdf([None] * 21))
+    original = sarvam.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status = re.search(r"/job/(job-\d+)/status$", str(request.url))
+        if status and status.group(1) == "job-1":
+            return httpx.Response(200, json={"job_id": "job-1", "status": "rejected"})
+        return original(request)
+
+    sarvam.handler = handler
+    sarvam.running_polls = 1_000
+    assert _start(client, token, matter_id, attachment_id, "hi").status_code == 202
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert ocr["status"] == "ocr_processing" and ocr["pages_failed"] == 21
+    follow_up_id = _rendition_row(ocr["id"]).processing_job_id
+
+    sarvam.running_polls = 0
+    assert run_document_processing_job(follow_up_id) is True
+    assert len(sarvam.submissions) == 2  # the rejected 20 pages were not resent
+    final = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert (final["pages_ok"], final["pages_failed"]) == (1, 20)
+
+
+def test_malformed_successful_submit_receipt_keeps_the_spend_hold(
+    client: TestClient, providers,
+) -> None:
+    sarvam, _ = providers
+    _verify_costs()
+    _, token, matter_id = _setup(client, "OCR-RECEIPT")
+    attachment_id = _upload(client, token, matter_id, "scan.pdf", _pdf([None]))
+    original = sarvam.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            original(request)
+            return httpx.Response(200, content=b"<html>accepted</html>")
+        return original(request)
+
+    sarvam.handler = handler
+    assert _start(client, token, matter_id, attachment_id, "hi").status_code == 202
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    detail = _detail(client, token, matter_id, attachment_id, ocr["id"])
+    assert "provider_bad_response" in detail["pages"][0]["reasons"]
+    with get_session_factory()() as session:
+        holds = session.scalars(select(ProviderSpendReservation).where(
+            ProviderSpendReservation.provider_key == "sarvam",
+        )).all()
+    assert len(holds) == 1 and holds[0].status == "reserved"
+
+
+def test_pages_over_the_block_cap_translate_every_block(client: TestClient, providers) -> None:
+    sarvam, google = providers
+    _verify_costs()
+    _, token, matter_id = _setup(client, "OCR-BLOCKS")
+    attachment_id = _upload(client, token, matter_id, "dense.pdf", _pdf([None]))
+    blocks = [
+        {"tag": "paragraph", "text": f"Paragraph {n} of the order records Rs. {n}00.",
+         "confidence": 0.95}
+        for n in range(1, pipeline.BLOCK_TAGS_KEPT + 2)
+    ]
+
+    def archive(job: str) -> bytes:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as handle:
+            handle.writestr("doc/metadata/page_001.json", json.dumps({"blocks": blocks}))
+        return buffer.getvalue()
+
+    sarvam._archive = archive
+    assert _start(client, token, matter_id, attachment_id, "en", "hi").status_code == 202
+    translation = _latest(_versions(client, token, matter_id, attachment_id), "translation")
+    assert translation["status"] == "translation_completed", translation["error_code"]
+    detail = _detail(client, token, matter_id, attachment_id, translation["id"])
+    paragraphs = detail["pages"][0]["paragraphs"]
+    assert len(paragraphs) == len(blocks) == pipeline.BLOCK_TAGS_KEPT + 1
+    assert paragraphs[-1]["source"] == blocks[-1]["text"]
+    sent = [text for request in google.requests for text in request["contents"]]
+    assert any(text.startswith(f"Paragraph {len(blocks)} ") for text in sent)
+
+
+def test_translated_pdf_publish_rechecks_the_storage_quota(
+    client: TestClient, providers, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.db.models import Company
+    from caseops_api.services.document_storage import resolve_storage_path
+    from caseops_api.services.storage_governance import _used_bytes
+
+    _verify_costs()
+    boot, token, matter_id = _setup(client, "OCR-QUOTA")
+    company_id = boot["company"]["id"]
+    attachment_id = _upload(client, token, matter_id, "order.pdf", _pdf([ENGLISH_PAGE]))
+    real_persist = pipeline.persist_workspace_attachment
+    stored_keys: list[str] = []
+
+    def persist(**kwargs):
+        stored = real_persist(**kwargs)
+        stored_keys.append(stored.storage_key)
+        # A concurrent upload takes the remaining capacity after the preflight.
+        with get_session_factory()() as session:
+            used = _used_bytes(session, company_id=company_id)
+            session.get(Company, company_id).storage_quota_bytes = used + 1
+            session.commit()
+        return stored
+
+    monkeypatch.setattr(pipeline, "persist_workspace_attachment", persist)
+    assert _start(client, token, matter_id, attachment_id, "en", "hi").status_code == 202
+    translation = _latest(_versions(client, token, matter_id, attachment_id), "translation")
+    assert (translation["status"], translation["error_code"]) == (
+        "failed", "storage_quota_exceeded",
+    )
+    assert translation["has_output_file"] is False
+    assert stored_keys and not resolve_storage_path(stored_keys[0]).exists()

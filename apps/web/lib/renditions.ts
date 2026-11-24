@@ -142,6 +142,8 @@ const PAGE_REASONS: Record<string, string> = {
   provider_page_missing: "OCR returned nothing for this page",
   provider_rejected: "OCR service rejected this page",
   provider_failed: "OCR service failed on this page",
+  provider_submit_uncertain:
+    "An earlier OCR request was interrupted and may have been charged; retry to send it again",
   inspect_no_text_layer: "Scanned page with no text layer",
   inspect_unreliable_text_layer: "Text layer unreliable",
   inspect_legacy_font_encoding_suspected: "Text layer uses a legacy font encoding",
@@ -214,5 +216,6 @@ export function pageStatusLabel(status: string): string {
   if (status === "ok") return "Read";
   if (status === "review") return "Needs review";
   if (status === "failed") return "Unread";
+  if (status === "pending") return "Not read yet";
   return humanise(status);
 }

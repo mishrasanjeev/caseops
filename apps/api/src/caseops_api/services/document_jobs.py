@@ -513,7 +513,11 @@ def cancel_document_processing_job_for_disposal(
         current = session.scalar(select(DocumentProcessingJob).where(
             DocumentProcessingJob.id == job.id,
             DocumentProcessingJob.company_id == job.company_id,
-            DocumentProcessingJob.target_type == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            DocumentProcessingJob.target_type.in_((
+                DocumentProcessingTargetType.MATTER_ATTACHMENT,
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_OCR,
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_TRANSLATION,
+            )),
         ).with_for_update(of=DocumentProcessingJob).execution_options(populate_existing=True))
         if current is None or current.status not in {
             DocumentProcessingJobStatus.QUEUED, DocumentProcessingJobStatus.PROCESSING,

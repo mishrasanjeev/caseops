@@ -3385,10 +3385,56 @@ def _neutralize_disposed_matter_operations(
             )
         )
     )
+    from caseops_api.db.document_rendition_models import (
+        ACTIVE_RENDITION_STATUSES,
+        MatterAttachmentRendition,
+        RenditionStatus,
+    )
     from caseops_api.services.document_jobs import cancel_document_processing_job_for_disposal
 
+    # OCR/translation jobs target a rendition id, not the attachment id.
+    document_processing_jobs.extend(
+        session.scalars(
+            select(DocumentProcessingJob)
+            .join(
+                MatterAttachmentRendition,
+                MatterAttachmentRendition.id == DocumentProcessingJob.attachment_id,
+            )
+            .where(
+                MatterAttachmentRendition.matter_id == matter.id,
+                DocumentProcessingJob.company_id == context.company.id,
+                DocumentProcessingJob.target_type.in_(
+                    (
+                        DocumentProcessingTargetType.MATTER_ATTACHMENT_OCR.value,
+                        DocumentProcessingTargetType.MATTER_ATTACHMENT_TRANSLATION.value,
+                    )
+                ),
+                DocumentProcessingJob.status.in_(
+                    (
+                        DocumentProcessingJobStatus.QUEUED.value,
+                        DocumentProcessingJobStatus.PROCESSING.value,
+                    )
+                ),
+            )
+        )
+    )
     for job in document_processing_jobs:
         cancel_document_processing_job_for_disposal(session, job, completed_at=now)
+
+    open_renditions = session.scalars(
+        select(MatterAttachmentRendition)
+        .where(
+            MatterAttachmentRendition.company_id == context.company.id,
+            MatterAttachmentRendition.matter_id == matter.id,
+            MatterAttachmentRendition.status.in_(tuple(ACTIVE_RENDITION_STATUSES)),
+        )
+        .with_for_update()
+    ).all()
+    for rendition in open_renditions:
+        rendition.status = RenditionStatus.FAILED
+        rendition.error_code = "matter_disposed"
+        rendition.error_message = "Stopped because the matter was disposed."
+        rendition.completed_at = now
 
     reminders = list(
         session.scalars(

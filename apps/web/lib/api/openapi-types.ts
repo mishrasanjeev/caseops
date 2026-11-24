@@ -48690,7 +48690,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "ok" | "review" | "failed";
+            status: "ok" | "review" | "failed" | "pending";
             /** Text */
             text?: string | null;
         };

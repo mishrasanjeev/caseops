@@ -174,7 +174,15 @@ class SarvamDocumentClient:
                 "network", "Sarvam could not be reached.", retryable=True, charge_possible=True,
             ) from exc
         _raise_for_status(response, submit=True)
-        job_id = _json(response).get("job_id")
+        try:
+            receipt = _json(response)
+        except SarvamError as exc:
+            # A 2xx means Sarvam may have accepted and billed the file even if
+            # the receipt is unreadable; only evidenced no-charge releases a hold.
+            raise SarvamError(
+                "bad_response", exc.message, retryable=False, charge_possible=True,
+            ) from exc
+        job_id = receipt.get("job_id")
         if not isinstance(job_id, str) or not job_id.strip():
             raise SarvamError(
                 "bad_response", "Sarvam accepted the file but returned no job id.",

@@ -100,7 +100,8 @@ class RenditionParagraph(BaseModel):
 class RenditionPage(BaseModel):
     page: int
     source: Literal["native", "ocr", "none"]
-    status: Literal["ok", "review", "failed"]
+    # "pending": not read yet, either still in progress or stopped before it.
+    status: Literal["ok", "review", "failed", "pending"]
     reasons: list[str] = Field(default_factory=list)
     text: str | None = None
     char_count: int = 0

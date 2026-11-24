@@ -24,8 +24,10 @@ from tests.test_document_renditions_20261123 import (
     FakeGoogle,
     FakeSarvam,
     _base,
+    _dispose,
     _latest,
     _pdf,
+    _rendition_row,
     _setup,
     _start,
     _upload,
@@ -152,3 +154,34 @@ def test_partial_unique_index_allows_one_open_run_per_kind(pg_providers) -> None
         ))
         with pytest.raises(IntegrityError):  # translation needs a source and target
             session.commit()
+
+
+def test_disposal_cancels_rendition_jobs_under_the_execution_protocol(
+    pg_providers, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, sarvam, _ = pg_providers
+    _verify_costs()
+    monkeypatch.setenv("CASEOPS_SARVAM_JOB_MAX_WAIT_SECONDS", "1")
+    get_settings.cache_clear()
+    ticks = iter([0.0, 0.0])
+    monkeypatch.setattr(pipeline, "_monotonic", lambda: next(ticks, 100.0))
+    sarvam.running_polls = 1_000
+    _, token, matter_id = _setup(client, "PG-OCR-4")
+    attachment_id = _upload(client, token, matter_id, "scan.pdf", _pdf([None]))
+    assert _start(client, token, matter_id, attachment_id, "hi", "en").status_code == 202
+    ocr = _latest(_versions(client, token, matter_id, attachment_id), "ocr")
+    assert ocr["status"] == "ocr_processing"
+    follow_up_id = _rendition_row(ocr["id"]).processing_job_id
+
+    _dispose(client, token, matter_id)
+
+    with get_session_factory()() as session:
+        job = session.get(DocumentProcessingJob, follow_up_id)
+        assert (job.status, job.error_message) == (
+            "failed", "Cancelled because the matter was disposed.",
+        )
+    row = _rendition_row(ocr["id"])
+    assert (row.status, row.error_code) == ("failed", "matter_disposed")
+    sarvam.running_polls = 0
+    assert run_document_processing_job(follow_up_id) is False
+    assert len(sarvam.submissions) == 1

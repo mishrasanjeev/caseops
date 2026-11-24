@@ -85,7 +85,12 @@ from caseops_api.services.legal_translation_checks import (
     segment_paragraphs,
     split_paragraphs,
 )
-from caseops_api.services.matter_operational_guard import matter_is_operational
+from caseops_api.services.matter_operational_guard import (
+    MatterNotOperationalError,
+    assert_operational_matter,
+    matter_is_operational,
+)
+from caseops_api.services.matter_write_fence import lock_matter_private_authority
 from caseops_api.services.paid_provider_safety import paid_provider_block_reason
 from caseops_api.services.pdf_extraction import pdfium_operation
 from caseops_api.services.provider_costs import verified_actual_cost_minor
@@ -127,6 +132,19 @@ class _JobRef:
     requested_by_membership_id: str | None
     no_paid_providers: bool
     target_type: str
+    action: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _MatterFence:
+    """The Matter lifecycle captured when the job started work."""
+
+    company_id: str
+    matter_id: str
+    lifecycle_version: int
+
+
+_MATTER_FENCE_KEY = "rendition_matter_fence"
 
 
 class RenditionFailure(Exception):
@@ -298,12 +316,25 @@ def _persist(
     *,
     rendition_id: str,
     mutate: Callable[[MatterAttachmentRendition], None],
+    fence_matter: bool = True,
 ) -> None:
-    """Apply ``mutate`` under the job's lease fence and commit."""
+    """Apply ``mutate`` under the tenant, job-lease and Matter fences, then commit.
+
+    Lock order matches ordinary document jobs: Company authority, the job
+    lease, then a shared Matter lifecycle fence. Disposal takes the Matter
+    exclusively, so a result can never publish after (or during) disposal or
+    a reopen. Recording a failure skips the Matter check (``fence_matter``).
+    """
 
     session.rollback()
     serialize_sqlite_writer(session)
-    _fence_attempt(session)
+    fence: _MatterFence | None = session.info.get(_MATTER_FENCE_KEY)
+    with session.no_autoflush:
+        if fence is not None:
+            lock_matter_private_authority(session, company_id=fence.company_id)
+        _fence_attempt(session)
+        if fence is not None and fence_matter:
+            _assert_matter_fence(session, fence)
     rendition = session.scalar(
         select(MatterAttachmentRendition)
         .where(MatterAttachmentRendition.id == rendition_id)
@@ -316,6 +347,30 @@ def _persist(
     session.add(rendition)
     session.commit()
     session.expunge_all()
+
+
+def _assert_matter_fence(session: Session, fence: _MatterFence) -> None:
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.id == fence.matter_id, Matter.company_id == fence.company_id,
+        )
+    )
+    if matter is None:
+        raise RenditionFailure("missing_source", "The matter for this document is gone.")
+    try:
+        matter = assert_operational_matter(
+            session, matter=matter, shared_lifecycle_fence=True,
+        )
+    except MatterNotOperationalError as exc:
+        raise RenditionFailure(
+            "matter_disposed", "The matter is disposed or inactive; processing stopped.",
+        ) from exc
+    if matter.lifecycle_version != fence.lifecycle_version:
+        raise RenditionFailure(
+            "matter_lifecycle_changed",
+            "The matter was closed or reopened while this ran; nothing was published. "
+            "Retry is available.",
+        )
 
 
 def _budget_session_call(action: Callable[[Session], None]) -> None:
@@ -510,6 +565,12 @@ def process_rendition_job(session: Session, job: DocumentProcessingJob) -> None:
         requested_by_membership_id=job.requested_by_membership_id,
         no_paid_providers=job.no_paid_providers,
         target_type=job.target_type,
+        action=str(job.action or ""),
+    )
+    session.info[_MATTER_FENCE_KEY] = _MatterFence(
+        company_id=job.company_id,
+        matter_id=matter.id,
+        lifecycle_version=int(matter.lifecycle_version),
     )
     try:
         if rendition.kind == RenditionKind.OCR:
@@ -527,6 +588,8 @@ def process_rendition_job(session: Session, job: DocumentProcessingJob) -> None:
             session, job_id, rendition_id, "internal_error",
             "Processing stopped unexpectedly. Saved progress is kept; retry is available.",
         )
+    finally:
+        session.info.pop(_MATTER_FENCE_KEY, None)
 
 
 def _fail_rendition(
@@ -556,7 +619,7 @@ def _fail_rendition(
             metadata={"code": code, "attachment_id": rendition.attachment_id},
         )
 
-    _persist(session, rendition_id=rendition_id, mutate=mutate)
+    _persist(session, rendition_id=rendition_id, mutate=mutate, fence_matter=False)
 
 
 def _apply_counts(rendition: MatterAttachmentRendition, pages: list[dict[str, Any]]) -> None:
@@ -660,13 +723,38 @@ def _run_ocr(
                     "reasons": [f"inspect_{reason}"], "text": None, "char_count": 0,
                 })
     else:
+        user_retry = job.action == "retry"
+        # A batch recorded as "dispatching" was interrupted between the saved
+        # intent and its receipt: Sarvam may have accepted and billed it. Keep
+        # its hold and never resubmit it automatically; only a user retry may.
+        for entry in provider_jobs:
+            if entry.get("status") == "dispatching":
+                entry["status"] = "uncertain"
+        uncertain_pages: set[int] = set()
+        for entry in provider_jobs:
+            if entry.get("status") != "uncertain":
+                continue
+            if user_retry:
+                entry["status"] = "uncertain_retried"
+            else:
+                uncertain_pages.update(entry.get("pages", []))
         open_pages = {
             number for entry in provider_jobs if entry.get("status") == "submitted"
             for number in entry.get("pages", [])
         }
         for page in pages:
-            if page.get("status") == "failed" or (
-                page.get("status") == "pending" and page["page"] not in open_pages
+            if page["page"] in open_pages:
+                continue
+            if page["page"] in uncertain_pages:
+                if page.get("status") in {"pending", "failed"}:
+                    page["status"] = "failed"
+                    if "provider_submit_uncertain" not in page.get("reasons", []):
+                        page["reasons"] = [*page.get("reasons", []), "provider_submit_uncertain"]
+                continue
+            # Automatic recovery continues pages never sent; settled failures are
+            # resubmitted (and paid for again) only on an explicit user retry.
+            if page.get("status") == "pending" or (
+                user_retry and page.get("status") == "failed"
             ):
                 page.update(status="pending", source="none", text=None, char_count=0)
                 page["reasons"] = [r for r in page.get("reasons", []) if r.startswith("inspect_")]
@@ -809,8 +897,17 @@ def _run_sarvam(
             for remaining in batches[position:]:
                 fail(remaining, failure.code)
             break
-        _dispatch(reservation_id, company_id)
         name, content, media_type = _content_for_batch(path, fmt, numbers, filename, content_type)
+        # Commit the intent before any byte leaves: if the worker dies after
+        # Sarvam accepts the file, recovery sees this entry and does not pay
+        # for the same pages again.
+        entry: dict[str, Any] = {
+            "pages": numbers, "status": "dispatching", "reservation_id": reservation_id,
+            "dispatched_at": utcnow().isoformat(),
+        }
+        provider_jobs.append(entry)
+        checkpoint()
+        _dispatch(reservation_id, company_id)
         try:
             provider_job_id = client.submit_parse(
                 filename=name, content=content, content_type=media_type, language=language,
@@ -818,10 +915,9 @@ def _run_sarvam(
         except sarvam_document_ai.SarvamError as error:
             if not error.charge_possible:
                 _release_no_charge(reservation_id)
-            provider_jobs.append({
-                "pages": numbers, "status": "submit_failed", "error": error.code,
-                "reservation_id": reservation_id, "charge_possible": error.charge_possible,
-            })
+            entry.update(
+                status="submit_failed", error=error.code, charge_possible=error.charge_possible,
+            )
             fail(numbers, f"provider_{error.code}")
             if error.code in {"auth", "billing"}:
                 for remaining in batches[position + 1:]:
@@ -830,10 +926,9 @@ def _run_sarvam(
                 break
             checkpoint()
             continue
-        provider_jobs.append({
-            "pages": numbers, "status": "submitted", "job_id": provider_job_id,
-            "reservation_id": reservation_id, "submitted_at": utcnow().isoformat(),
-        })
+        entry.update(
+            status="submitted", job_id=provider_job_id, submitted_at=utcnow().isoformat(),
+        )
         # Save the provider job id before polling: a crash resumes, never resubmits.
         checkpoint()
 
@@ -923,6 +1018,9 @@ def _finish_sarvam_entry(
             min_confidence=result.min_confidence,
             low_confidence_blocks=result.low_confidence_blocks,
             blocks=result.blocks[:BLOCK_TAGS_KEPT],
+            # The cap limits stored layout metadata only; translation must then
+            # read the complete page text instead of the capped block list.
+            blocks_truncated=len(result.blocks) > BLOCK_TAGS_KEPT,
             provider_job_id=entry["job_id"],
         )
         validate_ocr_page(page)
@@ -1093,7 +1191,7 @@ def _translation_pages(ocr_pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             })
         else:
             blocks = [block for block in page.get("blocks") or [] if block.get("text")]
-            if blocks:
+            if blocks and not page.get("blocks_truncated"):
                 units = [
                     (str(block.get("tag") or "paragraph"), str(block["text"])) for block in blocks
                 ]
@@ -1400,6 +1498,23 @@ def _finish_translation(
     total_chars = sum(int(page.get("char_count") or 0) for page in pages)
 
     def mutate(rendition: MatterAttachmentRendition) -> None:
+        # The preflight above released its Company lock before storage I/O.
+        # Admit again under the Company fence this transaction already holds,
+        # so concurrent publishes cannot jointly exceed the quota.
+        try:
+            assert_storage_quota_allows_upload(
+                session,
+                company_id=company_id,
+                matter_id=matter_id,
+                incoming_size_bytes=stored.size_bytes,
+                replaced_size_bytes=int(rendition.output_size_bytes or 0),
+            )
+        except StorageQuotaExceeded as exc:
+            raise RenditionFailure(
+                "storage_quota_exceeded",
+                "The workspace storage quota is full; the translation is kept and the PDF "
+                "can be generated on retry.",
+            ) from exc
         rendition.pages_json = json.dumps(pages, ensure_ascii=False)
         _apply_counts(rendition, pages)
         rendition.model = model
