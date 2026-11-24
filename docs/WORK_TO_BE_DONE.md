@@ -486,7 +486,9 @@ the pre-existing Matter lock across email transport as separate open adjacent
 work. The November24 issue613 candidate bounds those downloads' complete bodies,
 and the sibling status-handling downloads, under the caller signal and one
 deadline; it stays Partially implemented until merged, deployed and verified
-in a browser, and the 90-second total deadline is an open owner decision. See the explicit inventory in the triage; do not infer global closure from
+in a browser. Downloads use a 120-second total deadline equal to the API's
+server request ceiling. The unbounded synchronous audit export and the
+uncapped IP filing bundle are separate open server-side follow-ups. See the explicit inventory in the triage; do not infer global closure from
 the new draft/contract helper or from emulated email acceptance.
 
 November12 continuation: current candidate repairs representative assistant

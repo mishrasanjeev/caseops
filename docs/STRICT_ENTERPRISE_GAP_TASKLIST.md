@@ -771,7 +771,9 @@ finished body reads outside `apiBlobRequest`'s deadline; the November24
 them (and the later rendition download) onto the whole-body helper with no
 client byte cap, and bounds the sibling status-handling downloads (import
 templates and errors, cause-list PDF, `downloadApiFile`, audit export) the same
-way. Partially implemented until merged, deployed and verified in a
+way, under a 120-second download deadline equal to the API's server request
+ceiling. Separate open server-side follow-ups: the synchronous audit export has
+no size bound, and the IP filing bundle has no explicit size cap. Partially implemented until merged, deployed and verified in a
 browser; see the triage. Matter email
 transport still owns its parent lock during external I/O. The new private
 draft/contract helper and template shared-reader fence do not close those

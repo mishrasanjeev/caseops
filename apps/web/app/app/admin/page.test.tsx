@@ -326,9 +326,9 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
       await waitFor(() =>
         expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/admin/audit/export"))).toBe(true),
       );
-      await vi.advanceTimersByTimeAsync(90_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       await waitFor(() =>
-        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("did not respond within 90 seconds")),
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("did not respond within 120 seconds")),
       );
       expect(cancel).toHaveBeenCalled();
       expect(URL.createObjectURL).not.toHaveBeenCalled();

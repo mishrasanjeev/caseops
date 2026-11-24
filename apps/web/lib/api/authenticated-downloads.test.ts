@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DOWNLOAD_REQUEST_TIMEOUT_MS } from "./client";
 import { NetworkError } from "./config";
 import {
   downloadApiFile,
@@ -22,7 +23,7 @@ import { downloadNoticeFile } from "./notices";
 // one request deadline through authentication recovery and the whole body.
 
 const API = "http://localhost:8000";
-const DEADLINE_MS = 90_000;
+const DEADLINE_MS = DOWNLOAD_REQUEST_TIMEOUT_MS;
 const OBJECT_URL = "blob:caseops-download";
 const createObjectURL = vi.fn<(blob: Blob) => string>(() => OBJECT_URL);
 const revokeObjectURL = vi.fn();
@@ -212,7 +213,7 @@ describe("authenticated downloads read the complete body inside one deadline", (
     vi.mocked(fetch).mockResolvedValue(new Response(stalledBody(cancel), { headers: headersFor(caller) }));
 
     const assertion = expect(caller.run()).rejects.toMatchObject({
-      name: "NetworkError", message: expect.stringContaining("90 seconds"),
+      name: "NetworkError", message: expect.stringContaining("120 seconds"),
     });
     await vi.advanceTimersByTimeAsync(DEADLINE_MS);
     await assertion;
@@ -246,7 +247,7 @@ describe("authenticated downloads read the complete body inside one deadline", (
       .mockResolvedValueOnce(new Response(stalledBody(cancel), { headers: headersFor(caller) }));
 
     const assertion = expect(caller.run()).rejects.toMatchObject({
-      name: "NetworkError", message: expect.stringContaining("90 seconds"),
+      name: "NetworkError", message: expect.stringContaining("120 seconds"),
     });
     await vi.advanceTimersByTimeAsync(DEADLINE_MS);
     await assertion;
@@ -369,7 +370,7 @@ describe("status-handling downloads read the complete body inside one deadline",
     vi.mocked(fetch).mockResolvedValue(new Response(stalledBody(cancel), { headers: statusHeaders(caller) }));
 
     const assertion = expect(caller.run()).rejects.toMatchObject({
-      name: "NetworkError", message: expect.stringContaining("90 seconds"),
+      name: "NetworkError", message: expect.stringContaining("120 seconds"),
     });
     await vi.advanceTimersByTimeAsync(DEADLINE_MS);
     await assertion;
@@ -407,7 +408,7 @@ describe("status-handling downloads read the complete body inside one deadline",
         .mockResolvedValueOnce(json({ detail: "Document is unavailable" }, 403));
 
       const stalled = expect(caller.run()).rejects.toMatchObject({
-        name: "NetworkError", message: expect.stringContaining("90 seconds"),
+        name: "NetworkError", message: expect.stringContaining("120 seconds"),
       });
       await vi.advanceTimersByTimeAsync(DEADLINE_MS);
       await stalled;
@@ -420,4 +421,36 @@ describe("status-handling downloads read the complete body inside one deadline",
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+});
+
+describe("download deadline", () => {
+  it("equals the API's 120-second server request ceiling", () => {
+    expect(DOWNLOAD_REQUEST_TIMEOUT_MS).toBe(120_000);
+  });
+
+  it.each([
+    ["fetchMatterAttachmentBlob", callers.find((caller) => caller.name === "fetchMatterAttachmentBlob")!.run],
+    ["downloadApiFile", statusCallers.find((caller) => caller.name === "downloadApiFile")!.run],
+  ])("%s keeps a download still in progress at 90 seconds until 120 seconds", async (_name, run) => {
+    vi.useFakeTimers();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const cancel = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(streamController) { controller = streamController; controller.enqueue(CHUNKS[0]); },
+      cancel,
+    }), { headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="slow.pdf"' } }));
+
+    const operation = run();
+    await vi.advanceTimersByTimeAsync(90_000);
+    controller.enqueue(CHUNKS[1]);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(false);
+    controller.enqueue(CHUNKS[2]);
+    controller.close();
+
+    const blob = await operation;
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(ORIGINAL);
+    expect(cancel).not.toHaveBeenCalled();
+  });
 });

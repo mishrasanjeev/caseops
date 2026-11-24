@@ -13,6 +13,12 @@ import { localAcceptanceRequest } from "./local-acceptance";
 
 const REFRESH_PATH = "/api/auth/refresh";
 const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
+/**
+ * Whole-body downloads get the API's own request ceiling: Cloud Run ends any
+ * response at API_TIMEOUT_SECONDS=120 (scripts/deploy-prod.sh), so the client
+ * never abandons a download the server could still deliver. Keep the two equal.
+ */
+export const DOWNLOAD_REQUEST_TIMEOUT_MS = 120_000;
 const REFRESH_TIMEOUT_MS = 15_000;
 
 // EG-001 (2026-04-23): cookie name + header pair for the
@@ -511,7 +517,9 @@ export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {
 export function apiDownloadRequest(
   path: string, init: Omit<ApiBlobDataInit, "maxBytes"> = {},
 ): Promise<ApiBlobData> {
-  return apiBlobDataRequest(path, { ...init, maxBytes: Number.POSITIVE_INFINITY });
+  return apiBlobDataRequest(path, {
+    timeoutMs: DOWNLOAD_REQUEST_TIMEOUT_MS, ...init, maxBytes: Number.POSITIVE_INFINITY,
+  });
 }
 
 export type FetchedBlob = { ok: boolean; status: number; headers: Headers; blob: Blob };
@@ -525,7 +533,7 @@ export type FetchedBlob = { ok: boolean; status: number; headers: Headers; blob:
 export async function fetchBlobWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
   onHeaders?: () => void,
 ): Promise<FetchedBlob> {
   return consumeResponseWithTimeout(input, init, timeoutMs, async (response, signal) => {
