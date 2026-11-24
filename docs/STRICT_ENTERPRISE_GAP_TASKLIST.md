@@ -1,7 +1,7 @@
 ## November24 — async routes ran synchronous database work on the event loop
 
 **Partially implemented.** Code and a CI-enforced check are on branch
-`fix/async-routes-blocking-db-20261124` (PR pending merge). Not merged, released
+`fix/async-routes-blocking-db-20261124` (PR #656). Not merged, released
 or verified on a deployed revision.
 
 FastAPI runs an `async def` route on the event loop and a `def` route in its
