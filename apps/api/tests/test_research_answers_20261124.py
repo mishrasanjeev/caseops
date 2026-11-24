@@ -374,7 +374,9 @@ def test_answers_are_private_until_saved_and_tenant_isolated(client: TestClient)
     assert matter.status_code == 200, matter.text
     matter_id = matter.json()["id"]
     saved = client.post(
-        f"{url}/save", headers=auth_headers(owner), json={"matter_id": matter_id}
+        f"/api/research/answers/{record['id']}/save",
+        headers=auth_headers(owner),
+        json={"matter_id": matter_id},
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["saved_matter"] == {"id": matter_id, "title": "Cheque dishonour complaint"}
