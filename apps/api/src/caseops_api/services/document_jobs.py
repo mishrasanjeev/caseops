@@ -73,8 +73,8 @@ class _ClaimLost(RuntimeError):
 
 
 # Processors for job targets owned by modules that depend on this one (OCR and
-# translation renditions). They register on import, so this module never
-# imports them back; entry points load them (document_dispatch, the worker).
+# translation renditions). Entry points register them (document_dispatch, the
+# document worker), so this module never imports them back.
 DocumentTargetProcessor = Callable[[Session, DocumentProcessingJob], None]
 _TARGET_PROCESSORS: dict[str, DocumentTargetProcessor] = {}
 

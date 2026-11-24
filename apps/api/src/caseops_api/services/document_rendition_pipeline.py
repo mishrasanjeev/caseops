@@ -1566,9 +1566,15 @@ def _finish_translation(
         raise
 
 
-register_document_target_processor(
-    (OCR_TARGET_TYPE, TRANSLATION_TARGET_TYPE), process_rendition_job,
-)
+def register_rendition_processors() -> None:
+    """Register the OCR/translation job processor with document_jobs (idempotent).
+
+    Entry points call this explicitly; document_jobs never imports this module.
+    """
+
+    register_document_target_processor(
+        (OCR_TARGET_TYPE, TRANSLATION_TARGET_TYPE), process_rendition_job,
+    )
 
 
 __all__ = [
@@ -1576,6 +1582,7 @@ __all__ = [
     "build_batch_pdf",
     "inspect_pdf",
     "process_rendition_job",
+    "register_rendition_processors",
     "sarvam_client",
     "translation_client",
     "usable_native_text",

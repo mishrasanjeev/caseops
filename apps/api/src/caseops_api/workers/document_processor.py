@@ -35,7 +35,11 @@ class WorkerRunSummary:
 def _load_document_job_processors() -> None:
     """Register processors that document_jobs dispatches to but never imports."""
 
-    from caseops_api.services import document_rendition_pipeline  # noqa: F401
+    from caseops_api.services.document_rendition_pipeline import (
+        register_rendition_processors,
+    )
+
+    register_rendition_processors()
 
 
 def run_worker_iteration(
