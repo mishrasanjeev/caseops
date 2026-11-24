@@ -42,6 +42,7 @@ from caseops_api.api.routes import (
     machine_readiness,
     mailbox,
     matter_billing,
+    matter_document_renditions,
     matter_readthrough,
     matter_tags,
     matter_work_queue,
@@ -129,6 +130,11 @@ def register_api_routes(application: FastAPI) -> None:
     )
     application.include_router(ip_watch.router, prefix="/api/ip", tags=["ip-watch"])
     application.include_router(matters.router, prefix="/api/matters", tags=["matters"])
+    application.include_router(
+        matter_document_renditions.router,
+        prefix="/api/matters",
+        tags=["matter-document-renditions"],
+    )
     application.include_router(notices.router, prefix="/api/notices", tags=["notices"])
     application.include_router(matter_tags.router, prefix="/api/matter-tags", tags=["matter-tags"])
     application.include_router(me.router, prefix="/api/me", tags=["me"])

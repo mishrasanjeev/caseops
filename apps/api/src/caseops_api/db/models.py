@@ -526,6 +526,8 @@ class ProviderCostCategory(StrEnum):
     EMBEDDING = "embedding"
     DOCUMENT_PROCESSING = "document_processing"
     OCR_PAGE = "ocr_page"
+    # Machine translation, priced per 1,000 source characters.
+    TRANSLATION_CHARACTERS = "translation_characters"
     STORAGE = "storage"
     BANDWIDTH_EXPORT = "bandwidth_export"
     PAYMENT_MDR = "payment_mdr"
@@ -554,6 +556,9 @@ class DocumentProcessingTargetType(StrEnum):
     MATTER_ATTACHMENT = "matter_attachment"
     CONTRACT_ATTACHMENT = "contract_attachment"
     IP_DOCUMENT_VERSION = "ip_document_version"
+    # attachment_id holds a matter_attachment_renditions.id for these two.
+    MATTER_ATTACHMENT_OCR = "matter_attachment_ocr"
+    MATTER_ATTACHMENT_TRANSLATION = "matter_attachment_translation"
 
 
 class DocumentProcessingAction(StrEnum):
@@ -22807,5 +22812,9 @@ event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_mo
 event.listen(
     Base.metadata, "after_create", matter_readthrough_page_schema_v1.install_model_schema
 )
+
+from caseops_api.db import document_rendition_models as _rendition_models  # noqa: E402
+
+MatterAttachmentRendition = _rendition_models.MatterAttachmentRendition
 
 ensure_foreign_key_indexes(Base.metadata)

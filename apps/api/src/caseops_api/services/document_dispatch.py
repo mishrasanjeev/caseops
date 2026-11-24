@@ -14,9 +14,12 @@ from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import Settings, get_settings, is_non_local_env
 from caseops_api.services.document_jobs import run_document_processing_job
+from caseops_api.services.document_rendition_pipeline import register_rendition_processors
 from caseops_api.services.matter_write_fence import require_read_only_upload_session
 
 logger = logging.getLogger(__name__)
+# Local runs execute jobs in this process, so load the OCR/translation processor.
+register_rendition_processors()
 DISPATCH_BUDGET_SECONDS = 3.0
 PROJECT_ID = re.compile(r"[a-z][a-z0-9-]{4,61}[a-z0-9]")
 

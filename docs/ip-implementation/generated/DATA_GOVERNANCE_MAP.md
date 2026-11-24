@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `7b42325fdbceb1b72788e0e0f6332fb21ed2e177260c62e1cffb8ea0906860f5`
-- SQL tables: `371`
-- SQL columns: `5916`
-- ORM indexes: `1845`
-- Alembic/raw index declarations: `1622`
-- Non-SQL data classes: `17`
+- Canonical map SHA-256: `2f5a69d720860bc7fa8ef212410c7d30d68574da005d7e8a156b789dba48b46a`
+- SQL tables: `372`
+- SQL columns: `5950`
+- ORM indexes: `1852`
+- Alembic/raw index declarations: `1629`
+- Non-SQL data classes: `18`
 
 ## Boundary
 
@@ -259,6 +259,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_activity` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `matter_attachment_annotations` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_attachment_chunks` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `matter_attachment_renditions` | `tenant_restricted_legal_content` | 34 | `registry_fail_closed` |
 | `matter_attachments` | `tenant_restricted_legal_content` | 51 | `registry_fail_closed` |
 | `matter_billing_profiles` | `billing_provider_evidence` | 29 | `registry_fail_closed` |
 | `matter_billing_rates` | `billing_provider_evidence` | 14 | `registry_fail_closed` |
@@ -414,6 +415,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
 | `phone-reminder-provider-delivery` | `provider_held_object` | `registry_fail_closed` |
+| `ocr-translation-provider-processing` | `provider_held_object` | `registry_fail_closed` |
 
 ## Change control
 

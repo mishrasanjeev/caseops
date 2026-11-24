@@ -3097,6 +3097,150 @@ export async function fetchMatterAttachmentBlob(input: {
   return response.blob();
 }
 
+// OCR & Translate: versions of a matter document produced by OCR and
+// machine translation. Every call goes to CaseOps; the browser never
+// talks to an OCR or translation provider.
+export type RenditionLanguage = components["schemas"]["RenditionCreateRequest"]["source_language"];
+export type RenditionSummary = components["schemas"]["RenditionSummary"];
+export type RenditionDetail = components["schemas"]["RenditionDetail"];
+export type RenditionPage = components["schemas"]["RenditionPage"];
+export type RenditionParagraph = components["schemas"]["RenditionParagraph"];
+export type RenditionProviderReadiness = components["schemas"]["ProviderReadiness"];
+export type RenditionMutationResponse = components["schemas"]["RenditionMutationResponse"];
+export type AttachmentRenditionsResponse = components["schemas"]["AttachmentRenditionsResponse"];
+export type MatterRenditionsResponse = components["schemas"]["MatterRenditionsResponse"];
+export type RenditionReviewStatusInput =
+  components["schemas"]["RenditionReviewRequest"]["review_status"];
+
+function renditionsPath(matterId: string, attachmentId: string): string {
+  return `/api/matters/${encodeURIComponent(matterId)}/attachments/${encodeURIComponent(
+    attachmentId,
+  )}/renditions`;
+}
+
+function renditionPath(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+}): string {
+  return `${renditionsPath(input.matterId, input.attachmentId)}/${encodeURIComponent(
+    input.renditionId,
+  )}`;
+}
+
+export async function listMatterDocumentRenditions(
+  matterId: string,
+): Promise<MatterRenditionsResponse> {
+  return apiRequest<MatterRenditionsResponse>(
+    `/api/matters/${encodeURIComponent(matterId)}/document-renditions`,
+  );
+}
+
+export async function listAttachmentRenditions(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<AttachmentRenditionsResponse> {
+  return apiRequest<AttachmentRenditionsResponse>(
+    renditionsPath(input.matterId, input.attachmentId),
+  );
+}
+
+export async function createAttachmentRendition(input: {
+  matterId: string;
+  attachmentId: string;
+  sourceLanguage: RenditionLanguage;
+  targetLanguage: RenditionLanguage | null;
+}): Promise<RenditionMutationResponse> {
+  const body: components["schemas"]["RenditionCreateRequest"] = {
+    source_language: input.sourceLanguage,
+    target_language: input.targetLanguage,
+  };
+  return apiRequest<RenditionMutationResponse>(
+    renditionsPath(input.matterId, input.attachmentId),
+    { method: "POST", body },
+  );
+}
+
+export async function createRenditionTranslation(input: {
+  matterId: string;
+  attachmentId: string;
+  ocrRenditionId: string;
+  targetLanguage: RenditionLanguage;
+}): Promise<RenditionMutationResponse> {
+  const body: components["schemas"]["TranslationCreateRequest"] = {
+    target_language: input.targetLanguage,
+  };
+  return apiRequest<RenditionMutationResponse>(
+    `${renditionPath({ ...input, renditionId: input.ocrRenditionId })}/translations`,
+    { method: "POST", body },
+  );
+}
+
+export async function retryAttachmentRendition(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+}): Promise<RenditionMutationResponse> {
+  return apiRequest<RenditionMutationResponse>(`${renditionPath(input)}/retry`, {
+    method: "POST",
+  });
+}
+
+export async function reviewAttachmentRendition(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+  reviewStatus: RenditionReviewStatusInput;
+  note: string | null;
+}): Promise<RenditionSummary> {
+  const body: components["schemas"]["RenditionReviewRequest"] = {
+    review_status: input.reviewStatus,
+    note: input.note,
+  };
+  return apiRequest<RenditionSummary>(`${renditionPath(input)}/review`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function fetchAttachmentRendition(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+}): Promise<RenditionDetail> {
+  return apiRequest<RenditionDetail>(renditionPath(input));
+}
+
+export function attachmentRenditionDownloadUrl(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+}): string {
+  return `${API_BASE_URL}${renditionPath(input)}/download`;
+}
+
+/** Download the translated PDF through the authenticated CaseOps API. */
+export async function downloadAttachmentRendition(input: {
+  matterId: string;
+  attachmentId: string;
+  renditionId: string;
+  fallbackName: string;
+}): Promise<void> {
+  const response = await apiBlobRequest(`${renditionPath(input)}/download`);
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = downloadNameFromDisposition(
+    response.headers.get("content-disposition"),
+    input.fallbackName,
+  );
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 30_000);
+}
+
 export type MatterAttachmentPreview = {
   attachment_id: string;
   filename: string;
@@ -8822,6 +8966,7 @@ export type ProviderCostProfileInput = {
     | "embedding"
     | "document_processing"
     | "ocr_page"
+    | "translation_characters"
     | "storage"
     | "bandwidth_export"
     | "payment_mdr"

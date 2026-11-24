@@ -10234,6 +10234,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List OCR and translation versions of a matter document */
+        get: operations["list_attachment_renditions_api_matters__matter_id__attachments__attachment_id__renditions_get"];
+        put?: never;
+        /** Run OCR on a matter document, optionally followed by translation */
+        post: operations["create_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions/{rendition_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an OCR or translation version page by page */
+        get: operations["get_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions/{rendition_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the translated PDF of a matter document */
+        get: operations["download_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions/{rendition_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry a failed or partly failed OCR or translation version */
+        post: operations["retry_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions/{rendition_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark an OCR or translation version reviewed or needing correction */
+        post: operations["review_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/renditions/{rendition_id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Translate a finished OCR version of a matter document */
+        post: operations["create_rendition_translation_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__translations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/attachments/{attachment_id}/retry": {
         parameters: {
             query?: never;
@@ -10722,6 +10825,23 @@ export interface paths {
         head?: never;
         /** Update a matter deadline */
         patch: operations["patch_current_company_matter_deadline_api_matters__matter_id__deadlines__deadline_id__patch"];
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/document-renditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the latest OCR and translation version of each matter document */
+        get: operations["list_matter_document_renditions_api_matters__matter_id__document_renditions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/matters/{matter_id}/drafting-data": {
@@ -16497,6 +16617,14 @@ export interface components {
             status: "queued" | "completed" | "abstained" | "failed" | "cancelled";
             /** Suggested Searches */
             suggested_searches: string[];
+        };
+        /** AttachmentRenditionsResponse */
+        AttachmentRenditionsResponse: {
+            /** Attachment Id */
+            attachment_id: string;
+            providers: components["schemas"]["ProviderReadiness"];
+            /** Renditions */
+            renditions: components["schemas"]["RenditionSummary"][];
         };
         /**
          * AuditExportAsyncRequest
@@ -37692,6 +37820,19 @@ export interface components {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
         };
+        /** LanguagePair */
+        LanguagePair: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "en" | "hi" | "mr";
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "en" | "hi" | "mr";
+        };
         /** LayoutApplication */
         LayoutApplication: {
             /** Account */
@@ -41865,6 +42006,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MatterRenditionsResponse */
+        MatterRenditionsResponse: {
+            /** Matter Id */
+            matter_id: string;
+            /** Renditions */
+            renditions: components["schemas"]["RenditionSummary"][];
         };
         /** MatterRestrictedAccessRequest */
         MatterRestrictedAccessRequest: {
@@ -47650,7 +47798,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "translation_characters" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
             /**
              * Confidence Level
              * @default low
@@ -47714,7 +47862,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "translation_characters" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
             /**
              * Confidence Level
              * @enum {string}
@@ -48051,6 +48199,23 @@ export interface components {
             preview_token: string;
             /** Warnings */
             warnings?: string[];
+        };
+        /** ProviderReadiness */
+        ProviderReadiness: {
+            /** Ocr Languages */
+            ocr_languages: ("en" | "hi" | "mr")[];
+            /** Ocr Provider Available */
+            ocr_provider_available: boolean;
+            /** Ocr Unavailable Reason */
+            ocr_unavailable_reason?: string | null;
+            /** Third Party Processing Permitted */
+            third_party_processing_permitted: boolean;
+            /** Translation Available */
+            translation_available: boolean;
+            /** Translation Pairs */
+            translation_pairs: components["schemas"]["LanguagePair"][];
+            /** Translation Unavailable Reason */
+            translation_unavailable_reason?: string | null;
         };
         /** ProviderReadinessListResponse */
         ProviderReadinessListResponse: {
@@ -48619,6 +48784,270 @@ export interface components {
             paragraph_count: number;
             /** Uninterpreted Revision Count */
             uninterpreted_revision_count: number;
+        };
+        /** RenditionBlock */
+        RenditionBlock: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Tag */
+            tag: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * RenditionCreateRequest
+         * @description Run OCR, and optionally translate the OCR result when it is ready.
+         */
+        RenditionCreateRequest: {
+            /**
+             * Source Language
+             * @enum {string}
+             */
+            source_language: "en" | "hi" | "mr";
+            /** Target Language */
+            target_language?: ("en" | "hi" | "mr") | null;
+        };
+        /** RenditionDetail */
+        RenditionDetail: {
+            /** Attachment Filename */
+            attachment_filename: string;
+            /** Attachment Id */
+            attachment_id: string;
+            /** Chain Target Language */
+            chain_target_language: ("en" | "hi" | "mr") | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Failed Pages */
+            failed_pages: number[];
+            /** Has Output File */
+            has_output_file: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ocr" | "translation";
+            /** Matter Id */
+            matter_id: string;
+            /** Model */
+            model: string | null;
+            /** Output Size Bytes */
+            output_size_bytes: number | null;
+            /** Page Count */
+            page_count: number;
+            /** Pages */
+            pages: components["schemas"]["RenditionPage"][];
+            /** Pages Failed */
+            pages_failed: number;
+            /** Pages Ok */
+            pages_ok: number;
+            /** Pages Review */
+            pages_review: number;
+            /** Provider */
+            provider: string | null;
+            /** Requested By Name */
+            requested_by_name: string | null;
+            /** Retry Allowed */
+            retry_allowed: boolean;
+            /** Review Note */
+            review_note: string | null;
+            /** Review Pages */
+            review_pages: number[];
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "unreviewed" | "reviewed" | "needs_correction";
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /**
+             * Source Language
+             * @enum {string}
+             */
+            source_language: "en" | "hi" | "mr";
+            /** Source Rendition Id */
+            source_rendition_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "inspecting" | "ocr_processing" | "ocr_completed" | "translation_processing" | "translation_completed" | "review_required" | "failed";
+            /** Target Language */
+            target_language: ("en" | "hi" | "mr") | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** RenditionMutationResponse */
+        RenditionMutationResponse: {
+            /** Created */
+            created: boolean;
+            rendition: components["schemas"]["RenditionSummary"];
+        };
+        /** RenditionPage */
+        RenditionPage: {
+            /** Blocks */
+            blocks?: components["schemas"]["RenditionBlock"][];
+            /**
+             * Char Count
+             * @default 0
+             */
+            char_count: number;
+            /** Min Confidence */
+            min_confidence?: number | null;
+            /** Page */
+            page: number;
+            /** Paragraphs */
+            paragraphs?: components["schemas"]["RenditionParagraph"][];
+            /** Reasons */
+            reasons?: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "native" | "ocr" | "none";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "review" | "failed" | "pending";
+            /** Text */
+            text?: string | null;
+        };
+        /** RenditionParagraph */
+        RenditionParagraph: {
+            /** Added Numbers */
+            added_numbers?: string[];
+            /** Flags */
+            flags?: string[];
+            /** Index */
+            index: number;
+            /** Kind */
+            kind: string;
+            /** Missing Abbreviations */
+            missing_abbreviations?: string[];
+            /** Missing Identifiers */
+            missing_identifiers?: string[];
+            /** Missing Numbers */
+            missing_numbers?: string[];
+            /** Source */
+            source: string;
+            /**
+             * Source Unavailable
+             * @default false
+             */
+            source_unavailable: boolean;
+            /** Translated */
+            translated?: string | null;
+        };
+        /** RenditionReviewRequest */
+        RenditionReviewRequest: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "reviewed" | "needs_correction";
+        };
+        /** RenditionSummary */
+        RenditionSummary: {
+            /** Attachment Id */
+            attachment_id: string;
+            /** Chain Target Language */
+            chain_target_language: ("en" | "hi" | "mr") | null;
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Has Output File */
+            has_output_file: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ocr" | "translation";
+            /** Matter Id */
+            matter_id: string;
+            /** Model */
+            model: string | null;
+            /** Output Size Bytes */
+            output_size_bytes: number | null;
+            /** Page Count */
+            page_count: number;
+            /** Pages Failed */
+            pages_failed: number;
+            /** Pages Ok */
+            pages_ok: number;
+            /** Pages Review */
+            pages_review: number;
+            /** Provider */
+            provider: string | null;
+            /** Requested By Name */
+            requested_by_name: string | null;
+            /** Retry Allowed */
+            retry_allowed: boolean;
+            /** Review Note */
+            review_note: string | null;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "unreviewed" | "reviewed" | "needs_correction";
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /**
+             * Source Language
+             * @enum {string}
+             */
+            source_language: "en" | "hi" | "mr";
+            /** Source Rendition Id */
+            source_rendition_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "inspecting" | "ocr_processing" | "ocr_completed" | "translation_processing" | "translation_completed" | "review_required" | "failed";
+            /** Target Language */
+            target_language: ("en" | "hi" | "mr") | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /**
          * ResolvedBenchMember
@@ -51811,6 +52240,14 @@ export interface components {
             permitted_access_as_supplied: string;
             /** Protective Controls */
             protective_controls: string;
+        };
+        /** TranslationCreateRequest */
+        TranslationCreateRequest: {
+            /**
+             * Target Language
+             * @enum {string}
+             */
+            target_language: "en" | "hi" | "mr";
         };
         /** TrialStartRequest */
         TrialStartRequest: {
@@ -73507,6 +73944,268 @@ export interface operations {
             };
         };
     };
+    list_attachment_renditions_api_matters__matter_id__attachments__attachment_id__renditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentRenditionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenditionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description An OCR run is already in progress; it is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenditionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+                rendition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenditionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+                rendition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Translated PDF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+                rendition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The version is already running; it is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenditionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_attachment_rendition_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+                rendition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenditionReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenditionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rendition_translation_api_matters__matter_id__attachments__attachment_id__renditions__rendition_id__translations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+                rendition_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description A translation is already in progress; it is returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenditionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retry_current_company_matter_attachment_processing_api_matters__matter_id__attachments__attachment_id__retry_post: {
         parameters: {
             query?: never;
@@ -74543,6 +75242,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_matter_document_renditions_api_matters__matter_id__document_renditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterRenditionsResponse"];
                 };
             };
             /** @description Validation Error */

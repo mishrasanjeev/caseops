@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -69,6 +70,20 @@ class _Attempt:
 
 class _ClaimLost(RuntimeError):
     pass
+
+
+# Processors for job targets owned by modules that depend on this one (OCR and
+# translation renditions). Entry points register them (document_dispatch, the
+# document worker), so this module never imports them back.
+DocumentTargetProcessor = Callable[[Session, DocumentProcessingJob], None]
+_TARGET_PROCESSORS: dict[str, DocumentTargetProcessor] = {}
+
+
+def register_document_target_processor(
+    target_types: Iterable[str], processor: DocumentTargetProcessor,
+) -> None:
+    for target_type in target_types:
+        _TARGET_PROCESSORS[str(target_type)] = processor
 
 
 def _bounded_limit(limit: int) -> int:
@@ -513,7 +528,11 @@ def cancel_document_processing_job_for_disposal(
         current = session.scalar(select(DocumentProcessingJob).where(
             DocumentProcessingJob.id == job.id,
             DocumentProcessingJob.company_id == job.company_id,
-            DocumentProcessingJob.target_type == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            DocumentProcessingJob.target_type.in_((
+                DocumentProcessingTargetType.MATTER_ATTACHMENT,
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_OCR,
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_TRANSLATION,
+            )),
         ).with_for_update(of=DocumentProcessingJob).execution_options(populate_existing=True))
         if current is None or current.status not in {
             DocumentProcessingJobStatus.QUEUED, DocumentProcessingJobStatus.PROCESSING,
@@ -656,6 +675,8 @@ def run_document_processing_job(job_id: str) -> bool:
                 _process_contract_attachment_job(session, job)
             elif job.target_type == DocumentProcessingTargetType.IP_DOCUMENT_VERSION:
                 _process_ip_document_version_job(session, job)
+            elif job.target_type in _TARGET_PROCESSORS:
+                _TARGET_PROCESSORS[job.target_type](session, job)
             else:
                 _mark_job_failed(
                     session,

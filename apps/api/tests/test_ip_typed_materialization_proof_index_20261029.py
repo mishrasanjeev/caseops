@@ -22,7 +22,6 @@ from tests.migration_index_catalog import (
     write_catalog,
 )
 from tests.test_counsel_page_migration_20261027 import _rows
-from tests.test_ip_official_search_migration_20261123 import REFUSAL as HEAD_REFUSAL
 from tests.test_ip_official_search_migration_20261123 import TABLE as HEAD_TABLE
 from tests.test_ip_official_search_migration_20261123 import seed_retained_import
 from tests.test_matter_readthrough_indexes_20261028 import PRESERVED as OTHER_PRESERVED
@@ -41,6 +40,11 @@ PRESERVED = tuple(sorted(set(OTHER_PRESERVED) | {
 PATH = (
     Path(__file__).resolve().parents[1]
     / "alembic/versions/20261029_0002_audit_typed_source_proof_seek.py"
+)
+
+# Current head 20261124_0001 (matter attachment renditions) refuses downgrade first.
+HEAD_REFUSAL = (
+    "OCR text, translations and their review evidence are retained; restore-forward only."
 )
 STAMP = datetime(2026, 10, 29, 1, 2, 3, 123456, tzinfo=UTC)
 
@@ -264,7 +268,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head == "20261123_0001"
+        assert current_head == "20261124_0001"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)
@@ -286,9 +290,9 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
-        # The current head refuses on its retained official-page lineage before
-        # any lineage or index changes. The historical index's own conflict
-        # guard is exercised separately.
+        # The current head refuses on its retained OCR/translation versions
+        # before any retained row or index changes. The historical index's own
+        # conflict guard is exercised separately.
         assert str(refused.value) == HEAD_REFUSAL
         retained_rows, retained_catalog = _rows(engine, retained), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting

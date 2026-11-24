@@ -37,6 +37,7 @@ MONEY_COST_CATEGORIES = {
     ProviderCostCategory.EMBEDDING,
     ProviderCostCategory.DOCUMENT_PROCESSING,
     ProviderCostCategory.OCR_PAGE,
+    ProviderCostCategory.TRANSLATION_CHARACTERS,
     ProviderCostCategory.STORAGE,
     ProviderCostCategory.BANDWIDTH_EXPORT,
     ProviderCostCategory.PAYMENT_FIXED_FEE,

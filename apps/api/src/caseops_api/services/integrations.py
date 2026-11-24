@@ -818,6 +818,45 @@ def connector_registry(
             platform=platform,
         ),
         _record(
+            key="document_ocr",
+            name="Document OCR",
+            category="documents",
+            provider="sarvam_document_ai",
+            enabled=settings.sarvam_document_ai_enabled and bool(settings.sarvam_api_key),
+            configured=bool(settings.sarvam_api_key),
+            blocked=not (settings.sarvam_document_ai_enabled and settings.sarvam_api_key),
+            webhook_status="not_applicable",
+            required_config_names=["SARVAM_DOCUMENT_AI_ENABLED", "SARVAM_API_KEY"],
+            runbook_link="docs/runbooks/ocr-translation-enablement-2026-11-23.md",
+            internal_cost_label="OCR page cost",
+            risk_label="scanned pages leave CaseOps for OCR",
+            platform=platform,
+        ),
+        _record(
+            key="document_translation",
+            name="Document translation",
+            category="documents",
+            provider="google_translation_llm",
+            enabled=settings.google_translation_enabled and bool(
+                settings.google_translation_project_id or settings.gcp_project_id
+            ),
+            configured=bool(settings.google_translation_project_id or settings.gcp_project_id),
+            blocked=not (
+                settings.google_translation_enabled
+                and (settings.google_translation_project_id or settings.gcp_project_id)
+            ),
+            webhook_status="not_applicable",
+            required_config_names=[
+                "GOOGLE_TRANSLATION_ENABLED",
+                "GOOGLE_TRANSLATION_PROJECT_ID",
+                "GOOGLE_TRANSLATION_LOCATION",
+            ],
+            runbook_link="docs/runbooks/ocr-translation-enablement-2026-11-23.md",
+            internal_cost_label="translation cost per 1,000 characters",
+            risk_label="document text leaves CaseOps for translation",
+            platform=platform,
+        ),
+        _record(
             key="storage",
             name="Document storage",
             category="storage",

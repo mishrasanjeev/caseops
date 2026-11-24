@@ -1655,6 +1655,7 @@ scaffold / data model exists but UX is missing.
 - **PRD**: not formalised. User story exists ("bilingual research") but no PRD § covers it.
 - **Plan** (Sprint U — deferred to v2):
   - U1 — decide provider: Anthropic Haiku (we already depend on it; decent Hindi / regional) vs Google Translate API vs in-house fine-tune. Default to Haiku.
+  - **Stale-doc (2026-11-23):** superseded. The owner chose Google Cloud Translation (Translation LLM) for translation and Sarvam Document AI for scanned-page OCR. The slice landed as Matter Documents OCR & Translate; versions are stored in `matter_attachment_renditions`, not as sibling attachments. Current status lives in `docs/PRD_CODEX_2026-04-23.md` (MOD-TS-003, FT-105..110).
   - U2 — new service `services/translation.py`. Bilingual prompt template enforcing legal-terminology preservation (BNSS vs IPC, petition / appeal, etc.).
   - U3 — `/api/matters/{id}/attachments/{id}/translate` endpoint; result stored as a sibling attachment `{original}.en.txt`.
   - U4 — UX: "Translate" action on document viewer + matter attachment card.
@@ -1781,7 +1782,7 @@ scaffold / data model exists but UX is missing.
 - **SMS provider** — MSG91 or Twilio. Not provisioned.
 - **Form builder library** — React Hook Form + Zod (standard MIT stack); no blocker.
 - **PDF viewer** — `react-pdf` (MIT); no blocker.
-- **Translation provider** — Haiku (already integrated); no blocker.
+- **Translation provider** — Haiku (already integrated); no blocker. *Stale-doc (2026-11-23): Google Cloud Translation LLM was chosen; see MOD-TS-003 in the PRD.*
 - **KYC aggregators** — DigiLocker + NSDL need enterprise agreement; legal review.
 
 ---
