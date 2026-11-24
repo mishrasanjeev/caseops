@@ -1,3 +1,34 @@
+## November22 — Matter ethical walls admin screen
+
+**Partially implemented.** Admin now has an Ethical walls card that lists
+active Matter walls per Matter (walled person, role, reason, set up by), sets up
+walls for one or more colleagues after an explicit confirmation, and lifts a
+wall after a per-row confirmation, with field-anchored errors. It reads the new
+audited `GET /api/matters/ethical-walls` (owner/admin, tenant- and
+visibility-scoped, 500-row bound) and writes through the existing audited wall
+routes. API, component and desktop/393px journey tests cover listing, creation,
+lifting, denial, tenant isolation and what a walled admin, partner or member
+sees. Still open: team-subject and time-boxed Matter walls have no writer, the
+grants and restricted-access toggle still have no screen. Access management
+refuses a walled admin (an ethical wall overrides the admin role, restriction
+does not; owners exempt) on Matter and IP docket access and off-boarding. Not
+yet deployed or verified in production.
+
+## November22 - IP workspace paid add-on (J14/M14, J08/M08)
+
+**Partially implemented: landed in code, not deployed or verified in production.**
+Migration `20261122_0002` adds `addon_ip_workspace` to catalog 2026.11.v1
+(Rs 9,999 a month, Rs 99,990 a year, GST-exclusive, Firm and GC plans only)
+granting exactly the eight IP entitlement keys the IP gates check. Entitlement
+resolution ignores the add-on on an ineligible plan; checkout and the new
+platform-admin add-on route refuse Solo, trial and internal plans. Activation
+and ending are audited for the platform and the tenant. Remaining: deploy, a
+production invoice-activation replay on a real Firm or GC tenant, a
+platform-admin UI for the route, and a time-based add-on term end if the owner
+wants one (today add-ons, like base plans, end by status or explicit ending).
+The migration must be re-chained after whichever of this change and the
+`sales_demo` plan (PR #628) lands second.
+
 ## 2026-11-18 — local Docker04 failures remain release blockers
 
 ## November19 — deployed PR624, production Batch5 acceptance still open
@@ -3301,6 +3332,24 @@ Without this, the PRD's central promise does not exist.
 > external channels are implemented. Remaining scope is provider-specific
 > policy, credential, and runbook approval plus transactional email/SMS/WhatsApp
 > adapters and sender-domain/template governance.
+>
+> 2026-11-22 SMS/WhatsApp slice (Partially implemented, not live): MSG91 and Meta
+> Cloud API adapters (`services/phone_providers.py`) and the opt-in gate,
+> verification, consent, dispatch and WhatsApp STOP/status webhook
+> (`services/phone_notifications.py`, table `notification_phone_contacts`) are
+> in code with fake-transport tests. Go-live needs the owner to: register the
+> DLT entity, six-character header and three DLT templates (hearing reminder
+> with VAR1..VAR4 = Matter code, date, time, court; alert with VAR1 = Matter
+> code; one-time code with VAR1) and link them to MSG91 templates; get three
+> Meta templates approved (utility hearing and alert, authentication copy-code);
+> store `CASEOPS_MSG91_AUTH_KEY`, `CASEOPS_WHATSAPP_ACCESS_TOKEN`,
+> `CASEOPS_WHATSAPP_APP_SECRET` and `CASEOPS_WHATSAPP_WEBHOOK_VERIFY_TOKEN` in
+> Secret Manager; set the template/sender/phone-number ids,
+> `CASEOPS_PHONE_NOTIFICATION_TRANSPORT=live` and `CASEOPS_MSG91_ENABLED` /
+> `CASEOPS_WHATSAPP_ENABLED`; register a verified actual per-message cost for
+> categories `sms`/`msg91` and `whatsapp`/`meta-whatsapp`; subscribe the Meta
+> webhook to `/api/webhooks/whatsapp`; then prove one real send per channel.
+> MSG91 delivery reports are not consumed yet (SMS ends at provider-accepted).
 
 - **Traces to:** PRD Section 9.10 fee-collection, PRD Section 9.2 invitations; today `payments.py` generates a link but never emails it
 - **Done when:**
@@ -3336,13 +3385,13 @@ Without this, the PRD's central promise does not exist.
   - `matters.restricted_access` boolean (default false  - existing matters keep current "all company members see" behaviour). `matter_access_grants` opens a restricted matter to a membership; `ethical_walls` blocks a membership regardless of grants.
   - `services/matter_access` exposes `can_access`, `assert_access` (raises 404 and commits an `access_denied` audit row on denial  - deliberately commits before raising so the compliance trail survives the request-scope rollback), and `visible_matters_filter` (a SQLAlchemy clause the matter list composes in).
   - Enforcement threaded through every `_load_matter` / `_get_matter_model` in `services/matters.py`, `services/drafting.py`, `services/hearing_packs.py`, `services/recommendations.py`. Matter list view composes the filter clause.
-  - Decision rule: owners bypass walls on their own firm; the matter's assignee bypasses walls on their own matter; walls beat grants; restricted_access=false means company-member default.
+  - Decision rule: owners bypass walls on their own firm; walls beat grants and also block the matter's assignee (Stale-doc corrected 2026-11-22 against `record_access_policy._matter_visibility_predicate`); restricted_access=false means company-member default.
   - CRUD: `GET /matters/{id}/access` (panel), `POST /matters/{id}/access/restricted`, `POST/DELETE /matters/{id}/access/grants/{id}`, `POST/DELETE /matters/{id}/access/walls/{id}`. Every mutation audits and is owner/admin-only.
   - UI: audit-export form (date pickers + action filter + Download button) on `/app/admin`, gated on `audit:export` capability.
   - Tests: `tests/test_ethical_walls.py` (6 cases  - unrestricted default visibility, restricted hides non-granted members, wall beats grant, owner bypass, member denied CRUD, cross-tenant 404). Full API suite: 190 passed.
 - **Remaining:**
   - Team-scoped grants once Section 5.7 Teams lands (principal_type=team, principal_id=team_id).
-  - UI for managing grants + walls on the matter cockpit (the endpoints are ready; the page still needs the surface  - pairs with Section 10.1 admin console).
+  - UI for managing grants and the restricted-access toggle (the walls Admin screen was built 2026-11-22 and re-mounted 2026-11-23 after the Admin stall fix; see the November22 entry).
   - Finer `access_level` values beyond `member` (read-only viewer, billing-only, etc.)  - keep behind the existing enum so adding them doesn't migrate.
 
 ### 5.7 Teams
@@ -4356,3 +4405,21 @@ Independent cryptography parsing/signature/extension checks also pass.
 Full input closure, replacement3249-case frontend/1704 affected API
 inventories, current CI/Docker and production acceptance remain pending.
 See [evidence and remaining gates](security/windows-native-tls-fixture-2026-11-19.md).
+
+
+## November 22 — simpler native sign-in
+
+**Partially implemented; Inconclusive; release NO-GO.** J20/M22,
+US-MOB-01/02/08. The user requests a single explicit Verify and continue
+transaction in place of verification followed by repeated Connect consent.
+Keep exact-session MFA, current account/workspace identity, PKCE, grant lifetime
+and the final synchronous Open CaseOps gesture. Real built-client baseline
+reproduced an unfocused 40px MFA field and a below-viewport button at 360×640.
+The canonical native authorization POST cannot inherit generic 401 refresh
+and bearer retry. Complete UI/client79 and real built-browser14 cases pass;
+current native harness647 passes with two declared Windows-only skips. The old
+production flow reproduces the exact typed403 and succeeds after its extra
+manual connection step. The new flow is not yet deployed; actual native and
+production acceptance remain pending. Existing Android version 3 went live November
+17; Managed publishing now holds future updates. Historical private-only status
+entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).

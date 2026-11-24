@@ -40,6 +40,7 @@ from caseops_api.schemas.outside_counsel import (
     OutsideCounselRecommendationRecord,
     OutsideCounselRecommendationRequest,
     OutsideCounselRecommendationResponse,
+    OutsideCounselRecommendationSpend,
     OutsideCounselRecord,
     OutsideCounselSpendRecordCreateRequest,
     OutsideCounselSpendRecordUpdateRequest,
@@ -1226,17 +1227,28 @@ def get_outside_counsel_recommendations(
     payload: OutsideCounselRecommendationRequest,
 ) -> OutsideCounselRecommendationResponse:
     matter = _get_company_matter(session, context=context, matter_id=payload.matter_id)
+    company_id = context.company.id
+    visible_matter_ids = select(Matter.id).where(
+        Matter.company_id == company_id,
+        visible_matters_filter(session, context=context),
+    )
     profiles = list(
         session.scalars(
             select(OutsideCounsel)
             .options(
-                selectinload(OutsideCounsel.assignments).joinedload(
+                selectinload(OutsideCounsel.assignments.and_(
+                    MatterOutsideCounselAssignment.company_id == company_id,
+                    MatterOutsideCounselAssignment.matter_id.in_(visible_matter_ids),
+                )).joinedload(
                     MatterOutsideCounselAssignment.matter
                 ),
-                selectinload(OutsideCounsel.spend_records),
+                selectinload(OutsideCounsel.spend_records.and_(
+                    OutsideCounselSpendRecord.company_id == company_id,
+                    OutsideCounselSpendRecord.matter_id.in_(visible_matter_ids),
+                )),
             )
-            .where(OutsideCounsel.company_id == context.company.id)
-            .order_by(OutsideCounsel.updated_at.desc())
+            .where(OutsideCounsel.company_id == company_id)
+            .execution_options(populate_existing=True)
         )
     )
 
@@ -1300,12 +1312,9 @@ def get_outside_counsel_recommendations(
                 f"{active_matter_count} active or approved matter assignment(s) on record."
             )
 
-        approved_spend_minor = sum(record.approved_amount_minor for record in spend_records)
-        if approved_spend_minor:
-            evidence.append(
-                "Approved spend history totals "
-                f"{approved_spend_minor} minor units across prior matters."
-            )
+        approved_by_currency: dict[str, int] = defaultdict(int)
+        for record in spend_records:
+            approved_by_currency[record.currency.strip().upper()] += record.approved_amount_minor
 
         results.append(
             OutsideCounselRecommendationRecord(
@@ -1315,19 +1324,26 @@ def get_outside_counsel_recommendations(
                 score=round(score, 2),
                 total_matters_count=len(assignments),
                 active_matters_count=active_matter_count,
-                approved_spend_minor=approved_spend_minor,
+                approved_spend_minor=approved_by_currency.get("INR", 0),
+                approved_spend_by_currency=[
+                    OutsideCounselRecommendationSpend(
+                        currency=currency, approved_spend_minor=amount,
+                    )
+                    for currency, amount in sorted(approved_by_currency.items())
+                    if amount > 0
+                ],
                 evidence=evidence or ["Panel profile available but no prior matter evidence yet."],
             )
         )
 
     results.sort(
         key=lambda item: (
-            item.score,
-            item.active_matters_count,
-            item.total_matters_count,
-            item.approved_spend_minor,
+            -item.score,
+            -item.active_matters_count,
+            -item.total_matters_count,
+            item.counsel_name.casefold(),
+            item.counsel_id,
         ),
-        reverse=True,
     )
 
     return OutsideCounselRecommendationResponse(

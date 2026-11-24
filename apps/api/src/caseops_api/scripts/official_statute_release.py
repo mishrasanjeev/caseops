@@ -35,6 +35,7 @@ EXPECTED_COUNTS = {
     "transfer-of-property-1882": 149,
     "contract-1872": 269,
     "consumer-protection-2019": 107,
+    "motor-vehicles-1988": 259,
 }
 
 
@@ -45,14 +46,18 @@ def is_omitted_arrangement(label: str) -> bool:
 
 def _official_document_url(url: str) -> bool:
     parsed = urlparse(url)
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname != "www.indiacode.nic.in"
-        or parsed.username
-        or parsed.password
-        or parsed.port
-        or parsed.fragment
-    ):
+    if parsed.scheme != "https" or "#" in url:
+        return False
+    authority = parsed.netloc.lower()
+    if authority == "indiacode.gov.in":
+        return (
+            not parsed.query
+            and re.fullmatch(
+                r"/server/api/core/bitstreams/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/content",
+                parsed.path,
+            ) is not None
+        )
+    if authority != "www.indiacode.nic.in":
         return False
     if re.fullmatch(r"/(?:indiacode/)?bitstream/123456789/\d+/\d+/[^/]+\.pdf", parsed.path, re.I):
         return not parsed.query
@@ -171,15 +176,10 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
                 raise ValueError("Structured statutory table source digest mismatch")
         page = policy["official_pdf_page"]
         end_page = policy["official_pdf_end_page"]
-        parsed = urlparse(source["source_url"])
+        # The document URL has already passed the publisher check. Requiring its
+        # exact page link binds the scheme, host, path and query to that edition.
         if (
-            parsed.scheme != "https"
-            or parsed.hostname != "www.indiacode.nic.in"
-            or parsed.username
-            or parsed.password
-            or parsed.port
-            or parsed.query != urlparse(document["source_url"]).query
-            or source["source_url"] != f"{document['source_url']}#page={page}"
+            source["source_url"] != f"{document['source_url']}#page={page}"
             or not re.fullmatch(r"[0-9a-f]{64}", document["sha256"])
             or source["source_document_sha256"] != document["sha256"]
             or source["source_retrieved_at"] != document["retrieved_at"]

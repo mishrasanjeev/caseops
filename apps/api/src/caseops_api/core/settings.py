@@ -234,6 +234,10 @@ class Settings(BaseSettings):
     ip_filing_operations_rollout_expires_at: datetime | None = Field(default=None)
     ip_watch_enabled: bool = Field(default=False)
     ip_watch_rollout_expires_at: datetime | None = Field(default=None)
+    # Global kill switch for the public Trade Marks Journal feed. Off by
+    # default: no IP India request is made until it is set, and each
+    # workspace must also opt in (ip_journal_feed_settings).
+    ip_journal_feed_enabled: bool = Field(default=False)
     ip_costs_enabled: bool = Field(default=False)
     ip_costs_rollout_expires_at: datetime | None = Field(default=None)
     ip_rule_governance_enabled: bool = Field(default=False)
@@ -281,31 +285,41 @@ class Settings(BaseSettings):
     # events against our tenants.
     sendgrid_webhook_public_key: str | None = Field(default=None)
 
-    # MOD-TS-007 (2026-04-26) — SMS via Twilio. Disabled by default
-    # so a fresh deployment never burns money on a test SMS. Flip
-    # CASEOPS_TWILIO_ENABLED=true and provide all three other env
-    # vars to wire the channel; the worker still respects the
-    # per-hearing/per-channel uniqueness constraint so retries don't
-    # duplicate billable messages.
-    twilio_enabled: bool = Field(default=False)
-    twilio_account_sid: str | None = Field(default=None)
-    twilio_auth_token: str | None = Field(default=None)
-    twilio_from_number: str | None = Field(default=None)
-
-    # MOD-TS-007 (2026-04-26) — WhatsApp via Meta Cloud API. Disabled
-    # by default; needs Meta-approved templates per deployment so
-    # the integration can send transactional reminders without
-    # 24-hour-window restrictions. Flip CASEOPS_WHATSAPP_ENABLED=true
-    # plus all three other env vars to wire it.
+    # SMS (MSG91, DLT) and WhatsApp (Meta Cloud API) reminder delivery.
+    # Both stay off until every value below is supplied from Secret Manager
+    # and the owner has registered the DLT and WhatsApp templates. The kill
+    # switch halts every phone send at once, even for fully configured
+    # providers. ``mock`` transport never leaves the process and is honoured
+    # only in local environments; anywhere else a phone channel needs
+    # ``live`` transport and full configuration before it is ready.
+    phone_notifications_kill_switch: bool = Field(default=False)
+    phone_notification_transport: str = Field(default="mock", pattern="^(mock|live)$")
+    msg91_enabled: bool = Field(default=False)
+    msg91_auth_key: str | None = Field(default=None)
+    # DLT-registered six-letter header bound to the MSG91 templates.
+    msg91_sender_id: str | None = Field(default=None, pattern="^[A-Z0-9]{6}$")
+    msg91_api_base_url: str = Field(default="https://control.msg91.com")
+    msg91_hearing_template_id: str | None = Field(default=None, max_length=64)
+    msg91_hearing_dlt_template_id: str | None = Field(default=None, pattern="^[0-9]{19}$")
+    msg91_alert_template_id: str | None = Field(default=None, max_length=64)
+    msg91_alert_dlt_template_id: str | None = Field(default=None, pattern="^[0-9]{19}$")
+    msg91_otp_template_id: str | None = Field(default=None, max_length=64)
+    msg91_otp_dlt_template_id: str | None = Field(default=None, pattern="^[0-9]{19}$")
     whatsapp_enabled: bool = Field(default=False)
     whatsapp_access_token: str | None = Field(default=None)
-    whatsapp_phone_number_id: str | None = Field(default=None)
-    whatsapp_template_name: str | None = Field(default=None)
-    # MSG91 / other Indian SMS providers can land via the same
-    # adapter pattern — Twilio first because the developer-experience
-    # is well-documented and the SDK isn't required (basic-auth POST).
-    msg91_auth_key: str | None = Field(default=None)
-    msg91_sender_id: str | None = Field(default=None)
+    whatsapp_phone_number_id: str | None = Field(default=None, pattern="^[0-9]{5,32}$")
+    whatsapp_api_base_url: str = Field(default="https://graph.facebook.com")
+    whatsapp_api_version: str = Field(default="v21.0", pattern=r"^v[0-9]{1,3}\.[0-9]{1,2}$")
+    whatsapp_template_language: str = Field(default="en", pattern="^[a-z]{2}(_[A-Z]{2})?$")
+    whatsapp_hearing_template_name: str | None = Field(default=None, pattern="^[a-z0-9_]{1,512}$")
+    whatsapp_alert_template_name: str | None = Field(default=None, pattern="^[a-z0-9_]{1,512}$")
+    whatsapp_otp_template_name: str | None = Field(default=None, pattern="^[a-z0-9_]{1,512}$")
+    # Webhook verification: X-Hub-Signature-256 HMAC key and the GET
+    # subscription handshake token. Without the app secret the inbound
+    # webhook refuses outside local environments.
+    whatsapp_app_secret: str | None = Field(default=None)
+    whatsapp_webhook_verify_token: str | None = Field(default=None)
+    phone_provider_timeout_seconds: float = Field(default=10.0, gt=0, le=30)
 
     # LW-S10: Outlook calendar sync. Manual sync is enabled only when
     # these Microsoft Graph OAuth settings are present. Durable automated

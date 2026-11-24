@@ -218,7 +218,7 @@ describe("IpDocumentWorkspace retirement", () => {
     expect(within(panel).getByRole("button", { name: "Retire document" })).toBeDisabled();
   });
 
-  it("brings the panel into view when it opens and again once the reason field appears", async () => {
+  it("brings the panel into view when it opens, then the reason field once it appears", async () => {
     let settle: (value: IpDocumentRetirementPreview) => void = () => undefined;
     fetchIpDocumentRetirementMock.mockReturnValueOnce(new Promise((resolve) => { settle = resolve; }));
     const original = HTMLElement.prototype.scrollIntoView;
@@ -230,14 +230,67 @@ describe("IpDocumentWorkspace retirement", () => {
       const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
       expect(scrollIntoView.mock.contexts[0]).toBe(panel);
-      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", behavior: "smooth" });
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest", inline: "nearest", behavior: "smooth" });
 
       settle(RETIRABLE);
-      await within(panel).findByLabelText("Reason for retiring");
+      const reason = await within(panel).findByLabelText("Reason for retiring");
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
-      expect(scrollIntoView.mock.contexts[1]).toBe(panel);
+      expect(scrollIntoView.mock.contexts[1]).toBe(reason.parentElement);
     } finally {
       HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("reveals the reason and its inline error without moving keyboard focus", async () => {
+    const original = HTMLElement.prototype.scrollIntoView;
+    const scroll = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      renderWorkspace();
+      const trigger = await screen.findByRole("button", { name: "Retire" });
+      trigger.focus();
+      fireEvent.click(trigger);
+      const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
+      const reason = await within(panel).findByLabelText("Reason for retiring");
+      const confirm = within(panel).getByRole("button", { name: "Retire document" });
+      await waitFor(() => expect(scroll.mock.contexts).toContain(reason.parentElement));
+      expect(trigger).toHaveFocus();
+
+      scroll.mockClear();
+      fireEvent.change(reason, { target: { value: "short" } });
+      confirm.focus();
+      fireEvent.click(confirm);
+      expect(await within(panel).findByRole("alert")).toBeInTheDocument();
+      await waitFor(() => expect(scroll.mock.contexts).toContain(reason.parentElement));
+      expect(confirm).toHaveFocus();
+      expect(retireIpDocumentMock).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+    }
+  });
+
+  it("does not pull the page back when the check settles after the user moved on", async () => {
+    let settle: (value: IpDocumentRetirementPreview) => void = () => undefined;
+    fetchIpDocumentRetirementMock.mockReturnValueOnce(new Promise((resolve) => { settle = resolve; }));
+    const original = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const elsewhere = Object.assign(window.document.createElement("button"), { textContent: "Elsewhere" });
+    window.document.body.appendChild(elsewhere);
+    try {
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole("button", { name: "Retire" }));
+      const panel = await screen.findByRole("region", { name: "Retire Executed deed" });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      elsewhere.focus();
+      settle(RETIRABLE);
+      await within(panel).findByLabelText("Reason for retiring");
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(elsewhere).toHaveFocus();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original;
+      elsewhere.remove();
     }
   });
 

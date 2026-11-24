@@ -7,6 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.schemas.ip_journal_feed import (
+    IpJournalFeedSettingUpdateRequest,
+    IpJournalFeedStatusResponse,
+)
 from caseops_api.schemas.ip_watch import (
     IpJournalIngestionRunResponse,
     IpJournalIngestRequest,
@@ -22,6 +26,10 @@ from caseops_api.schemas.ip_watch import (
     IpWatchProfileStatusResponse,
     IpWatchProfileUpdateRequest,
     IpWatchWorkspaceResponse,
+)
+from caseops_api.services.ip_journal_feed import (
+    get_journal_feed_status,
+    update_journal_feed_setting,
 )
 from caseops_api.services.ip_watch import (
     create_watch_handoff,
@@ -63,6 +71,31 @@ def watch_publication_search(
             for item in search_journal_publications(session, context=context, query=q, limit=limit)
         ]
     )
+
+
+@router.get(
+    "/watch/journal-feed",
+    response_model=IpJournalFeedStatusResponse,
+    summary="Public Trade Marks Journal feed status",
+)
+def journal_feed_status(
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
+) -> IpJournalFeedStatusResponse:
+    return get_journal_feed_status(session, context=context)
+
+
+@router.put(
+    "/watch/journal-feed",
+    response_model=IpJournalFeedStatusResponse,
+    summary="Turn the public Trade Marks Journal feed on or off for this workspace",
+)
+def journal_feed_setting(
+    payload: IpJournalFeedSettingUpdateRequest,
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:watch_manage"))],
+) -> IpJournalFeedStatusResponse:
+    return update_journal_feed_setting(session, context=context, payload=payload)
 
 
 @router.post(

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { click, dispatchNativeClick, find, read, selector, swipe, visible } from './native-ui.mjs';
 import { firefoxLogin } from './firefox-handoff.mjs';
-import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
+import { CONSENT_MFA_CONTINUE, CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage } from './mfa.mjs';
 import { browserStep } from './browser-progress.mjs';
 
 export function browserOrigin(value) {
@@ -54,10 +54,14 @@ async function domFill(context, key, css, value) {
   browserStep(context, key, 'fill');
   await control.setValue(typeof value === 'function' ? value() : value);
 }
-async function domPress(context, key, css) {
-  const control = await dom(context, key, css);
+async function domClick(context, key, control) {
+  assert.ok(typeof control.elementId === 'string' && control.elementId.trim(), 'BROWSER_PROTOCOL_ELEMENT_ID_REQUIRED');
   browserStep(context, key, 'click');
-  await control.click();
+  // A stale/lost acknowledgement must not refetch and replay this mutation.
+  await context.driver.elementClick(control.elementId);
+}
+async function domPress(context, key, css) {
+  await domClick(context, key, await dom(context, key, css));
 }
 
 async function iosAuthorizationContexts(context) {
@@ -292,8 +296,7 @@ export async function browserLogin(context) {
       browserStep(context, 'connect', 'read');
       assert.equal((await connect.getText()).trim(), 'Connect app', 'REAL_CONNECT_CONTROL_REQUIRED');
       assert.equal(await connect.isEnabled(), true, 'CONNECT_CONTROL_DISABLED');
-      browserStep(context, 'connect', 'click');
-      await connect.click();
+      await domClick(context, 'connect', connect);
     };
     await verifyIdentity();
     await connectExplicitly();
@@ -306,19 +309,19 @@ export async function browserLogin(context) {
       await domFill(context, 'mfaCode', '#native-mfa-code', () => fixtureMfaCode(fixture.auth));
       const verify = await dom(context, 'mfaSubmit', 'form:has(#native-mfa-code) button[type="submit"]');
       browserStep(context, 'mfaSubmit', 'read');
-      assert.equal((await verify.getText()).trim(), 'Verify code', 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
-      browserStep(context, 'mfaSubmit', 'click');
-      await verify.click();
+      assert.equal((await verify.getText()).trim(), CONSENT_MFA_CONTINUE, 'REAL_NATIVE_MFA_VERIFY_CONTROL_REQUIRED');
+      await domClick(context, 'mfaSubmit', verify);
       browserStep(context, 'mfaVerified', 'wait');
       await driver.waitUntil(async () => (await driver.$$('#native-mfa-code')).length === 0
-        && (await driver.$$('main dl dd')).length === 2 && (await driver.$$('main button')).length === 1,
+        && (await driver.$$('main dl dd')).length === 2 && (await driver.$$('#native-app-open')).length === 1,
       { timeout: 15000, interval: 200, timeoutMsg: 'NATIVE_CONSENT_MFA_NOT_COMPLETED' });
       const verified = await dom(context, 'mfaVerified', 'main [role="status"]');
       browserStep(context, 'mfaVerified', 'read');
       assert.equal((await verified.getText()).trim(), CONSENT_MFA_VERIFIED,
         'NATIVE_CONSENT_MFA_VERIFIED_NOTICE_REQUIRED');
+      // The acknowledged Verify and continue transaction already authorized
+      // this same identity. Do not dispatch another Connect/authorize request.
       await verifyIdentity();
-      await connectExplicitly();
     }
     browserStep(context, 'appOpen', 'wait');
     await driver.waitUntil(async () => !!await visible(driver, '#native-app-open'),
@@ -328,8 +331,7 @@ export async function browserLogin(context) {
     assert.equal((await appOpen.getText()).trim(), 'Open CaseOps', 'REAL_NATIVE_APP_OPEN_CONTROL_REQUIRED');
     browserStep(context, 'appOpen', 'check');
     assert.equal(await appOpen.isEnabled(), true, 'NATIVE_APP_OPEN_CONTROL_DISABLED');
-    browserStep(context, 'appOpen', 'click');
-    await appOpen.click();
+    await domClick(context, 'appOpen', appOpen);
   } finally {
     browserStep(context, 'native-return', 'switch-context');
     await driver.switchContext('NATIVE_APP');

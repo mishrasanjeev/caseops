@@ -5,6 +5,7 @@ import {
   getCsrfHeaders,
 } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
+import type { components } from "./openapi-types";
 import {
   type AuthContext,
   type AuthSession,
@@ -154,6 +155,9 @@ import {
   type MailboxMessageReviewResponse,
   type Microsoft365TenantConfigurationResponse,
   type NotificationPreferenceResponse,
+  type PhoneChannel,
+  type PhoneChannelAdminResponse,
+  type PhoneContactStatusResponse,
   type MailboxImportResponse,
   type MailboxStatusResponse,
   type MailboxWatchResponse,
@@ -284,6 +288,8 @@ import {
   mailboxMessageReviewResponse,
   microsoft365TenantConfigurationResponse,
   notificationPreferenceResponse,
+  phoneChannelAdminResponse,
+  phoneContactStatusResponse,
   mailboxImportResponse,
   mailboxStatusResponse,
   mailboxWatchResponse,
@@ -1924,6 +1930,8 @@ export type OutsideCounselRecommendation = {
   total_matters_count: number;
   active_matters_count: number;
   approved_spend_minor: number;
+  // Earlier API revisions omitted the currency breakdown during rolling deployment.
+  approved_spend_by_currency?: components["schemas"]["OutsideCounselRecommendationRecord"]["approved_spend_by_currency"];
   evidence: string[];
 };
 
@@ -1965,6 +1973,8 @@ export type MatterHearingCreateInput = {
   judge_name?: string | null;
   outcome_note?: string | null;
   status?: "scheduled" | "completed" | "adjourned" | "cancelled";
+  // Omitted means the API default (in-app and email).
+  reminder_channels?: Array<"in_app" | "email" | "sms" | "whatsapp">;
 };
 
 export async function createMatterHearing(
@@ -6178,6 +6188,19 @@ export async function fetchContractWorkspace(contractId: string): Promise<unknow
   return apiRequest<unknown>(`/api/contracts/${contractId}/workspace`);
 }
 
+export type ContractObligationRecord =
+  components["schemas"]["caseops_api__schemas__contracts__ContractObligationRecord"];
+
+export async function createContractObligation(
+  contractId: string,
+  body: components["schemas"]["ContractObligationCreateRequest"],
+): Promise<ContractObligationRecord> {
+  return apiRequest<ContractObligationRecord>(
+    `/api/contracts/${encodeURIComponent(contractId)}/obligations`,
+    { method: "POST", body },
+  );
+}
+
 export async function createContract(input: {
   title: string;
   contractCode: string;
@@ -6301,6 +6324,22 @@ export async function createContractTermSuggestion(input: {
   );
 }
 
+export async function updateContractTermSuggestion(input: {
+  contractId: string;
+  suggestionId: string;
+  expected_updated_at: string;
+  suggested_effective_on?: string | null;
+  suggested_expires_on?: string | null;
+  suggested_renewal_on?: string | null;
+  suggested_duration_months?: number | null;
+}): Promise<ContractTermSuggestionRecord> {
+  const { contractId, suggestionId, ...body } = input;
+  return apiRequest<ContractTermSuggestionRecord>(
+    `/api/contracts/${contractId}/term-suggestions/${suggestionId}`,
+    { method: "PATCH", body },
+  );
+}
+
 export async function acceptContractTermSuggestion(input: {
   contractId: string;
   suggestionId: string;
@@ -6315,10 +6354,11 @@ export async function acceptContractTermSuggestion(input: {
 export async function rejectContractTermSuggestion(input: {
   contractId: string;
   suggestionId: string;
+  expected_updated_at?: string;
 }): Promise<ContractTermSuggestionRecord> {
   return apiRequest<ContractTermSuggestionRecord>(
     `/api/contracts/${input.contractId}/term-suggestions/${input.suggestionId}/reject`,
-    { method: "POST", body: {} },
+    { method: "POST", body: { expected_updated_at: input.expected_updated_at } },
   );
 }
 
@@ -7971,6 +8011,60 @@ export async function updateTenantNotificationPreferences(input: {
   return notificationPreferenceResponse.parse(data);
 }
 
+export async function fetchPhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone");
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function startPhoneVerification(input: {
+  phoneNumber: string;
+  channel: PhoneChannel;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/verification", {
+    method: "POST",
+    body: { phone_number: input.phoneNumber, channel: input.channel },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function confirmPhoneVerification(
+  code: string,
+): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>(
+    "/api/notification-preferences/phone/verification/confirm",
+    { method: "POST", body: { code } },
+  );
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function setPhoneConsent(input: {
+  channel: PhoneChannel;
+  optedIn: boolean;
+  consentTextVersion?: string;
+}): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone/consent", {
+    method: "POST",
+    body: {
+      channel: input.channel,
+      opted_in: input.optedIn,
+      consent_text_version: input.optedIn ? input.consentTextVersion : undefined,
+    },
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function removePhoneContact(): Promise<PhoneContactStatusResponse> {
+  const data = await apiRequest<unknown>("/api/notification-preferences/phone", {
+    method: "DELETE",
+  });
+  return phoneContactStatusResponse.parse(data);
+}
+
+export async function fetchAdminPhoneChannels(): Promise<PhoneChannelAdminResponse> {
+  const data = await apiRequest<unknown>("/api/admin/notification-phone-channels");
+  return phoneChannelAdminResponse.parse(data);
+}
+
 async function mutateProviderOperation(
   operationId: string,
   action: "ignore" | "mark-resolved",
@@ -8293,6 +8387,24 @@ export async function createEmailTemplate(input: {
   return emailTemplateRecord.parse(data);
 }
 
+export async function updateEmailTemplate(input: {
+  templateId: string;
+  expected_updated_at: string;
+  name?: string;
+  kind?: string;
+  subject_template?: string;
+  body_template?: string;
+  description?: string | null;
+  variables?: EmailTemplateVariable[];
+}): Promise<EmailTemplateRecord> {
+  const { templateId, ...body } = input;
+  const data = await apiRequest<unknown>(
+    `/api/admin/email-templates/${templateId}`,
+    { method: "PATCH", body },
+  );
+  return emailTemplateRecord.parse(data);
+}
+
 export async function archiveEmailTemplate(
   templateId: string,
 ): Promise<EmailTemplateRecord> {
@@ -8491,6 +8603,7 @@ export async function fetchBillingAddOns(): Promise<BillingPlansResponse> {
 
 export async function createBillingAddOnCheckout(input: {
   addOnCode: string;
+  interval?: "month" | "year" | null;
   quantity?: number;
   successUrl?: string | null;
   cancelUrl?: string | null;
@@ -8499,6 +8612,7 @@ export async function createBillingAddOnCheckout(input: {
     method: "POST",
     body: {
       add_on_code: input.addOnCode,
+      interval: input.interval ?? null,
       quantity: input.quantity ?? 1,
       success_url: input.successUrl ?? null,
       cancel_url: input.cancelUrl ?? null,
@@ -12678,6 +12792,81 @@ export async function fetchIpWatchWorkspace(
   });
   if (docketId) params.set("docket_id", docketId);
   return apiRequest(`/api/ip/watch?${params.toString()}`);
+}
+
+/** Public source lineage of one Trade Marks Journal PDF the official listing names. */
+export type IpPublicJournalDocument = {
+  id: string;
+  journal_number: string;
+  journal_date: string;
+  available_on: string | null;
+  file_name: string;
+  source_url: string;
+  status: "pending" | "parsed" | "needs_review" | "failed";
+  attempts: number;
+  content_sha256: string | null;
+  byte_size: number | null;
+  page_count: number | null;
+  entry_count: number;
+  review_count: number;
+  parser_version: string | null;
+  error_code: string | null;
+  retrieved_at: string | null;
+  workspace_status: string | null;
+  workspace_entries_compared: number | null;
+};
+
+export type IpPublicJournalReviewItem = {
+  id: string;
+  document_id: string;
+  journal_number: string;
+  journal_date: string;
+  page_start: number;
+  page_end: number;
+  journal_page: string | null;
+  review_reason: string | null;
+  application_number: string | null;
+  source_url: string;
+};
+
+export type IpJournalFeedStatus = {
+  source_key: string;
+  listing_url: string;
+  attribution: string;
+  /** Platform kill switch: false means no IP India request is made at all. */
+  global_enabled: boolean;
+  setting: {
+    enabled: boolean;
+    version: number;
+    run_as_membership_id: string;
+    updated_by_membership_id: string;
+    updated_at: string;
+  } | null;
+  last_check: {
+    status: "succeeded" | "failed" | "refused";
+    reason_code: string | null;
+    http_status: number | null;
+    issues_listed: number;
+    documents_discovered: number;
+    checked_at: string;
+  } | null;
+  documents: IpPublicJournalDocument[];
+  review_items: IpPublicJournalReviewItem[];
+  review_total: number;
+};
+
+export async function fetchIpJournalFeedStatus(): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed");
+}
+
+export async function updateIpJournalFeedSetting(input: {
+  enabled: boolean;
+  expectedVersion: number | null;
+}): Promise<IpJournalFeedStatus> {
+  return apiRequest("/api/ip/watch/journal-feed", {
+    method: "PUT",
+    body: { enabled: input.enabled, expected_version: input.expectedVersion },
+  });
 }
 
 /** Recorded journal entries the viewer may see, searched on the server. */

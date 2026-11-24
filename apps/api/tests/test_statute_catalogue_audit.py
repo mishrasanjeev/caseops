@@ -21,9 +21,8 @@ def _audit_module():
 def test_catalogue_audit_reconciles_every_act_without_claiming_partial_completion():
     result = _audit_module().audit_catalogue()
     assert result["catalogue_act_count"] == result["inventoried_act_count"] == 23
-    assert result["retained_release_document_count"] == 20
-    assert len(result["missing_release_documents"]) == 3
-    assert "constitution-india" in result["missing_release_documents"]
+    assert result["retained_release_document_count"] == 21
+    assert result["missing_release_documents"] == ["constitution-india", "income-tax-1961"]
     assert "cpc-1908" in result["missing_whole_document_page_inventory"]
     assert "income-tax-2025" in result["additional_source_packs_pending"]
     assert result["complete"] is False

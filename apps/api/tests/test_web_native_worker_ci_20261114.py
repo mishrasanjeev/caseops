@@ -20,6 +20,8 @@ def test_web_native_browser_dependency_precedes_unchanged_coverage_gate() -> Non
     )
     assert workflow["jobs"]["web"]["timeout-minutes"] == 15
     assert workflow["jobs"]["web"]["runs-on"] == "ubuntu-24.04"
+    node = next(step for step in steps if step.get("uses") == "actions/setup-node@v4")
+    assert node["with"]["node-version"] == "22.23.5"
 
 
 def test_web_worker_failure_retention_is_exact_synthetic_json_only() -> None:
@@ -46,7 +48,7 @@ def test_windows_runs_the_complete_frontend_inventory_with_original_budgets() ->
     assert linux["timeout-minutes"] == 15
     steps = windows["steps"]
     node = next(step for step in steps if step.get("uses") == "actions/setup-node@v4")
-    assert node["with"]["node-version"] == "22.23.4"
+    assert node["with"]["node-version"] == "22.23.5"
     python = next(step for step in steps if step.get("id") == "metadata_python")
     assert python["uses"] == (
         "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"

@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
@@ -34,6 +34,13 @@ DIGEST_IMAGE = re.compile(r"^.+@sha256:[a-f0-9]{64}$")
 # 44 seconds for the same inventory and exceeded the drain's sub-deadline.
 EXECUTION_DRAIN_SCAN_SENTINEL = 3001
 EXECUTION_API_PAGE_SIZE = 1000
+# Private resume reads one v2 page of the newest executions. The v2 list is
+# documented as sorted by creation time, descending; gcloud's client-side
+# --sort-by materialized ~2,100 executions and took 2m40s on 2026-11-08.
+RESUME_EXECUTION_PAGE_SIZE = 3
+# The execution-scoped log read is bounded to the execution's own run window.
+# An unbounded read fell back to gcloud's one-day freshness and took 66 seconds.
+MAINTENANCE_LOG_WINDOW_SLACK = timedelta(minutes=5)
 PRIVATE_PROJECTION_SCHEDULER = "caseops-private-projection-maintenance-cadence"
 PROD_VERIFY_REPOSITORY = "mishrasanjeev/caseops"
 PROD_VERIFY_WORKFLOW = "prod-verify.yml"
@@ -994,6 +1001,73 @@ def _unfinished_executions(payload: object, *, job_name: str) -> list[str]:
     return unfinished
 
 
+def _run_v2_get(url: str, *, access_token: str, timeout: float) -> Any:
+    request = urllib_request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token.strip()}",
+        },
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (
+        json.JSONDecodeError,
+        OSError,
+        TimeoutError,
+        UnicodeDecodeError,
+        urllib_error.URLError,
+    ) as exc:
+        raise InventoryError("Cloud Run execution inventory request failed") from exc
+
+
+def _latest_job_executions_v2(
+    *,
+    job_name: str,
+    project: str,
+    region: str,
+    access_token: str,
+) -> list[dict[str, str]]:
+    """Read one bounded v2 page of the newest executions, newest first.
+
+    The v2 executions.list contract is "sorted by creation time, descending".
+    Exactly one page of RESUME_EXECUTION_PAGE_SIZE rows is requested; a longer
+    page is refused and later pages are never followed. Callers still verify the
+    order, uniqueness and the job's latestCreatedExecution independently.
+    """
+
+    if not access_token.strip():
+        raise InventoryError("gcloud returned an empty access token")
+    parent = f"projects/{project}/locations/{region}/jobs/{job_name}/executions"
+    query = urllib_parse.urlencode({
+        "pageSize": RESUME_EXECUTION_PAGE_SIZE,
+        "fields": "executions(name,job,createTime),nextPageToken",
+    })
+    payload = _run_v2_get(
+        f"https://run.googleapis.com/v2/{parent}?{query}",
+        access_token=access_token,
+        timeout=30,
+    )
+    rows = payload.get("executions", []) if isinstance(payload, dict) else None
+    if not isinstance(rows, list) or len(rows) > RESUME_EXECUTION_PAGE_SIZE:
+        raise InventoryError("Cloud Run returned an invalid latest execution page")
+    latest: list[dict[str, str]] = []
+    for row in rows:
+        name = row.get("name") if isinstance(row, dict) else None
+        if (
+            not isinstance(name, str)
+            or not name.startswith(f"{parent}/")
+            or row.get("job") != job_name
+            or not isinstance(row.get("createTime"), str)
+        ):
+            raise InventoryError("Cloud Run returned a mismatched execution identity")
+        latest.append(
+            {"name": name.rsplit("/", 1)[-1], "createTime": row["createTime"]}
+        )
+    return latest
+
+
 def _list_job_executions_v2(
     *,
     job_name: str,
@@ -1032,26 +1106,11 @@ def _list_job_executions_v2(
         }
         if page_token:
             query["pageToken"] = page_token
-        request = urllib_request.Request(
+        payload = _run_v2_get(
             f"{endpoint}?{urllib_parse.urlencode(query)}",
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {access_token.strip()}",
-            },
+            access_token=access_token,
+            timeout=min(30, remaining),
         )
-        try:
-            with urllib_request.urlopen(request, timeout=min(30, remaining)) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except (
-            json.JSONDecodeError,
-            OSError,
-            TimeoutError,
-            UnicodeDecodeError,
-            urllib_error.URLError,
-        ) as exc:
-            raise InventoryError(
-                "Cloud Run execution inventory request failed"
-            ) from exc
         if not isinstance(payload, dict) or not isinstance(
             payload.get("executions", []), list
         ):
@@ -1420,11 +1479,18 @@ def _maintenance_execution(
     ended = _evidence_time(status.get("completionTime"), "maintenance completion")
     if not started < ended <= datetime.now(UTC):
         raise InventoryError("maintenance execution timing is invalid")
+    # Bound the scan to the execution's own run window. The execution-name label
+    # still selects the record; a window that misses it yields zero rows and
+    # fails closed below.
+    window_start = (started - MAINTENANCE_LOG_WINDOW_SLACK).isoformat()
+    window_end = (ended + MAINTENANCE_LOG_WINDOW_SLACK).isoformat()
     log_filter = (
         'resource.type="cloud_run_job" AND '
         f'resource.labels.job_name="{job["run_job_name"]}" AND '
         f'labels."run.googleapis.com/execution_name"="{name}" AND '
         f'logName="projects/{project}/logs/run.googleapis.com%2Fstdout" AND '
+        f'timestamp>="{window_start.replace("+00:00", "Z")}" AND '
+        f'timestamp<="{window_end.replace("+00:00", "Z")}" AND '
         'textPayload:"CASEOPS_PRIVATE_PROJECTION"'
     )
     logs = run_gcloud([
@@ -1503,26 +1569,27 @@ def _private_resume_evidence(
         or revision_api[0].get("image") != image
     ):
         raise InventoryError("QA serving revision does not use the maintenance image")
-    rows = run_gcloud([
-        "run", "jobs", "executions", "list", "--job", job["run_job_name"],
-        "--project", project, "--region", region,
-        "--sort-by=~metadata.creationTimestamp", "--limit=3", "--format=json",
-    ], expect_json=True)
+    access_token = run_gcloud(["auth", "print-access-token"])
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise InventoryError("gcloud returned an empty access token")
+    rows = _latest_job_executions_v2(
+        job_name=job["run_job_name"], project=project, region=region,
+        access_token=access_token,
+    )
     if not isinstance(rows, list) or len(rows) < 2 or len(rows) > 3:
         raise InventoryError("two latest maintenance executions are unavailable")
     names: list[str] = []
     created: list[datetime] = []
     for row in rows:
-        metadata = row.get("metadata") if isinstance(row, dict) else None
-        if not isinstance(metadata, dict):
+        if not isinstance(row, dict):
             raise InventoryError("invalid maintenance execution listing")
-        name = metadata.get("name")
+        name = row.get("name")
         if not isinstance(name, str) or not re.fullmatch(
             re.escape(job["run_job_name"]) + r"-[a-z0-9-]+", name
         ) or name in names:
             raise InventoryError("invalid maintenance execution identity")
         names.append(name)
-        created.append(_evidence_time(metadata.get("creationTimestamp"), "execution creation"))
+        created.append(_evidence_time(row.get("createTime"), "execution creation"))
     if created != sorted(created, reverse=True) or len(set(created)) != len(created):
         raise InventoryError("latest maintenance execution order is unverified")
     job_status = run_gcloud([

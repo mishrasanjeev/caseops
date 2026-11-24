@@ -24,13 +24,8 @@ const APP_ROOT = path.resolve(__dirname);
 // real tests) is preferred over additions; the set is meant to
 // shrink, not grow. Per audit priority list:
 const ALLOWED_UNTESTED = new Set<string>([
-  // Marketing pages — minimal interactivity, low test ROI today.
-  // TODO 2026-04-24 add at least mobile + keyboard a11y E2E.
-  "general-counsels/page.tsx",
-  "guide/page.tsx",
-  "law-firms/page.tsx",
-  "solo-lawyers/page.tsx",
-  "page.tsx", // root marketing landing
+  // Marketing pages (home, guide and persona pages) gained sibling
+  // claim tests on 2026-11-22; their waivers were removed.
   // App pages — REAL gaps. TODO 2026-04-24 add per-page vitest.
   // AQ-003 batch-1 (2026-04-25): the 5 highest-traffic lawyer-daily
   // pages now have sibling page.test.tsx files (matters list,

@@ -214,6 +214,7 @@ export default function MatterCommunicationsPage() {
 
       {sending ? (
         <ComposeEmailForm
+          key={matterId}
           matterId={matterId}
           templates={templatesQuery.data?.templates ?? []}
           loading={templatesQuery.isPending}

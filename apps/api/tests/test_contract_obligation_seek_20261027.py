@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import inspect, text
+from sqlalchemy import MetaData, Table, inspect, text
 from sqlalchemy.orm import Session
 
 from alembic import command
-from caseops_api.db.models import (
-    Contract,
-    ContractObligation,
-)
+from caseops_api.db.models import Contract
 from tests.migration_index_catalog import (
     require_index_additions,
     require_revision,
@@ -65,25 +63,26 @@ def populate(engine):
         )
         session.add(contract)
         session.flush()
-        session.add_all(
-            [
-                ContractObligation(
-                    contract_id=contract.id,
-                    title="Retained nullable duty",
-                    due_on=None,
-                    status="pending",
-                    created_at=datetime(2026, 10, 27, tzinfo=UTC),
-                ),
-                ContractObligation(
-                    contract_id=contract.id,
-                    title="Retained completed duty",
-                    due_on=date(2026, 10, 27),
-                    status="completed",
-                    completed_at=datetime(2026, 10, 27, tzinfo=UTC),
-                    owner_membership_id=member,
-                ),
-            ]
-        )
+        # This fixture also runs at the named historical boundary, where the
+        # current ORM defaults may refer to columns that do not exist yet.
+        obligations = Table("contract_obligations", MetaData(), autoload_with=session.connection())
+        stamp = datetime(2026, 10, 27, tzinfo=UTC)
+        common = {
+            "contract_id": contract.id, "description": None,
+            "priority": "medium", "created_at": stamp,
+        }
+        session.execute(obligations.insert(), [
+            {
+                **common, "id": str(uuid4()), "title": "Retained nullable duty",
+                "status": "pending",
+                "owner_membership_id": None, "due_on": None, "completed_at": None,
+            },
+            {
+                **common, "id": str(uuid4()), "title": "Retained completed duty",
+                "status": "completed",
+                "owner_membership_id": member, "due_on": stamp.date(), "completed_at": stamp,
+            },
+        ])
         session.commit()
 
 

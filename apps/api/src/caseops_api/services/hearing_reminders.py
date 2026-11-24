@@ -20,9 +20,9 @@ Dark-launched on 2026-04-22. Three moving parts:
    rows at ``QUEUED`` so flipping the flag later starts real sends
    without a backfill.
 
-The provider integration is pluggable: ``_send_via_sendgrid`` is the
-only real path today. MSG91 SMS drops in alongside it when creds are
-available.
+External dispatch is owned by the durable notification intent worker:
+SendGrid for email, MSG91 for SMS and the Meta Cloud API for WhatsApp
+(``services.phone_notifications``), each behind its own readiness gate.
 """
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
     User,
 )
+from caseops_api.services.phone_providers import phone_channel_readiness
 from caseops_api.services.session_context import SessionContext
 
 
@@ -541,80 +542,6 @@ def _send_via_sendgrid(
     )
 
 
-# MOD-TS-007 (2026-04-26) — SMS via Twilio. Gated by
-# ``CASEOPS_TWILIO_ENABLED=true`` so the default deployment never
-# burns money on a test SMS. Required env when enabled:
-#   CASEOPS_TWILIO_ACCOUNT_SID
-#   CASEOPS_TWILIO_AUTH_TOKEN
-#   CASEOPS_TWILIO_FROM_NUMBER
-#
-# Cost discipline: each SMS costs ~₹0.50–₹2.00 in India depending on
-# length + alphanumeric sender registration. The reminder worker still
-# respects the per-hearing/per-channel uniqueness constraint, so this
-# never doubles the bill on a retry.
-def _twilio_sms_configured() -> bool:
-    settings = get_settings()
-    return bool(
-        getattr(settings, "twilio_enabled", False)
-        and getattr(settings, "twilio_account_sid", None)
-        and getattr(settings, "twilio_auth_token", None)
-        and getattr(settings, "twilio_from_number", None)
-    )
-
-
-def _send_via_twilio_sms(
-    *, to_phone: str, body: str,
-) -> tuple[bool, str | None, str | None]:
-    """Return ``(success, provider_message_id, error)``.
-
-    Twilio's Messages API. Uses httpx directly + basic-auth rather
-    than the SDK to keep the install footprint small. Truncates body
-    at 1500 chars (Twilio caps at 1600 for concatenated SMS in India).
-    """
-    import httpx
-
-    settings = get_settings()
-    sid = settings.twilio_account_sid
-    token = settings.twilio_auth_token
-    from_number = settings.twilio_from_number
-    payload = {
-        "From": from_number,
-        "To": to_phone,
-        "Body": body[:1500],
-    }
-    response = httpx.post(
-        f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
-        auth=(sid, token),
-        data=payload,
-        timeout=20,
-    )
-    if response.status_code in (200, 201):
-        try:
-            msg_id = response.json().get("sid")
-        except Exception:  # noqa: BLE001
-            msg_id = None
-        return True, msg_id, None
-    return (
-        False,
-        None,
-        f"twilio {response.status_code}: {response.text[:200]}",
-    )
-
-
-def _whatsapp_configured() -> bool:
-    """WhatsApp via Meta Cloud API. Requires Meta-approved templates
-    so this stays a hard 'not configured' until both
-    ``CASEOPS_WHATSAPP_ENABLED=true`` and the per-deployment template
-    name + access token + phone-number-id env vars land."""
-    settings = get_settings()
-    return bool(
-        getattr(settings, "whatsapp_enabled", False)
-        and getattr(settings, "whatsapp_access_token", None)
-        and getattr(settings, "whatsapp_phone_number_id", None)
-        and getattr(settings, "whatsapp_template_name", None)
-    )
-
-
 def run_reminder_worker(
     session: Session,
     *,
@@ -624,7 +551,7 @@ def run_reminder_worker(
 ) -> dict:
     """Project due legacy rows from their canonical delivery intents.
 
-    This compatibility worker never invokes SendGrid, Twilio, or another
+    This compatibility worker never invokes SendGrid, MSG91, Meta, or another
     external provider. Scheduling creates the linked durable intent; the
     canonical notification worker owns claim/commit/provider/finalize. Running
     the two workers in either order is therefore exactly-once at this boundary.
@@ -648,8 +575,8 @@ def run_reminder_worker(
         "effective_live": False,
         "enabled_flag": get_settings().hearing_reminders_enabled,
         "provider_configured": _sendgrid_configured(),
-        "sms_provider_configured": _twilio_sms_configured(),
-        "whatsapp_provider_configured": _whatsapp_configured(),
+        "sms_provider_configured": phone_channel_readiness("sms").ready,
+        "whatsapp_provider_configured": phone_channel_readiness("whatsapp").ready,
         "due_count": len(due),
         "sent": 0,
         "would_send": 0,

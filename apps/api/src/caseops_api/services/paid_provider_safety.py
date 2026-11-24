@@ -16,6 +16,9 @@ _PAID_PROVIDER_HOSTS = frozenset(
     {
         "api.indiankanoon.org",
         "webapi.ecourtsindia.com",
+        # Billable per message: SMS reminders and WhatsApp template sends.
+        "control.msg91.com",
+        "graph.facebook.com",
     }
 )
 _SYNTHETIC_TENANT_TOKENS = frozenset(

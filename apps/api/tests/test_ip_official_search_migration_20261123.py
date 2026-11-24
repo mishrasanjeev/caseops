@@ -16,10 +16,12 @@ from caseops_api.db.models import (
     User,
 )
 from tests.test_platform_console_migration import KINDS, fresh_engine, migration_config
+from tests.test_postgres_validation import _seed_company, _seed_membership
 
-PREVIOUS = "20261112_0001"
+PREVIOUS = "20261122_0631"
 HEAD = "20261123_0001"
 TABLE = "ip_official_search_imports"
+REFUSAL = f"{TABLE} holds retained official-page lineage; restore-forward only"
 
 
 def _row(company_id: str, membership_id: str, digest: str) -> IpOfficialSearchImport:
@@ -43,6 +45,15 @@ def _row(company_id: str, membership_id: str, digest: str) -> IpOfficialSearchIm
         uploaded_at=datetime(2026, 11, 23, tzinfo=UTC),
         version=1,
     )
+
+
+def seed_retained_import(engine) -> None:
+    """One retained import, so a downgrade from this head refuses before any DDL."""
+    with Session(engine) as session:
+        company = _seed_company(session)
+        member = _seed_membership(session, company)
+        session.add(_row(company, member, "d" * 64))
+        session.commit()
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -102,7 +113,7 @@ def test_official_search_migration_tenant_keys_and_retained_downgrade(
             session.commit()
         with engine.connect() as connection:
             before = connection.execute(select(IpOfficialSearchImport.__table__)).all()
-        with pytest.raises(RuntimeError, match="restore-forward only"):
+        with pytest.raises(RuntimeError, match=REFUSAL):
             command.downgrade(config, PREVIOUS)
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == HEAD

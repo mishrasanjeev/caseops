@@ -17,7 +17,7 @@ import { scenarios } from '../../apps/mobile/e2e/core.mjs';
 import { createGateway } from './no-paid-gateway.mjs';
 import { authenticate, authorizationIdentity, browserLogin, browserOrigin, loginCredentials } from '../../apps/mobile/e2e/browser-handoff.mjs';
 import { prepareFirefox, resolveFirefoxEntry, validateFirefoxRecipe } from '../../apps/mobile/e2e/firefox-handoff.mjs';
-import { CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
+import { CONSENT_MFA_CONTINUE, CONSENT_MFA_VERIFIED, fixtureMfaCode, mfaStage, totp, validateAuthorizationTraffic } from '../../apps/mobile/e2e/mfa.mjs';
 import { admitApplication, FixtureUnavailable, loadOwnerControls, ownerControl, prepareOwnerControlsForCase, SEARCH_KINDS, validateBuildReceipt, validateCoreFixture, validateNativeFixtureAuthentication, verifiedFile } from '../../apps/mobile/e2e/fixture-contract.mjs';
 import { delta, discard, noNotePostRetried, prepareScenario, readOnlyTraffic, scenarios as datedScenarios, selectMatterActivity, signedOutResumeTraffic, verifySavedNote } from '../../apps/mobile/e2e/journeys.mjs';
 import { backgroundAndResume, click, find, input, nativeAction, read, selector, visible } from '../../apps/mobile/e2e/native-ui.mjs';
@@ -28,7 +28,7 @@ import { configuredSessionDeleteAdmission, MAX_SESSION_ADMISSION_EVENTS, proveCu
 import { browserStep } from '../../apps/mobile/e2e/browser-progress.mjs';
 import { appiumSessionEvent, authenticationGate, configureNativeDriver, needsFailedCallRecovery, recoverFailedCall } from '../../apps/mobile/e2e/run-state.mjs';
 import { attestAndroidBinary } from '../../apps/mobile/e2e/installed-android.mjs';
-import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA } from './host-node-trust.mjs';
+import { prepareHostNodeTrust, reviewHostNodeRoots, reviewHostNodeBuildConfiguration, reviewHostNodeWindowsAclProof, reviewHostNodeWindowsAclPhase, DENIED_HOST_CA, HOST_NODE_ROOTS } from './host-node-trust.mjs';
 import { localCertificates } from './host-node-trust-fixture.mjs';
 import { readIosHostInput, referenceIosHostInput, neutralIosEnvironment, composeIosHostCommand, validateIosHostArguments, reviewIosPodBuildPaths, validatePodsCurlArguments, validateIosCurlArguments, validateIosLocalArchiveArguments, projectIosGitArguments, admitIosGitRepository, iosHostCommandProjection, IOS_PODS_SOURCE_SHA256, runIosSimulatorBuild, runIosLocalQaCommand, openIosCurlTransport, reviewIosHostHome, prepareIosHomeDirectories, iosSimulatorInputEnvironment, reviewProjectNpm, renderIosHostBuildEntry, validateIosReadonlyGitArguments, reviewIosLocalArchive } from './ios-host-launch.mjs';
 import { captureAndroidEmptyMavenRepository, bindAndroidEmptyMavenRepository, ANDROID_EMPTY_MAVEN_ENV } from './android-host-launch.mjs';
@@ -632,7 +632,7 @@ test('browser credentials come only from bounded named environment values, never
 });
 
 function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, externalOrigin = false, duplicatePassword = false,
-  mfa = false, consent = false, platform = 'android', wrongAfterMfa = false, changedAfterMfa = false, autoConnect = false,
+  mfa = false, consent = false, platform = 'android', wrongAfterMfa = false, changedAfterMfa = false, autoConnect = false, consentDispatchFailure,
   noConsentChallenge = false, verifyRefused = false, appOpenMissing = false, appOpenDisabled = false, wrongAppOpenLabel = false,
   initiallyAuthenticated = false } = {}) {
   let stage = initiallyAuthenticated ? 'complete' : 'app', native = true, verified = false;
@@ -659,7 +659,8 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       if (key === 'app-open') { request('POST', '/api/auth/native/token', 200); stage = 'complete'; }
       if (key === 'consent-verify' && !verifyRefused) {
         request('POST', '/api/auth/mfa/step-up', 200); request('GET', '/api/auth/me', 200);
-        verified = true; stage = autoConnect ? 'complete' : 'connect';
+        verified = true; request('POST', '/api/auth/native/authorize', 200); stage = autoConnect ? 'complete' : 'grant';
+        if (consentDispatchFailure) throw consentDispatchFailure;
       } },
   });
   const driver = {
@@ -702,9 +703,9 @@ function domBrowserDouble({ wrongPrincipal = false, changedHandoff = false, exte
       if (query === '#mfa-code' && stage === 'mfa') return [element('#mfa-code')];
       if (query === 'form[aria-label="MFA challenge"] button[type="submit"]' && stage === 'mfa') return [element('mfa-submit')];
       if (query === '#native-mfa-code' && stage === 'consent-mfa') return [element('native-mfa-code')];
-      if (query === 'form:has(#native-mfa-code) button[type="submit"]' && stage === 'consent-mfa') return [element('consent-verify', 'Verify code')];
-      if (query === 'main [role="status"]' && verified && stage === 'connect') return [element('consent-notice', CONSENT_MFA_VERIFIED)];
-      if (query === 'main dl dd' && stage === 'connect') return [element('principal', `${wrongPrincipal || verified && wrongAfterMfa ? 'Wrong' : 'Unit Person'} unit@example.invalid`), element('workspace', 'Unit Workspace / unit')];
+      if (query === 'form:has(#native-mfa-code) button[type="submit"]' && stage === 'consent-mfa') return [element('consent-verify', CONSENT_MFA_CONTINUE)];
+      if (query === 'main [role="status"]' && verified && stage === 'grant') return [element('consent-notice', CONSENT_MFA_VERIFIED)];
+      if (query === 'main dl dd' && ['connect', 'grant'].includes(stage)) return [element('principal', `${wrongPrincipal || verified && wrongAfterMfa ? 'Wrong' : 'Unit Person'} unit@example.invalid`), element('workspace', 'Unit Workspace / unit')];
       if (query === 'main button' && stage === 'connect') return [element('connect', 'Connect app')];
       if (query === '#native-app-open' && stage === 'grant' && !appOpenMissing) return [element('app-open', wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps')];
       return [];
@@ -867,7 +868,7 @@ test('NATIVE-13 setup runs actual auth orchestration fresh with logout, password
   t.after(() => server.close());
   Object.assign(fake.context.fixture, { gatewayUrl: await listen(server), gatewayRunId: 'unit-phase-two' });
   await prepareScenario(fake.context, datedScenarios.find(({ id }) => id === 'NATIVE-13'), new Set());
-  assert.deepEqual(fake.clicks, ['account', 'sign-out', 'sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect', 'app-open', 'account', 'back']);
+  assert.deepEqual(fake.clicks, ['account', 'sign-out', 'sign-in', 'link', 'submit', 'connect', 'consent-verify', 'app-open', 'account', 'back']);
   assert.deepEqual(fake.records.filter(({ type }) => type === 'native_authentication_boundary').map(({ state }) => state), ['started', 'passed']);
   assert.equal(fake.requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/logout').length, 1);
   assert.equal(fake.requests.filter(({ method, route }) => method === 'POST' && route === '/api/auth/native/token').length, 1);
@@ -1246,7 +1247,7 @@ function firefoxRecipe(t, { consent = false, androidBack = false, prepare = [], 
   locators.appOpen = { kind: 'id', value: 'native-app-open' };
   locators.fullBrowser = { kind: 'id', value: 'ADDRESSBAR_TABS_COUNTER' };
   Object.assign(locators, entryLocators);
-  if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: 'Verify code' },
+  if (consent) Object.assign(locators, { mfaCode: { kind: 'id', value: 'native-mfa-code' }, mfaSubmit: { kind: 'buttonText', value: CONSENT_MFA_CONTINUE },
     mfaVerified: { kind: 'text', value: CONSENT_MFA_VERIFIED } });
   const urlCloseMode = androidBack ? 'android-back' : 'locator';
   const evidence = ownedFile(t, { kind: 'observed-native-firefox-locators', packageName: 'org.mozilla.firefox', version: '158.0.2', locators, urlCloseMode, prepare, afterConnect, conversionConfirmation });
@@ -1300,7 +1301,7 @@ test('Firefox app-open admission requires the exact new locator in both the reci
   assert.throws(() => validateFirefoxRecipe(wrong), /EXACT_NATIVE_APP_OPEN_CONTROL_REQUIRED/);
 });
 
-test('Firefox consent recipes require hash-bound exact challenge, Verify code and verified notice locators', (t) => {
+test('Firefox consent recipes require hash-bound exact challenge, Verify and continue and verified notice locators', (t) => {
   for (const key of ['mfaCode', 'mfaSubmit', 'mfaVerified']) {
     const auth = firefoxRecipe(t, { consent: true });
     auth.firefoxUi.locators[key] = { kind: 'text', value: 'Wrong control' };
@@ -1429,17 +1430,18 @@ test('browser refuses missing MFA stage before any sign-in or credential entry',
   assert.deepEqual(fake.writes, []);
 });
 
-test('consent MFA browser orchestration has two explicit Connect clicks around one real code submission on Android and iOS', async (t) => {
+test('consent MFA browser orchestration has one Connect then Verify and continue and explicit Open on Android and iOS', async (t) => {
   browserEnvironment(t);
   for (const platform of ['android', 'ios']) {
     const fake = domBrowserDouble({ consent: true, platform });
     Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
     await browserLogin(fake.context);
-    assert.deepEqual(fake.clicks, ['sign-in', 'link', 'submit', 'connect', 'consent-verify', 'connect', 'app-open']);
+    assert.deepEqual(fake.clicks, ['sign-in', 'link', 'submit', 'connect', 'consent-verify', 'app-open']);
     assert.deepEqual(fake.writes.map(([key]) => key), ['#company-slug', '#email', '#password', 'native-mfa-code']);
     assert.match(fake.writes.at(-1)[1], /^\d{6}$/);
     assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
     assert.equal(fake.isNative(), true);
+    validateAuthorizationTraffic(fake.requests, fake.context.fixture.auth, { single: true });
   }
 });
 
@@ -1499,7 +1501,8 @@ function firefoxDouble(t, foreign = false, options = {}) {
   const consentScrolls = [], keyboardDismissals = [];
   let fullBrowser = !options.prepare?.length || options.fullBrowserInitially === true;
   let clock = 0, connectedAt = 0, verifiedAt = 0, grantAt = 0, promptAt = 0, noticeCleared = false, promptCleared = false, lastLookup, promptIndex = 0, preparationShown = 0;
-  const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [];
+  const writes = [], clicks = [], records = [], swipes = [], waits = [], refreshes = [], requests = [];
+  const request = (method, route, status) => requests.push({ method, route, status });
   const values = auth.firefoxUi.locators;
   // Field text as the browser reports it; options.autofill models Firefox prefill.
   const typed = { ...(options.autofill || {}) }, fields = new Map();
@@ -1511,7 +1514,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
     getCurrentPackage: async () => stage === 'complete' ? fixture.appId : 'org.mozilla.firefox',
     pressKeyCode: async (code) => {
       assert.equal(code, 4); assert.equal(editing, true, 'BACK_MUST_NOT_NAVIGATE_WHEN_EDITOR_CLOSED');
-      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
+      clicks.push('android-back'); if (++backCount >= (options.backPressesRequired || 1)) { editing = false; keyboardShown = ['connect', 'grant'].includes(stage) && !!options.restoreConsentKeyboard; }
     },
     isKeyboardShown: async () => options.recurringConsentKeyboard && keyboardDismissals.length > 0
       ? ++keyboardChecksAfterDismissal > 1 : keyboardShown,
@@ -1545,7 +1548,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
     getWindowRect: async () => ({ width: 400, height: 800 }),
     performActions: async (actions) => {
       swipes.push('scroll');
-      if (options.consentViewportScroll && stage === 'connect') {
+      if (options.consentViewportScroll && ['connect', 'grant'].includes(stage)) {
         const gesture = actions[0].actions;
         const direction = gesture[0].y < gesture[2].y ? 'up' : 'down';
         consentScrolls.push({ direction, verified, identityRead: records.filter(row => row.type === 'browser_step' && row.action === 'read').at(-1)?.key });
@@ -1579,16 +1582,18 @@ function firefoxDouble(t, foreign = false, options = {}) {
         : key === 'signInLink' ? stage === 'landing' && !editing && clock >= (options.entryDelayMs ?? 0)
         : ['companySlug', 'email', 'password', 'submit'].includes(key) ? stage === 'login' && !editing
           && (key === 'companySlug' || !options.lowerFieldsNeedScroll || swipes.length > 0)
-        : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? stage === 'connect' && !editing
+        : ['principal', 'emailFact', 'workspace', 'connect'].includes(key) ? (stage === 'connect' || stage === 'grant' && key !== 'connect') && !editing
           && clock - connectedAt >= (options.connectDelayMs ?? 0)
           && (!options.consentViewportScroll || (key === 'connect' ? consentViewport === 'bottom' && !(options.missingSettledConnect && consentScrolls.length > 0) : consentViewport === 'top'))
           && (key !== 'connect' || !options.restoreKeyboardAfterWorkspace
             || !keyboardShown && (keyboardDismissals.length === 0 || clock - keyboardDismissedAt >= (options.keyboardTreeDelayMs ?? 0)))
         : ['mfaCode', 'mfaSubmit'].includes(key) ? stage === 'consent-mfa' && !editing
           && (key !== 'mfaSubmit' || !options.submitHiddenUntilCode || consentCodeEntered)
-        : key === 'mfaVerified' ? verified && stage === 'connect' && !editing && !noticeCleared
+        : key === 'mfaVerified' ? verified && stage === 'grant' && !editing && !noticeCleared
           && clock - verifiedAt >= (options.verifiedNoticeDelayMs ?? 0)
         : key === 'appOpen' ? stage === 'grant' && !editing && !options.appOpenMissing && clock - grantAt >= (options.appOpenDelayMs ?? 0)
+          && (!options.consentViewportScroll || consentViewport === 'bottom')
+          && (!options.restoreKeyboardAfterWorkspace || !keyboardShown && (keyboardDismissals.length === 0 || clock - keyboardDismissedAt >= (options.keyboardTreeDelayMs ?? 0)))
         : key && key.startsWith('prompt-') ? stage === 'prompt' && key === `prompt-${promptIndex}` && !promptCleared
           && clock - promptAt >= (options.promptDelaysMs?.[promptIndex] ?? 0)
         : key && key.startsWith('prepare-') ? stage === 'landing' && clock >= (options.chromeDelayMs ?? 0)
@@ -1606,7 +1611,7 @@ function firefoxDouble(t, foreign = false, options = {}) {
             return stage === 'login' ? `${target.origin}/sign-in?${new URLSearchParams({ next: target.pathname + target.search })}` : target.href;
           }
           return { principal: verified && options.wrongAfterMfa ? 'Wrong' : fixture.principalLabel, emailFact: 'unit@example.invalid',
-            workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: 'Verify code', mfaVerified: CONSENT_MFA_VERIFIED,
+            workspace: 'Unit Workspace / unit', connect: 'Connect app', mfaSubmit: CONSENT_MFA_CONTINUE, mfaVerified: CONSENT_MFA_VERIFIED,
             appOpen: options.wrongAppOpenLabel ? 'Wrong button' : 'Open CaseOps' }[key] || '';
         },
         click: async () => {
@@ -1615,23 +1620,29 @@ function firefoxDouble(t, foreign = false, options = {}) {
           if (key?.startsWith('prepare-')) preparationShown = Math.max(preparationShown, Number(key.slice('prepare-'.length)) + 1);
           if (key === `prepare-${auth.firefoxUi.prepare.length - 1}` && !options.neverFullBrowser) fullBrowser = true;
           if (key === 'urlOpen') { editing = true; backCount = 0; }
-          if (key === 'urlClose') { editing = false; keyboardShown = stage === 'connect' && !!options.restoreConsentKeyboard; }
+          if (key === 'urlClose') { editing = false; keyboardShown = ['connect', 'grant'].includes(stage) && !!options.restoreConsentKeyboard; }
           if (key === 'signInLink') stage = 'login';
           if (key === 'submit') { stage = 'connect'; connectedAt = clock; }
           if (key === 'connect') {
+            request('POST', '/api/auth/native/authorize', options.consent && !verified ? 403 : 200);
             stage = options.consent && !verified ? options.noConsentChallenge ? 'connect' : 'consent-mfa' : 'grant';
             if (stage === 'grant') grantAt = clock;
           }
-          if (key === 'appOpen') { stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete'; promptAt = clock; }
+          if (key === 'appOpen') { request('POST', '/api/auth/native/token', 200); stage = auth.firefoxUi.afterConnect.length ? 'prompt' : 'complete'; promptAt = clock; }
           if (key?.startsWith('prompt-')) {
             promptAt = clock;
             if (++promptIndex === auth.firefoxUi.afterConnect.length) stage = 'complete';
           }
-          if (key === 'mfaSubmit' && !options.verifyRefused) { verified = true; verifiedAt = clock; stage = options.autoConnect ? 'complete' : 'connect'; }
+          if (key === 'mfaSubmit' && !options.verifyRefused) {
+            request('POST', '/api/auth/mfa/step-up', 200); request('GET', '/api/auth/me', 200);
+            request('POST', '/api/auth/native/authorize', 200);
+            verified = true; verifiedAt = clock; grantAt = clock; stage = options.autoConnect ? 'complete' : 'grant';
+            if (options.consentDispatchFailure) throw options.consentDispatchFailure;
+          }
         } }];
     },
   };
-  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes, consentScrolls, keyboardDismissals,
+  return { context: { driver: nativeProtocolDouble(driver), fixture, platform: 'android', record: (row) => records.push(row) }, writes, clicks, records, swipes, waits, refreshes, requests, consentScrolls, keyboardDismissals,
     elapsed: () => clock };
 }
 
@@ -2037,7 +2048,7 @@ test('Firefox already-full browser skips Custom Tab menu conversion but retains 
   await browserLogin(fake.context);
   assert.deepEqual(fake.clicks.filter(key => key.startsWith('prepare-')), []);
   assert.equal(fake.clicks.filter(key => key === 'mfaSubmit').length, 1);
-  assert.equal(fake.clicks.filter(key => key === 'connect').length, 2);
+  assert.equal(fake.clicks.filter(key => key === 'connect').length, 1);
   assert.equal(fake.clicks.filter(key => key === 'appOpen').length, 1);
 });
 
@@ -2110,13 +2121,14 @@ test('Firefox native UI refuses an external address before entering any credenti
   assert.equal(fake.clicks.includes('connect'), false);
 });
 
-test('Firefox consent MFA submits one code between exactly two explicit Connect actions (unit accessibility double)', async (t) => {
+test('Firefox consent MFA submits one code before the sole successful authorization and explicit Open (unit accessibility double)', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true });
   await browserLogin(fake.context);
   assert.deepEqual(fake.writes.map(([key]) => key), ['companySlug', 'email', 'password', 'mfaCode']);
-  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit']);
   assert.equal(JSON.stringify(fake.records).includes(process.env.CASEOPS_MOBILE_UNIT_TOTP), false);
+  validateAuthorizationTraffic(fake.requests, fake.context.fixture.auth, { single: true });
 });
 
 test('Firefox explicitly opens the granted app callback once before its observed normal browser prompt', async (t) => {
@@ -2124,7 +2136,7 @@ test('Firefox explicitly opens the granted app callback once before its observed
   const fake = firefoxDouble(t, false, { consent: true, afterConnect: [{ kind: 'label', value: 'Open in App' }] });
   await browserLogin(fake.context);
   assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit', 'appOpen', 'prompt-0'].includes(key)),
-    ['connect', 'mfaSubmit', 'connect', 'appOpen', 'prompt-0']);
+    ['connect', 'mfaSubmit', 'appOpen', 'prompt-0']);
   assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'appOpen' && action === 'click').length, 1);
 });
 
@@ -2137,7 +2149,7 @@ test('both bounded afterConnect prompt keys wait 10s without gestures when their
   assert.deepEqual(fake.swipes, []);
   assert.deepEqual(fake.refreshes, []);
   assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit', 'appOpen', 'prompt-0', 'prompt-1'].includes(key)),
-    ['connect', 'mfaSubmit', 'connect', 'appOpen', 'prompt-0', 'prompt-1']);
+    ['connect', 'mfaSubmit', 'appOpen', 'prompt-0', 'prompt-1']);
   assert.ok(fake.elapsed() >= 6311 && fake.elapsed() < 20000);
 });
 
@@ -2152,7 +2164,7 @@ test('either missing afterConnect prompt fails at its one 10s bound without scro
     assert.deepEqual(fake.swipes, []);
     assert.deepEqual(fake.refreshes, []);
     assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 1);
-    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
     assert.equal(fake.clicks.filter((key) => key.startsWith('prompt-')).length, missing);
     assert.equal(fake.records.filter(({ type }) => type === 'browser_step').at(-1).key, `afterConnect-${missing}`);
   }
@@ -2165,7 +2177,7 @@ test('Firefox waits for a delayed grant-backed Open CaseOps button without refre
   assert.ok(fake.waits.some(({ key, timeout }) => key === 'appOpen' && timeout === 10000));
   assert.deepEqual(fake.swipes, []);
   assert.deepEqual(fake.refreshes, []);
-  assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+  assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
   assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 1);
 });
 
@@ -2174,21 +2186,21 @@ test('Firefox missing, disabled/expired or wrongly labelled app-open control can
   for (const options of [{ appOpenMissing: true }, { appOpenDisabled: true }, { wrongAppOpenLabel: true }]) {
     const fake = firefoxDouble(t, false, { consent: true, ...options });
     await assert.rejects(() => browserLogin(fake.context));
-    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
     assert.equal(fake.clicks.filter((key) => key === 'mfaSubmit').length, 1);
     assert.equal(fake.clicks.filter((key) => key === 'appOpen').length, 0);
     assert.deepEqual(fake.swipes, []);
   }
 });
 
-test('Android/iOS web-context flow clicks fixed app-open control once after the final explicit Connect', async (t) => {
+test('Android/iOS web-context flow clicks fixed app-open control once after Verify and continue', async (t) => {
   browserEnvironment(t);
   for (const platform of ['android', 'ios']) {
     const fake = domBrowserDouble({ consent: true, platform });
     Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
     await browserLogin(fake.context);
     assert.deepEqual(fake.clicks.filter((key) => ['connect', 'consent-verify', 'app-open'].includes(key)),
-      ['connect', 'consent-verify', 'connect', 'app-open']);
+      ['connect', 'consent-verify', 'app-open']);
     assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'appOpen' && action === 'click').length, 1);
   }
 });
@@ -2199,18 +2211,18 @@ test('web-context missing or disabled app-open button fails without renewing a g
     const fake = domBrowserDouble({ consent: true, ...options });
     Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
     await assert.rejects(() => browserLogin(fake.context));
-    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 2);
+    assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
     assert.equal(fake.clicks.filter((key) => key === 'app-open').length, 0);
     assert.equal(fake.isNative(), true);
   }
 });
 
-test('Firefox consent fills six digits before looking up Verify code hidden from Gecko accessibility while disabled', async (t) => {
+test('Firefox consent fills six digits before looking up Verify and continue hidden from Gecko accessibility while disabled', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true });
   await browserLogin(fake.context);
   assert.match(fake.writes.find(([key]) => key === 'mfaCode')[1], /^\d{6}$/);
-  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit']);
   assert.deepEqual(fake.swipes, []);
 });
 
@@ -2223,7 +2235,7 @@ test('Firefox waits for post-login consent without a pull-to-refresh that cancel
   assert.deepEqual(fake.swipes, []);
   assert.deepEqual(fake.refreshes, []);
   assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)),
-    ['submit', 'connect', 'mfaSubmit', 'connect', 'appOpen']);
+    ['submit', 'connect', 'mfaSubmit', 'appOpen']);
 });
 
 test('Firefox absent post-login consent fails at 10s without scrolling, another login or authorization', async (t) => {
@@ -2236,7 +2248,7 @@ test('Firefox absent post-login consent fails at 10s without scrolling, another 
   assert.deepEqual(fake.clicks.filter(key => ['submit', 'connect', 'mfaSubmit', 'appOpen'].includes(key)), ['submit']);
 });
 
-test('Firefox waits without scrolling for the exact MFA verified notice arriving after 4011ms, retaining explicit second Connect', async (t) => {
+test('Firefox waits without scrolling for the exact MFA verified notice arriving after 4011ms, retaining the separate explicit Open', async (t) => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, { consent: true, submitHiddenUntilCode: true, verifiedNoticeDelayMs: 4011 });
   await browserLogin(fake.context);
@@ -2244,7 +2256,7 @@ test('Firefox waits without scrolling for the exact MFA verified notice arriving
   assert.ok(fake.waits.some(({ key, timeout }) => key === 'mfaVerified' && timeout === 10000));
   assert.deepEqual(fake.swipes, []);
   assert.deepEqual(fake.refreshes, []);
-  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit', 'connect']);
+  assert.deepEqual(fake.clicks.filter((key) => ['connect', 'mfaSubmit'].includes(key)), ['connect', 'mfaSubmit']);
   assert.equal(fake.records.filter(({ type, key, action }) => type === 'browser_step' && key === 'mfaVerified' && action === 'find').length, 1);
 });
 
@@ -2294,7 +2306,7 @@ test('Firefox journals each recipe action before execution and fills MFA before 
     'principal', 'emailFact', 'workspace', 'connect', 'mfaCode', 'mfaSubmit', 'mfaVerified', 'appOpen', 'native-return']) {
     assert.ok(steps.some((step) => step.key === key), key);
   }
-  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 2);
+  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 1);
   for (const step of steps) assert.deepEqual(Object.keys(step), ['type', 'key', 'action']);
   const serialized = JSON.stringify(steps);
   for (const value of [fake.context.fixture.auth.webOrigin, 'unit@example.invalid', 'unit-only-password',
@@ -2312,7 +2324,7 @@ test('a Firefox locator failure retains the exact last nonsecret recipe stage ra
   assert.equal(fake.clicks.filter((key) => key === 'connect').length, 1);
 });
 
-test('web-context consent journals fill-before-submit and two explicit Connect actions without browser contents', async (t) => {
+test('web-context consent journals fill-before-submit and one combined verification and authorization without browser contents', async (t) => {
   browserEnvironment(t);
   const fake = domBrowserDouble({ consent: true });
   Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
@@ -2320,7 +2332,7 @@ test('web-context consent journals fill-before-submit and two explicit Connect a
   const steps = fake.records.filter(({ type }) => type === 'browser_step');
   assert.ok(steps.findIndex(({ key, action }) => key === 'mfaCode' && action === 'fill')
     < steps.findIndex(({ key, action }) => key === 'mfaSubmit' && action === 'find'));
-  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 2);
+  assert.equal(steps.filter(({ key, action }) => key === 'connect' && action === 'click').length, 1);
   assert.equal(JSON.stringify(steps).includes('unit-only-password'), false);
   assert.equal(JSON.stringify(steps).includes('code_challenge'), false);
 });
@@ -3441,6 +3453,8 @@ test('CI preparation refuses to complete when a project config appears during th
   assert.throws(() => fs.fstatSync(commandFD), { code: 'EBADF' });
 }));
 test('CI workflows scope the nine trust outputs to Node commands and retain exact conditional setup admission', () => {
+  assert.deepEqual(HOST_NODE_ROOTS['22.23.5'], HOST_NODE_ROOTS['22.23.4']);
+  assert.ok(['22.23.4', '24.15.0', '22.14.0'].every(version => Object.hasOwn(HOST_NODE_ROOTS, version)));
   let setupCount = 0, commandCount = 0;
   const nativePhaseCommands = [];
   for (const name of ['ci.yml', 'mobile-source.yml', 'security.yml', 'release-verify.yml', 'prod-verify.yml']) {
@@ -3450,7 +3464,7 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       assert.ok(ciTrustKeys.every(key => !Object.hasOwn(job.env ?? {}, key)));
       let setup, trust;
       for (const step of job.steps ?? []) {
-        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
+        if (step.uses === 'actions/setup-node@v4') { setup = step; trust = null; if (name === 'ci.yml' && ['web', 'web-windows'].includes(jobId)) assert.equal(step.with['node-version'], '22.23.5'); else assert.ok(['22.23.4', '24.15.0'].includes(step.with['node-version'])); setupCount++; }
         if (step.uses === './.github/actions/node-trust') { assert.ok(setup && !trust); assert.equal(step.id, 'node_trust'); assert.equal(step.if, setup.if); trust = step; }
         const isNode = typeof step.run === 'string' && /\b(?:npm|npx|node)\s|bash\s+"\$RUNNER_TEMP\/caseops-prod-playwright"/.test(step.run);
         if (isNode) { assert.ok(trust, 'Node command requires prepared policy: ' + name); commandCount++; }
@@ -4802,8 +4816,8 @@ test('iOS role projection drops only the typed pinned-worker status descriptor m
 
 test('offline iOS Git inventory bootstrap and source closure are pinned without importing Node trust', () => {
   const root = new URL('./', import.meta.url), helper = fs.readFileSync(new URL('ios-host-launch.mjs', root), 'utf8');
-  assert.ok(helper.includes("const NODE_HELPER = '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18'"));
-  assert.ok(helper.includes("const NODE_BOOTSTRAP = '292ca2e4a4304b09389854caac242f8d8a57efabcd64ca19bd312e5729eacd2a'"));
+  assert.ok(helper.includes("const NODE_HELPER = '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e'"));
+  assert.ok(helper.includes("const NODE_BOOTSTRAP = '5dfd52600a80d998d5ee6f5e305d2bace317b35efb90ce9aaa468a187fd7c499'"));
   const input = fs.readFileSync(new URL('ios-git-readonly.py', root));
   const pin = createHash('sha256').update(input).digest('hex');
   assert.ok(helper.includes("'ios-git-readonly.py': '" + pin + "'"));
@@ -4946,8 +4960,8 @@ test('CI runtime copies retain exact reviewed Git blobs with independent readonl
     assert.equal(used, Number(expected)); return bytes.subarray(0, used);
   };
   try {
-    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'b659d65faca119a0cc78ab12c8d41a224bf6d112'], ['100644', '3f08aeb00815650e61beaa32faf097af0b05602e']]);
-    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29741n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
+    assert.deepEqual(staged.provenance.map(row => [row.gitMode, row.gitBlobSha1]), [['100644', 'd9e096cf74508700496b85e45c75b5f23dd3ba11'], ['100644', 'f760bbba17aacb26aabefdc5302c1196f52163d4']]);
+    for (const [role, name, expected] of [['helper', 'host-node-trust.mjs', 29977n], ['bootstrap', 'host-node-trust-start.mjs', 6068n]]) {
       const input = path.join(source, name), output = staged.sourceRefs[role].path;
       const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
       let inputFd, outputFd, originalFailure; let bodyFailed = false; const closeFailures = [];
@@ -5028,7 +5042,7 @@ test('CI source copy replacement changes no existing replacement mode and closes
 test('CI source partial writes progress fully and zero writes refuse without losing descriptors', async () => ciSourceFixture(async ({ root, parent, api }) => {
   const trace = ciSourceTrace(); let staged;
   fs.writeSync = (fd, data, offset, length, position) => trace.write(fd, data, offset, Math.min(length, 7), position);
-  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29741); }
+  try { staged = api.stageCIHostNodeRuntimeSources(parent, ciSourceCheck()); assert.equal(staged.retainedHelper.length, 29977); }
   finally { staged?.retainedHelper.fill(0); trace.restore(); } trace.closed();
   const second = path.join(root, 'second-parent'); fs.mkdirSync(second, { mode: 0o700 }); const refused = ciSourceTrace(); fs.writeSync = () => 0;
   try { assert.throws(() => api.stageCIHostNodeRuntimeSources(second, ciSourceCheck()), /CI_TRUST_RUNTIME_SOURCE_WRITE_PROGRESS/); }
@@ -5048,7 +5062,7 @@ test('CI explicit Windows preparation imports copied bytes and scopes child poli
     const result = await prepareCIHostNodeTrustWindows(environment); assert.equal(result.appendedKeys, 9); assert.equal(result.runtimeSourceCopies.length, 2);
     const scoped = Object.fromEntries(fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(1).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
     const policy = JSON.parse(fs.readFileSync(scoped.CASEOPS_HOST_NODE_TRUST_POLICY_FILE));
-    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '4dcca216db4071bee09d939142c5ea92bfb120b0bffa152ebefcf0b9acab1a18');
+    assert.ok(policy.runtimeSource.helper.path.startsWith(root + path.sep)); assert.match(policy.runtimeSource.helper.path, /runtime-source[/\\]host-node-trust\.mjs$/); assert.equal(policy.runtimeSource.helper.sha256, '0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e');
     const text = execFileSync(process.execPath, ['--input-type=module', '-e', 'import tls from "node:tls"; console.log(JSON.stringify({count:tls.getCACertificates("default").length}));'], { env: { ...neutralTrustEnv(), ...scoped }, timeout: 12000, encoding: 'utf8', maxBuffer: 16384 }); assert.equal(JSON.parse(text).count, 144);
     const unixFile = path.join(root, 'unix-commands'); fs.writeFileSync(unixFile, '', { flag: 'wx', mode: 0o600 }); prepareCIHostNodeTrust({ ...environment, GITHUB_OUTPUT: unixFile });
     const rows = Object.fromEntries(fs.readFileSync(unixFile, 'utf8').trim().split('\n').map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
@@ -6124,6 +6138,7 @@ test('source observer bootstrap generator preserves exact tokens and AST within 
   assert.throws(() => checkRecorderBinding(Buffer.from(input.toString().replace('const A_SIZE = ' + recorder.length, 'const A_SIZE = 0'))), { code: 'ERR_ASSERTION' });
   const first = rebuildHostNodeBootstrap(input), second = rebuildHostNodeBootstrap(input);
   assert.ok(first.bytes.equals(actual) && second.bytes.equals(actual)); assert.deepEqual(first.provenance, declared);
+  assert.deepEqual(first.provenance.compilerNodeVersions, ['22.23.5', '24.15.0']);
   assert.equal(first.provenance.exactAstEqual, true); assert.ok(first.provenance.optionWithSourceMapsBytes <= 8191);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.alloc(16385)), /BOOTSTRAP_GENERATOR_INPUT/);
   assert.throws(() => rebuildHostNodeBootstrap(Buffer.from([0xff])), /encoded data|UTF-8/);
@@ -6499,7 +6514,7 @@ test('Android Maven fallback retains namespace identity and feeds both actual Gr
 });
 
 
-test('Firefox restores settled Connect after identity scrolling before and after consent MFA', async t => {
+test('Firefox restores settled Connect then explicit Open after consent identity scrolling', async t => {
   browserEnvironment(t);
   for (const restoreConsentKeyboard of [false, true]) {
     const fake = firefoxDouble(t, false, { consent: true, consentViewportScroll: true, restoreConsentKeyboard });
@@ -6507,7 +6522,7 @@ test('Firefox restores settled Connect after identity scrolling before and after
     await browserLogin(fake.context);
     assert.deepEqual(fake.consentScrolls.map(({direction,verified}) => [direction,verified]), [['up',false],['down',false],['up',true],['down',true]]);
     assert.deepEqual(fake.consentScrolls.filter(x => x.direction === 'down').map(x=>x.identityRead), ['workspace','workspace']);
-    assert.equal(fake.clicks.filter(x=>x==='connect').length, 2);
+    assert.equal(fake.clicks.filter(x=>x==='connect').length, 1);
     assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length, 1);
     assert.equal(fake.clicks.filter(x=>x==='appOpen').length, 1);
     assert.equal(fake.keyboardDismissals.length, restoreConsentKeyboard ? 2 : 0);
@@ -6609,13 +6624,13 @@ test('Firefox settled visibility and swipe failures preserve the original error 
 });
 
 
-test('Firefox late consent IME and delayed accessibility settle inside both original Connect lookup bounds', async t => {
+test('Firefox late consent IME and delayed accessibility settle inside original Connect and Open lookup bounds', async t => {
   browserEnvironment(t);
   const fake = firefoxDouble(t, false, {consent:true, consentViewportScroll:true, restoreKeyboardAfterWorkspace:true, keyboardTreeDelayMs:450});
   t.mock.method(Date, 'now', () => fake.elapsed());
   await browserLogin(fake.context);
   assert.equal(fake.keyboardDismissals.length,2);
-  assert.equal(fake.clicks.filter(x=>x==='connect').length,2);
+  assert.equal(fake.clicks.filter(x=>x==='connect').length,1);
   assert.equal(fake.clicks.filter(x=>x==='mfaSubmit').length,1);
   assert.equal(fake.clicks.filter(x=>x==='appOpen').length,1);
   const steps=fake.records.filter(x=>x.type==='browser_step');
@@ -6692,4 +6707,21 @@ test('native constructor extraction refuses ambiguous or non-object calls', () =
   assert.throws(() => constructorCalls('remote(options);', 'fixture.mjs'), /ACTUAL_NATIVE_OPTIONS_OBJECT_REQUIRED/);
   assert.throws(() => constructorCalls('remote({}, {});', 'fixture.mjs'), /EXACT_NATIVE_REMOTE_ARGUMENT_REQUIRED/);
   assert.throws(() => nativeConstructorOptions(NATIVE_WEBDRIVER_SITES[0], 'android', 'https://example.com/'), /OWNED_LOOPBACK_WEBDRIVER_PEER_REQUIRED/);
+});
+
+
+test('combined consent verification preserves lost acknowledgements without another click, authorize or Open', async t => {
+  browserEnvironment(t);
+  for (const mode of ['android-web', 'ios-web', 'firefox']) {
+    const failure = new Error('UNIT_VERIFY_CONTINUE_ACK_UNKNOWN');
+    const fake = mode === 'firefox' ? firefoxDouble(t, false, { consent: true, consentDispatchFailure: failure })
+      : domBrowserDouble({ consent: true, platform: mode === 'ios-web' ? 'ios' : 'android', consentDispatchFailure: failure });
+    Object.assign(fake.context.fixture.auth, { mfaRequired: true, mfaStage: 'consent', totpSecretEnv: 'CASEOPS_MOBILE_UNIT_TOTP' });
+    await assert.rejects(browserLogin(fake.context), error => error === failure);
+    assert.equal(fake.clicks.filter(key => key === 'connect').length, 1);
+    assert.equal(fake.clicks.filter(key => key === (mode === 'firefox' ? 'mfaSubmit' : 'consent-verify')).length, 1);
+    assert.equal(fake.clicks.some(key => ['appOpen', 'app-open'].includes(key)), false);
+    assert.deepEqual(fake.requests.filter(row => row.route === '/api/auth/native/authorize').map(row => row.status), [403, 200]);
+    assert.equal(fake.requests.some(row => row.route === '/api/auth/native/token'), false);
+  }
 });

@@ -1,4 +1,126 @@
+## November22 — intermittent Admin API stall under SQLite release CI
+
+**Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
+caseops-api-00532-zm4 and web revision caseops-web-00508-b67 serve 100%,
+exact-release prod-verify dispatch 45254312649 passed, and the private
+projection cadence resumed through its guard after clean executions drc56 and
+56cqz. The two Admin ethical walls journeys run in the app suite, not in
+prod-verify; both passed in main CI run 45191342078 on the merge commit. Root cause found 2026-11-23. In
+release CI run 45000524482 the Admin page's API calls stayed pending for more than
+15 s on desktop and 30 s at 393px, so the Admin ethical walls card was held from
+the 2026-11-22 release. Two Admin reads formed a deadlock in the single API process:
+
+- `GET /api/matters/ethical-walls` was `async def`. Its audit write waited for
+  SQLite's write lock on the event loop, freezing every request teardown.
+- `GET /api/admin/tenant-ai-policy` flushed a default policy row and never
+  committed. It held the write lock until its teardown, which needed that loop.
+
+While the loop was frozen, finished requests could not return their connections,
+so the rest of the burst failed with `database_capacity_exhausted` and
+`database_temporarily_unavailable` 503s after 30 s. A concurrent burst of the
+Admin page's 17 reads reproduced it on every run (60 of 153 requests were 503s).
+Each fix alone removes it. Both ship: the walls read is now sync, and the policy
+read rolls back its unsaved default row before returning, so it no longer holds
+the write lock. `apps/api/tests/test_admin_concurrent_reads_20261123.py` fails on
+the old routes and passes on the fix. The walls card is mounted again. Production
+is not exposed: the API runs at Cloud Run concurrency 1, so one instance never
+serves the concurrent reads the deadlock needs. Open, not fixed: other `async def`
+routes still write synchronously on the event loop, and a read that leaves an
+uncommitted write holds SQLite's lock until teardown. Both remain possible
+CI-only stall sources.
+
+## November22 — walled admins could change walls and grants on their Matter
+
+**Implemented in code; release proof pending.** Found while building the Admin
+ethical walls screen (J14/M13, SEC-004). The Matter access writers in
+`services/matter_access.py` checked only the owner/admin role and loaded the
+Matter by id, so an admin walled from a Matter could lift its own wall, add
+walls, grant itself or others access, or read the access panel by id.
+
+Policy: **an ethical wall overrides the admin role; restriction does not.**
+Admins remain the access managers of restricted Matters and IP dockets they
+cannot read, but never of a record that walls them out. Owners are exempt.
+
+Fix (PR #634, narrowed on the release integration branch):
+`_lock_matter_access_responsibility_fence`, the shared fence of
+`add_ethical_wall`, `remove_ethical_wall`, `add_access_grant`,
+`remove_access_grant` and `set_restricted_access`, and the `list_access_panel`
+read call `_refuse_walled_matter_access_manager`. It uses
+`walled_access_manager_target_ids`, which applies the wall test every read uses
+(`_wall_subject_filter` with `_active_wall_window`: an active, unrevoked wall on
+the membership or one of its active teams). A walled actor gets the audited
+`access_denied` row and the read's "Matter not found." 404, with
+`commit_denial` respected for access-review finalization. The check runs under
+the Company lock the Matter access writers take. The admin wall directory read
+lists only Matters the actor may open.
+
+The first version used the full read rule (`assert_access`), which also refused
+an admin on a restricted Matter it had no grant on. PostgreSQL CI caught it
+(`test_postgres_matter_counsel_current_acl[wall]`: an admin restricts a Matter,
+then grants). Narrowed to walls only.
+
+Tests: `tests/test_ethical_walls.py` (a walled admin gets an audited 404 on all
+seven access calls with the ACL unchanged; an unwalled admin and a self-walled
+owner still manage; cross-tenant 404) and
+`tests/test_20261122_walled_admin_access_management.py` (an unwalled admin
+restricts a Matter, cannot read it, and still reads the panel, grants, revokes,
+walls and lifts the restriction). Mutation probe: removing the wall check fails
+the walled-admin tests.
+
+Inventory: `services/access_reviews.py` (finalize resolves its target through
+the read rule, then the fence applies), `services/teams.py` (dependency probe
+only), `services/ip_operations.py` (initial IP creator grants),
+`scripts/bootstrap_ip_production_qa.py` (owner context). IP docket access
+management and off-boarding are covered by the next entry.
+
+Release proof still needed: hosted CI, PostgreSQL CI and a deployed check.
+
+## November22 — walled admins and IP docket access, off-boarding grants
+
+**Implemented in code; release proof pending.** The same walls-only policy for
+the two remaining paths (PR #640, narrowed on the release integration branch).
+
+- IP docket access management: `get_ip_access_panel`,
+  `preview_ip_access_change` and `apply_ip_access_change` (through
+  `_lock_ip_access_responsibility_fence`) call
+  `_assert_ip_access_manager_can_open`. An admin walled from the docket gets
+  the audited "IP docket record not found." 404; an admin without a grant on
+  a restricted docket still manages its access. Owners are exempt; the IP read
+  rule itself still does not exempt owners. Access-review finalization passes
+  `commit_denial=False`. The existing expectation that an ungranted admin
+  applying someone else's preview token gets 409 is unchanged.
+- Employee off-boarding: `_build_offboarding_preview`, used by preview and
+  commit, refuses with a name-free count when the acting admin is walled from
+  some affected Matters (grants, assignee or other moved work). Refusing,
+  rather than skipping, avoids leaving the leaver's grants on an inactive
+  membership and a replacement without the expected access. An owner or an
+  unwalled admin completes it. Restricted-but-unwalled Matters off-board as
+  before.
+- Off-boarding preview disclosure: rows on Matters the acting admin is walled
+  from appear only in the per-type counts and the blocker's count, never with
+  their Matter code, title or id. Other rows, including restricted Matters, are
+  listed as before; owners see every row.
+
+Tests: `tests/test_20261122_walled_admin_access_management.py` (walled admin
+refused and audited for IP access and off-boarding; the walled admin's preview
+carries neither the walled Matter's code, title nor id; an unwalled admin
+manages a restricted IP docket it cannot read and off-boards grants on a
+restricted, unwalled Matter; owner works; other tenant 404). Mutation probes:
+removing the wall check fails its tests.
+
 ## November18 — a green CI does not supersede failed local acceptance
+
+## November 22 — outside-counsel recommendation access
+
+**Partially implemented.** J13/M12 recommendation history reproduced a matter
+access leak in an isolated HTTP fixture. An administrator lost direct access
+to one of two matters but the recommendation still returned both assignments
+and 90,016 paise. The viewer's remaining visible matter accounted for 15 paise.
+The candidate applies the canonical matter visibility predicate to each source
+association before ranking or grouping spend. The regression checks direct
+denial, grant restoration, an ethical wall overriding the grant, and the
+owner's separate authorized view. The same regression is registered for
+SQLite and PostgreSQL. Browser and production verification remain pending.
 
 ## November19 — deployed PR624, production Batch5 acceptance still open
 
@@ -4505,7 +4627,16 @@ Only EH-SGR-06 changes status in this pass, because only it was fixed.
 
 ### EH-SGR-16 - Dead notification channels are user-selectable
 
-- **Status:** Missing.
+- **Status:** Partially implemented (2026-11-22, branch
+  `feat/sms-whatsapp-alerts`, not merged or deployed). The generic preference
+  toggle no longer offers `sms`/`whatsapp` and refuses an opt-in through it
+  (422); a verified-number flow (`notification_phone_contacts`), MSG91 and Meta
+  adapters and per-channel consent now exist; the hearing dialog offers a phone
+  channel only when the workspace enabled it and the provider is ready. Still
+  open: no live provider result (DLT/Meta approvals and Secret Manager keys are
+  owner-pending), MSG91 delivery reports are not consumed, and rule-driven
+  channels stay in-app only.
+- **Original status (2026-08-20):** Missing.
 - **Gap found:** `SMS` and `WHATSAPP` are selectable notification channels with
   no way to reach a recipient - there is no verified phone number on `User` or
   `CompanyMembership`, and WhatsApp has no adapter. Selecting `sms` on a hearing
@@ -5950,8 +6081,7 @@ compile, CI, production and recovery evidence remains pending.
 ## November 23 - assisted official trade mark search and TMview pre-search (IPLF-052D)
 
 **Partially implemented.** UJ-07/UJ-31, IP-REG-02/03, IP-CLR-02/03. Code,
-migration `20261123_0001` (down_revision `20261112_0001`; it must be re-chained
-after the in-flight release adding `20261121_0001` and `20261122_0001`-`0003`),
+migration `20261123_0001` (down_revision `20261122_0631`, the current `main` head),
 governance map/projection, OpenAPI types and tests land on branch
 `feat/ip-assisted-search-tmview`; nothing is merged, deployed or migrated.
 
@@ -5976,3 +6106,101 @@ governance map/projection, OpenAPI types and tests land on branch
   is therefore no feature flag or kill switch: no automated path exists. The
   TMview deep-link query parameters are taken from TMview's own route and are
   unverified against the live site; the entry steps repeat the values.
+
+## November 22 — private resume guard bounded control-plane reads
+
+### EH-DEPLOY-05 - The private resume guard's execution and log reads exceeded their per-call deadline
+
+- **Status:** Partially implemented. The fix is on
+  `fix/scheduler-resume-guard-bounded-reads` and is **not yet merged**. It
+  becomes `Implemented` once it is on `main` with CI green and the next guarded
+  `scheduler_inventory.py resume` of
+  `caseops-private-projection-maintenance-cadence` completes from the release
+  workstation without a raised timeout.
+- **Gap found:** on 2026-11-08 the resume failed with "gcloud control-plane
+  deadline exceeded". `_private_resume_evidence` listed executions with
+  `gcloud run jobs executions list --sort-by=~metadata.creationTimestamp
+  --limit=3`, which sorts client-side over the whole retained history (about
+  2,100 executions, about 2m40s), and `_maintenance_execution` read the
+  execution log without a time bound (gcloud's default one-day freshness,
+  66 s). Both ran under `run_gcloud`'s fixed 60 s limit. That release resumed
+  through a disclosed scratch copy with only the two limits raised to 300 s.
+- **Fix:** the newest executions now come from one Cloud Run v2
+  `executions.list` page (`pageSize=3`,
+  `fields=executions(name,job,createTime),nextPageToken`), which the API
+  documents as "sorted by creation time, descending". Later pages are never
+  followed and a page longer than three rows is refused. Each row must carry
+  the job's resource parent, the job name and a creation time. The existing
+  checks are unchanged: two or three rows, the reviewed name pattern, no
+  duplicates, strictly descending creation times, and the newest row equal to
+  the job's `latestCreatedExecution`. The log filter now carries
+  `timestamp>=` (execution start minus 5 minutes) and `timestamp<=`
+  (completion plus 5 minutes) beside the execution-name label, with
+  `--order=desc --limit=3`, and still requires exactly one record. A window
+  that misses the record returns zero rows and refuses. The v2 request
+  transport is shared with the quiesce drain; no timeout was raised.
+- **Tests:** `apps/api/tests/test_private_projection_resume_guard.py` pins
+  the exact v2 URL, page size, fields, bearer token and per-request timeout,
+  the absence of any gcloud `executions list` or `--sort-by` call, newest-first
+  selection with an unfollowed `nextPageToken`, and each log filter's exact
+  window, clauses and limit. Twenty malformed-page cases refuse before any log
+  read or resume: empty, one row, an extra row, out of order, oldest first,
+  duplicate name or time, newest omitted, wrong job or parent, unprefixed or
+  unreviewed name, missing or timezone-free creation time, non-object rows or
+  pages, request failure, invalid JSON and an empty token. Records outside the
+  window, or duplicated, also refuse. Every earlier refusal case still
+  refuses. The new tests fail against `origin/main`'s script.
+- **Live read-only proof (2026-11-22):** a scratch harness imported the
+  worktree script and called `_private_resume_evidence` against
+  `perfect-period-305406`/`asia-south1` for prod-verify `44919885553`
+  (`1b6ba0f6`, serving `caseops-api-00529-bwf`), with an allowlist that
+  refused any gcloud or gh command other than describe, list, view, log read
+  or token print. No scheduler, job or other production resource was changed.
+  The evidence passed twice: 123 s under parallel test load and 66 s quiet.
+  The v2 page took 0.27-0.57 s, and each bounded log read took 4.9-12.7 s
+  (every gcloud call here, including token print, takes 3-15 s). The v2 page
+  and gcloud's sorted listing returned the same three names in the same order.
+  2,012 executions are retained. The old reads did not reproduce the
+  2026-11-08 slowness today: the sorted gcloud listing took 13 s and the
+  unbounded log read 6.6 s. The fix removes the dependence on history size; it
+  does not by itself establish the cause of the 2026-11-08 latency.
+- **Adjacent, not changed:** `inspect_live(..., audit_attempts=True)` (the
+  `audit` command) still lists executions with `--sort-by ... --limit=1`
+  through gcloud and can hit the same client-side sort cost.
+
+## November 22 — public Trade Marks Journal feed (IPLF-052C)
+
+**Partially implemented.** UJ-33/UJ-21, IP-WATCH-01..05. Code, migration
+`20261122_0001`, governance map/projection and tests land on branch
+`feat/ip-india-journal-feed`; nothing is deployed or switched on. The feed runs
+inside the existing `caseops-ip-journal-watch` job, so the job inventory, image
+and schedule are unchanged; the platform kill switch
+`CASEOPS_IP_JOURNAL_FEED_ENABLED` defaults off and is not in the job's checked-in
+environment. Activation needs a reviewed inventory change that adds it (with
+`CASEOPS_IP_WATCH_ENABLED`) to the job, a first production run observed against
+the live public listing, and owner sign-off of the source-terms reading recorded
+in the PR. Remaining hardening gaps: the parser is validated against journal
+2287 only (two real PDFs, 1,319 entries, one flagged for review); a republished
+PDF under the same listed file name is not re-fetched; profiles created after a
+document was compared are not compared with it; an entry linked to the tenant's
+own application is recorded without `application_id`. Trade mark e-status,
+e-register and public search are CAPTCHA/OTP-gated and remain **Missing** by
+design for automation.
+
+
+## November 22 — simpler native sign-in
+
+**Partially implemented; Inconclusive; release NO-GO.** J20/M22,
+US-MOB-01/02/08. The user requests a single explicit Verify and continue
+transaction in place of verification followed by repeated Connect consent.
+Keep exact-session MFA, current account/workspace identity, PKCE, grant lifetime
+and the final synchronous Open CaseOps gesture. Real built-client baseline
+reproduced an unfocused 40px MFA field and a below-viewport button at 360×640.
+The canonical native authorization POST cannot inherit generic 401 refresh
+and bearer retry. Complete UI/client79 and real built-browser14 cases pass;
+current native harness647 passes with two declared Windows-only skips. The old
+production flow reproduces the exact typed403 and succeeds after its extra
+manual connection step. The new flow is not yet deployed; actual native and
+production acceptance remain pending. Existing Android version 3 went live November
+17; Managed publishing now holds future updates. Historical private-only status
+entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).

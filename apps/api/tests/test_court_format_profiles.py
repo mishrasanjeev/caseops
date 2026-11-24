@@ -34,6 +34,12 @@ def test_unknown_explicit_key_raises() -> None:
 def test_court_name_fuzzy_match_resolves_delhi_hc() -> None:
     profile = resolve_profile(court_name="High Court of Delhi at New Delhi")
     assert profile.key == "delhi_hc"
+    assert profile.page_format == "A4"
+    assert (profile.margin_left_mm, profile.margin_right_mm) == (40, 40)
+    assert (profile.margin_top_mm, profile.margin_bottom_mm) == (20, 20)
+    assert profile.body_font == "Times"
+    assert profile.body_font_size_pt == 14
+    assert profile.body_line_height_mm == pytest.approx(7.408333333)
 
 
 def test_court_name_fuzzy_match_resolves_bombay_hc() -> None:

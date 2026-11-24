@@ -237,7 +237,7 @@ function HearingPackMock() {
         </span>
         <span>22 Apr 2026 · Court 7 · Item 14</span>
         <span className="ml-auto font-semibold text-[var(--color-ink-2)]">
-          Ready · 14:31
+          Review required · 14:31
         </span>
       </div>
 

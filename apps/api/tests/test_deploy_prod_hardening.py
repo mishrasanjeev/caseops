@@ -1309,7 +1309,7 @@ def _web_external_unit_dependencies(root: Path) -> set[str]:
 
 
 def _assert_web_builder_inputs(dockerfile: str, ignore: str, required: set[str]) -> None:
-    assert "FROM node:22.23.4-alpine AS trusted-base" in dockerfile
+    assert "FROM node:22.23.5-alpine AS trusted-base" in dockerfile
     builder, runner = dockerfile.split("FROM trusted-base AS runner", 1)
     builder = builder.split("FROM deps AS builder", 1)[1]
     lines = set(builder.splitlines())

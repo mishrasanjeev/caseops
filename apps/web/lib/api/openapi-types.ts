@@ -818,6 +818,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/notification-phone-channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SMS and WhatsApp readiness, workspace enablement and opted-in members. */
+        get: operations["get_admin_phone_channels_api_admin_notification_phone_channels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/notification-preferences": {
         parameters: {
             query?: never;
@@ -4076,6 +4093,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{contract_id}/term-suggestions/{suggestion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit terms on a pending contract suggestion */
+        patch: operations["patch_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__patch"];
         trace?: never;
     };
     "/api/contracts/{contract_id}/term-suggestions/{suggestion_id}/accept": {
@@ -9101,6 +9135,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch/journal-feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Trade Marks Journal feed status */
+        get: operations["journal_feed_status_api_ip_watch_journal_feed_get"];
+        /** Turn the public Trade Marks Journal feed on or off for this workspace */
+        put: operations["journal_feed_setting_api_ip_watch_journal_feed_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/watch/journal-ingestions": {
         parameters: {
             query?: never;
@@ -11882,6 +11934,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/ethical-walls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active ethical walls across visible matters (admin/owner)
+         * @description Admin directory of active Matter ethical walls, newest first, with the walled member and the member who set the wall up. Lists only Matters the actor may open, so a walled admin cannot read walled Matter titles here. Bounded to 500 rows (`truncated` reports more). Audited.
+         */
+        get: operations["get_current_company_matter_ethical_walls_api_matters_ethical_walls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/hearing-follow-up": {
         parameters: {
             query?: never;
@@ -12237,6 +12309,75 @@ export interface paths {
         head?: never;
         /** Update current user's notification opt-in/opt-out preferences. */
         patch: operations["patch_notification_preferences_api_notification_preferences_patch"];
+        trace?: never;
+    };
+    "/api/notification-preferences/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the current user's mobile number, verification and consent state. */
+        get: operations["get_phone_contact_api_notification_preferences_phone_get"];
+        put?: never;
+        post?: never;
+        /** Remove the current user's mobile number and stop phone reminders. */
+        delete: operations["delete_phone_contact_api_notification_preferences_phone_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Opt in to, or out of, SMS or WhatsApp reminders. */
+        post: operations["set_phone_contact_consent_api_notification_preferences_phone_consent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a one-time code to verify the current user's mobile number. */
+        post: operations["start_phone_contact_verification_api_notification_preferences_phone_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notification-preferences/phone/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the one-time code and mark the mobile number verified. */
+        post: operations["confirm_phone_contact_verification_api_notification_preferences_phone_verification_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/notification-preferences/test": {
@@ -12610,6 +12751,23 @@ export interface paths {
         put?: never;
         /** Mutate Company Subscription */
         post: operations["mutate_company_subscription_api_platform_admin_companies__company_id__subscription_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/companies/{company_id}/subscription/add-ons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Company Subscription Add On */
+        post: operations["set_company_subscription_add_on_api_platform_admin_companies__company_id__subscription_add_ons_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14824,6 +14982,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/webhooks/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Meta webhook subscription handshake */
+        get: operations["whatsapp_webhook_verify_api_webhooks_whatsapp_get"];
+        put?: never;
+        /** Receive WhatsApp STOP replies and delivery statuses */
+        post: operations["whatsapp_webhook_api_webhooks_whatsapp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-assistant/scope-options": {
         parameters: {
             query?: never;
@@ -15366,6 +15542,8 @@ export interface components {
             add_on_code: string;
             /** Cancel Url */
             cancel_url?: string | null;
+            /** Interval */
+            interval?: ("month" | "year") | null;
             /**
              * Quantity
              * @default 1
@@ -17567,6 +17745,8 @@ export interface components {
             description: string | null;
             /** Display Name */
             display_name: string;
+            /** Eligible Segments */
+            eligible_segments?: string[] | null;
             /** Entitlements */
             entitlements: {
                 [key: string]: unknown;
@@ -22040,6 +22220,11 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ContractTermRejectRequest */
+        ContractTermRejectRequest: {
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
+        };
         /** ContractTermReviewRequest */
         ContractTermReviewRequest: {
             /**
@@ -22110,6 +22295,22 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ContractTermSuggestionUpdateRequest */
+        ContractTermSuggestionUpdateRequest: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Suggested Duration Months */
+            suggested_duration_months?: number | null;
+            /** Suggested Effective On */
+            suggested_effective_on?: string | null;
+            /** Suggested Expires On */
+            suggested_expires_on?: string | null;
+            /** Suggested Renewal On */
+            suggested_renewal_on?: string | null;
         };
         /** ContractUpdateRequest */
         ContractUpdateRequest: {
@@ -23618,6 +23819,8 @@ export interface components {
             body_template?: string | null;
             /** Description */
             description?: string | null;
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Kind */
@@ -31182,6 +31385,51 @@ export interface components {
             /** Release Reason */
             release_reason: string;
         };
+        /** IpJournalFeedSettingResponse */
+        IpJournalFeedSettingResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Run As Membership Id */
+            run_as_membership_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
+        /** IpJournalFeedSettingUpdateRequest */
+        IpJournalFeedSettingUpdateRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /** Expected Version */
+            expected_version?: number | null;
+        };
+        /** IpJournalFeedStatusResponse */
+        IpJournalFeedStatusResponse: {
+            /** Attribution */
+            attribution: string;
+            /** Documents */
+            documents?: components["schemas"]["IpPublicJournalDocumentResponse"][];
+            /** Global Enabled */
+            global_enabled: boolean;
+            last_check?: components["schemas"]["IpPublicJournalCheckResponse"] | null;
+            /** Listing Url */
+            listing_url: string;
+            /** Review Items */
+            review_items?: components["schemas"]["IpPublicJournalReviewItemResponse"][];
+            /**
+             * Review Total
+             * @default 0
+             */
+            review_total: number;
+            setting?: components["schemas"]["IpJournalFeedSettingResponse"] | null;
+            /** Source Key */
+            source_key: string;
+        };
         /** IpJournalIngestionRunResponse */
         IpJournalIngestionRunResponse: {
             /** Company Id */
@@ -33926,6 +34174,98 @@ export interface components {
             registry_freshness: "not_configured" | "candidate_pending" | "current";
             /** Unconfirmed Deadline Refs */
             unconfirmed_deadline_refs: string[];
+        };
+        /** IpPublicJournalCheckResponse */
+        IpPublicJournalCheckResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Documents Discovered */
+            documents_discovered: number;
+            /** Http Status */
+            http_status: number | null;
+            /** Issues Listed */
+            issues_listed: number;
+            /** Reason Code */
+            reason_code: string | null;
+            /** Status */
+            status: string;
+        };
+        /**
+         * IpPublicJournalDocumentResponse
+         * @description Public source lineage for one listed journal PDF.
+         */
+        IpPublicJournalDocumentResponse: {
+            /** Attempts */
+            attempts: number;
+            /** Available On */
+            available_on: string | null;
+            /** Byte Size */
+            byte_size: number | null;
+            /** Content Sha256 */
+            content_sha256: string | null;
+            /** Entry Count */
+            entry_count: number;
+            /** Error Code */
+            error_code: string | null;
+            /** File Name */
+            file_name: string;
+            /** Id */
+            id: string;
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Page Count */
+            page_count: number | null;
+            /** Parser Version */
+            parser_version: string | null;
+            /** Retrieved At */
+            retrieved_at: string | null;
+            /** Review Count */
+            review_count: number;
+            /** Source Url */
+            source_url: string;
+            /** Status */
+            status: string;
+            /** Workspace Entries Compared */
+            workspace_entries_compared?: number | null;
+            /** Workspace Status */
+            workspace_status?: string | null;
+        };
+        /**
+         * IpPublicJournalReviewItemResponse
+         * @description A span of a public journal PDF the parser could not read with confidence.
+         */
+        IpPublicJournalReviewItemResponse: {
+            /** Application Number */
+            application_number: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Id */
+            id: string;
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Journal Page */
+            journal_page: string | null;
+            /** Page End */
+            page_end: number;
+            /** Page Start */
+            page_start: number;
+            /** Review Reason */
+            review_reason: string | null;
+            /** Source Url */
+            source_url: string;
         };
         /** IpRecordalCreateRequest */
         IpRecordalCreateRequest: {
@@ -40625,6 +40965,53 @@ export interface components {
             subject: string;
         };
         /**
+         * MatterEthicalWallDirectoryRecord
+         * @description One active Matter wall and the people it names, for the admin screen.
+         */
+        MatterEthicalWallDirectoryRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Full Name */
+            created_by_full_name: string | null;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Enforced */
+            enforced: boolean;
+            /** Excluded Email */
+            excluded_email: string;
+            /** Excluded Full Name */
+            excluded_full_name: string;
+            /** Excluded Membership Active */
+            excluded_membership_active: boolean;
+            /** Excluded Membership Id */
+            excluded_membership_id: string;
+            /**
+             * Excluded Role
+             * @enum {string}
+             */
+            excluded_role: "owner" | "admin" | "partner" | "member" | "paralegal" | "viewer";
+            /** Id */
+            id: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Title */
+            matter_title: string;
+            /** Reason */
+            reason: string | null;
+        };
+        /** MatterEthicalWallDirectoryResponse */
+        MatterEthicalWallDirectoryResponse: {
+            /** Truncated */
+            truncated: boolean;
+            /** Walls */
+            walls: components["schemas"]["MatterEthicalWallDirectoryRecord"][];
+        };
+        /**
          * MatterExecutiveSummary
          * @description Structured overview of a matter for the cockpit summary tile.
          *
@@ -43902,7 +44289,13 @@ export interface components {
         OutsideCounselRecommendationRecord: {
             /** Active Matters Count */
             active_matters_count: number;
-            /** Approved Spend Minor */
+            /** Approved Spend By Currency */
+            approved_spend_by_currency: components["schemas"]["OutsideCounselRecommendationSpend"][];
+            /**
+             * Approved Spend Minor
+             * @deprecated
+             * @description INR subtotal for earlier clients. Use approved_spend_by_currency for all subtotals.
+             */
             approved_spend_minor: number;
             /** Counsel Id */
             counsel_id: string;
@@ -43945,6 +44338,13 @@ export interface components {
             matter_title: string;
             /** Results */
             results: components["schemas"]["OutsideCounselRecommendationRecord"][];
+        };
+        /** OutsideCounselRecommendationSpend */
+        OutsideCounselRecommendationSpend: {
+            /** Approved Spend Minor */
+            approved_spend_minor: number;
+            /** Currency */
+            currency: string;
         };
         /** OutsideCounselRecord */
         OutsideCounselRecord: {
@@ -45365,6 +45765,128 @@ export interface components {
             /** Provider Order Id */
             provider_order_id: string | null;
         };
+        /** PhoneChannelAdminRecord */
+        PhoneChannelAdminRecord: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Kill Switch Active */
+            kill_switch_active: boolean;
+            /** Missing Configuration */
+            missing_configuration?: string[];
+            /** Not Ready Reason */
+            not_ready_reason?: string | null;
+            /**
+             * Opted In Members
+             * @default 0
+             */
+            opted_in_members: number;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "msg91" | "meta-whatsapp";
+            /** Provider Ready */
+            provider_ready: boolean;
+            /** Tenant Enabled */
+            tenant_enabled: boolean;
+            /**
+             * Transport
+             * @enum {string}
+             */
+            transport: "mock" | "live";
+        };
+        /** PhoneChannelAdminResponse */
+        PhoneChannelAdminResponse: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["PhoneChannelAdminRecord"];
+            };
+        };
+        /** PhoneChannelConsentRecord */
+        PhoneChannelConsentRecord: {
+            /** Blocked Reason */
+            blocked_reason?: string | null;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Consent At */
+            consent_at?: string | null;
+            /** Deliverable */
+            deliverable: boolean;
+            /** Opt Out Source */
+            opt_out_source?: string | null;
+            /** Opted In */
+            opted_in: boolean;
+            /** Opted Out At */
+            opted_out_at?: string | null;
+            /** Provider Ready */
+            provider_ready: boolean;
+            /** Tenant Enabled */
+            tenant_enabled: boolean;
+        };
+        /** PhoneConsentRequest */
+        PhoneConsentRequest: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Consent Text Version */
+            consent_text_version?: "2026-11-22" | null;
+            /** Opted In */
+            opted_in: boolean;
+        };
+        /** PhoneContactStatusResponse */
+        PhoneContactStatusResponse: {
+            /** Channels */
+            channels: {
+                [key: string]: components["schemas"]["PhoneChannelConsentRecord"];
+            };
+            /**
+             * Consent Text Version
+             * @default 2026-11-22
+             */
+            consent_text_version: string;
+            /** Phone Masked */
+            phone_masked?: string | null;
+            /** Verification Channel */
+            verification_channel?: ("sms" | "whatsapp") | null;
+            /** Verification Expires At */
+            verification_expires_at?: string | null;
+            /**
+             * Verification Pending
+             * @default false
+             */
+            verification_pending: boolean;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+            /** Verified At */
+            verified_at?: string | null;
+        };
+        /** PhoneVerificationConfirmRequest */
+        PhoneVerificationConfirmRequest: {
+            /** Code */
+            code: string;
+        };
+        /** PhoneVerificationStartRequest */
+        PhoneVerificationStartRequest: {
+            /**
+             * Channel
+             * @default sms
+             * @enum {string}
+             */
+            channel: "sms" | "whatsapp";
+            /** Phone Number */
+            phone_number: string;
+        };
         /** PineLabsActivationDecisionRequest */
         PineLabsActivationDecisionRequest: {
             /**
@@ -45470,6 +45992,25 @@ export interface components {
             material_access_instructions: string;
             /** Material Custodian */
             material_custodian: string;
+        };
+        /** PlatformAddOnMutation */
+        PlatformAddOnMutation: {
+            /** Add On Code */
+            add_on_code: string;
+            /**
+             * Billing Interval
+             * @default month
+             * @enum {string}
+             */
+            billing_interval: "month" | "year";
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "ended";
         };
         /** PlatformCouponCreateRequest */
         PlatformCouponCreateRequest: {
@@ -53322,6 +53863,26 @@ export interface operations {
             };
         };
     };
+    get_admin_phone_channels_api_admin_notification_phone_channels_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneChannelAdminResponse"];
+                };
+            };
+        };
+    };
     get_admin_notification_preferences_api_admin_notification_preferences_get: {
         parameters: {
             query?: never;
@@ -59723,6 +60284,42 @@ export interface operations {
             };
         };
     };
+    patch_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractTermSuggestionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractTermSuggestionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     accept_current_company_contract_term_suggestion_api_contracts__contract_id__term_suggestions__suggestion_id__accept_post: {
         parameters: {
             query?: never;
@@ -59769,7 +60366,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ContractTermRejectRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -70582,6 +71183,59 @@ export interface operations {
             };
         };
     };
+    journal_feed_status_api_ip_watch_journal_feed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalFeedStatusResponse"];
+                };
+            };
+        };
+    };
+    journal_feed_setting_api_ip_watch_journal_feed_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpJournalFeedSettingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalFeedStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     journal_ingest_api_ip_watch_journal_ingestions_post: {
         parameters: {
             query?: never;
@@ -76461,6 +77115,26 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_ethical_walls_api_matters_ethical_walls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterEthicalWallDirectoryResponse"];
+                };
+            };
+        };
+    };
     current_company_matter_hearing_follow_up_api_matters_hearing_follow_up_get: {
         parameters: {
             query?: {
@@ -77138,6 +77812,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationPreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_phone_contact_api_notification_preferences_phone_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+        };
+    };
+    delete_phone_contact_api_notification_preferences_phone_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+        };
+    };
+    set_phone_contact_consent_api_notification_preferences_phone_consent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_phone_contact_verification_api_notification_preferences_phone_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneVerificationStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_phone_contact_verification_api_notification_preferences_phone_verification_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhoneVerificationConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneContactStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -77881,6 +78694,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PlatformSubscriptionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_company_subscription_add_on_api_platform_admin_companies__company_id__subscription_add_ons_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformAddOnMutation"];
             };
         };
         responses: {
@@ -82168,6 +83018,70 @@ export interface operations {
             header?: {
                 "X-Twilio-Email-Event-Webhook-Signature"?: string | null;
                 "X-Twilio-Email-Event-Webhook-Timestamp"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookAckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whatsapp_webhook_verify_api_webhooks_whatsapp_get: {
+        parameters: {
+            query?: {
+                "hub.challenge"?: string | null;
+                "hub.mode"?: string | null;
+                "hub.verify_token"?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whatsapp_webhook_api_webhooks_whatsapp_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Hub-Signature-256"?: string | null;
             };
             path?: never;
             cookie?: never;

@@ -66,6 +66,7 @@ def test_real_schedule_and_historical_provisions_attach_and_reload_on_postgres(
         ("specific-relief-1963", "Schedule"),
         ("ipc-1860", "Section 302"),
         ("iea-1872", "Section 65B"),
+        ("motor-vehicles-1988", "Section 147"),
         ("crpc-1973", "Section 482"),
     ]:
         source = sources[act, number]
@@ -120,4 +121,4 @@ def test_real_schedule_and_historical_provisions_attach_and_reload_on_postgres(
         )
         assert rejected.status_code == 409, rejected.text
     saved = client.get(f"/api/matters/{matter_id}/statute-references", headers=headers)
-    assert len(saved.json()["references"]) == 5
+    assert len(saved.json()["references"]) == 6

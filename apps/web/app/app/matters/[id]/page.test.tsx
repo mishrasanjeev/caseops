@@ -38,6 +38,8 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchBenchStrategy: fetchBenchStrategyMock,
+  // ScheduleHearingDialog reads workspace phone-channel enablement.
+  fetchNotificationPreferences: vi.fn().mockResolvedValue({ tenant: { channels: {} } }),
   fetchMatterIpLinks: fetchMatterIpLinksMock,
   fetchMatterNextAction: fetchMatterNextActionMock,
   fetchForumCatalog: vi.fn(),
@@ -168,6 +170,16 @@ describe("MatterOverviewPage", () => {
 
   it("mounts the BenchStrategyPanel sibling of CounselRecommendationsCard", async () => {
     useMatterWorkspaceMock.mockReturnValue({ data: BASE_DATA });
+    useCapabilityMock.mockImplementation((capability: string) => capability === "outside_counsel:recommend");
+    fetchOutsideCounselRecommendationsMock.mockResolvedValue({
+      results: [
+        { counsel_id: "c-1", counsel_name: "First Panel Counsel", score: 0.93, panel_status: "preferred",
+          total_matters_count: 3, active_matters_count: 2, approved_spend_minor: 0,
+          evidence: ["Same jurisdiction", "Same practice", "Available", "Known budget", "Prior work"] },
+        { counsel_id: "c-2", counsel_name: "Second Panel Counsel", score: 0.87, panel_status: "active",
+          total_matters_count: 1, active_matters_count: 0, approved_spend_minor: 0, evidence: ["Related practice"] },
+      ],
+    });
     fetchBenchStrategyMock.mockResolvedValue({
       matter_id: "m-1",
       bench_judge_ids: ["j-1"],
@@ -182,6 +194,23 @@ describe("MatterOverviewPage", () => {
       expect(screen.getByTestId("bench-strategy-panel")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("bench-strategy-disclaimer")).toBeInTheDocument();
+    const first = await screen.findByText("First Panel Counsel");
+    const second = screen.getByText("Second Panel Counsel");
+    const firstToggle = first.closest("summary")!;
+    const secondToggle = second.closest("summary")!;
+    expect(first).toBeVisible();
+    expect(second).toBeVisible();
+    expect(screen.getByText("Prior work")).not.toBeVisible();
+    const user = userEvent.setup();
+    await user.click(firstToggle);
+    expect(screen.getByText("Prior work")).toBeVisible();
+    expect(screen.getByText("Related practice")).not.toBeVisible();
+    await user.click(secondToggle);
+    expect(screen.getByText("Related practice")).toBeVisible();
+    await user.click(firstToggle);
+    expect(firstToggle).toHaveFocus();
+    expect(screen.getByText("Prior work")).not.toBeVisible();
+    expect(screen.getByText("Related practice")).toBeVisible();
   });
 
   it("renders nothing when useMatterWorkspace returns no data (loading)", () => {

@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -48,7 +49,15 @@ import type {
   BillingPlanRecord,
   BillingUsageSnapshot,
 } from "@/lib/api/schemas";
-import { formatBytes, formatLimit, formatMoneyMinor, ratioPercent } from "@/lib/billing-format";
+import {
+  IP_WORKSPACE_ADD_ON,
+  addOnAvailability,
+  addOnAvailableOn,
+  formatBytes,
+  formatLimit,
+  formatMoneyMinor,
+  ratioPercent,
+} from "@/lib/billing-format";
 import { useCapability } from "@/lib/capabilities";
 
 function statusTone(status: string): "neutral" | "brand" | "success" | "warning" {
@@ -215,6 +224,7 @@ export default function TenantBillingPage() {
   const [interval, setInterval] = useState<"month" | "year">("month");
   const [selectedAddOn, setSelectedAddOn] = useState("addon_ai_250");
   const [addOnQuantity, setAddOnQuantity] = useState("1");
+  const [ipInterval, setIpInterval] = useState<"month" | "year">("year");
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const currentQuery = useQuery({
@@ -251,9 +261,14 @@ export default function TenantBillingPage() {
     () => (plansQuery.data?.plans ?? []).filter((plan) => !plan.plan_code.includes("enterprise")),
     [plansQuery.data],
   );
-  const addOns = addOnsQuery.data?.add_ons ?? [];
+  const allAddOns = addOnsQuery.data?.add_ons ?? [];
+  // The IP workspace add-on has its own panel; the pack picker lists the rest.
+  const addOns = allAddOns.filter((addOn) => addOn.plan_code !== IP_WORKSPACE_ADD_ON);
+  const ipAddOn = allAddOns.find((addOn) => addOn.plan_code === IP_WORKSPACE_ADD_ON) ?? null;
   const current = currentQuery.data;
   const currentPlan = current?.subscription?.plan_code ?? "none";
+  const ipActive = current?.entitlements.ip_workspace === true;
+  const ipAvailable = ipAddOn ? addOnAvailableOn(ipAddOn, current?.subscription?.segment) : false;
 
   const planCheckoutMutation = useMutation({
     mutationFn: () =>
@@ -301,6 +316,30 @@ export default function TenantBillingPage() {
       }
     },
     onError: (err) => toast.error(apiErrorMessage(err, "Could not start add-on checkout.")),
+  });
+
+  const ipCheckoutMutation = useMutation({
+    mutationFn: () =>
+      createBillingAddOnCheckout({
+        addOnCode: IP_WORKSPACE_ADD_ON,
+        interval: ipInterval,
+        successUrl:
+          typeof window === "undefined"
+            ? null
+            : `${window.location.origin}/app/admin/billing`,
+        cancelUrl:
+          typeof window === "undefined"
+            ? null
+            : `${window.location.origin}/app/admin/billing`,
+      }),
+    onSuccess: (checkout) => {
+      setLastCheckout(checkout);
+      toast.success("IP workspace checkout created.");
+      if (checkout.provider_checkout_url) {
+        window.location.assign(checkout.provider_checkout_url);
+      }
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Could not start IP workspace checkout.")),
   });
 
   const syncMutation = useMutation({
@@ -615,6 +654,78 @@ export default function TenantBillingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {ipAddOn ? (
+        <Card data-testid="ip-workspace-addon">
+          <CardHeader className="flex-row items-start justify-between gap-4">
+            <div>
+              <CardTitle as="h2">{ipAddOn.display_name} add-on</CardTitle>
+              <CardDescription>{ipAddOn.description}</CardDescription>
+            </div>
+            <Badge tone={ipActive ? "success" : "neutral"}>
+              {ipActive ? "Active" : "Not included"}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid gap-3 text-sm sm:grid-cols-3">
+              {(["month", "year"] as const).map((term) => {
+                const price = planPrice(ipAddOn, term);
+                return (
+                  <div key={term}>
+                    <dt className="text-xs text-[var(--color-mute)]">
+                      {term === "month" ? "Monthly" : "Annual"}
+                    </dt>
+                    <dd className="font-medium tabular-nums text-[var(--color-ink)]">
+                      {formatMoneyMinor(price?.amount_minor, price?.currency ?? "INR")} + GST
+                    </dd>
+                  </div>
+                );
+              })}
+              <div>
+                <dt className="text-xs text-[var(--color-mute)]">Available on</dt>
+                <dd className="font-medium text-[var(--color-ink)]">{addOnAvailability(ipAddOn)}</dd>
+              </div>
+            </dl>
+            {ipActive ? (
+              <p className="text-sm text-[var(--color-ink-2)]">
+                The IP workspace is included in this workspace.
+              </p>
+            ) : ipAvailable ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="ip-addon-interval">Billing</Label>
+                  <select
+                    id="ip-addon-interval"
+                    className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                    value={ipInterval}
+                    onChange={(e) => setIpInterval(e.target.value as "month" | "year")}
+                  >
+                    <option value="year">Annual</option>
+                    <option value="month">Monthly</option>
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  disabled={!canAdmin || ipCheckoutMutation.isPending}
+                  onClick={() => ipCheckoutMutation.mutate()}
+                >
+                  <ShoppingCart className="h-4 w-4" aria-hidden />
+                  Add IP workspace
+                </Button>
+                <p className="basis-full text-sm text-[var(--color-mute)]">
+                  Where online payment is not open, request it from{" "}
+                  <Link href="/pricing#pricing-request" className="underline">public pricing</Link>{" "}
+                  and the CaseOps team activates it by invoice.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--color-ink-2)]">
+                Not available on the {current?.subscription?.plan_name ?? "current"} plan.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
           <Card>
         <CardHeader className="flex-row items-start justify-between gap-4">

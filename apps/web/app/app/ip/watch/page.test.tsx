@@ -14,6 +14,8 @@ const {
   decideHitMock,
   docketMock,
   docketsMock,
+  feedStatusMock,
+  feedUpdateMock,
   ingestMock,
   readinessMock,
   searchMock,
@@ -30,6 +32,8 @@ const {
   decideHitMock: vi.fn(),
   docketMock: vi.fn(),
   docketsMock: vi.fn(),
+  feedStatusMock: vi.fn(),
+  feedUpdateMock: vi.fn(),
   ingestMock: vi.fn(),
   readinessMock: vi.fn(),
   searchMock: vi.fn(),
@@ -62,11 +66,13 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpCoreRecords: coreMock,
   fetchIpDocket: docketMock,
   fetchIpDockets: docketsMock,
+  fetchIpJournalFeedStatus: feedStatusMock,
   fetchIpWatchWorkspace: workspaceMock,
   fetchIpWorkspaceReadiness: readinessMock,
   ingestIpJournal: ingestMock,
   listCompanyUsers: usersMock,
   searchIpJournalPublications: searchMock,
+  updateIpJournalFeedSetting: feedUpdateMock,
   updateIpWatchProfileStatus: statusMock,
 }));
 
@@ -225,6 +231,23 @@ function wrapper() {
 // Mutation tests query only inside their own render container. If a test ever
 // overruns its deadline, cleanup() empties that container and the abandoned
 // user flow fails on its next query instead of driving the next test's page.
+function feedStatus(overrides: Record<string, unknown> = {}) {
+  return {
+    source_key: "ipindia-tm-journal",
+    listing_url: "https://search.ipindia.gov.in/IPOJournal/Journal/Trademark",
+    attribution: "Office of the Controller General of Patents, Designs and Trade Marks, Government of India (ipindia.gov.in)",
+    global_enabled: true,
+    setting: null,
+    last_check: null,
+    documents: [],
+    review_items: [],
+    review_total: 0,
+    ...overrides,
+  };
+}
+
+const FEED_PDF = "https://search.ipindia.gov.in/IPOJournal/Journal/ViewJournal?FileName=ipo-docs%5CTMR%5C2287%5CClass%201-9.pdf";
+
 function renderWatchPage() {
   const view = render(<IpJournalWatchPage />, { wrapper: wrapper() });
   return within(view.container);
@@ -271,6 +294,59 @@ describe("IP journal watch page", () => {
     searchMock.mockResolvedValue({ publications: [ZERO_HIT_PUBLICATION, PUBLICATION] });
     readinessMock.mockResolvedValue(readiness(["rollout_disabled"]));
     usersMock.mockResolvedValue(USERS);
+    feedStatusMock.mockResolvedValue(feedStatus());
+  });
+
+  it("IPLF-052C turns the public journal feed on for the workspace and reports it honestly", async () => {
+    const user = userEvent.setup();
+    readinessMock.mockResolvedValue(readiness([]));
+    feedUpdateMock.mockResolvedValue(feedStatus({
+      setting: { enabled: true, version: 1, run_as_membership_id: "member-1", updated_by_membership_id: "member-1", updated_at: "2026-11-22T06:00:00Z" },
+    }));
+    const page = renderWatchPage();
+    const panel = await page.findByTestId("journal-feed");
+    expect(await within(panel).findByText("Off")).toBeVisible();
+    expect(within(panel).getByText(/require a CAPTCHA and are not automated/)).toBeVisible();
+    const automated = page.getByTestId("watch-readiness-automated");
+    expect(within(automated).getByText("No journal source connected")).toBeVisible();
+    await user.click(within(panel).getByRole("button", { name: "Turn on for this workspace" }));
+    await waitFor(() => expect(feedUpdateMock).toHaveBeenCalledWith({ enabled: true, expectedVersion: null }));
+    expect(await within(panel).findByText("On")).toBeVisible();
+    expect(within(panel).getByRole("button", { name: "Turn off for this workspace" })).toBeVisible();
+    expect(await within(automated).findByText("Public Trade Marks Journal feed on")).toBeVisible();
+  });
+
+  it("IPLF-052C lists journal files and review spans with their official pages", async () => {
+    capabilityMock.mockImplementation((capability: string) => capability !== "ip:watch_manage");
+    feedStatusMock.mockResolvedValue(feedStatus({
+      global_enabled: false,
+      setting: { enabled: true, version: 2, run_as_membership_id: "member-1", updated_by_membership_id: "member-1", updated_at: "2026-11-22T06:00:00Z" },
+      last_check: { status: "refused", reason_code: "challenge_detected", http_status: 200, issues_listed: 0, documents_discovered: 0, checked_at: "2026-11-22T06:00:00Z" },
+      documents: [{
+        id: "doc-1", journal_number: "2287", journal_date: "2026-11-16", available_on: "2026-11-16",
+        file_name: "ipo-docs/IPIndia_Docs/TMR/2026/2287/Class 1-9.pdf", source_url: FEED_PDF, status: "needs_review",
+        attempts: 1, content_sha256: "a".repeat(64), byte_size: 1024, page_count: 1129, entry_count: 1102,
+        review_count: 1, parser_version: "ipindia-tmj-pdf-v1", error_code: null, retrieved_at: "2026-11-22T06:00:00Z",
+        workspace_status: "completed", workspace_entries_compared: 1102,
+      }],
+      review_items: [{
+        id: "entry-1", document_id: "doc-1", journal_number: "2287", journal_date: "2026-11-16", page_start: 282,
+        page_end: 283, journal_page: "5693", review_reason: "mark_text_unreliable", application_number: "6500001",
+        source_url: `${FEED_PDF}#page=282`,
+      }],
+      review_total: 1,
+    }));
+    const page = renderWatchPage();
+    const panel = await page.findByTestId("journal-feed");
+    expect(await within(panel).findByText("On, paused by CaseOps")).toBeVisible();
+    expect(within(panel).getByTestId("journal-feed-paused")).toHaveTextContent("no journal is downloaded");
+    expect(within(panel).getByTestId("journal-feed-last-check")).toHaveTextContent("CAPTCHA or bot check");
+    expect(within(panel).queryByRole("button", { name: /Turn (on|off)/ })).toBeNull();
+    expect(within(panel).getByText("Compared with your profiles")).toBeVisible();
+    expect(within(panel).getByRole("link", { name: /Official PDF/ })).toHaveAttribute("href", FEED_PDF);
+    const review = within(panel).getByTestId("journal-feed-review");
+    expect(within(review).getByRole("link", { name: "Journal 2287, PDF pages 282-283" })).toHaveAttribute("href", `${FEED_PDF}#page=282`);
+    expect(review).toHaveTextContent("mark text unreliable");
   });
 
   it("B4-ADJ-05 states each list's total and reads the next page of hits, profiles and entries", async () => {

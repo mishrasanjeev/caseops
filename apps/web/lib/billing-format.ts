@@ -39,3 +39,27 @@ export function ratioPercent(used: number, limit: number | null | undefined): nu
   if (!limit || limit <= 0) return 0;
   return Math.min(100, Math.round((used / limit) * 100));
 }
+
+export const IP_WORKSPACE_ADD_ON = "addon_ip_workspace";
+
+const SEGMENT_LABELS: Record<string, string> = { solo: "Solo", firm: "Firm", gc: "GC" };
+
+type SegmentRestricted = { eligible_segments?: string[] | null };
+
+export function segmentLabel(segment: string): string {
+  return SEGMENT_LABELS[segment] ?? segment;
+}
+
+/** Whether an add-on can be bought on a base-plan segment. Mirrors the API rule. */
+export function addOnAvailableOn(addOn: SegmentRestricted, segment: string | null | undefined): boolean {
+  const segments = addOn.eligible_segments;
+  if (segments === null || segments === undefined) return true;
+  return typeof segment === "string" && segments.includes(segment);
+}
+
+/** Plain-language availability rule, for example "Firm and GC plans only". */
+export function addOnAvailability(addOn: SegmentRestricted): string {
+  const segments = addOn.eligible_segments;
+  if (segments === null || segments === undefined) return "Every plan";
+  return `${segments.map(segmentLabel).join(" and ")} plans only`;
+}

@@ -31,7 +31,7 @@ def compact(value: str) -> str:
     return "".join(value.split())
 
 
-def extracted(body: bytes) -> str:
+def _page_texts(body: bytes) -> list[str]:
     document = pdfium.PdfDocument(body)
     pages = []
     try:
@@ -45,7 +45,23 @@ def extracted(body: bytes) -> str:
                 page.close()
     finally:
         document.close()
-    return "\n".join(pages)
+    return pages
+
+
+def extracted(body: bytes) -> str:
+    return "\n".join(_page_texts(body))
+
+
+def numbered_pdf_body_pages(body: bytes, page_number_format: str) -> list[str]:
+    pages = _page_texts(body)
+    assert pages
+    contents = []
+    for number, page_text in enumerate(pages, 1):
+        main_text, separator, footer = page_text.rstrip().rpartition("\n")
+        expected = page_number_format.format(n=number, total=len(pages))
+        assert separator and footer == expected, (number, footer, expected)
+        contents.append(main_text)
+    return contents
 
 
 @pytest.mark.parametrize("source", SAMPLES)

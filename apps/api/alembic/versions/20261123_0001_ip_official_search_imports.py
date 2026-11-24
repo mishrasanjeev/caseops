@@ -1,7 +1,7 @@
 """Tenant-scoped lineage for saved IP India official search result pages.
 
 Revision ID: 20261123_0001
-Revises: 20261112_0001
+Revises: 20261122_0631
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-LOCK-RISK: acknowledged. One new, empty table and its indexes are
 created. Existing tables are referenced by foreign keys only; no existing row
@@ -9,8 +9,7 @@ is scanned or rewritten.
 MIGRATION-ROLLBACK: restore-forward once used. Downgrade drops the table only
 while it is empty and refuses before any DDL when an import row exists,
 because linked rows are the lineage that registry snapshots point back to.
-IPLF-052D/UJ-07, UJ-31. Re-chain down_revision after the in-flight release
-(20261121_0001, 20261122_0001-0003) lands on main.
+IPLF-052D/UJ-07, UJ-31.
 """
 
 import sqlalchemy as sa
@@ -18,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261123_0001"
-down_revision = "20261112_0001"
+down_revision = "20261122_0631"
 branch_labels = None
 depends_on = None
 

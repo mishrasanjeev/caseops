@@ -4,7 +4,7 @@
   "program": {
     "id": "PRD-IPLF-2026-08-01",
     "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-    "prd_sha256": "bb6f02d48d198d6468fcdfcc80ac8cb0069f3d7c5301b9a54081ca0dce0579f6",
+    "prd_sha256": "f18a6cc0285c70f1e2fb80927fa2f4747f8d4309cf622502d36863819b778ad3",
     "baseline": {
       "requirement_count": 436,
       "family_count": 50,

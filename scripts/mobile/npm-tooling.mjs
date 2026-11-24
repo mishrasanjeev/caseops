@@ -358,7 +358,7 @@ export function verifyInstalledNpm(root, rows, directories, end, uid) {
 }
 export function prepareNpm(options = {}) {
   const { parent = os.tmpdir(), archive = fileURLToPath(new URL('../../' + NPM_ARTIFACT.relative, import.meta.url)) } = options;
-  assert.ok(['22.23.4', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(['22.23.4', '22.23.5', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
   const end = ciArchiveDeadlines.get(options) ?? performance.now() + 30000;
   const kept = readPinnedArchive(archive, end), tar = gunzipSync(kept, { maxOutputLength: 33554432 });
   assert.equal(tar.length, NPM_ARTIFACT.tarBytes, 'NPM_TOOLING_TAR_EXTENT');
@@ -471,7 +471,7 @@ export async function runNpm(args, options = {}) {
 /** CI invocation only: no arbitrary archive, environment, deadline or ACL target API. */
 export async function runCINpm(args) {
   const end = performance.now() + 30000;
-  assert.ok(['22.23.4', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(['22.23.4', '22.23.5', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
   assert.ok(Array.isArray(args) && args.every(arg => typeof arg === 'string'), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
   const proof = hardenCIPinnedArchive(end);
   console.error(JSON.stringify(proof));

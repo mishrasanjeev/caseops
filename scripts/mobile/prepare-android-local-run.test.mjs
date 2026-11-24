@@ -112,7 +112,7 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
   const locators = Object.fromEntries(['urlOpen', 'urlValue', 'companySlug', 'email', 'password', 'submit', 'principal', 'emailFact',
     'workspace', 'connect', 'urlClose'].map(key => [key, { kind: 'id', value: `synthetic-${key}` }]));
   Object.assign(locators, { appOpen: { kind: 'id', value: 'native-app-open' }, mfaCode: { kind: 'id', value: 'native-mfa-code' },
-    mfaSubmit: { kind: 'buttonText', value: 'Verify code' }, mfaVerified: { kind: 'text', value: 'Code verified. Select Connect app to continue.' } });
+    mfaSubmit: { kind: 'buttonText', value: 'Verify and continue' }, mfaVerified: { kind: 'text', value: 'Sign-in is ready. Open CaseOps to finish.' } });
   const locatorsRef = save('firefox-locators.json', { kind: 'observed-native-firefox-locators', observed: true, platform: 'android',
     udid: SERIAL, appId: APP, buildReceipt, publicCa: ca, packageName: 'org.mozilla.firefox', version: '158.0.2', locators, prepare: [], afterConnect: [] });
   const firefoxRecipe = save('firefox-recipe.json', { status: 'complete', packageName: 'org.mozilla.firefox', version: '158.0.2',
