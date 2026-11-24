@@ -244,11 +244,13 @@ J14/M14/US-040/042, FT-060/061; LEAD-04/05 own the notification contract.
   without contact data or provider text, and MFA-manager Leads readback with
   signed two-page pagination. A second test proves the log for every
   undelivered outcome and its absence after acceptance. Before this change
-  the Leads manager readback had SQLite-only native coverage. Alembic's
-  `fileConfig` disables the already-imported service logger in native test
-  sessions, so older caplog PII assertions in the lead modules are vacuous;
-  the new module enables that logger explicitly. Unchanged main failed 8/9
-  of its SQLite cases; only the accepted (no-log) case passed.
+  the Leads manager readback had SQLite-only native coverage. Unchanged main
+  failed 8/9 of its SQLite cases; only the accepted (no-log) case passed.
+  Alembic's `fileConfig` disables already-imported loggers in native test
+  sessions, which had made the older caplog PII assertions in the lead
+  modules vacuous. The shared `live_logs` test fixture now re-enables them;
+  temporary PII log injections proved the repaired assertions fail when the
+  sentinel is logged.
 
 Still open and not closed by code: browser proof of a failed notification is
 native and component-level only (the local Leads journey's capture adapter

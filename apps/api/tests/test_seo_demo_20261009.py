@@ -514,6 +514,7 @@ def test_seo_demo_20261009_replay_releases_request_session_before_transport(
         (TimeoutError("redact provider PII"), "transport_outcome_unknown"),
     ],
 )
+@pytest.mark.usefixtures("live_logs")
 def test_seo_demo_20261009_transport_failure_and_timeout_preserve_lead_without_resend(
     demo_client, monkeypatch, error, code, caplog
 ):

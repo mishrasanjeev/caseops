@@ -366,6 +366,7 @@ def test_no_paid_context_is_checked_at_last_transport_boundary(client, clock, of
     (202, "sent"), (400, "exhausted"), (429, "retry_pending"),
     (503, "outcome_unknown"), ("timeout", "outcome_unknown"),
 ])
+@pytest.mark.usefixtures("live_logs")
 def test_provider_outcome_is_durable_and_redacted(
     client, clock, offline_mail, caplog, result, expected,
 ):

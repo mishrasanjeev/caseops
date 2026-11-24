@@ -1,3 +1,15 @@
+## November25 — hollow caplog PII/secret assertions in native tests
+
+**Partially implemented.** Alembic's `fileConfig` (default
+`disable_existing_loggers=True`) silences every logger imported before the
+session's first migration, so `secret not in caplog.text` checks were vacuous
+in normal ordering. A shared `live_logs` fixture (`apps/api/tests/conftest.py`)
+now guards 11 tests in 8 modules; injected-sentinel runs proved them live,
+except the tracestate test, which needs the opentelemetry extra (CI only).
+Remaining: new absence checks must opt in to `live_logs`; capsys-based stderr
+checks were not assessed. Evidence: `docs/STRICT_BUG_TASKLIST_2026-04-22.md`,
+section "November24 — issue #513 public lead failure observability".
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision

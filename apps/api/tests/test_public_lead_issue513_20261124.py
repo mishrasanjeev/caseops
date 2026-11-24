@@ -9,7 +9,6 @@ replaced and every other HTTP transport denied, so no socket is opened.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -91,22 +90,6 @@ def _install_mail(monkeypatch):
 
 
 @pytest.fixture
-def demo_log(caplog):
-    # Alembic's fileConfig in the session migration fixtures disables loggers
-    # that already exist, which would make every log assertion vacuous. Enable
-    # the service logger and attach caplog directly for this test only.
-    was_disabled = demo.logger.disabled
-    demo.logger.disabled = False
-    demo.logger.addHandler(caplog.handler)
-    try:
-        with caplog.at_level(logging.WARNING, logger=demo.logger.name):
-            yield caplog
-    finally:
-        demo.logger.removeHandler(caplog.handler)
-        demo.logger.disabled = was_disabled
-
-
-@pytest.fixture
 def clock(monkeypatch):
     value = [NOW]
     monkeypatch.setattr(demo, "_now", lambda: value[0])
@@ -154,21 +137,19 @@ def _public_lead_count():
 
 
 def _undelivered(caplog):
-    # Propagation may also deliver a record to caplog; count each record once.
-    return list(
-        {
-            id(record): record
-            for record in caplog.records
-            if record.name == demo.logger.name
-            and record.getMessage().startswith("Public lead alert not delivered:")
-        }.values()
-    )
+    return [
+        record
+        for record in caplog.records
+        if record.name == demo.logger.name
+        and record.getMessage().startswith("Public lead alert not delivered:")
+    ]
 
 
+# live_logs: Alembic's fileConfig otherwise leaves the service logger disabled.
+@pytest.mark.usefixtures("live_logs")
 def test_issue513_landing_and_pricing_leads_survive_smtp_timeout_into_manager_readback(
-    lead_console, clock, demo_log
+    lead_console, clock, caplog
 ):
-    caplog = demo_log
     client, mail = lead_console["client"], lead_console["mail"]
     landing = _payload("homepage", "demo")
     pricing = _payload(
@@ -298,10 +279,10 @@ def test_issue513_landing_and_pricing_leads_survive_smtp_timeout_into_manager_re
         ("accepted", "sent", None),
     ],
 )
+@pytest.mark.usefixtures("live_logs")
 def test_issue513_every_undelivered_outcome_is_logged_by_reference_only(
-    lead_client, clock, demo_log, case, status, error
+    lead_client, clock, caplog, case, status, error
 ):
-    caplog = demo_log
     client, mail = lead_client
     response = client.post(URL, json=_payload("homepage", "demo"))
     assert response.status_code == 200, response.text

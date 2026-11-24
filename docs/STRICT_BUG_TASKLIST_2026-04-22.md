@@ -11,9 +11,28 @@ Each undelivered outcome now logs the lead reference, recorded status and fixed
 code only, after the conditional write succeeds. RED on unchanged main: the new
 module failed8/9 on SQLite (only the accepted case passed). The new
 SQLite/PostgreSQL module also gives the Leads manager readback its first native
-PostgreSQL coverage. Adjacent, not changed: alembic `fileConfig` disables the
-already-imported service logger in native sessions, so older caplog PII checks
-in the lead modules are vacuous; the new module enables the logger explicitly.
+PostgreSQL coverage.
+
+Adjacent defect, fixed in the same PR: alembic `fileConfig` disables every
+already-imported logger for the rest of a native test session, so caplog
+absence checks for PII and secrets passed without observing anything. The new
+`live_logs` fixture in `apps/api/tests/conftest.py` re-enables them for one test
+and keeps a migration during that test from disabling them again. It now guards
+11 tests in 8 modules (lead admission/notification, issue 513, Gemini decoder,
+corpus money stop x2, portfolio export callback/dispatch, IP upload failure,
+tracestate). Proof with temporary PII log injections, SQLite: original tests
+passed 29 of 30 cases while the sentinel was being logged (vacuous; the IP
+upload case was already live because its route logger is created after the
+migration); with `live_logs` 34 of 41 cases failed on the injected sentinel,
+covering every other repaired test in at least one case, and two more failed
+on the missing opentelemetry extra. The tracestate test could not run
+locally (opentelemetry extra absent from the borrowed venv), so its liveness is
+unproven here. Without injection the repaired tests pass on SQLite and
+PostgreSQL (50 passed; the same two tracestate cases fail on the missing
+extra). No product PII leak surfaced. Not changed: the LLM fallback and
+private-retrieval tests already re-enable their loggers; the PostgreSQL
+attachment/notice/IP upload admission tests assert log presence, so they
+cannot pass vacuously; capsys-based stderr checks were not assessed.
 Browser proof of a failed alert, Docker/CI and exact-production acceptance,
 and the owner sender/retention/consent/attribution decisions remain open.
 See `docs/public-leads-admin-2026-10-21.md`.
