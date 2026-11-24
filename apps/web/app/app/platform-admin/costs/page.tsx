@@ -48,6 +48,7 @@ const costCategories: ProviderCostProfileInput["category"][] = [
   "embedding",
   "document_processing",
   "ocr_page",
+  "translation_characters",
   "storage",
   "bandwidth_export",
   "payment_mdr",

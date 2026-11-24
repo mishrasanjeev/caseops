@@ -43,7 +43,12 @@ no native, signing or deployment credit transfers from FDD. See
 
 ## November22 — intermittent Admin API stall under SQLite release CI
 
-**Implemented in code; release proof pending.** Root cause found 2026-11-23. In
+**Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
+caseops-api-00532-zm4 and web revision caseops-web-00508-b67 serve 100%,
+exact-release prod-verify dispatch 45254312649 passed, and the private
+projection cadence resumed through its guard after clean executions drc56 and
+56cqz. The two Admin ethical walls journeys run in the app suite, not in
+prod-verify; both passed in main CI run 45191342078 on the merge commit. Root cause found 2026-11-23. In
 release CI run 45000524482 the Admin page's API calls stayed pending for more than
 15 s on desktop and 30 s at 393px, so the Admin ethical walls card was held from
 the 2026-11-22 release. Two Admin reads formed a deadlock in the single API process:
@@ -6116,6 +6121,55 @@ plus real validator proof. Complete replacement coverage now expects 3,256
 cases in 316 files, with the same 792 browser metadata identities. All new
 compile, CI, production and recovery evidence remains pending.
 
+## November 23 - assisted official trade mark search and TMview pre-search (IPLF-052D)
+
+**Partially implemented.** UJ-07/UJ-31, IP-REG-02/03, IP-CLR-02/03. Code,
+migration `20261123_0001` (down_revision `20261122_0631`), governance
+map/projection, OpenAPI types and tests merged in PR #641 (fa4ad2e4e; main CI
+run 45322921246 passed). Released 2026-11-24: the pre-migration backup and
+migrate job caseops-migrate-job-7cxzc applied `20261123_0001`; API revision
+caseops-api-00533-88f and web revision caseops-web-00509-ksn serve 100%;
+exact-release prod-verify dispatch 45332944119 passed; the private projection
+cadence resumed through its guard after clean executions zcj6j (3 rebuilds)
+and jxcrc (0). No prod-verify journey covers this page yet, so production
+proof of the feature itself is limited to an unauthenticated probe: the
+imports route answers 401 (a sibling unknown path answers 404) and the page
+serves 200.
+
+- **Implemented in code:** assisted IP India search links and entry steps; saved
+  page upload with extension/content-type/signature checks, a 5 MB cap, the
+  existing ClamAV path (fail-closed where scanning is required) and HTML read as
+  untrusted visible text; review-first parsing; tenant-scoped lineage rows with
+  composite company foreign keys and wall-aware reads; audit rows for import,
+  link, staging and dismissal; linking through the canonical IPLF-051 registry
+  writers and staging through the canonical portfolio import owner.
+- **Review fixes (2026-11-24, PR #641):** matches and links are limited to
+  IP India applications (`IN`/`IP India`), so a same-numbered foreign
+  application is never offered, linked or allowed to block staging. Linking
+  and staging now commit the registry link, match decision, snapshot or
+  preview job together with the import's resolution while the import row stays
+  locked; a failure leaves no registry evidence or orphan job. The downgrade
+  takes an `ACCESS EXCLUSIVE` lock on PostgreSQL before its emptiness check, and
+  a local PostgreSQL test proves an upload committed while the downgrade waits
+  is kept (it is dropped without the lock). The page shows link controls for a
+  staged page and reads older imports with Load more and the server total.
+  Tests: `test_ip_official_search_20261123` (four new cases),
+  `test_ip_official_search_migration_20261123`, `page.test.tsx` (two new cases).
+- **Partially implemented:** the parser is validated only against synthetic
+  pages shaped from IP India's published field labels. No real saved e-status,
+  e-register or public-search page was available (the pages are CAPTCHA/OTP
+  gated and were not automated), so real-page label coverage is unverified and
+  the first real uploads should be reviewed field by field. The uploaded bytes
+  are not retained; the lawyer keeps the saved file, and CaseOps keeps its
+  SHA-256 and the values as published.
+- **Missing by design:** automated IP India status, register or public search,
+  and automated TMview querying. TMview's governing EUIPO legal notice opts out
+  of bot and scraper use and forbids substantial extraction, the site runs bot
+  defences, and EUIPO's sanctioned search API covers EU and WO marks only. There
+  is therefore no feature flag or kill switch: no automated path exists. The
+  TMview deep-link query parameters are taken from TMview's own route and are
+  unverified against the live site; the entry steps repeat the values.
+
 ## November 22 — private resume guard bounded control-plane reads
 
 ### EH-DEPLOY-05 - The private resume guard's execution and log reads exceeded their per-call deadline
@@ -6213,3 +6267,72 @@ manual connection step. The new flow is not yet deployed; actual native and
 production acceptance remain pending. Existing Android version 3 went live November
 17; Managed publishing now holds future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+
+## November 23 - Matter Documents OCR & Translate (EH-OCRT-01..04)
+
+New paid-provider surface. Statuses are separate for what is in code and what is
+deployed and verified.
+
+### EH-OCRT-01 - Paid OCR/translation providers are fenced and fail closed
+
+- **Status:** Partially implemented (2026-11-23, branch
+  `feat/ocr-translation-20261123`, not merged or deployed). Sarvam
+  (`api.sarvam.ai`) and Google Translation (`translate.googleapis.com`,
+  `translation.googleapis.com`) are in `_PAID_PROVIDER_HOSTS`. Calls need the
+  kill switch on (`CASEOPS_SARVAM_DOCUMENT_AI_ENABLED`,
+  `CASEOPS_GOOGLE_TRANSLATION_ENABLED`, both default off), credentials, a
+  verified actual cost profile (`ocr_page`/`sarvam`,
+  `translation_characters`/`google-translation`) and a spend reservation in the
+  shared provider budget (`sarvam`, `google-translation` added to
+  `PROVIDER_KEYS`). Documents with `native_local_processing_only` are never sent.
+  Tests prove each refusal makes no provider request
+  (`apps/api/tests/test_document_renditions_20261123.py`).
+- **Open:** no deploy binding and no live call, so live behaviour is unproven.
+  Sarvam's per-page output schema is unpublished and parsed defensively. A
+  tenant-level OCR/translation model allowlist (SEC-025 depth) is not in
+  `tenant_ai_policy` yet; only the per-document on-device flag and global
+  switches restrict it.
+
+### EH-OCRT-02 - Provider work holds no transaction and resumes instead of re-paying
+
+- **Status:** Partially implemented (same branch). Work runs as
+  `matter_attachment_ocr`/`matter_attachment_translation` jobs on the existing
+  claimed and fenced document queue, with no transaction open during provider
+  I/O. Sarvam job ids and spend holds are committed before polling. A run that
+  outlasts the lease queues a `resume` job that polls the saved ids. A
+  translation request with an unknown outcome keeps its hold and is not
+  re-sent automatically. The partial unique index `uq_matter_attachment_rendition_active`
+  blocks duplicate open runs.
+- **Proof (2026-11-24):** `apps/api/tests/test_document_renditions_20261123_postgres.py`
+  passes on pgvector/pg17 (3 passed, 0 skipped): OCR then chained translation and
+  a `resume` job both complete under the execution-protocol trigger, and the
+  partial unique index rejects a second open run. A local browser run against
+  PostgreSQL (providers off) showed a mixed PDF reaching `review_required` with
+  the scanned page listed as unread, and a review that required a note and
+  wrote `ocr_requested`, `ocr_completed` and `rendition_reviewed` audit events.
+- **Open:** production cadence pickup of `resume` jobs is unverified.
+
+### EH-OCRT-03 - Derived legal text is versioned, reviewable and never presented as certified
+
+- **Status:** Partially implemented (same branch).
+  `matter_attachment_renditions` links every OCR/translation version to its
+  company, matter and attachment, with page-level provenance, provider/model,
+  requester and review status. Review is `documents:manage` only and audited.
+  A version with unreadable pages needs a reviewer note. Generated PDFs use the
+  existing storage namespace, private download headers and the storage quota.
+- **Open:** derived text is deliberately not indexed for retrieval. Glossary
+  control, in-place edit and a legal-term benchmark are missing, so no
+  language pair may be called production-ready (PRD J16).
+
+### EH-OCRT-04 - Credentials and deploy wiring
+
+- **Status:** Missing (deploy). Settings and the `.env.example` placeholders
+  exist, Google auth uses ADC, and no key file is committed.
+  Neither `scripts/deploy-prod.sh` (`caseops-api`) nor the
+  `caseops-document-processing` contract in
+  `infra/cloudrun/scheduler-inventory.json` binds `caseops-sarvam-api-key`
+  yet, deliberately, until the secret exists. Releases re-apply that job
+  contract with `--set-secrets`, so a manual binding on the job would be
+  erased. See section A of
+  `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.

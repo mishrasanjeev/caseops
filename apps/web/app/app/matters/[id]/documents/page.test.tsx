@@ -19,6 +19,9 @@ const {
   listGoogleDriveFilesMock,
   revokeGoogleDriveConnectionMock,
   startGoogleDriveConnectionMock,
+  listMatterDocumentRenditionsMock,
+  listAttachmentRenditionsMock,
+  createAttachmentRenditionMock,
   workspaceData,
   useCapabilityMock,
   toastSuccess,
@@ -38,6 +41,9 @@ const {
   listGoogleDriveFilesMock: vi.fn(),
   revokeGoogleDriveConnectionMock: vi.fn(),
   startGoogleDriveConnectionMock: vi.fn(),
+  listMatterDocumentRenditionsMock: vi.fn(),
+  listAttachmentRenditionsMock: vi.fn(),
+  createAttachmentRenditionMock: vi.fn(),
   workspaceData: {
     current: {
       matter: { id: "m1", matter_code: "X", title: "T", status: "active" },
@@ -81,6 +87,9 @@ vi.mock("@/lib/api/endpoints", () => ({
   listGoogleDriveFiles: listGoogleDriveFilesMock,
   revokeGoogleDriveConnection: revokeGoogleDriveConnectionMock,
   startGoogleDriveConnection: startGoogleDriveConnectionMock,
+  listMatterDocumentRenditions: listMatterDocumentRenditionsMock,
+  listAttachmentRenditions: listAttachmentRenditionsMock,
+  createAttachmentRendition: createAttachmentRenditionMock,
 }));
 
 vi.mock("@/lib/use-matter-workspace", () => ({
@@ -216,6 +225,10 @@ describe("MatterDocumentsPage", () => {
       auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
       unavailable_reason: null,
     });
+    listMatterDocumentRenditionsMock.mockReset();
+    listMatterDocumentRenditionsMock.mockResolvedValue({ matter_id: "m1", renditions: [] });
+    listAttachmentRenditionsMock.mockReset();
+    createAttachmentRenditionMock.mockReset();
     useCapabilityMock.mockReset();
     toastSuccess.mockReset();
     toastError.mockReset();
@@ -1577,5 +1590,154 @@ describe("MatterDocumentsPage", () => {
     expect(section.textContent).not.toMatch(
       /guaranteed|will win|emotional|psychological|mental state|biometric|voice stress/i,
     );
+  });
+
+  describe("OCR & Translate", () => {
+    const now = "2026-11-23T10:00:00Z";
+    function rendition(overrides: Record<string, unknown>) {
+      return {
+        id: "r1",
+        company_id: "company-1",
+        matter_id: "m1",
+        attachment_id: "a-pdf",
+        source_rendition_id: null,
+        kind: "ocr",
+        version: 1,
+        status: "ocr_processing",
+        review_status: "unreviewed",
+        source_language: "hi",
+        target_language: null,
+        chain_target_language: null,
+        provider: "sarvam",
+        model: null,
+        page_count: 2,
+        pages_ok: 0,
+        pages_review: 0,
+        pages_failed: 0,
+        error_code: null,
+        error_message: null,
+        has_output_file: false,
+        output_size_bytes: null,
+        requested_by_name: "Asha Rao",
+        reviewed_by_name: null,
+        reviewed_at: null,
+        review_note: null,
+        retry_allowed: false,
+        created_at: now,
+        updated_at: now,
+        completed_at: null,
+        ...overrides,
+      };
+    }
+
+    function ocrAttachments() {
+      attachments([
+        { id: "a-pdf", original_filename: "order.pdf", content_type: "application/pdf", processing_status: "indexed", created_at: now, size_bytes: 10 },
+        { id: "a-png", original_filename: "scan.PNG", content_type: "image/png", processing_status: "indexed", created_at: now, size_bytes: 10 },
+        { id: "a-txt", original_filename: "notes.txt", content_type: "text/plain", processing_status: "indexed", created_at: now, size_bytes: 10 },
+        { id: "a-fake", original_filename: "renamed.pdf", content_type: "text/plain", processing_status: "indexed", created_at: now, size_bytes: 10 },
+      ]);
+    }
+
+    it("offers OCR & Translate only on PDF and image documents to uploaders", async () => {
+      useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+      ocrAttachments();
+      renderDocumentsPage();
+
+      expect(screen.getByTestId("matter-attachment-ocr-a-pdf")).toHaveAccessibleName("OCR & Translate order.pdf");
+      expect(screen.getByTestId("matter-attachment-ocr-a-png")).toBeInTheDocument();
+      expect(screen.queryByTestId("matter-attachment-ocr-a-txt")).toBeNull();
+      expect(screen.queryByTestId("matter-attachment-ocr-a-fake")).toBeNull();
+      await waitFor(() => expect(listMatterDocumentRenditionsMock).toHaveBeenCalledWith("m1"));
+    });
+
+    it("hides OCR & Translate from members without documents:upload", () => {
+      useCapabilityMock.mockImplementation((cap: string) => cap === "documents:manage");
+      ocrAttachments();
+      renderDocumentsPage();
+      expect(screen.queryByTestId("matter-attachment-ocr-a-pdf")).toBeNull();
+      expect(screen.queryByTestId("matter-attachment-ocr-a-png")).toBeNull();
+    });
+
+    it("shows a text OCR status per eligible row and links to versions", async () => {
+      useCapabilityMock.mockImplementation(() => false);
+      ocrAttachments();
+      listMatterDocumentRenditionsMock.mockResolvedValue({
+        matter_id: "m1",
+        renditions: [
+          rendition({ id: "r1", status: "ocr_completed", created_at: "2026-11-23T09:00:00Z" }),
+          rendition({ id: "r2", kind: "translation", status: "translation_processing", source_rendition_id: "r1", target_language: "en", created_at: "2026-11-23T09:05:00Z" }),
+        ],
+      });
+      renderDocumentsPage();
+
+      expect(await screen.findByText("Translation processing")).toBeInTheDocument();
+      expect(screen.getByTestId("matter-attachment-rendition-status-a-pdf")).toHaveTextContent("Translation processing");
+      expect(screen.getByTestId("matter-attachment-rendition-status-a-png")).toHaveTextContent("Uploaded");
+      expect(screen.queryByTestId("matter-attachment-rendition-status-a-txt")).toBeNull();
+      expect(screen.getByTestId("matter-attachment-versions-a-pdf")).toHaveAttribute(
+        "href",
+        "/app/matters/m1/documents/a-pdf/renditions",
+      );
+      expect(screen.queryByTestId("matter-attachment-versions-a-png")).toBeNull();
+    });
+
+    it("polls every two seconds while a version is processing and stops once it finishes", async () => {
+      useCapabilityMock.mockImplementation(() => false);
+      ocrAttachments();
+      listMatterDocumentRenditionsMock
+        .mockResolvedValueOnce({ matter_id: "m1", renditions: [rendition({ status: "queued" })] })
+        .mockResolvedValue({ matter_id: "m1", renditions: [rendition({ status: "ocr_completed" })] });
+      renderDocumentsPage();
+
+      expect(await screen.findByText("OCR queued")).toBeInTheDocument();
+      expect(await screen.findByText("OCR completed", {}, { timeout: 4000 })).toBeInTheDocument();
+      const calls = listMatterDocumentRenditionsMock.mock.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      expect(listMatterDocumentRenditionsMock.mock.calls.length).toBe(calls);
+    });
+
+    it("labels review-required and failed versions in words", async () => {
+      useCapabilityMock.mockImplementation(() => false);
+      ocrAttachments();
+      listMatterDocumentRenditionsMock.mockResolvedValue({
+        matter_id: "m1",
+        renditions: [
+          rendition({ id: "r1", attachment_id: "a-pdf", status: "review_required" }),
+          rendition({ id: "r3", attachment_id: "a-png", status: "failed" }),
+        ],
+      });
+      renderDocumentsPage();
+      await waitFor(() =>
+        expect(screen.getByTestId("matter-attachment-rendition-status-a-pdf")).toHaveTextContent("Review required"),
+      );
+      expect(screen.getByTestId("matter-attachment-rendition-status-a-png")).toHaveTextContent("OCR failed");
+    });
+
+    it("opens the OCR & Translate dialog from the row action", async () => {
+      useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+      ocrAttachments();
+      listAttachmentRenditionsMock.mockResolvedValue({
+        attachment_id: "a-pdf",
+        providers: {
+          ocr_provider_available: true,
+          ocr_unavailable_reason: null,
+          translation_available: true,
+          translation_unavailable_reason: null,
+          third_party_processing_permitted: true,
+          ocr_languages: ["en", "hi", "mr"],
+          translation_pairs: [{ source: "hi", target: "en" }],
+        },
+        renditions: [],
+      });
+      const user = userEvent.setup();
+      renderDocumentsPage();
+
+      await user.click(screen.getByTestId("matter-attachment-ocr-a-pdf"));
+      const dialog = await screen.findByRole("dialog", { name: "OCR & Translate" });
+      expect(dialog).toHaveTextContent("order.pdf");
+      await within(dialog).findByLabelText("Source language");
+      expect(listAttachmentRenditionsMock).toHaveBeenCalledWith({ matterId: "m1", attachmentId: "a-pdf" });
+    });
   });
 });

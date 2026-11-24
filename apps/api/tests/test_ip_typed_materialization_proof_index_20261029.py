@@ -22,6 +22,8 @@ from tests.migration_index_catalog import (
     write_catalog,
 )
 from tests.test_counsel_page_migration_20261027 import _rows
+from tests.test_ip_official_search_migration_20261123 import TABLE as HEAD_TABLE
+from tests.test_ip_official_search_migration_20261123 import seed_retained_import
 from tests.test_matter_readthrough_indexes_20261028 import PRESERVED as OTHER_PRESERVED
 from tests.test_matter_readthrough_indexes_20261028 import populate as populate_other
 from tests.test_platform_console_migration import KINDS, fresh_engine, migration_config
@@ -38,6 +40,11 @@ PRESERVED = tuple(sorted(set(OTHER_PRESERVED) | {
 PATH = (
     Path(__file__).resolve().parents[1]
     / "alembic/versions/20261029_0002_audit_typed_source_proof_seek.py"
+)
+
+# Current head 20261124_0001 (matter attachment renditions) refuses downgrade first.
+HEAD_REFUSAL = (
+    "OCR text, translations and their review evidence are retained; restore-forward only."
 )
 STAMP = datetime(2026, 10, 29, 1, 2, 3, 123456, tzinfo=UTC)
 
@@ -261,7 +268,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head == "20261122_0631"
+        assert current_head == "20261124_0001"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)
@@ -270,8 +277,10 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         current = schema_catalog(engine)
         assert current
         populate(engine)
-        preserved = _rows(engine, PRESERVED)
-        assert all(preserved[table] for table in PRESERVED)
+        seed_retained_import(engine)
+        retained = (*PRESERVED, HEAD_TABLE)
+        preserved = _rows(engine, retained)
+        assert all(preserved[table] for table in retained)
         old_identity = old_index_identity(engine)
         # A conflicting invocation-owned name at current head must refuse
         # downgrade before dropping any retained index or changing any data.
@@ -281,13 +290,11 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
         conflicting = schema_catalog(engine)
         with pytest.raises(RuntimeError) as refused:
             command.downgrade(config, PARENT)
-        # The current extraction-provenance head refuses
-        # before any provenance or indexes change. The historical index's own
+        # The current head refuses on its retained OCR/translation versions
+        # before any retained row or index changes. The historical index's own
         # conflict guard is exercised separately.
-        assert str(refused.value) == (
-            "Contract extraction provenance is restore-forward. Restore the reviewed backup."
-        )
-        retained_rows, retained_catalog = _rows(engine, PRESERVED), schema_catalog(engine)
+        assert str(refused.value) == HEAD_REFUSAL
+        retained_rows, retained_catalog = _rows(engine, retained), schema_catalog(engine)
         assert retained_rows == preserved and retained_catalog == conflicting
         require_revision(engine, current_head)
         retained_old_identity = old_index_identity(engine)

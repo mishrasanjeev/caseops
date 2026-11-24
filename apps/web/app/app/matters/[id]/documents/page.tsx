@@ -10,11 +10,13 @@ import {
   FileText,
   HardDrive,
   HelpCircle,
+  History,
   Loader2,
   MessageSquareText,
   Pencil,
   RefreshCw,
   Save,
+  ScanText,
   Search,
   Send,
   Upload,
@@ -27,6 +29,11 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { SourceAction } from "@/components/app/SourceAction";
+import {
+  OcrTranslateDialog,
+  matterRenditionsQueryKey,
+} from "@/components/document/OcrTranslateDialog";
+import { RenditionStatusBadge } from "@/components/document/RenditionStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -43,6 +50,7 @@ import {
   fetchGoogleDriveStatus,
   fetchMatterFileQAHistory,
   listGoogleDriveFiles,
+  listMatterDocumentRenditions,
   matterAttachmentBulkDownloadUrl,
   reindexMatterAttachment,
   revokeGoogleDriveConnection,
@@ -54,6 +62,7 @@ import {
 import type {
   MatterDocumentType,
   MatterLifecycleStage,
+  RenditionSummary,
 } from "@/lib/api/endpoints";
 import type {
   AffidavitIntelligenceResponse,
@@ -68,6 +77,13 @@ import type {
 } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
+import {
+  isRenditionActive,
+  isRenditionEligible,
+  latestRendition,
+  renditionStatusLabel,
+  renditionStatusTone,
+} from "@/lib/renditions";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 import type {
   WorkspaceAttachment,
@@ -465,6 +481,7 @@ export default function MatterDocumentsPage() {
   });
   const [googleDriveMessage, setGoogleDriveMessage] = useState<string | null>(null);
   const [googleDriveFiles, setGoogleDriveFiles] = useState<GoogleDriveFileRecord[]>([]);
+  const [ocrTarget, setOcrTarget] = useState<{ id: string; name: string } | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] });
@@ -478,6 +495,24 @@ export default function MatterDocumentsPage() {
     queryFn: fetchGoogleDriveStatus,
     enabled: canUpload,
   });
+  // OCR & Translate: latest OCR and translation version per document.
+  // Poll every 2 s only while a version is still being processed.
+  const renditionsQuery = useQuery({
+    queryKey: matterRenditionsQueryKey(matterId),
+    queryFn: () => listMatterDocumentRenditions(matterId),
+    enabled: Boolean(matterId),
+    refetchInterval: (query) =>
+      query.state.data?.renditions.some(isRenditionActive) ? 2000 : false,
+  });
+  const renditionsByAttachment = useMemo(() => {
+    const map = new Map<string, RenditionSummary[]>();
+    for (const rendition of renditionsQuery.data?.renditions ?? []) {
+      const list = map.get(rendition.attachment_id) ?? [];
+      list.push(rendition);
+      map.set(rendition.attachment_id, list);
+    }
+    return map;
+  }, [renditionsQuery.data]);
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) =>
@@ -1150,6 +1185,10 @@ export default function MatterDocumentsPage() {
                     const canRetry = canManage && RETRY_STATUSES.has(status);
                     const canReindex = canManage && REINDEX_STATUSES.has(status);
                     const viewHref = `/app/matters/${matterId}/documents/${doc.id}/view`;
+                    const docName = doc.original_filename ?? doc.filename ?? "Untitled";
+                    const ocrEligible = isRenditionEligible(doc);
+                    const docRenditions = renditionsByAttachment.get(doc.id) ?? [];
+                    const rowRendition = latestRendition(docRenditions);
                     const typeLabel = labelFor(
                       DOCUMENT_TYPE_OPTIONS,
                       doc.document_type,
@@ -1224,7 +1263,25 @@ export default function MatterDocumentsPage() {
                             {humanSize(doc.size_bytes)}
                           </td>
                           <td data-label="Processing" className="px-4 py-3">
-                            <StatusBadge status={doc.processing_status ?? "unknown"} />
+                            <div className="flex flex-col items-start gap-1">
+                              <StatusBadge status={doc.processing_status ?? "unknown"} />
+                              {ocrEligible ? (
+                                <RenditionStatusBadge
+                                  label={
+                                    rowRendition
+                                      ? renditionStatusLabel(rowRendition)
+                                      : "Uploaded"
+                                  }
+                                  tone={
+                                    rowRendition
+                                      ? renditionStatusTone(rowRendition.status)
+                                      : "neutral"
+                                  }
+                                  title="OCR & Translate status"
+                                  data-testid={`matter-attachment-rendition-status-${doc.id}`}
+                                />
+                              ) : null}
+                            </div>
                           </td>
                           <td data-label="Added" className="px-4 py-3 text-xs text-[var(--color-mute)]">
                             {dateLabel(doc.created_at)}
@@ -1240,6 +1297,31 @@ export default function MatterDocumentsPage() {
                                 <Eye className="h-4 w-4" aria-hidden />
                                 View
                               </Button>
+                              {canUpload && ocrEligible ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setOcrTarget({ id: doc.id, name: docName })}
+                                  aria-label={`OCR & Translate ${docName}`}
+                                  data-testid={`matter-attachment-ocr-${doc.id}`}
+                                >
+                                  <ScanText className="h-4 w-4" aria-hidden />
+                                  OCR &amp; Translate
+                                </Button>
+                              ) : null}
+                              {docRenditions.length > 0 ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  href={`/app/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(doc.id)}/renditions`}
+                                  aria-label={`OCR and translation versions of ${docName}`}
+                                  data-testid={`matter-attachment-versions-${doc.id}`}
+                                >
+                                  <History className="h-4 w-4" aria-hidden />
+                                  Versions
+                                </Button>
+                              ) : null}
                               {canManage ? (
                                 <Button
                                   type="button"
@@ -1451,6 +1533,11 @@ export default function MatterDocumentsPage() {
         </CardContent>
       </Card>
       )}
+      <OcrTranslateDialog
+        matterId={matterId}
+        attachment={ocrTarget}
+        onClose={() => setOcrTarget(null)}
+      />
     </div>
   );
 }

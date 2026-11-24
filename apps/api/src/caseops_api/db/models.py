@@ -526,6 +526,8 @@ class ProviderCostCategory(StrEnum):
     EMBEDDING = "embedding"
     DOCUMENT_PROCESSING = "document_processing"
     OCR_PAGE = "ocr_page"
+    # Machine translation, priced per 1,000 source characters.
+    TRANSLATION_CHARACTERS = "translation_characters"
     STORAGE = "storage"
     BANDWIDTH_EXPORT = "bandwidth_export"
     PAYMENT_MDR = "payment_mdr"
@@ -554,6 +556,9 @@ class DocumentProcessingTargetType(StrEnum):
     MATTER_ATTACHMENT = "matter_attachment"
     CONTRACT_ATTACHMENT = "contract_attachment"
     IP_DOCUMENT_VERSION = "ip_document_version"
+    # attachment_id holds a matter_attachment_renditions.id for these two.
+    MATTER_ATTACHMENT_OCR = "matter_attachment_ocr"
+    MATTER_ATTACHMENT_TRANSLATION = "matter_attachment_translation"
 
 
 class DocumentProcessingAction(StrEnum):
@@ -22778,6 +22783,7 @@ MatterPackItemReadPage = _readthrough_models.MatterPackItemReadPage
 MatterReadthroughDirty = _readthrough_models.MatterReadthroughDirty
 MatterRecommendationReadPage = _readthrough_models.MatterRecommendationReadPage
 from caseops_api.db import ip_journal_feed_models as _journal_feed_models  # noqa: E402
+from caseops_api.db import ip_official_search_models as _official_search_models  # noqa: E402
 from caseops_api.db import task_queue_page_models as _queue_models  # noqa: E402
 from caseops_api.db import workspace_conduct_models as _conduct_models  # noqa: E402
 from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
@@ -22791,6 +22797,7 @@ from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
 )
 
 IpJournalFeedSetting = _journal_feed_models.IpJournalFeedSetting
+IpOfficialSearchImport = _official_search_models.IpOfficialSearchImport
 IpJournalFeedTenantRun = _journal_feed_models.IpJournalFeedTenantRun
 IpPublicJournalCheck = _journal_feed_models.IpPublicJournalCheck
 IpPublicJournalDocument = _journal_feed_models.IpPublicJournalDocument
@@ -22805,5 +22812,9 @@ event.listen(Base.metadata, "after_create", task_queue_page_schema_v1.install_mo
 event.listen(
     Base.metadata, "after_create", matter_readthrough_page_schema_v1.install_model_schema
 )
+
+from caseops_api.db import document_rendition_models as _rendition_models  # noqa: E402
+
+MatterAttachmentRendition = _rendition_models.MatterAttachmentRendition
 
 ensure_foreign_key_indexes(Base.metadata)

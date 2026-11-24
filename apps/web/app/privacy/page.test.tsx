@@ -43,8 +43,8 @@ describe("public CaseOps privacy policy", () => {
     expect(main).toHaveAttribute("id", "main");
     expect(main).toHaveAttribute("tabindex", "-1");
     expect(within(main).getByText("Orchestrum Technologies LLP", { exact: true })).toBeVisible();
-    expect(within(main).getByText("2026-11-22", { exact: true })).toBeVisible();
-    expect(within(main).getByText("22 November 2026", { exact: true })).toHaveAttribute("datetime", "2026-11-22");
+    expect(within(main).getByText("2026-11-23", { exact: true })).toBeVisible();
+    expect(within(main).getByText("23 November 2026", { exact: true })).toHaveAttribute("datetime", "2026-11-23");
     expect(within(main).getByText(privacyPolicy.intro, { exact: true })).toBeVisible();
   });
 

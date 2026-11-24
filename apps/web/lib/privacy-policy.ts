@@ -19,8 +19,8 @@ export type PrivacyPolicyDocument = {
 };
 
 export const privacyPolicy = {
-  "version": "2026-11-22",
-  "effectiveDate": "22 November 2026",
+  "version": "2026-11-23",
+  "effectiveDate": "23 November 2026",
   "title": "Privacy policy",
   "operator": "Orchestrum Technologies LLP",
   "product": "CaseOps",
@@ -76,7 +76,7 @@ export const privacyPolicy = {
       "paragraphs": [
         "Information is available to people your organisation authorises, subject to the workspace and record-level access controls.",
         "Authorised workspace owners or CaseOps reviewers may see limited report details, depending on who the report concerns. Access to the underlying matter, note or file follows the usual workspace permissions.",
-        "We use service providers for hosting, storage, AI and search processing, communications, payments and support. Depending on the enabled feature, these may include Google Cloud, OpenAI, Voyage AI and SendGrid, and, for reminders you opt in to, MSG91 for text messages and Meta for WhatsApp. A connected service or payment provider may also receive information when you use its integration. Relevant information is shared to perform that function.",
+        "We use service providers for hosting, storage, AI and search processing, communications, payments and support. Depending on the enabled feature, these may include Google Cloud, OpenAI, Voyage AI and SendGrid; Sarvam AI for document OCR, only when a user runs OCR on a scanned document; Google Cloud Translation for document translation, only when a user requests it; and, for reminders you opt in to, MSG91 for text messages and Meta for WhatsApp. A connected service or payment provider may also receive information when you use its integration. Relevant information is shared to perform that function.",
         "Service providers processing personal data for us must use it for the agreed service and protect it with at least the same level of protection described in this policy and required by applicable law.",
         "We may disclose information when required by law, to protect rights or security, or as part of a business transfer with appropriate protections and notice where required.",
         "We do not sell personal data or use it for targeted advertising."

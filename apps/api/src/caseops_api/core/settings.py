@@ -5,7 +5,15 @@ from typing import Literal
 from unicodedata import category
 
 from email_validator import EmailNotValidError, validate_email
-from pydantic import UUID4, AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    UUID4,
+    AliasChoices,
+    AnyHttpUrl,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_AUTH_SECRET = "change-me-change-me-change-me-2026"
@@ -408,6 +416,36 @@ class Settings(BaseSettings):
     indian_kanoon_monthly_budget_minor: int = Field(default=0, ge=0)
     indian_kanoon_request_timeout_seconds: float = Field(default=8.0, ge=1.0, le=20.0)
     indian_kanoon_cache_ttl_seconds: int = Field(default=300, ge=0, le=3600)
+
+    # Matter Documents "OCR & Translate". Keys stay server-side. Each provider
+    # is off until explicitly enabled, and every paid call also needs a
+    # verified provider cost profile and workspace budget headroom.
+    sarvam_document_ai_enabled: bool = Field(default=False)
+    sarvam_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CASEOPS_SARVAM_API_KEY", "SARVAM_API_KEY"),
+    )
+    sarvam_api_base_url: str = Field(default="https://api.sarvam.ai")
+    sarvam_request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
+    sarvam_poll_interval_seconds: float = Field(default=5.0, ge=0.0, le=60.0)
+    # Must stay inside the 15-minute document job lease.
+    sarvam_job_max_wait_seconds: int = Field(default=600, ge=1, le=720)
+    google_translation_enabled: bool = Field(default=False)
+    google_translation_project_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "CASEOPS_GOOGLE_TRANSLATION_PROJECT_ID", "GOOGLE_CLOUD_PROJECT_ID",
+        ),
+    )
+    google_translation_location: str = Field(
+        default="us-central1",
+        pattern=r"^(global|[a-z]+-[a-z]+[0-9])$",
+        validation_alias=AliasChoices(
+            "CASEOPS_GOOGLE_TRANSLATION_LOCATION", "GOOGLE_CLOUD_LOCATION",
+        ),
+    )
+    google_translation_api_base_url: str = Field(default="https://translate.googleapis.com")
+    google_translation_request_timeout_seconds: float = Field(default=60.0, ge=5.0, le=120.0)
     indian_kanoon_retention_days: int = Field(default=0, ge=0, le=3650)
     indian_kanoon_max_search_page: int = Field(default=20, ge=0, le=100)
     indian_kanoon_max_results: int = Field(default=20, ge=1, le=100)

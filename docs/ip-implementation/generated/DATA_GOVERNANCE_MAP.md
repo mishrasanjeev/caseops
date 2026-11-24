@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `60b6c26112bba03e88c589a8497931552f2a1c39d9d05da25309c36c71b6d121`
-- SQL tables: `370`
-- SQL columns: `5890`
-- ORM indexes: `1838`
-- Alembic/raw index declarations: `1615`
-- Non-SQL data classes: `17`
+- Canonical map SHA-256: `d438ceec1ac1ecea07c745a2e780f184d5e6ddf741ad7a0f81e6fe899329ba8d`
+- SQL tables: `372`
+- SQL columns: `5950`
+- ORM indexes: `1852`
+- Alembic/raw index declarations: `1629`
+- Non-SQL data classes: `18`
 
 ## Boundary
 
@@ -178,6 +178,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_journal_ingestion_runs` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_official_search_imports` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `ip_patent_application_identifiers` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_patent_application_identities` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
@@ -258,6 +259,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_activity` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `matter_attachment_annotations` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
 | `matter_attachment_chunks` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `matter_attachment_renditions` | `tenant_restricted_legal_content` | 34 | `registry_fail_closed` |
 | `matter_attachments` | `tenant_restricted_legal_content` | 51 | `registry_fail_closed` |
 | `matter_billing_profiles` | `billing_provider_evidence` | 29 | `registry_fail_closed` |
 | `matter_billing_rates` | `billing_provider_evidence` | 14 | `registry_fail_closed` |
@@ -413,6 +415,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `operational-activity-report-delivery` | `provider_held_object` | `registry_fail_closed` |
 | `database-and-object-backups` | `backup` | `registry_fail_closed` |
 | `phone-reminder-provider-delivery` | `provider_held_object` | `registry_fail_closed` |
+| `ocr-translation-provider-processing` | `provider_held_object` | `registry_fail_closed` |
 
 ## Change control
 
