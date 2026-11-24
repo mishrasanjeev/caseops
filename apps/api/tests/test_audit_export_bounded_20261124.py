@@ -259,6 +259,9 @@ def cap_is_counted_per_tenant(client: TestClient, monkeypatch: pytest.MonkeyPatc
     _seed(company_a, cap * 3)
     seeded_b = _seed(company_b, cap)
 
+    # The client keeps the last bootstrap's session cookie, and a cookie wins
+    # over a bearer token; clear it so each request is the tenant it names.
+    client.cookies.clear()
     # Tenant A's 75 rows neither appear in B's file nor count against B's cap.
     export_b = client.get(
         EXPORT,
@@ -271,6 +274,7 @@ def cap_is_counted_per_tenant(client: TestClient, monkeypatch: pytest.MonkeyPatc
     assert {row["company_id"] for row in rows_b} == {company_b}
 
     # Tenant A is refused on its own rows; B's rows do not rescue or leak in.
+    client.cookies.clear()
     export_a = client.get(
         EXPORT,
         params={"action": PROBE_ACTION},

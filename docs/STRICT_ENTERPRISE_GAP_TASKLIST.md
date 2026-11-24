@@ -12,7 +12,8 @@ issue613 download-body candidate (PR #655) recorded as open.
   row. One download holds at most `AUDIT_EXPORT_MAX_ROWS` = 50,000 rows, about
   24 MB of JSONL or 15 MB of CSV at ~480 bytes a row. Measured locally on
   SQLite through the test client, 50,000 rows took 6.1 s (JSONL) and 11.5 s
-  (CSV); with one chunk per row they took 51 s and 56 s. That leaves the
+  (CSV); with one chunk per row they took 51 s and 56 s. On local PostgreSQL
+  17 through the server-side cursor they took 11.5 s and 17.0 s. That leaves the
   120 s Cloud Run and browser deadlines room for network transfer; no timeout
   was raised. A wider window gets a typed 422 problem
   (`audit_export_row_cap_exceeded`, `row_cap`) before any byte is sent, and the
