@@ -24,6 +24,8 @@ from caseops_api.schemas.platform_console import (
     ConsoleEmptyRequest,
     ConsoleInvitationResponse,
     ConsoleInviteCompleteRequest,
+    ConsoleInviteInspectRequest,
+    ConsoleInviteInspectResponse,
     ConsoleInviteRequest,
     ConsoleLoginRequest,
     ConsoleLogoutResponse,
@@ -154,6 +156,17 @@ def logout(request: Request, response: Response, session: DbSession):
     console.logout(session, _context(request, session, authenticated=False))
     clear_console_cookies(response)
     return ConsoleLogoutResponse()
+
+
+@router.post("/auth/invitations/inspect", response_model=ConsoleInviteInspectResponse)
+@limiter.limit(login_rate_limit)
+def inspect_invitation(
+    request: Request,
+    payload: ConsoleInviteInspectRequest,
+    session: DbSession,
+):
+    # Read-only: the link is validated under the same fences but not consumed.
+    return console.inspect_invitation(session, token=payload.token)
 
 
 @router.post("/auth/invitations/complete", response_model=ConsoleAuthState)

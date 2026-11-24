@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `d438ceec1ac1ecea07c745a2e780f184d5e6ddf741ad7a0f81e6fe899329ba8d`
-- SQL tables: `372`
-- SQL columns: `5950`
-- ORM indexes: `1852`
-- Alembic/raw index declarations: `1629`
+- Canonical map SHA-256: `beabab97790e492ebeb222794383d392e3a16a69df048cb6b030dd38aedcb72b`
+- SQL tables: `373`
+- SQL columns: `5967`
+- ORM indexes: `1859`
+- Alembic/raw index declarations: `1636`
 - Non-SQL data classes: `18`
 
 ## Boundary
@@ -351,6 +351,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `recommendation_options` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `recommendations` | `tenant_restricted_legal_content` | 35 | `registry_fail_closed` |
 | `report_artifacts` | `tenant_operational_record` | 22 | `registry_fail_closed` |
+| `research_answers` | `tenant_operational_record` | 17 | `registry_fail_closed` |
 | `source_link_reports` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `statute_change_events` | `public_or_licensed_legal_reference` | 12 | `registry_fail_closed` |
 | `statute_sections` | `public_or_licensed_legal_reference` | 40 | `registry_fail_closed` |

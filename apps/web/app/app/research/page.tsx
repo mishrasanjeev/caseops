@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SourceAction } from "@/components/app/SourceAction";
+import { ResearchAnswerPanel } from "@/components/research/ResearchAnswerPanel";
 import {
   Select,
   SelectContent,
@@ -72,6 +73,12 @@ export default function ResearchPage() {
   const initialQuery =
     (searchParams?.get("q") ?? searchParams?.get("query") ?? "").trim();
   const initialMode = parseAuthoritySearchMode(searchParams?.get("mode"));
+  const contextMatterId = searchParams?.get("matter")?.trim() || null;
+  // Authority search stays the default so existing links and controls keep
+  // their place; ?tab=answer or a matter launch opens the research answer.
+  const [tool, setTool] = useState<"answer" | "search">(
+    searchParams?.get("tab") === "answer" || contextMatterId ? "answer" : "search",
+  );
   const previousUrlCriteria = useRef({ query: initialQuery, mode: initialMode });
   const [query, setQuery] = useState(initialQuery);
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
@@ -322,6 +329,39 @@ export default function ResearchPage() {
         }
       />
 
+      <div
+        className="flex w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white sm:w-auto sm:self-start"
+        data-testid="research-tool-toggle"
+      >
+        {(
+          [
+            ["answer", "Research answer"],
+            ["search", "Find authorities"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTool(value)}
+            data-testid={`research-tool-${value}`}
+            aria-pressed={tool === value}
+            className={`min-w-0 flex-1 px-3 py-1.5 text-sm font-medium sm:flex-none ${
+              tool === value ? "bg-[var(--color-ink)] text-white" : "text-[var(--color-ink-2)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tool === "answer" ? (
+        <ResearchAnswerPanel
+          key={contextMatterId ?? "workspace"}
+          initialQuestion={initialQuery}
+          contextMatterId={contextMatterId}
+        />
+      ) : (
+        <>
       <Card>
         <CardHeader>
           <CardTitle as="h2" className="text-base">
@@ -789,6 +829,8 @@ export default function ResearchPage() {
               </div>
             </div>
           ) : null}
+        </>
+      )}
         </>
       )}
     </div>
