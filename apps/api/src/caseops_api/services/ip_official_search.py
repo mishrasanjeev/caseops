@@ -12,6 +12,7 @@ writers or stages a new record through the canonical portfolio import owner.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import os
 import tempfile
@@ -77,6 +78,10 @@ IPINDIA_CREDIT = (
 )
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 REGISTRY_PROVIDER_KEY = "ipindia-registry"
+# The only register these pages come from. A same-numbered foreign application
+# is a different record and is never offered or linked.
+IPINDIA_JURISDICTION = "IN"
+IPINDIA_OFFICE = "IP India"
 CAPTURE_METHOD = "assisted_official_page_upload"
 _HTML_EXTENSIONS = {".html", ".htm"}
 _HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml", "application/octet-stream"}
@@ -156,10 +161,9 @@ def _scan(data: bytes, *, filename: str) -> None:
             temp.write(data)
         reject_if_infected(path, filename=filename)
     finally:
-        try:
+        # The scanner may already have removed or quarantined the file.
+        with contextlib.suppress(OSError):
             os.unlink(path)
-        except OSError:
-            pass
 
 
 def _parse(data: bytes, *, content_kind: str, search: dict[str, Any]) -> ParsedOfficialPage:
@@ -204,8 +208,15 @@ def _matches(
             (IpDocketRecord.id == IpIdentifier.docket_id)
             & (IpDocketRecord.company_id == IpIdentifier.company_id),
         )
+        .join(
+            TrademarkApplication,
+            (TrademarkApplication.id == IpIdentifier.application_id)
+            & (TrademarkApplication.company_id == IpIdentifier.company_id),
+        )
         .where(
             IpIdentifier.company_id == context.company.id,
+            TrademarkApplication.jurisdiction == IPINDIA_JURISDICTION,
+            TrademarkApplication.office == IPINDIA_OFFICE,
             IpIdentifier.identifier_kind == "application",
             IpIdentifier.normalized_value == normalize_ip_identifier(str(number)),
             IpIdentifier.effective_until.is_(None),
@@ -517,6 +528,8 @@ def link_official_search_import(
         select(TrademarkApplication).where(
             TrademarkApplication.id == payload.application_id,
             TrademarkApplication.company_id == locked.company.id,
+            TrademarkApplication.jurisdiction == IPINDIA_JURISDICTION,
+            TrademarkApplication.office == IPINDIA_OFFICE,
         )
     )
     match_ids = {match.application_id for match in _matches(session, context=locked, row=row)}
@@ -565,86 +578,83 @@ def link_official_search_import(
         "matched_on": "application_number",
         "method": "exact_identifier_after_lawyer_confirmation",
     }
-    if link is None:
-        link = create_registry_link(
-            session,
-            context=locked,
-            docket_id=application.docket_id,
-            payload=IpRegistryLinkCreateRequest(
-                application_id=application.id,
-                provider_key=REGISTRY_PROVIDER_KEY,
-                office=application.office,
-                jurisdiction=application.jurisdiction,
-                identifier_kind="application",
-                raw_identifier=number,
-                source_url=official_url,
-                match_confidence=Decimal("1"),
-                match_evidence=evidence,
-                terms_version=None,
-                capability_version="assisted-official-page-v1",
-            ),
-        )
-    if link.match_status == "candidate":
-        link = decide_registry_match(
+    # The import row stays locked from the version check above to the single
+    # commit below, so registry evidence and the import's resolution are
+    # published together or not at all.
+    try:
+        if link is None:
+            link = create_registry_link(
+                session,
+                context=locked,
+                docket_id=application.docket_id,
+                payload=IpRegistryLinkCreateRequest(
+                    application_id=application.id,
+                    provider_key=REGISTRY_PROVIDER_KEY,
+                    office=application.office,
+                    jurisdiction=application.jurisdiction,
+                    identifier_kind="application",
+                    raw_identifier=number,
+                    source_url=official_url,
+                    match_confidence=Decimal("1"),
+                    match_evidence=evidence,
+                    terms_version=None,
+                    capability_version="assisted-official-page-v1",
+                ),
+                commit=False,
+            )
+        if link.match_status == "candidate":
+            link = decide_registry_match(
+                session,
+                context=locked,
+                link_id=link.id,
+                payload=IpRegistryLinkMatchDecisionRequest(
+                    expected_version=link.version,
+                    decision="confirm",
+                    reason=(
+                        "Application number read from the official IP India page matches "
+                        f"this record (official search import {import_row_id})."
+                    ),
+                ),
+                commit=False,
+            )
+        result = record_manual_snapshot(
             session,
             context=locked,
             link_id=link.id,
-            payload=IpRegistryLinkMatchDecisionRequest(
-                expected_version=link.version,
-                decision="confirm",
-                reason=(
-                    "Application number read from the official IP India page matches this "
-                    f"record (official search import {import_row_id})."
-                ),
+            payload=IpRegistryManualSnapshotRequest(
+                expected_link_version=link.version,
+                idempotency_key=f"official-page-{import_row_id}",
+                source_url=official_url,
+                source_retrieved_at=uploaded_at,
+                parser_version=PARSER_VERSION,
+                schema_version=1,
+                attribution={
+                    "publisher": IPINDIA_CREDIT,
+                    "capture_method": CAPTURE_METHOD,
+                    "source_kind": row.source_kind,
+                },
+                raw_snapshot={
+                    "capture_method": CAPTURE_METHOD,
+                    "source_kind": row.source_kind,
+                    "official_search_import_id": import_row_id,
+                    "file_sha256": row.file_sha256,
+                    "byte_size": row.byte_size,
+                    "content_kind": row.content_kind,
+                    "original_filename": row.original_filename,
+                    "published_values": row.published_values_json or {},
+                    "review_items": row.review_items_json or [],
+                },
+                normalized_snapshot=_register_record(link.accepted_state_json or {}, row),
             ),
+            commit=False,
         )
-    row = _row_or_404(session, context=locked, import_id=import_row_id)
-    result = record_manual_snapshot(
-        session,
-        context=locked,
-        link_id=link.id,
-        payload=IpRegistryManualSnapshotRequest(
-            expected_link_version=link.version,
-            idempotency_key=f"official-page-{import_row_id}",
-            source_url=official_url,
-            source_retrieved_at=uploaded_at,
-            parser_version=PARSER_VERSION,
-            schema_version=1,
-            attribution={
-                "publisher": IPINDIA_CREDIT,
-                "capture_method": CAPTURE_METHOD,
-                "source_kind": row.source_kind,
-            },
-            raw_snapshot={
-                "capture_method": CAPTURE_METHOD,
-                "source_kind": row.source_kind,
-                "official_search_import_id": import_row_id,
-                "file_sha256": row.file_sha256,
-                "byte_size": row.byte_size,
-                "content_kind": row.content_kind,
-                "original_filename": row.original_filename,
-                "published_values": row.published_values_json or {},
-                "review_items": row.review_items_json or [],
-            },
-            normalized_snapshot=_register_record(link.accepted_state_json or {}, row),
-        ),
-    )
-    locked = _lock_ip_writer_context(
-        session, context=context, required_capability="ip:registry_sync"
-    )
-    row = _row_or_404(session, context=locked, import_id=import_row_id, for_update=True)
-    snapshot_id = result.snapshot.id if result.snapshot else None
-    if row.resolution_status == "linked" and row.registry_snapshot_id == snapshot_id:
-        session.rollback()
-    else:
-        _assert_open(row, payload.expected_version)
-        now = _now()
+        snapshot_id = result.snapshot.id if result.snapshot else None
         row.resolution_status = "linked"
         row.linked_docket_id = application.docket_id
         row.linked_application_id = application.id
         row.registry_snapshot_id = snapshot_id
         row.resolved_by_membership_id = locked.membership.id
-        row.resolved_at = now
+        row.resolved_at = _now()
         row.version += 1
         record_from_context(
             session,
@@ -664,6 +674,9 @@ def link_official_search_import(
             },
         )
         session.commit()
+    except BaseException:
+        session.rollback()
+        raise
     row = _row_or_404(session, context=locked, import_id=import_row_id)
     return IpOfficialSearchLinkResponse(
         record=_record(session, context=locked, row=row),
@@ -701,8 +714,8 @@ def stage_official_search_import(
     values: dict[str, Any] = {
         "Title": (payload.title or "").strip() or fields.get("mark") or number,
         "Application Number": number,
-        "Jurisdiction": "IN",
-        "Office": "IP India",
+        "Jurisdiction": IPINDIA_JURISDICTION,
+        "Office": IPINDIA_OFFICE,
         "S No": f"official-page:{row.id}",
     }
     optional = {
@@ -713,38 +726,40 @@ def stage_official_search_import(
         "Status": fields.get("status"),
     }
     values.update({key: value for key, value in optional.items() if value})
-    import_row_id = row.id
-    expected_version = row.version
-    job = create_ip_import_job(
-        session,
-        context=locked,
-        payload=IpParsedImportJobCreateRequest(
-            filename=row.original_filename,
-            rows=[IpImportRowInput(row_number=1, values=values)],
-            source_sha256=row.file_sha256,
-        ),
-    )
-    locked = _lock_ip_writer_context(session, context=context, required_capability="ip:write")
-    row = _row_or_404(session, context=locked, import_id=import_row_id, for_update=True)
-    _assert_open(row, expected_version)
-    row.resolution_status = "staged_new_record"
-    row.import_job_id = job.job.id
-    row.resolved_by_membership_id = locked.membership.id
-    row.resolved_at = _now()
-    row.version += 1
-    record_from_context(
-        session,
-        locked,
-        action="ip_official_search.new_record_staged",
-        target_type="ip_official_search_import",
-        target_id=row.id,
-        metadata={
-            "import_job_id": job.job.id,
-            "file_sha256": row.file_sha256,
-            "external_call": False,
-        },
-    )
-    session.commit()
+    # The preview job and the import's resolution commit together while the
+    # import row stays locked, so a concurrent dismissal leaves no orphan job.
+    try:
+        job = create_ip_import_job(
+            session,
+            context=locked,
+            payload=IpParsedImportJobCreateRequest(
+                filename=row.original_filename,
+                rows=[IpImportRowInput(row_number=1, values=values)],
+                source_sha256=row.file_sha256,
+            ),
+            commit=False,
+        )
+        row.resolution_status = "staged_new_record"
+        row.import_job_id = job.job.id
+        row.resolved_by_membership_id = locked.membership.id
+        row.resolved_at = _now()
+        row.version += 1
+        record_from_context(
+            session,
+            locked,
+            action="ip_official_search.new_record_staged",
+            target_type="ip_official_search_import",
+            target_id=row.id,
+            metadata={
+                "import_job_id": job.job.id,
+                "file_sha256": row.file_sha256,
+                "external_call": False,
+            },
+        )
+        session.commit()
+    except BaseException:
+        session.rollback()
+        raise
     session.refresh(row)
     return _record(session, context=locked, row=row)
 

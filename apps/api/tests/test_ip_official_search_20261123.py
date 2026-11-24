@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     IpRegistryDiff,
     IpRegistryLink,
     IpRegistrySnapshot,
+    IpRegistrySyncAttempt,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import ip_official_search as service
@@ -581,3 +582,158 @@ def test_matches_and_linked_imports_respect_restricted_dockets(client: TestClien
     assert client.get("/api/ip/official-search/imports", headers=member_headers).json()[
         "total"
     ] == 0
+
+
+def _foreign_numbered_application(client: TestClient, headers: dict[str, str]) -> dict:
+    """A USPTO application that carries the same digits as the Indian one."""
+
+    docket = _docket(client, headers, "SYNTHETIC FOREIGN ASTRA")
+    asset = client.post(
+        f"/api/ip/dockets/{docket['id']}/assets",
+        headers=headers,
+        json={"asset_kind": "trademark", "jurisdiction": "US", "title": "SYNTHETIC ASTRA"},
+    )
+    assert asset.status_code == 201, asset.text
+    created = client.post(
+        f"/api/ip/dockets/{docket['id']}/applications",
+        headers=headers,
+        json={
+            "asset_id": asset.json()["id"],
+            "office": "USPTO",
+            "jurisdiction": "US",
+            "filing_phase": "draft",
+            "source_pending_identifier_allocation": False,
+        },
+    )
+    assert created.status_code == 201, created.text
+    application = created.json()["application"]
+    identifier = client.post(
+        f"/api/ip/dockets/{docket['id']}/identifiers",
+        headers=headers,
+        json={
+            "identifier_kind": "application",
+            "raw_value": NUMBER,
+            "office": "USPTO",
+            "jurisdiction": "US",
+            "source": "manual_fixture",
+            "effective_from": "2024-03-14",
+            "is_primary": True,
+            "application_id": application["id"],
+        },
+    )
+    assert identifier.status_code == 201, identifier.text
+    return application
+
+
+def test_same_numbered_foreign_application_is_never_offered_linked_or_blocking(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    foreign = _foreign_numbered_application(client, headers)
+    record = _upload(client, headers).json()["record"]
+    assert record["matches"] == []
+    linked = client.post(
+        f"/api/ip/official-search/imports/{record['id']}/link",
+        headers=headers,
+        json={"expected_version": 1, "application_id": foreign["id"]},
+    )
+    assert linked.status_code == 422
+    assert "official_search_target_mismatch" in linked.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(IpRegistryLink.id)) is None
+    # The foreign record does not stop the Indian application being staged.
+    staged = client.post(
+        f"/api/ip/official-search/imports/{record['id']}/stage-new-record",
+        headers=headers,
+        json={"expected_version": 1},
+    )
+    assert staged.status_code == 200, staged.text
+
+
+def test_indian_application_is_offered_beside_a_same_numbered_foreign_one(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    _foreign_numbered_application(client, headers)
+    _, application = _numbered_application(client, headers, "SYNTHETIC ASTRA")
+    record = _upload(client, headers).json()["record"]
+    assert [match["application_id"] for match in record["matches"]] == [application["id"]]
+
+
+def test_link_failure_after_registry_writes_leaves_no_registry_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from caseops_api.services import ip_registry
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    company_id = str(bootstrap["company"]["id"])
+    _, application = _numbered_application(client, headers, "SYNTHETIC ASTRA")
+    record = _upload(client, headers).json()["record"]
+    real_snapshot = ip_registry.record_manual_snapshot
+
+    def snapshot_then_fail(*args, **kwargs):
+        # The link, match decision and snapshot are written before the import
+        # resolves; a failure here must leave none of them behind.
+        real_snapshot(*args, **kwargs)
+        raise HTTPException(status_code=409, detail="This import changed; reload it.")
+
+    monkeypatch.setattr(ip_registry, "record_manual_snapshot", snapshot_then_fail)
+    failed = client.post(
+        f"/api/ip/official-search/imports/{record['id']}/link",
+        headers=headers,
+        json={"expected_version": 1, "application_id": application["id"]},
+    )
+    assert failed.status_code == 409
+    with get_session_factory()() as session:
+        assert session.scalar(select(IpRegistryLink.id)) is None
+        assert session.scalar(select(IpRegistrySnapshot.id)) is None
+        assert session.scalar(select(IpRegistrySyncAttempt.id)) is None
+        row = session.get(IpOfficialSearchImport, record["id"])
+        assert row is not None
+        assert (row.resolution_status, row.version, row.registry_snapshot_id) == (
+            "pending",
+            1,
+            None,
+        )
+    assert _audit(company_id, "ip_registry.link_created") == []
+    assert _audit(company_id, "ip_registry.snapshot_recorded") == []
+    monkeypatch.setattr(ip_registry, "record_manual_snapshot", real_snapshot)
+    linked = client.post(
+        f"/api/ip/official-search/imports/{record['id']}/link",
+        headers=headers,
+        json={"expected_version": 1, "application_id": application["id"]},
+    )
+    assert linked.status_code == 200, linked.text
+    assert len(_audit(company_id, "ip_registry.link_created")) == 1
+
+
+def test_stage_failure_after_the_preview_job_leaves_no_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from caseops_api.services import ip_imports
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    company_id = str(bootstrap["company"]["id"])
+    record = _upload(client, headers).json()["record"]
+    real_create = ip_imports.create_ip_import_job
+
+    def create_then_fail(*args, **kwargs):
+        real_create(*args, **kwargs)
+        raise HTTPException(status_code=409, detail="This import changed; reload it.")
+
+    monkeypatch.setattr(ip_imports, "create_ip_import_job", create_then_fail)
+    failed = client.post(
+        f"/api/ip/official-search/imports/{record['id']}/stage-new-record",
+        headers=headers,
+        json={"expected_version": 1},
+    )
+    assert failed.status_code == 409
+    with get_session_factory()() as session:
+        assert session.scalar(select(BulkImportJob.id)) is None
+        row = session.get(IpOfficialSearchImport, record["id"])
+        assert row is not None and (row.resolution_status, row.version) == ("pending", 1)
+    assert _audit(company_id, "ip.import.staged") == []

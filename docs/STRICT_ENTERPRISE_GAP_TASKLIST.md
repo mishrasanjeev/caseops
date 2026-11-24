@@ -6092,6 +6092,18 @@ governance map/projection, OpenAPI types and tests land on branch
   composite company foreign keys and wall-aware reads; audit rows for import,
   link, staging and dismissal; linking through the canonical IPLF-051 registry
   writers and staging through the canonical portfolio import owner.
+- **Review fixes (2026-11-24, PR #641):** matches and links are limited to
+  IP India applications (`IN`/`IP India`), so a same-numbered foreign
+  application is never offered, linked or allowed to block staging. Linking
+  and staging now commit the registry link, match decision, snapshot or
+  preview job together with the import's resolution while the import row stays
+  locked; a failure leaves no registry evidence or orphan job. The downgrade
+  takes an `ACCESS EXCLUSIVE` lock on PostgreSQL before its emptiness check, and
+  a local PostgreSQL test proves an upload committed while the downgrade waits
+  is kept (it is dropped without the lock). The page shows link controls for a
+  staged page and reads older imports with Load more and the server total.
+  Tests: `test_ip_official_search_20261123` (four new cases),
+  `test_ip_official_search_migration_20261123`, `page.test.tsx` (two new cases).
 - **Partially implemented:** the parser is validated only against synthetic
   pages shaped from IP India's published field labels. No real saved e-status,
   e-register or public-search page was available (the pages are CAPTCHA/OTP

@@ -162,6 +162,49 @@ describe("IPLF-052D official trade mark search page", () => {
     expect(link).toHaveAttribute("href", "/app/ip/portfolio/imports?job=job-1");
   });
 
+  it("lets a staged page link to its newly created record", async () => {
+    const user = userEvent.setup();
+    linkMock.mockResolvedValue({ record: RECORD, registry_link_id: "link-1", diff_count: 0, no_change: true });
+    listMock.mockResolvedValue({
+      records: [{ ...RECORD, resolution_status: "staged_new_record", import_job_id: "job-1", version: 2 }],
+      total: 1,
+      limit: 25,
+      offset: 0,
+    });
+    renderPage();
+    await screen.findByRole("link", { name: "Review and confirm the staged record" });
+    await user.click(screen.getByRole("button", { name: "Link as registry evidence" }));
+    await waitFor(() => expect(linkMock).toHaveBeenCalledTimes(1));
+    expect(linkMock.mock.calls[0][0]).toEqual({ importId: "import-1", expectedVersion: 2, applicationId: "application-1" });
+  });
+
+  it("reads older imports on request with the server total until the last page", async () => {
+    const user = userEvent.setup();
+    const older = (id: string, sha: string) => ({ ...RECORD, id, file_sha256: sha.repeat(64), matches: [], review_items: [] });
+    // The page that still needs a decision is the oldest, on the third page.
+    const pages = [
+      [older("import-new", "c")],
+      [older("import-mid", "d")],
+      [{ ...RECORD, id: "import-oldest" }],
+    ];
+    listMock.mockImplementation(async ({ offset = 0 }: { offset?: number } = {}) => ({
+      records: pages[offset],
+      total: 3,
+      limit: 1,
+      offset,
+    }));
+    renderPage();
+    expect(await screen.findByText("Showing 1 of 3 imported pages")).toBeInTheDocument();
+    expect(screen.queryByText("SYNTHETIC ASTRA")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more imported pages" }));
+    expect(await screen.findByText("Showing 2 of 3 imported pages")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more imported pages" }));
+    expect(await screen.findByText("SYNTHETIC ASTRA")).toBeInTheDocument();
+    expect(screen.getByText("Showing 3 of 3 imported pages")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more imported pages" })).not.toBeInTheDocument();
+    expect(listMock.mock.calls.map(([options]) => options.offset)).toEqual([0, 1, 2]);
+  });
+
   it("requires IP read access", () => {
     capabilityMock.mockReturnValue(false);
     renderPage();

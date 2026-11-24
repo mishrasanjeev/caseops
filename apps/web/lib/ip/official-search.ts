@@ -7,6 +7,9 @@
  * upload; TMview is a pre-search aid only and is never imported.
  */
 
+import { ipListRows, nextIpListOffset } from "@/lib/api/endpoints";
+import type { IpOfficialSearchImport, IpOfficialSearchImportPage } from "@/lib/api/ip-official-search";
+
 export type OfficialSearchKind =
   | "ipindia_estatus"
   | "ipindia_eregister"
@@ -199,4 +202,16 @@ export function fieldText(field: string, value: unknown): string {
       .join(", ");
   }
   return String(value);
+}
+
+/** Offset of the next page of imports, or undefined once the server total is shown. */
+export function nextImportsOffset(page: IpOfficialSearchImportPage): number | undefined {
+  return nextIpListOffset({ ...page, items: page.records });
+}
+
+/** Imports from every page read so far, first occurrence kept. */
+export function importRows(
+  pages: readonly IpOfficialSearchImportPage[] | undefined,
+): IpOfficialSearchImport[] {
+  return ipListRows(pages?.map((page) => ({ ...page, items: page.records })));
 }

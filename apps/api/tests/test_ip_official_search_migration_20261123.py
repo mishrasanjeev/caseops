@@ -1,5 +1,7 @@
 """IPLF-052D migration: tenant keys are exact and retained lineage blocks downgrade."""
 
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, datetime
 
 import pytest
@@ -118,3 +120,34 @@ def test_official_search_migration_tenant_keys_and_retained_downgrade(
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
             assert connection.execute(select(IpOfficialSearchImport.__table__)).all() == before
+
+
+@pytest.mark.postgres
+def test_downgrade_waits_for_an_open_upload_and_keeps_its_committed_row(
+    tmp_path, monkeypatch
+):
+    """An upload that commits while the downgrade waits is retained, not dropped."""
+
+    with fresh_engine("postgres", tmp_path) as engine:
+        config = migration_config(engine, monkeypatch)
+        command.upgrade(config, HEAD)
+        with Session(engine) as seed:
+            company = _seed_company(seed)
+            member = _seed_membership(seed, company)
+            seed.commit()
+        writer = Session(engine)
+        try:
+            writer.add(_row(company, member, "e" * 64))
+            writer.flush()  # holds the upload's row lock, uncommitted
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                downgrade = executor.submit(command.downgrade, config, PREVIOUS)
+                with pytest.raises(FutureTimeoutError):
+                    downgrade.result(timeout=1)
+                writer.commit()
+                with pytest.raises(RuntimeError, match=REFUSAL):
+                    downgrade.result(timeout=30)
+        finally:
+            writer.close()
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+            assert connection.scalar(text(f"SELECT count(*) FROM {TABLE}")) == 1

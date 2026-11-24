@@ -829,6 +829,7 @@ def create_ip_import_job(
     *,
     context: SessionContext,
     payload: IpImportJobCreateRequest,
+    commit: bool = True,
 ) -> IpImportPreviewResponse:
     """Stage and validate rows; nothing is written to the portfolio yet."""
 
@@ -907,7 +908,10 @@ def create_ip_import_job(
             "invalid_rows": invalid,
         },
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(job)
     return IpImportPreviewResponse(
         job=_job_record(job),

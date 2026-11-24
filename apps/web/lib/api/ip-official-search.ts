@@ -47,8 +47,12 @@ export type IpOfficialSearchImportPage = {
 
 const BASE = "/api/ip/official-search/imports";
 
-export async function listIpOfficialSearchImports(): Promise<IpOfficialSearchImportPage> {
-  return apiRequest(`${BASE}?limit=25`);
+/** One page of imports, newest first; older pages are read on request. */
+export async function listIpOfficialSearchImports(
+  options: { offset?: number; signal?: AbortSignal } = {},
+): Promise<IpOfficialSearchImportPage> {
+  const offset = options.offset ?? 0;
+  return apiRequest(`${BASE}?limit=25&offset=${offset}`, { signal: options.signal });
 }
 
 export async function uploadIpOfficialSearchPage(input: {

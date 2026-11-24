@@ -327,6 +327,7 @@ def create_registry_link(
     context: SessionContext,
     docket_id: str,
     payload: IpRegistryLinkCreateRequest,
+    commit: bool = True,
 ) -> IpRegistryLink:
     locked_context = _lock_ip_writer_context(
         session,
@@ -422,7 +423,10 @@ def create_registry_link(
             "external_call": False,
         },
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(row)
     return row
 
@@ -433,6 +437,7 @@ def decide_registry_match(
     context: SessionContext,
     link_id: str,
     payload: IpRegistryLinkMatchDecisionRequest,
+    commit: bool = True,
 ) -> IpRegistryLink:
     locked_context = _lock_ip_writer_context(
         session, context=context, required_capability="ip:registry_sync"
@@ -459,7 +464,10 @@ def decide_registry_match(
         ip_docket_id=link.docket_id,
         metadata={"reason": payload.reason, "match_status": next_status},
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(link)
     return link
 
@@ -534,6 +542,7 @@ def record_manual_snapshot(
     context: SessionContext,
     link_id: str,
     payload: IpRegistryManualSnapshotRequest,
+    commit: bool = True,
 ) -> IpRegistrySnapshotResult:
     _assert_snapshot_size(payload.raw_snapshot, payload.normalized_snapshot)
     locked_context = _lock_ip_writer_context(
@@ -715,7 +724,10 @@ def record_manual_snapshot(
             "supersedes_snapshot_id": payload.supersedes_snapshot_id,
         },
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(link)
     session.refresh(attempt)
     session.refresh(snapshot)

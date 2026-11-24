@@ -1,12 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, FileUp } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 
+import { IpListMore } from "@/components/ip/IpListMore";
+import { showIpListError } from "@/components/ip/ip-list-query-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -32,6 +34,8 @@ import {
   OFFICIAL_SEARCH_ORDER,
   entrySteps,
   fieldText,
+  importRows,
+  nextImportsOffset,
   officialSearchUrl,
   queryProblem,
   reviewReasonText,
@@ -260,7 +264,7 @@ function ImportItem({ record, canLink, canWrite }: { record: IpOfficialSearchImp
           </ul>
         </div>
       ) : null}
-      {record.resolution_status === "pending" && record.matches.length > 0 ? (
+      {open && record.matches.length > 0 ? (
         <div className="flex min-w-0 flex-col gap-2">
           <p className="text-sm">The application number matches {record.matches.length === 1 ? "this record" : "these records"}:</p>
           <ul className="flex flex-col gap-2">
@@ -359,7 +363,14 @@ export default function OfficialSearchPage() {
   const canLink = useCapability("ip:registry_sync");
   const [kind, setKind] = useState<OfficialSearchKind>("ipindia_estatus");
   const [query, setQuery] = useState<OfficialSearchQuery>({ applicationNumber: "", wordMark: "", niceClass: "" });
-  const imports = useQuery({ queryKey: IMPORTS_KEY, queryFn: listIpOfficialSearchImports, enabled: canRead });
+  const imports = useInfiniteQuery({
+    queryKey: IMPORTS_KEY,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => listIpOfficialSearchImports({ offset: pageParam, signal }),
+    getNextPageParam: nextImportsOffset,
+    enabled: canRead,
+  });
+  const records = importRows(imports.data?.pages);
 
   if (!canRead) {
     return (
@@ -449,19 +460,30 @@ export default function OfficialSearchPage() {
         <h2 id={`${id}-imports`} className="text-base font-semibold">Imported pages</h2>
         {imports.isPending ? (
           <Skeleton className="h-24 w-full" />
-        ) : imports.isError ? (
+        ) : showIpListError(imports) ? (
           <QueryErrorState error={imports.error} onRetry={() => void imports.refetch()} />
-        ) : imports.data.records.length === 0 ? (
+        ) : records.length === 0 ? (
           <p className="max-w-[70ch] text-sm text-[var(--color-mute)]">
             No pages imported yet. Each page you bring back from IP India appears here with what
             was read, what needs review, and its source lineage.
           </p>
         ) : (
-          <ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">
-            {imports.data.records.map((record) => (
-              <ImportItem key={record.id} record={record} canLink={canLink} canWrite={canWrite} />
-            ))}
-          </ul>
+          <>
+            <ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">
+              {records.map((record) => (
+                <ImportItem key={record.id} record={record} canLink={canLink} canWrite={canWrite} />
+              ))}
+            </ul>
+            <IpListMore
+              shown={records.length}
+              total={imports.data?.pages.at(-1)?.total ?? 0}
+              noun="imported pages"
+              hasMore={imports.hasNextPage}
+              loading={imports.isFetchingNextPage}
+              failed={imports.isFetchNextPageError}
+              onMore={() => void imports.fetchNextPage()}
+            />
+          </>
         )}
       </section>
     </div>

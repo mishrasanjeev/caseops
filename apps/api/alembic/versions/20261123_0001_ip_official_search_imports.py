@@ -143,6 +143,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        # Exclude writers before the emptiness check and hold the lock through
+        # the drop, so an upload cannot commit in between. The migration
+        # connection's lock_timeout bounds the wait.
+        op.execute(sa.text(f'LOCK TABLE "{TABLE}" IN ACCESS EXCLUSIVE MODE'))
     if bind.scalar(sa.text(f"SELECT 1 FROM {TABLE} LIMIT 1")) is not None:
         raise RuntimeError(
             f"{TABLE} holds retained official-page lineage; restore-forward only"
