@@ -7581,6 +7581,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/official-search/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Official Search Imports */
+        get: operations["official_search_imports_api_ip_official_search_imports_get"];
+        put?: never;
+        /** Upload Official Search Page */
+        post: operations["upload_official_search_page_api_ip_official_search_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/official-search/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Official Search Import */
+        get: operations["official_search_import_api_ip_official_search_imports__import_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/official-search/imports/{import_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Official Search Page */
+        post: operations["dismiss_official_search_page_api_ip_official_search_imports__import_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/official-search/imports/{import_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link Official Search Page */
+        post: operations["link_official_search_page_api_ip_official_search_imports__import_id__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/official-search/imports/{import_id}/stage-new-record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stage Official Search Page */
+        post: operations["stage_official_search_page_api_ip_official_search_imports__import_id__stage_new_record_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/operational-deadlines": {
         parameters: {
             query?: never;
@@ -18019,6 +18105,13 @@ export interface components {
         Body_preview_current_company_matter_import_api_matters_imports_preview_post: {
             /** File */
             file: string;
+        };
+        /** Body_upload_official_search_page_api_ip_official_search_imports_post */
+        Body_upload_official_search_page_api_ip_official_search_imports_post: {
+            /** Metadata Json */
+            metadata_json: string;
+            /** Upload */
+            upload: string;
         };
         /** BootstrapCompanyRequest */
         BootstrapCompanyRequest: {
@@ -31924,6 +32017,151 @@ export interface components {
              * @default 0
              */
             suppressed_count: number;
+        };
+        /** IpOfficialSearchDismissRequest */
+        IpOfficialSearchDismissRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+        };
+        /** IpOfficialSearchImportPage */
+        IpOfficialSearchImportPage: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Records */
+            records: components["schemas"]["IpOfficialSearchImportRecord"][];
+            /** Total */
+            total: number;
+        };
+        /** IpOfficialSearchImportRecord */
+        IpOfficialSearchImportRecord: {
+            /** Attribution */
+            attribution: string;
+            /** Byte Size */
+            byte_size: number;
+            /**
+             * Content Kind
+             * @enum {string}
+             */
+            content_kind: "html" | "pdf";
+            /** Fields */
+            fields: {
+                [key: string]: unknown;
+            };
+            /** File Sha256 */
+            file_sha256: string;
+            /** Id */
+            id: string;
+            /** Import Job Id */
+            import_job_id: string | null;
+            /** Linked Application Id */
+            linked_application_id: string | null;
+            /** Linked Docket Id */
+            linked_docket_id: string | null;
+            /** Matches */
+            matches?: components["schemas"]["IpOfficialSearchMatch"][];
+            /** Official Url */
+            official_url: string;
+            /** Original Filename */
+            original_filename: string;
+            /**
+             * Parse Status
+             * @enum {string}
+             */
+            parse_status: "parsed" | "needs_review" | "unreadable";
+            /** Parser Version */
+            parser_version: string;
+            /** Published Values */
+            published_values: {
+                [key: string]: string;
+            };
+            /** Registry Snapshot Id */
+            registry_snapshot_id: string | null;
+            /** Resolution Reason */
+            resolution_reason: string | null;
+            /**
+             * Resolution Status
+             * @enum {string}
+             */
+            resolution_status: "pending" | "linked" | "staged_new_record" | "dismissed";
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Review Items */
+            review_items: components["schemas"]["IpOfficialSearchReviewItem"][];
+            /** Search Query */
+            search_query: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "ipindia_estatus" | "ipindia_eregister" | "ipindia_public_search";
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /** Uploaded By Label */
+            uploaded_by_label: string | null;
+            /** Uploaded By Membership Id */
+            uploaded_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
+        /** IpOfficialSearchLinkRequest */
+        IpOfficialSearchLinkRequest: {
+            /** Application Id */
+            application_id: string;
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** IpOfficialSearchLinkResponse */
+        IpOfficialSearchLinkResponse: {
+            /** Diff Count */
+            diff_count: number;
+            /** No Change */
+            no_change: boolean;
+            record: components["schemas"]["IpOfficialSearchImportRecord"];
+            /** Registry Link Id */
+            registry_link_id: string;
+        };
+        /** IpOfficialSearchMatch */
+        IpOfficialSearchMatch: {
+            /** Application Id */
+            application_id: string;
+            /** Application Number */
+            application_number: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+        };
+        /** IpOfficialSearchReviewItem */
+        IpOfficialSearchReviewItem: {
+            /** Field */
+            field: string;
+            /** Reason */
+            reason: string;
+        };
+        /** IpOfficialSearchStageRequest */
+        IpOfficialSearchStageRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Title */
+            title?: string | null;
+        };
+        /** IpOfficialSearchUploadResponse */
+        IpOfficialSearchUploadResponse: {
+            /**
+             * Duplicate Upload
+             * @default false
+             */
+            duplicate_upload: boolean;
+            record: components["schemas"]["IpOfficialSearchImportRecord"];
         };
         /** IpOperationalDeadlineCreateRequest */
         IpOperationalDeadlineCreateRequest: {
@@ -67298,6 +67536,207 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NiceClassCatalogueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    official_search_imports_api_ip_official_search_imports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchImportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_official_search_page_api_ip_official_search_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_official_search_page_api_ip_official_search_imports_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    official_search_import_api_ip_official_search_imports__import_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchImportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_official_search_page_api_ip_official_search_imports__import_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOfficialSearchDismissRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchImportRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_official_search_page_api_ip_official_search_imports__import_id__link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOfficialSearchLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_official_search_page_api_ip_official_search_imports__import_id__stage_new_record_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOfficialSearchStageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOfficialSearchImportRecord"];
                 };
             };
             /** @description Validation Error */

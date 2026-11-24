@@ -281,6 +281,9 @@ export default function IpRegistryPage() {
             >
               <BookOpen className="h-4 w-4" aria-hidden />
             </a>
+            <Button href="/app/ip/official-search" variant="outline" size="sm">
+              Official search
+            </Button>
             <Button
               variant="outline"
               size="sm"

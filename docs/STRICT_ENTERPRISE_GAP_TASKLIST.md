@@ -6078,6 +6078,47 @@ plus real validator proof. Complete replacement coverage now expects 3,256
 cases in 316 files, with the same 792 browser metadata identities. All new
 compile, CI, production and recovery evidence remains pending.
 
+## November 23 - assisted official trade mark search and TMview pre-search (IPLF-052D)
+
+**Partially implemented.** UJ-07/UJ-31, IP-REG-02/03, IP-CLR-02/03. Code,
+migration `20261123_0001` (down_revision `20261122_0631`, the current `main` head),
+governance map/projection, OpenAPI types and tests land on branch
+`feat/ip-assisted-search-tmview`; nothing is merged, deployed or migrated.
+
+- **Implemented in code:** assisted IP India search links and entry steps; saved
+  page upload with extension/content-type/signature checks, a 5 MB cap, the
+  existing ClamAV path (fail-closed where scanning is required) and HTML read as
+  untrusted visible text; review-first parsing; tenant-scoped lineage rows with
+  composite company foreign keys and wall-aware reads; audit rows for import,
+  link, staging and dismissal; linking through the canonical IPLF-051 registry
+  writers and staging through the canonical portfolio import owner.
+- **Review fixes (2026-11-24, PR #641):** matches and links are limited to
+  IP India applications (`IN`/`IP India`), so a same-numbered foreign
+  application is never offered, linked or allowed to block staging. Linking
+  and staging now commit the registry link, match decision, snapshot or
+  preview job together with the import's resolution while the import row stays
+  locked; a failure leaves no registry evidence or orphan job. The downgrade
+  takes an `ACCESS EXCLUSIVE` lock on PostgreSQL before its emptiness check, and
+  a local PostgreSQL test proves an upload committed while the downgrade waits
+  is kept (it is dropped without the lock). The page shows link controls for a
+  staged page and reads older imports with Load more and the server total.
+  Tests: `test_ip_official_search_20261123` (four new cases),
+  `test_ip_official_search_migration_20261123`, `page.test.tsx` (two new cases).
+- **Partially implemented:** the parser is validated only against synthetic
+  pages shaped from IP India's published field labels. No real saved e-status,
+  e-register or public-search page was available (the pages are CAPTCHA/OTP
+  gated and were not automated), so real-page label coverage is unverified and
+  the first real uploads should be reviewed field by field. The uploaded bytes
+  are not retained; the lawyer keeps the saved file, and CaseOps keeps its
+  SHA-256 and the values as published.
+- **Missing by design:** automated IP India status, register or public search,
+  and automated TMview querying. TMview's governing EUIPO legal notice opts out
+  of bot and scraper use and forbids substantial extraction, the site runs bot
+  defences, and EUIPO's sanctioned search API covers EU and WO marks only. There
+  is therefore no feature flag or kill switch: no automated path exists. The
+  TMview deep-link query parameters are taken from TMview's own route and are
+  unverified against the live site; the entry steps repeat the values.
+
 ## November 22 — private resume guard bounded control-plane reads
 
 ### EH-DEPLOY-05 - The private resume guard's execution and log reads exceeded their per-call deadline
