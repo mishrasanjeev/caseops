@@ -792,6 +792,12 @@ def test_known_principal_password_throttle_survives_requests(report_console):
         ),
         (
             "POST",
+            "/api/platform-console/auth/invitations/inspect",
+            {"token": "x" * 43},
+            401,
+        ),
+        (
+            "POST",
             "/api/platform-console/auth/invitations/resend",
             {"email": "missing@console.example"},
             200,

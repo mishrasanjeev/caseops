@@ -13730,6 +13730,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-console/auth/invitations/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Invitation */
+        post: operations["inspect_invitation_api_platform_console_auth_invitations_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-console/auth/invitations/resend": {
         parameters: {
             query?: never;
@@ -21203,11 +21220,29 @@ export interface components {
         /** ConsoleInviteCompleteRequest */
         ConsoleInviteCompleteRequest: {
             /** Full Name */
-            full_name: string;
+            full_name?: string | null;
             /** Password */
             password: string;
             /** Token */
             token: string;
+        };
+        /** ConsoleInviteInspectRequest */
+        ConsoleInviteInspectRequest: {
+            /** Token */
+            token: string;
+        };
+        /** ConsoleInviteInspectResponse */
+        ConsoleInviteInspectResponse: {
+            /**
+             * Account
+             * @enum {string}
+             */
+            account: "new" | "existing";
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** ConsoleInviteRequest */
         ConsoleInviteRequest: {
@@ -80996,6 +81031,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConsoleAuthState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_invitation_api_platform_console_auth_invitations_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleInviteInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleInviteInspectResponse"];
                 };
             };
             /** @description Validation Error */

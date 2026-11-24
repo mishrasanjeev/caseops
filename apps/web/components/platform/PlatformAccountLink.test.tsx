@@ -11,11 +11,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 vi.mock("@/lib/platform/session", () => ({ usePlatformSession: () => ({ accept }) }));
 vi.mock("@/lib/platform/client", async (load) => {
   const actual = await load<typeof import("@/lib/platform/client")>();
-  return { ...actual, platformApi: { acceptInvitation: vi.fn(), resendInvitation: vi.fn(), startReset: vi.fn(), completeReset: vi.fn() } };
+  return { ...actual, platformApi: { inspectInvitation: vi.fn(), acceptInvitation: vi.fn(), resendInvitation: vi.fn(), startReset: vi.fn(), completeReset: vi.fn() } };
 });
 
 describe("setup link recovery", () => {
-  beforeEach(() => { vi.clearAllMocks(); Object.values(platformApi).forEach((method) => vi.mocked(method).mockReset()); });
+  beforeEach(() => {
+    vi.clearAllMocks(); Object.values(platformApi).forEach((method) => vi.mocked(method).mockReset());
+    vi.mocked(platformApi.inspectInvitation).mockResolvedValue({ account: "new", email: "recipient@example.invalid" });
+  });
   afterEach(() => window.history.replaceState(null, "", "/"));
   it("offers explicit resend on a missing setup link without sending automatically", () => {
     window.history.replaceState(null, "", "/platform/setup");
@@ -29,7 +32,7 @@ describe("setup link recovery", () => {
     vi.mocked(platformApi.acceptInvitation).mockRejectedValue(new ConsoleError(401, "unauthorized"));
     vi.mocked(platformApi.resendInvitation).mockResolvedValue({ status: "accepted" });
     render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
-    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Recipient" } });
+    fireEvent.change(await screen.findByLabelText("Full name"), { target: { value: "Recipient" } });
     fireEvent.change(screen.getByLabelText("Password", { exact: true }), { target: { value: "ephemeral-input" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "ephemeral-input" } });
     fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
@@ -47,7 +50,7 @@ describe("setup link recovery", () => {
     window.history.replaceState(null, "", `/platform/setup#token=${"x".repeat(40)}`);
     vi.mocked(platformApi.acceptInvitation).mockRejectedValue(new TypeError("sensitive transport detail"));
     render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
-    fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Recipient" } });
+    fireEvent.change(await screen.findByLabelText("Full name"), { target: { value: "Recipient" } });
     fireEvent.change(screen.getByLabelText("Password", { exact: true }), { target: { value: "ephemeral-input" } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: "ephemeral-input" } });
     fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
@@ -61,11 +64,14 @@ describe("fresh setup/reset links without a page reload", () => {
   const freshAuth = { state: "mfa_enrollment_required" as const, admin: null, expires_at: "2099-01-01T00:00:00Z", recovery_codes: null };
   const oldToken = "a".repeat(40);
   const freshToken = "b".repeat(40);
-  beforeEach(() => { vi.clearAllMocks(); Object.values(platformApi).forEach((method) => vi.mocked(method).mockReset()); });
+  beforeEach(() => {
+    vi.clearAllMocks(); Object.values(platformApi).forEach((method) => vi.mocked(method).mockReset());
+    vi.mocked(platformApi.inspectInvitation).mockResolvedValue({ account: "new", email: "recipient@example.invalid" });
+  });
   afterEach(() => window.history.replaceState(null, "", "/"));
-  function fill(mode: "setup" | "reset", password = "form-input") {
-    if (mode === "setup") fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Fresh recipient" } });
-    fireEvent.change(screen.getByLabelText(mode === "setup" ? "Password" : "New password", { exact: true }), { target: { value: password } });
+  async function fill(mode: "setup" | "reset", password = "form-input") {
+    if (mode === "setup") fireEvent.change(await screen.findByLabelText("Full name"), { target: { value: "Fresh recipient" } });
+    fireEvent.change(await screen.findByLabelText(mode === "setup" ? "Password" : "New password", { exact: true }), { target: { value: password } });
     fireEvent.change(screen.getByLabelText("Confirm password"), { target: { value: password } });
   }
   function submit(mode: "setup" | "reset") {
@@ -74,7 +80,7 @@ describe("fresh setup/reset links without a page reload", () => {
   async function freshLink(mode: "setup" | "reset") {
     act(() => { window.location.hash = `token=${freshToken}`; });
     await waitFor(() => expect(window.location.hash).toBe(""));
-    expect(screen.getByRole("form", { name: mode === "setup" ? "Accept invitation" : "Platform password reset" })).toBeVisible();
+    expect(await screen.findByRole("form", { name: mode === "setup" ? "Accept invitation" : "Platform password reset" })).toBeVisible();
     expect(screen.getByLabelText(mode === "setup" ? "Password" : "New password", { exact: true })).toHaveValue("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -86,7 +92,7 @@ describe("fresh setup/reset links without a page reload", () => {
     vi.mocked(platformApi.acceptInvitation).mockRejectedValueOnce(new ConsoleError(401, "unauthorized")).mockResolvedValue(freshAuth);
     vi.mocked(platformApi.completeReset).mockRejectedValueOnce(new ConsoleError(401, "unauthorized")).mockResolvedValue({ status: "complete" });
     render(<PlatformLinkBoundary><PlatformAccountLink mode={mode} /></PlatformLinkBoundary>);
-    fill(mode); submit(mode);
+    await fill(mode); submit(mode);
     await screen.findByRole("alert");
     if (mode === "setup") {
       vi.mocked(platformApi.resendInvitation).mockResolvedValue({ status: "accepted" });
@@ -95,7 +101,7 @@ describe("fresh setup/reset links without a page reload", () => {
       await screen.findByRole("status");
     }
     await freshLink(mode);
-    fill(mode); submit(mode);
+    await fill(mode); submit(mode);
     if (mode === "setup") await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/platform/security"));
     else expect(await screen.findByRole("status")).toHaveTextContent("Password reset complete");
     const calls = mode === "setup" ? vi.mocked(platformApi.acceptInvitation).mock.calls : vi.mocked(platformApi.completeReset).mock.calls;
@@ -113,12 +119,12 @@ describe("fresh setup/reset links without a page reload", () => {
     vi.mocked(platformApi.completeReset).mockImplementationOnce(async () => { await pending; return { status: "complete" }; }).mockResolvedValue({ status: "complete" });
     window.history.replaceState(null, "", `/platform/${mode === "setup" ? "setup" : "reset-password"}#token=${oldToken}`);
     render(<PlatformLinkBoundary><PlatformAccountLink mode={mode} /></PlatformLinkBoundary>);
-    fill(mode); submit(mode);
+    await fill(mode); submit(mode);
     await freshLink(mode);
     const oldCall = mode === "setup" ? vi.mocked(platformApi.acceptInvitation).mock.calls[0] : vi.mocked(platformApi.completeReset).mock.calls[0];
     expect(oldCall[1]).toBeInstanceOf(AbortSignal);
     expect(oldCall[1]?.aborted).toBe(true);
-    fill(mode, "new-form-input");
+    await fill(mode, "new-form-input");
     await act(async () => { if (outcome === "success") finish(); else fail(new ConsoleError(401, "unauthorized")); await pending.catch(() => undefined); });
     expect(accept).not.toHaveBeenCalled(); expect(replace).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -127,5 +133,60 @@ describe("fresh setup/reset links without a page reload", () => {
     submit(mode);
     if (mode === "setup") await waitFor(() => expect(accept).toHaveBeenCalledExactlyOnceWith(freshAuth));
     else expect(await screen.findByRole("status")).toHaveTextContent("Password reset complete");
+  });
+});
+
+describe("invitation for an email that already has a CaseOps account", () => {
+  const token = "c".repeat(40);
+  const auth = { state: "mfa_enrollment_required" as const, admin: null, expires_at: "2099-01-01T00:00:00Z", recovery_codes: null };
+  beforeEach(() => {
+    vi.clearAllMocks(); Object.values(platformApi).forEach((method) => vi.mocked(method).mockReset());
+    vi.mocked(platformApi.inspectInvitation).mockResolvedValue({ account: "existing", email: "partner@firm.example" });
+    window.history.replaceState(null, "", `/platform/setup#token=${token}`);
+  });
+  afterEach(() => window.history.replaceState(null, "", "/"));
+  it("asks for the current CaseOps password only, never a new password or a name", async () => {
+    vi.mocked(platformApi.acceptInvitation).mockResolvedValue(auth);
+    render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
+    const password = await screen.findByLabelText("Current CaseOps password");
+    expect(password).toHaveAttribute("autocomplete", "current-password");
+    expect(screen.getByText("partner@firm.example")).toBeVisible();
+    expect(screen.getByText(/already has a CaseOps account/)).toBeVisible();
+    expect(screen.queryByLabelText("Full name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Confirm password")).not.toBeInTheDocument();
+    expect(platformApi.inspectInvitation).toHaveBeenCalledWith(token, expect.any(AbortSignal));
+    fireEvent.change(password, { target: { value: "current-input" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/platform/security"));
+    expect(platformApi.acceptInvitation).toHaveBeenCalledExactlyOnceWith({ token, password: "current-input" }, expect.any(AbortSignal));
+  });
+  it("keeps the link and the form after a wrong current password, and explains which password", async () => {
+    vi.mocked(platformApi.acceptInvitation).mockRejectedValueOnce(new ConsoleError(401, "existing_password_invalid")).mockResolvedValue(auth);
+    render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
+    fireEvent.change(await screen.findByLabelText("Current CaseOps password"), { target: { value: "wrong-input" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("not the current password for this CaseOps account");
+    expect(screen.queryByRole("form", { name: "Resend setup email" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Current CaseOps password"), { target: { value: "right-input" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Accept invitation" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/platform/security"));
+    expect(vi.mocked(platformApi.acceptInvitation).mock.calls.map(([body]) => body.token)).toEqual([token, token]);
+  });
+  it("shows resend recovery when inspection rejects the link, without ever submitting a password", async () => {
+    vi.mocked(platformApi.inspectInvitation).mockRejectedValue(new ConsoleError(401, "unauthorized"));
+    render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
+    expect(await screen.findByRole("form", { name: "Resend setup email" })).toBeVisible();
+    expect(screen.queryByRole("form", { name: "Accept invitation" })).not.toBeInTheDocument();
+    expect(platformApi.acceptInvitation).not.toHaveBeenCalled();
+    expect(platformApi.resendInvitation).not.toHaveBeenCalled();
+  });
+  it("offers an explicit re-check when inspection cannot reach the server", async () => {
+    vi.mocked(platformApi.inspectInvitation).mockRejectedValueOnce(new TypeError("sensitive transport detail"));
+    render(<PlatformLinkBoundary><PlatformAccountLink mode="setup" /></PlatformLinkBoundary>);
+    expect(await screen.findByRole("alert")).not.toHaveTextContent("sensitive transport detail");
+    expect(screen.queryByRole("form", { name: "Accept invitation" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check the link again" }));
+    expect(await screen.findByLabelText("Current CaseOps password")).toBeVisible();
+    expect(platformApi.inspectInvitation).toHaveBeenCalledTimes(2);
   });
 });

@@ -59,6 +59,7 @@ _PROTECTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _EXEMPT_PATHS = frozenset({
     "/api/platform-console/auth/login",
     "/api/platform-console/auth/invitations/complete",
+    "/api/platform-console/auth/invitations/inspect",
     "/api/platform-console/auth/invitations/resend",
     "/api/platform-console/auth/password-reset/start",
     "/api/platform-console/auth/password-reset/complete",

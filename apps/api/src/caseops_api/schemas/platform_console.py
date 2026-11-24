@@ -41,9 +41,23 @@ class ConsoleTokenCompleteRequest(ConsoleDTO):
 
 
 class ConsoleInviteCompleteRequest(ConsoleTokenCompleteRequest):
-    full_name: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
-    ]
+    # Required only when the invitation sets the account's first password; an
+    # existing CaseOps identity keeps its name and password unchanged.
+    full_name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+        | None
+    ) = None
+
+
+class ConsoleInviteInspectRequest(ConsoleDTO):
+    token: str = Field(min_length=32, max_length=256, repr=False)
+
+
+class ConsoleInviteInspectResponse(ConsoleDTO):
+    # "existing": the invitee confirms with the current CaseOps password for
+    # this email. "new": the invitee chooses a name and a first password.
+    account: Literal["new", "existing"]
+    email: EmailStr
 
 
 class ConsoleResetStartRequest(ConsoleDTO):
