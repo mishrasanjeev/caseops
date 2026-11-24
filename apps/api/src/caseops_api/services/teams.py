@@ -33,8 +33,8 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import (
-    _operational_ip_docket_role_membership_ids,
-    can_stably_access_ip_docket,
+    operational_ip_role_membership_ids_by_docket,
+    stably_accessible_ip_docket_ids,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -194,7 +194,8 @@ def _operational_ip_role_fence_snapshot(
         session, company_id=company_id, team_id=team_id,
     ):
         return {}
-    statement = select(IpDocketRecord).where(
+    # Columns, not entities: a tenant-wide fence must not load every docket.
+    statement = select(IpDocketRecord.id, IpDocketRecord.matter_id).where(
         IpDocketRecord.company_id == company_id,
         IpDocketRecord.is_active.is_(True),
         IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -202,13 +203,15 @@ def _operational_ip_role_fence_snapshot(
     )
     if linked_only:
         statement = statement.where(IpDocketRecord.matter_id.is_not(None))
-    dockets = list(session.scalars(statement.order_by(IpDocketRecord.id)))
+    dockets = session.execute(statement.order_by(IpDocketRecord.id)).all()
+    roles_by_docket = operational_ip_role_membership_ids_by_docket(
+        session,
+        company_id=company_id,
+        dockets={docket.id: docket.matter_id for docket in dockets},
+    )
     snapshot: dict[str, _IpRoleFenceEntry] = {}
     for docket in dockets:
-        role_ids = _operational_ip_docket_role_membership_ids(
-            session,
-            docket=docket,
-        )
+        role_ids = set(roles_by_docket.get(docket.id, ()))
         if membership_scope is not None:
             role_ids &= membership_scope
         if not role_ids and not include_empty:
@@ -306,30 +309,35 @@ def _assert_ip_role_access_survives_team_change(
     memberships: dict[str, CompanyMembership],
 ) -> None:
     by_id = {docket.id: docket for docket in dockets}
-    blocked: dict[str, list[str]] = {}
+    docket_ids_by_membership: dict[str, list[str]] = {}
     for docket_id, entry in sorted(expected.items()):
-        docket = by_id[docket_id]
         for membership_id in entry.role_membership_ids:
-            membership = memberships.get(membership_id)
-            if (
-                membership is None
-                or not membership.is_active
-                or membership.user is None
-                or not membership.user.is_active
-            ):
-                blocked.setdefault(membership_id, []).append(docket_id)
-                continue
-            member_context = SessionContext(
-                company=context.company,
-                membership=membership,
-                user=membership.user,
-            )
-            if not can_stably_access_ip_docket(
-                session,
-                context=member_context,
-                docket=docket,
-            ):
-                blocked.setdefault(membership_id, []).append(docket_id)
+            docket_ids_by_membership.setdefault(membership_id, []).append(docket_id)
+    blocked: dict[str, list[str]] = {}
+    # One set-based access check per role membership, never one per docket.
+    for membership_id, docket_ids in sorted(docket_ids_by_membership.items()):
+        membership = memberships.get(membership_id)
+        if (
+            membership is None
+            or not membership.is_active
+            or membership.user is None
+            or not membership.user.is_active
+        ):
+            blocked[membership_id] = docket_ids
+            continue
+        member_context = SessionContext(
+            company=context.company,
+            membership=membership,
+            user=membership.user,
+        )
+        accessible = stably_accessible_ip_docket_ids(
+            session,
+            context=member_context,
+            dockets=[by_id[docket_id] for docket_id in docket_ids],
+        )
+        missing = [docket_id for docket_id in docket_ids if docket_id not in accessible]
+        if missing:
+            blocked[membership_id] = missing
     if blocked:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

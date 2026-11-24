@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -344,6 +345,177 @@ def can_stably_access_ip_docket(
         context=context,
         matter=linked_matter,
     )
+
+
+def _stably_accessible_matter_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    matters: Sequence[Matter],
+) -> set[str]:
+    """Set-based ``can_stably_access_matter`` for one membership."""
+
+    visible = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.id.in_([matter.id for matter in matters]),
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+            )
+        ).all()
+    )
+    if _is_owner(context):
+        return visible
+    now = datetime.now(UTC)
+    membership_id = context.membership.id
+    candidates = [matter for matter in matters if matter.id in visible]
+    if not candidates:
+        return set()
+    walled = set(
+        session.scalars(
+            select(EthicalWall.matter_id).where(
+                EthicalWall.matter_id.in_([matter.id for matter in candidates]),
+                EthicalWall.revoked_at.is_(None),
+                or_(EthicalWall.expires_at.is_(None), EthicalWall.expires_at > now),
+                _wall_subject_filter(membership_id),
+            )
+        ).all()
+    )
+    candidates = [matter for matter in candidates if matter.id not in walled]
+    team_scoping = bool(candidates) and _team_scoping_enabled(session, context.company.id)
+    scoped_team_ids = {
+        matter.team_id
+        for matter in candidates
+        if team_scoping
+        and matter.team_id is not None
+        and matter.assignee_membership_id != membership_id
+    }
+    member_team_ids = (
+        set(
+            session.scalars(
+                select(TeamMembership.team_id)
+                .join(Team, Team.id == TeamMembership.team_id)
+                .where(
+                    TeamMembership.team_id.in_(scoped_team_ids),
+                    TeamMembership.membership_id == membership_id,
+                    Team.is_active.is_(True),
+                )
+            ).all()
+        )
+        if scoped_team_ids
+        else set()
+    )
+    needs_unbounded_grant = {
+        matter.id
+        for matter in candidates
+        if (matter.restricted_access and matter.assignee_membership_id != membership_id)
+        or (
+            team_scoping
+            and matter.team_id is not None
+            and matter.assignee_membership_id != membership_id
+            and matter.team_id not in member_team_ids
+        )
+    }
+    granted = (
+        set(
+            session.scalars(
+                select(MatterAccessGrant.matter_id).where(
+                    MatterAccessGrant.matter_id.in_(needs_unbounded_grant),
+                    MatterAccessGrant.revoked_at.is_(None),
+                    or_(
+                        MatterAccessGrant.effective_from.is_(None),
+                        MatterAccessGrant.effective_from <= now,
+                    ),
+                    MatterAccessGrant.expires_at.is_(None),
+                    _grant_subject_filter(membership_id),
+                )
+            ).all()
+        )
+        if needs_unbounded_grant
+        else set()
+    )
+    return {
+        matter.id
+        for matter in candidates
+        if matter.id not in needs_unbounded_grant or matter.id in granted
+    }
+
+
+def stably_accessible_ip_docket_ids(
+    session: Session,
+    *,
+    context: SessionContext,
+    dockets: Sequence[IpDocketRecord],
+) -> set[str]:
+    """Set-based ``can_stably_access_ip_docket`` for one membership.
+
+    Returns the ids of ``dockets`` the membership can stably access, in a
+    fixed number of queries whatever the docket count.
+    """
+
+    if not dockets:
+        return set()
+    visible = set(
+        session.scalars(
+            select(IpDocketRecord.id).where(
+                IpDocketRecord.id.in_([docket.id for docket in dockets]),
+                IpDocketRecord.company_id == context.company.id,
+                visible_ip_dockets_filter(session, context=context),
+            )
+        ).all()
+    )
+    now = datetime.now(UTC)
+    membership_id = context.membership.id
+    candidates = [docket for docket in dockets if docket.id in visible]
+    if not candidates:
+        return set()
+    walled = set(
+        session.scalars(
+            select(EthicalWall.ip_docket_id).where(
+                EthicalWall.ip_docket_id.in_([docket.id for docket in candidates]),
+                EthicalWall.revoked_at.is_(None),
+                or_(EthicalWall.expires_at.is_(None), EthicalWall.expires_at > now),
+                _wall_subject_filter(membership_id),
+            )
+        ).all()
+    )
+    candidates = [docket for docket in candidates if docket.id not in walled]
+    restricted_ids = [docket.id for docket in candidates if docket.restricted]
+    granted = (
+        set(
+            session.scalars(
+                select(MatterAccessGrant.ip_docket_id).where(
+                    MatterAccessGrant.ip_docket_id.in_(restricted_ids),
+                    MatterAccessGrant.revoked_at.is_(None),
+                    or_(
+                        MatterAccessGrant.effective_from.is_(None),
+                        MatterAccessGrant.effective_from <= now,
+                    ),
+                    MatterAccessGrant.expires_at.is_(None),
+                    _grant_subject_filter(membership_id),
+                )
+            ).all()
+        )
+        if restricted_ids
+        else set()
+    )
+    candidates = [
+        docket for docket in candidates if not docket.restricted or docket.id in granted
+    ]
+    accessible = {docket.id for docket in candidates if docket.matter_id is None}
+    linked = [docket for docket in candidates if docket.matter_id is not None]
+    if linked:
+        # The same identity-map objects ``session.get`` returns per docket.
+        matters = list(
+            session.scalars(
+                select(Matter).where(
+                    Matter.id.in_(sorted({str(docket.matter_id) for docket in linked}))
+                )
+            ).all()
+        )
+        stable = _stably_accessible_matter_ids(session, context=context, matters=matters)
+        accessible.update(docket.id for docket in linked if docket.matter_id in stable)
+    return accessible
 
 
 def assert_ip_docket_access(
@@ -825,6 +997,295 @@ def _operational_ip_docket_role_membership_ids(
         if membership_id is not None
     )
     return membership_ids
+
+
+def _hearing_role_membership_ids(
+    responsible_membership_id: str | None,
+    attendee_membership_ids_json: list[str] | None,
+    reminder_policy_json: dict | None,
+) -> set[str]:
+    policy = reminder_policy_json or {}
+    return {
+        membership_id
+        for membership_id in (
+            responsible_membership_id,
+            *(attendee_membership_ids_json or []),
+            *(policy.get("recipient_membership_ids") or []),
+            policy.get("escalation_membership_id"),
+        )
+        if membership_id is not None
+    }
+
+
+def operational_ip_role_membership_ids_by_docket(
+    session: Session,
+    *,
+    company_id: str,
+    dockets: Mapping[str, str | None],
+) -> dict[str, set[str]]:
+    """Set-based form of ``_operational_ip_docket_role_membership_ids``.
+
+    ``dockets`` maps each docket id of ``company_id`` to its linked Matter id.
+    Returns the same live role memberships for each of them, omitting dockets
+    with none, in a fixed number of queries whatever the docket count.
+
+    Every query reads one table filtered by tenant, and rows are matched to
+    dockets in Python. A join or IN-subquery against the docket set can be
+    planned as a nested loop when statistics are stale, for example right after
+    a bulk import, and that plan is quadratic in the tenant's dockets.
+    The equivalence tests compare each source with the per-docket function.
+    """
+
+    roles: dict[str, set[str]] = {}
+    if not dockets:
+        return roles
+
+    def add(docket_id: str, membership_ids: Iterable[str | None]) -> None:
+        found = {membership_id for membership_id in membership_ids if membership_id is not None}
+        if found:
+            roles.setdefault(docket_id, set()).update(found)
+
+    # Linked Matters share the docket's tenant (composite foreign key), as do
+    # their children, so tenant-filtered reads equal the per-docket lookups.
+    linked_matter_ids = {matter_id for matter_id in dockets.values() if matter_id is not None}
+    linked_matters = (
+        [
+            matter
+            for matter in session.execute(
+                select(
+                    Matter.id,
+                    Matter.status,
+                    Matter.is_active,
+                    Matter.assignee_membership_id,
+                    Matter.responsible_lawyer_membership_id,
+                ).where(Matter.company_id == company_id, Matter.is_active.is_(True))
+            ).all()
+            if matter.id in linked_matter_ids
+        ]
+        if linked_matter_ids
+        else []
+    )
+    operational_matters = {
+        matter.id
+        for matter in linked_matters
+        if matter_is_operational(matter)  # type: ignore[arg-type]
+    }
+    matter_roles: dict[str, set[str]] = {}
+
+    def add_matter(matter_id: str | None, membership_ids: Iterable[str | None]) -> None:
+        if matter_id in operational_matters:
+            matter_roles.setdefault(str(matter_id), set()).update(
+                membership_id for membership_id in membership_ids if membership_id is not None
+            )
+
+    for matter in linked_matters:
+        add_matter(
+            matter.id,
+            (matter.assignee_membership_id, matter.responsible_lawyer_membership_id),
+        )
+    if operational_matters:
+        for matter_id, membership_id in session.execute(
+            select(MatterTask.matter_id, MatterTask.owner_membership_id).where(
+                MatterTask.company_id == company_id,
+                MatterTask.matter_id.is_not(None),
+                MatterTask.ip_docket_id.is_(None),
+                MatterTask.owner_membership_id.is_not(None),
+                MatterTask.status.notin_(("completed", "cancelled")),
+                MatterTask.neutralized_at.is_(None),
+                MatterTask.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all():
+            add_matter(matter_id, (membership_id,))
+
+    # One read of the tenant's live deadlines serves Matter deadlines,
+    # standalone IP deadlines, coverage and IP-deadline projections.
+    live_deadlines = {
+        deadline.id: deadline
+        for deadline in session.execute(
+            select(
+                MatterDeadline.id,
+                MatterDeadline.matter_id,
+                MatterDeadline.ip_docket_id,
+                MatterDeadline.assignee_membership_id,
+            ).where(
+                MatterDeadline.company_id == company_id,
+                MatterDeadline.status.in_(
+                    (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                ),
+                MatterDeadline.neutralized_at.is_(None),
+                MatterDeadline.cancelled_by_matter_disposal.is_(False),
+            )
+        ).all()
+    }
+    for deadline in live_deadlines.values():
+        if deadline.assignee_membership_id is None:
+            continue
+        if deadline.ip_docket_id is None:
+            add_matter(deadline.matter_id, (deadline.assignee_membership_id,))
+        elif deadline.matter_id is None and deadline.ip_docket_id in dockets:
+            add(deadline.ip_docket_id, (deadline.assignee_membership_id,))
+
+    for hearing in session.execute(
+        select(
+            MatterHearing.matter_id,
+            MatterHearing.ip_docket_id,
+            MatterHearing.responsible_membership_id,
+            MatterHearing.attendee_membership_ids_json,
+            MatterHearing.reminder_policy_json,
+        ).where(
+            MatterHearing.company_id == company_id,
+            MatterHearing.status.in_(("scheduled", "adjourned")),
+            MatterHearing.neutralized_at.is_(None),
+            MatterHearing.cancelled_by_matter_disposal.is_(False),
+        )
+    ).all():
+        if hearing.ip_docket_id is None:
+            if hearing.matter_id in operational_matters:
+                add_matter(
+                    hearing.matter_id,
+                    _hearing_role_membership_ids(
+                        hearing.responsible_membership_id,
+                        hearing.attendee_membership_ids_json,
+                        hearing.reminder_policy_json,
+                    ),
+                )
+        elif hearing.matter_id is None and hearing.ip_docket_id in dockets:
+            add(
+                hearing.ip_docket_id,
+                _hearing_role_membership_ids(
+                    hearing.responsible_membership_id,
+                    hearing.attendee_membership_ids_json,
+                    hearing.reminder_policy_json,
+                ),
+            )
+    for docket_id, matter_id in dockets.items():
+        if matter_id is not None:
+            add(docket_id, matter_roles.get(matter_id, ()))
+
+    for coverage in session.execute(
+        select(
+            IpDeadlineCoverage.docket_id,
+            IpDeadlineCoverage.matter_deadline_id,
+            IpDeadlineCoverage.coverage_status,
+            IpDeadlineCoverage.responsible_membership_id,
+            IpDeadlineCoverage.backup_membership_id,
+            IpDeadlineCoverage.replacement_decision,
+            IpDeadlineCoverage.pending_replacement_membership_id,
+            IpDeadlineCoverage.emergency_escalation_membership_id,
+            IpDeadlineCoverage.emergency_until,
+        ).where(
+            IpDeadlineCoverage.company_id == company_id,
+            IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
+        )
+    ).all():
+        if coverage.docket_id not in dockets:
+            continue
+        # The per-docket join requires the deadline in the coverage's tenant.
+        deadline = live_deadlines.get(coverage.matter_deadline_id)
+        docket_matter_id = dockets[coverage.docket_id]
+        if deadline is None or not (
+            (deadline.matter_id is None and deadline.ip_docket_id == coverage.docket_id)
+            or (
+                docket_matter_id is not None
+                and deadline.matter_id == docket_matter_id
+                and deadline.ip_docket_id is None
+            )
+        ):
+            continue
+        add(
+            coverage.docket_id,
+            (
+                coverage.responsible_membership_id,
+                coverage.backup_membership_id,
+                (
+                    coverage.pending_replacement_membership_id
+                    if coverage.replacement_decision == "pending"
+                    else None
+                ),
+                (
+                    coverage.emergency_escalation_membership_id
+                    if _coverage_has_live_escalation(coverage)  # type: ignore[arg-type]
+                    else None
+                ),
+                deadline.assignee_membership_id,
+            ),
+        )
+
+    confirmed_ip_deadlines = session.execute(
+        select(IpDeadline.id, IpDeadline.docket_id, IpDeadline.matter_deadline_id).where(
+            IpDeadline.company_id == company_id,
+            IpDeadline.state.in_(("confirmed", "overdue")),
+        )
+    ).all()
+    # The per-docket query joins the projected deadline by id alone, so a
+    # projection outside the tenant read above is fetched by id, not skipped.
+    projected_ids = {
+        row.matter_deadline_id
+        for row in confirmed_ip_deadlines
+        if row.docket_id in dockets
+        and row.matter_deadline_id is not None
+        and row.matter_deadline_id not in live_deadlines
+    }
+    projected_deadlines = dict(live_deadlines)
+    if projected_ids:
+        projected_deadlines.update(
+            (deadline.id, deadline)
+            for deadline in session.execute(
+                select(
+                    MatterDeadline.id,
+                    MatterDeadline.matter_id,
+                    MatterDeadline.ip_docket_id,
+                    MatterDeadline.assignee_membership_id,
+                ).where(
+                    MatterDeadline.id.in_(sorted(projected_ids)),
+                    MatterDeadline.status.in_(
+                        (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
+                    ),
+                    MatterDeadline.neutralized_at.is_(None),
+                    MatterDeadline.cancelled_by_matter_disposal.is_(False),
+                )
+            ).all()
+        )
+    for row in confirmed_ip_deadlines:
+        deadline = projected_deadlines.get(row.matter_deadline_id)
+        if row.docket_id in dockets and deadline is not None:
+            add(row.docket_id, (deadline.assignee_membership_id,))
+
+    # Assignments reference deadlines of their own tenant (composite key).
+    confirmed_ids = {row.id for row in confirmed_ip_deadlines}
+    for docket_id, deadline_id, membership_id in session.execute(
+        select(
+            IpResponsibilityAssignment.docket_id,
+            IpResponsibilityAssignment.deadline_id,
+            IpResponsibilityAssignment.membership_id,
+        ).where(
+            IpResponsibilityAssignment.company_id == company_id,
+            IpResponsibilityAssignment.effective_until.is_(None),
+        )
+    ).all():
+        if docket_id in dockets and deadline_id in confirmed_ids:
+            add(docket_id, (membership_id,))
+
+    for statement in (
+        select(MatterTask.ip_docket_id, MatterTask.owner_membership_id).where(
+            MatterTask.company_id == company_id,
+            MatterTask.ip_docket_id.is_not(None),
+            MatterTask.matter_id.is_(None),
+            MatterTask.status.notin_(("completed", "cancelled")),
+            MatterTask.neutralized_at.is_(None),
+            MatterTask.cancelled_by_matter_disposal.is_(False),
+        ),
+        select(
+            IpRelatedRightObligation.docket_id, IpRelatedRightObligation.owner_membership_id
+        ).where(
+            IpRelatedRightObligation.company_id == company_id,
+            IpRelatedRightObligation.status == "open",
+        ),
+    ):
+        for docket_id, membership_id in session.execute(statement).all():
+            if docket_id in dockets:
+                add(docket_id, (membership_id,))
+    return roles
 
 
 def _lock_ip_access_responsibility_fence(
