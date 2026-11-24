@@ -6,7 +6,7 @@ import { API_BASE_URL, NetworkError } from "@/lib/api/config";
 import { activityReport } from "./activity-schema";
 import {
   consoleAccepted, consoleAdminRecord, consoleAdminsResponse, consoleAuthState, consoleComplete,
-  consoleEnrollmentResponse, consoleInvitationResponse, consoleLeadsResponse, consoleManagedAdminsResponse,
+  consoleEnrollmentResponse, consoleInvitationInspect, consoleInvitationResponse, consoleLeadsResponse, consoleManagedAdminsResponse,
   consoleNamedOverview, consoleNamedReportPage, consoleOverview, consoleReportPage, consoleSignedOut,
 } from "./schemas";
 
@@ -14,10 +14,10 @@ const PREFIX = "/api/platform-console";
 export const PLATFORM_SESSION_INVALIDATED = "caseops:platform-session-invalidated";
 let authEpoch = 0;
 export function advancePlatformSessionEpoch() { authEpoch += 1; }
-const PREAUTH = new Set(["/auth/login", "/auth/invitations/complete", "/auth/invitations/resend", "/auth/password-reset/start", "/auth/password-reset/complete"]);
+const PREAUTH = new Set(["/auth/login", "/auth/invitations/inspect", "/auth/invitations/complete", "/auth/invitations/resend", "/auth/password-reset/start", "/auth/password-reset/complete"]);
 
 export class ConsoleError extends Error {
-  constructor(public readonly status: number, public readonly kind: "unauthorized" | "forbidden" | "invalid" | "unavailable" | "csrf" | "contract" | "mfa_invalid") {
+  constructor(public readonly status: number, public readonly kind: "unauthorized" | "forbidden" | "invalid" | "unavailable" | "csrf" | "contract" | "mfa_invalid" | "existing_password_invalid") {
     super(kind);
     this.name = "ConsoleError";
   }
@@ -29,7 +29,7 @@ function csrfCookie(): string | null {
   try { return decodeURIComponent(value.slice("caseops_console_csrf=".length)); } catch { return null; }
 }
 
-async function isInvalidMfaFactor(response: Response): Promise<boolean> {
+async function isExpectedProblem(response: Response, code: string, instance: string): Promise<boolean> {
   if ((response.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase() !== "application/problem+json") return false;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
@@ -49,8 +49,7 @@ async function isInvalidMfaFactor(response: Response): Promise<boolean> {
     const problem: unknown = JSON.parse(text);
     if (typeof problem !== "object" || problem === null || Array.isArray(problem)) return false;
     const fields = problem as Record<string, unknown>;
-    return fields.type === "console_mfa_invalid" && fields.code === "console_mfa_invalid" && fields.status === 401 &&
-      fields.instance === "/api/platform-console/auth/mfa/verify";
+    return fields.type === code && fields.code === code && fields.status === 401 && fields.instance === instance;
   } catch { return false; }
   finally { reader?.releaseLock(); }
 }
@@ -76,9 +75,13 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: { body?: 
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       if (!response.ok) {
         // A rejected factor is not revocation of the limited console session.
-        const invalidFactor = response.status === 401 && mutation && path === "/auth/mfa/verify" && await isInvalidMfaFactor(response);
+        const invalidFactor = response.status === 401 && mutation && path === "/auth/mfa/verify" && await isExpectedProblem(response, "console_mfa_invalid", `${PREFIX}/auth/mfa/verify`);
+        // An existing CaseOps identity typed the wrong current password: the link is still usable.
+        const existingPassword = response.status === 401 && mutation && path === "/auth/invitations/complete" &&
+          await isExpectedProblem(response, "console_invitation_password_invalid", `${PREFIX}/auth/invitations/complete`);
         if (signal.aborted) throw new DOMException("Aborted", "AbortError");
         if (invalidFactor) throw new ConsoleError(401, "mfa_invalid");
+        if (existingPassword) throw new ConsoleError(401, "existing_password_invalid");
         if (response.status === 401 && requestEpoch === authEpoch && typeof window !== "undefined") window.dispatchEvent(new Event(PLATFORM_SESSION_INVALIDATED));
         throw new ConsoleError(response.status, response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : response.status < 500 ? "invalid" : "unavailable");
       }
@@ -110,7 +113,8 @@ export const platformApi = {
   enroll: () => request("/auth/mfa/enroll", consoleEnrollmentResponse, { body: {} }),
   verify: (body: { code: string } | { recovery_code: string }) => request("/auth/mfa/verify", consoleAuthState, { body }),
   logout: () => request("/auth/logout", consoleSignedOut, { body: {} }),
-  acceptInvitation: (body: { token: string; password: string; full_name: string }, signal?: AbortSignal) => request("/auth/invitations/complete", consoleAuthState, { body, signal }),
+  inspectInvitation: (token: string, signal?: AbortSignal) => request("/auth/invitations/inspect", consoleInvitationInspect, { body: { token }, signal }),
+  acceptInvitation: (body: { token: string; password: string; full_name?: string }, signal?: AbortSignal) => request("/auth/invitations/complete", consoleAuthState, { body, signal }),
   resendInvitation: (email: string) => request("/auth/invitations/resend", consoleAccepted, { body: { email } }),
   startReset: (email: string, signal?: AbortSignal) => request("/auth/password-reset/start", consoleAccepted, { body: { email }, signal }),
   completeReset: async (body: { token: string; password: string }, signal?: AbortSignal) => {
@@ -135,6 +139,7 @@ export const platformApi = {
 export function consoleErrorMessage(error: unknown): string {
   if (!(error instanceof ConsoleError)) return "The request could not be completed. No automatic retry was made.";
   switch (error.kind) {
+    case "existing_password_invalid": return "That is not the current password for this CaseOps account. Enter the password you use to sign in to CaseOps.";
     case "mfa_invalid": return "The MFA code is invalid or was already used. Enter a fresh code or another recovery code.";
     case "unauthorized": return "Your platform session has ended. Sign in again.";
     case "forbidden": return "Access was refused. Check your permissions or verify MFA again before an administrator change.";

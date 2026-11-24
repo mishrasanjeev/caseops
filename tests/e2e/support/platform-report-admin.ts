@@ -352,16 +352,34 @@ export async function expectState(page: Page, target: Origins, state: ConsoleAut
 
 export async function completeSetup(page: Page, link: string, password: string, fullName: string,
   expectedStatus = 200): Promise<void> {
+  // The page inspects the link before rendering a form; inspection never consumes it.
+  const inspecting = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/auth/invitations/inspect`
+    && response.request().method() === "POST");
   try { await page.goto(link); } catch { throw new Error("PRA setup navigation failed; private link omitted."); }
   await expect.poll(() => new URL(page.url()).hash === "", {
     message: "The one-use fragment must be consumed; secret omitted.",
   }).toBe(true);
   expect(new URL(page.url()).searchParams.has("token")).toBe(false);
-  await page.getByLabel("Full name", { exact: true }).fill(fullName);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(password);
-  await passwordControl(page, "Password");
-  await passwordControl(page, "Confirm password");
+  const inspected = await inspecting;
+  if (expectedStatus !== 200) {
+    // A dead link is refused on load: no password form is offered at all.
+    expect(inspected.status()).toBe(expectedStatus);
+    await expect(page.getByRole("button", { name: "Accept invitation", exact: true })).toHaveCount(0);
+    return;
+  }
+  const { account } = await json<{ account: "new" | "existing" }>(inspected, 200, "Invitation inspect");
+  if (account === "existing") {
+    // An existing CaseOps identity confirms with its current password only.
+    await expect(page.getByLabel("Full name", { exact: true })).toHaveCount(0);
+    await page.getByLabel("Current CaseOps password", { exact: true }).fill(password);
+    await passwordControl(page, "Current CaseOps password");
+  } else {
+    await page.getByLabel("Full name", { exact: true }).fill(fullName);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByLabel("Confirm password", { exact: true }).fill(password);
+    await passwordControl(page, "Password");
+    await passwordControl(page, "Confirm password");
+  }
   await controlBounds(page.getByRole("button", { name: "Accept invitation", exact: true }), page);
   const completing = page.waitForResponse(response => new URL(response.url()).pathname === `${CONSOLE}/auth/invitations/complete`
     && response.request().method() === "POST");
