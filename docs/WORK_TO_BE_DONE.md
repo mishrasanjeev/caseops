@@ -483,7 +483,9 @@ browser regressions for each bounded repair and keep the original acceptance
 boundaries open until exact deployed proof. No native-app change is in scope.
 The same audit retains eight legacy binary-success body/deadline consumers and
 the pre-existing Matter lock across email transport as separate open adjacent
-work. See the explicit inventory in the triage; do not infer global closure from
+work. The November24 issue613 candidate bounds those downloads' complete bodies
+under the caller signal and one deadline; it stays Partially implemented until
+merged, deployed and verified in a browser. See the explicit inventory in the triage; do not infer global closure from
 the new draft/contract helper or from emulated email acceptance.
 
 November12 continuation: current candidate repairs representative assistant

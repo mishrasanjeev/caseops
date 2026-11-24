@@ -1,5 +1,5 @@
 import {
-  apiBlobRequest,
+  apiDownloadRequest,
   apiRequest,
   fetchWithTimeout,
   getCsrfHeaders,
@@ -645,10 +645,10 @@ export type MatterBulkUpdateOperation = {
 export async function downloadMatterBulkUpdateTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/matters/bulk-update/template?format=${format}`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function listMatterBulkUpdateHistory(
@@ -2443,10 +2443,10 @@ export async function downloadIpPleadingDraft(input: {
   proceedingId: string;
   draftId: string;
 }): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/export.docx`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function validateIpPleadingDraft(input: {
@@ -2485,10 +2485,10 @@ export async function downloadIpPleadingFilingBundle(input: {
   proceedingId: string;
   draftId: string;
 }): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/filing-bundle.zip`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function transitionIpPleadingLifecycle(input: {
@@ -3093,8 +3093,8 @@ export async function fetchMatterAttachmentBlob(input: {
   signal?: AbortSignal;
 }): Promise<Blob> {
   const path = `/api/matters/${input.matterId}/attachments/${input.attachmentId}/download${input.inline ? "?inline=true" : ""}`;
-  const response = await apiBlobRequest(path, { signal: input.signal });
-  return response.blob();
+  const { blob } = await apiDownloadRequest(path, { signal: input.signal });
+  return blob;
 }
 
 // OCR & Translate: versions of a matter document produced by OCR and
@@ -3226,13 +3226,12 @@ export async function downloadAttachmentRendition(input: {
   renditionId: string;
   fallbackName: string;
 }): Promise<void> {
-  const response = await apiBlobRequest(`${renditionPath(input)}/download`);
-  const blob = await response.blob();
+  const { blob, headers } = await apiDownloadRequest(`${renditionPath(input)}/download`);
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.download = downloadNameFromDisposition(
-    response.headers.get("content-disposition"),
+    headers.get("content-disposition"),
     input.fallbackName,
   );
   document.body.appendChild(anchor);
@@ -11964,10 +11963,10 @@ export async function retryIpPortfolioExport(id: string): Promise<IpPortfolioExp
 }
 
 export async function downloadIpPortfolioExport(id: string): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/ip/portfolio/exports/${encodeURIComponent(id)}/download`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function uploadIpPortfolioImport(file: File): Promise<IpImportPreview> {
@@ -12097,10 +12096,10 @@ export async function resumeIpPortfolioImport(input: {
 }
 
 export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/ip/imports/${encodeURIComponent(id)}/errors`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function listBulkImportJobs(
@@ -12125,10 +12124,10 @@ export async function downloadBulkImportErrors(
   domain: BulkImportDomain,
   jobId: string,
 ): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/errors`,
   );
-  return response.blob();
+  return blob;
 }
 
 export type IpDocketListPage = {

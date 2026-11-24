@@ -819,6 +819,25 @@ This audit does not certify them as repaired. A separate
 bounded migration must preserve each source's supported sizes, cancellation,
 headers, original bytes and authorization before closing that class globally.
 
+November24 candidate for [issue613](https://github.com/mishrasanjeev/caseops/issues/613)
+(branch `fix/issue-613-download-bodies-20261124`, base `609914f5a`): the unread
+`apiBlobRequest` Response contract is removed. All eight consumers above, plus
+the later OCR rendition download that had adopted the same contract, now read
+through `apiDownloadRequest`. It delegates to the existing whole-body
+`apiBlobDataRequest` with no client byte cap, so server size policy is
+unchanged, while the caller signal and the one 90-second deadline cover session
+refresh, the retried request and the complete body. Cookie, explicit-token and
+portal handling, typed denials, Content-Disposition names, original bytes, the
+Content-Type-derived Blob type, a `no-store` request and object-URL revocation
+are retained. Offline vitest streams (chunked, stalled after headers, truncated,
+refresh then stalled retry, caller abort and an actual Matter image-preview
+unmount) fail on the base and pass on the candidate. Status: Partially
+implemented. The candidate is not merged, deployed or browser-verified, so it
+is not Properly fixed. Changed-source, post-load revocation and current-source
+recheck behaviour of the viewers is unchanged and not separately proven here.
+Caveat for the owner: a valid download that needs more than 90 seconds now
+fails instead of finishing; no deadline was raised.
+
 The existing Matter email transport still retains its parent lock across
 SendGrid I/O. The new template fence now permits compatible readers and excludes
 edit/archive, proven by two actual PostgreSQL cases, but does not certify

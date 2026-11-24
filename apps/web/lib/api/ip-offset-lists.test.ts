@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { call } = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("./client", () => ({
-  apiRequest: call, apiBlobRequest: vi.fn(), fetchWithTimeout: vi.fn(), getCsrfHeaders: vi.fn(),
+  apiRequest: call, apiDownloadRequest: vi.fn(), fetchWithTimeout: vi.fn(), getCsrfHeaders: vi.fn(),
 }));
 import {
   fetchEveryIpDocket, fetchIpForeignAssociateInstructions, fetchIpRecordals, fetchMadridRecords,
