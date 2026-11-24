@@ -63,6 +63,7 @@ from caseops_api.api.routes import (
     provider_operations,
     recipient_inbox,
     recommendations,
+    research_answers,
     source_actions,
     statutes,
     teams,
@@ -187,6 +188,11 @@ def register_api_routes(application: FastAPI) -> None:
         intelligent_reviews.router,
         prefix="/api/research",
         tags=["intelligent-reviews"],
+    )
+    application.include_router(
+        research_answers.router,
+        prefix="/api/research",
+        tags=["research-answers"],
     )
     application.include_router(conflicts.router, prefix="/api", tags=["conflicts"])
     application.include_router(admin.router, prefix="/api/admin", tags=["admin"])
