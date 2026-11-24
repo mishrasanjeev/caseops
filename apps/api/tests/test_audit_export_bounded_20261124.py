@@ -23,9 +23,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, insert, select
 
 from caseops_api.api.routes import admin as admin_routes
-from caseops_api.db.models import AuditEvent
+from caseops_api.db.models import AuditEvent, EthicalWall
 from caseops_api.db.session import get_engine, get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_clients import _mk_matter
+from tests.test_ip_record_access_foundation import _invite_member, _particulars
 
 EXPORT = "/api/admin/audit/export"
 PROBE_ACTION = "audit.bounded_export_probe"
@@ -47,7 +49,14 @@ def _second_tenant(client: TestClient) -> dict:
     return response.json()
 
 
-def _seed(company_id: str, count: int, *, action: str = PROBE_ACTION) -> list[str]:
+def _seed(
+    company_id: str,
+    count: int,
+    *,
+    action: str = PROBE_ACTION,
+    target_type: str = "bounded_export_probe",
+    ip_docket_id: str | None = None,
+) -> list[str]:
     """Insert `count` audit rows inside the default 30-day window, in a known
     (created_at, id) order, without building ORM objects in the test."""
     start = datetime.now(UTC) - timedelta(days=2)
@@ -58,7 +67,8 @@ def _seed(company_id: str, count: int, *, action: str = PROBE_ACTION) -> list[st
             "actor_type": "system",
             "actor_label": "bounded-export-fixture",
             "action": action,
-            "target_type": "bounded_export_probe",
+            "target_type": target_type,
+            "ip_docket_id": ip_docket_id,
             "target_id": f"probe-{index}",
             "result": "success",
             "metadata_json": json.dumps({"index": index, "pad": "x" * 64}),
@@ -116,7 +126,10 @@ def streams_in_bounded_batches(client: TestClient, monkeypatch: pytest.MonkeyPat
     engine = get_engine()
 
     def capture(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001
-        if "FROM audit_events" in statement and statement.lstrip().upper().startswith("SELECT"):
+        # Reads may open with a CTE (the IP wall filter's team scope), so match
+        # every non-write statement that reads audit_events.
+        is_write = statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        if "FROM audit_events" in statement and not is_write:
             server_side = type(cursor).__name__ == "ServerCursor"
             statements.append((statement, dict(context.execution_options), server_side))
 
@@ -286,6 +299,174 @@ def cap_is_counted_per_tenant(client: TestClient, monkeypatch: pytest.MonkeyPatc
     # Each refusal or download is audited only in the caller's tenant.
     assert [row.result for row in _export_events(company_b)] == ["success"]
     assert [row.result for row in _export_events(company_a)] == ["denied"]
+
+
+def _walled_docket(client: TestClient) -> dict:
+    """Owner, an admin member walled off one unrestricted IP docket, and the
+    docket. The member is an owner-role admin with audit:export."""
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    owner_membership_id = str(boot["membership"]["id"])
+    member_id, member_headers = _invite_member(client, owner_token)
+    client.cookies.clear()
+    created = client.post(
+        "/api/ip/dockets",
+        headers=auth_headers(owner_token),
+        json={
+            "title": "Walled ASTER",
+            "restricted": False,
+            "particulars": _particulars("ASTER"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket = created.json()
+    with get_session_factory()() as session:
+        session.add(
+            EthicalWall(
+                company_id=company_id,
+                ip_docket_id=docket["id"],
+                excluded_membership_id=member_id,
+                reason="Conflict on this mark.",
+                created_by_membership_id=owner_membership_id,
+            )
+        )
+        session.commit()
+    return {
+        "company_id": company_id,
+        "owner_headers": auth_headers(owner_token),
+        "member_headers": member_headers,
+        "docket": docket,
+    }
+
+
+def _export(client: TestClient, headers: dict[str, str], **params: object):  # noqa: ANN202
+    # A cookie from an earlier login wins over the bearer token; drop it so the
+    # request is the principal its headers name.
+    client.cookies.clear()
+    return client.get(EXPORT, headers=headers, params=params)
+
+
+def _rows(response) -> list[dict]:  # noqa: ANN001
+    if response.headers["content-type"].startswith("text/csv"):
+        return list(csv.DictReader(io.StringIO(response.text)))
+    return [json.loads(line) for line in response.text.splitlines() if line]
+
+
+def ethical_wall_hides_walled_ip_events(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    setup = _walled_docket(client)
+    company_id = setup["company_id"]
+    docket_id = setup["docket"]["id"]
+    walled = set(
+        _seed(company_id, 30, target_type="ip_docket_record", ip_docket_id=docket_id)
+    )
+    open_rows = set(_seed(company_id, 20))
+
+    monkeypatch.setattr(admin_routes, "AUDIT_EXPORT_MAX_ROWS", 60, raising=False)
+    for fmt in ("jsonl", "csv"):
+        # The walled admin sees neither the seeded docket rows nor the docket's
+        # own creation event, in either format.
+        member = _export(client, setup["member_headers"], action=PROBE_ACTION, format=fmt)
+        assert member.status_code == 200, member.text
+        assert {row["id"] for row in _rows(member)} == open_rows
+        everything = _export(client, setup["member_headers"], format=fmt)
+        assert everything.status_code == 200, everything.text
+        member_rows = _rows(everything)
+        assert not walled & {row["id"] for row in member_rows}
+        assert docket_id not in everything.text
+        assert not any(row["action"] == "ip_docket.created" for row in member_rows)
+
+        # An admin outside the wall still sees them.
+        owner = _export(client, setup["owner_headers"], action=PROBE_ACTION, format=fmt)
+        assert owner.status_code == 200, owner.text
+        assert {row["id"] for row in _rows(owner)} == open_rows | walled
+        owner_all = _export(client, setup["owner_headers"], format=fmt)
+        assert any(
+            row["action"] == "ip_docket.created" and row["target_id"] == docket_id
+            for row in _rows(owner_all)
+        )
+
+    # The cap counts only rows the caller may see: 20 visible rows fit a cap of
+    # 25 for the walled admin, so a 422 cannot reveal the 30 walled ones, while
+    # the unwalled admin's 50 rows exceed it.
+    monkeypatch.setattr(admin_routes, "AUDIT_EXPORT_MAX_ROWS", 25, raising=False)
+    member = _export(client, setup["member_headers"], action=PROBE_ACTION)
+    assert member.status_code == 200, member.text
+    assert {row["id"] for row in _rows(member)} == open_rows
+    owner = _export(client, setup["owner_headers"], action=PROBE_ACTION)
+    assert owner.status_code == 422, owner.text
+    assert owner.json()["type"] == "audit_export_row_cap_exceeded"
+
+    # Tenant isolation still holds alongside the wall filter.
+    tenant_b = _second_tenant(client)
+    other = _export(
+        client, auth_headers(str(tenant_b["access_token"])), action=PROBE_ACTION
+    )
+    assert other.status_code == 200, other.text
+    assert other.content == b""
+    other_all = _export(client, auth_headers(str(tenant_b["access_token"])))
+    assert {row["company_id"] for row in _rows(other_all)} <= {tenant_b["company"]["id"]}
+    assert docket_id not in other_all.text
+
+
+def matter_audit_hides_walled_link_events(client: TestClient) -> None:
+    setup = _walled_docket(client)
+    docket = setup["docket"]
+    client.cookies.clear()
+    owner_token = setup["owner_headers"]["Authorization"].removeprefix("Bearer ")
+    matter = _mk_matter(client, owner_token, "WALL-LINK-001")
+    client.cookies.clear()
+    linked = client.post(
+        f"/api/ip/dockets/{docket['id']}/matter-links",
+        headers=setup["owner_headers"],
+        json={
+            "matter_id": matter["id"],
+            "relation_role": "advisory",
+            "reason": "Advice on the walled mark.",
+            "expected_docket_updated_at": docket["updated_at"],
+        },
+    )
+    assert linked.status_code == 201, linked.text
+
+    def link_events(headers: dict[str, str]) -> tuple[list[dict], str, str]:
+        client.cookies.clear()
+        listed = client.get(f"/api/matters/{matter['id']}/audit-events", headers=headers)
+        assert listed.status_code == 200, listed.text
+        client.cookies.clear()
+        exported = client.get(
+            f"/api/matters/{matter['id']}/audit-events/export",
+            headers=headers,
+            params={"format": "csv"},
+        )
+        assert exported.status_code == 200, exported.text
+        return listed.json()["events"], exported.text, str(listed.json()["total"])
+
+    # The member can see the Matter but is walled off the linked docket: the
+    # link event names that docket, so it is hidden from list, count and export.
+    events, exported, _ = link_events(setup["member_headers"])
+    assert not any(row["action"] == "ip_matter_link.created" for row in events)
+    assert not any(row.get("ip_docket_id") == docket["id"] for row in events)
+    assert docket["id"] not in exported
+    assert "ip_matter_link.created" not in exported
+
+    events, exported, _ = link_events(setup["owner_headers"])
+    assert any(
+        row["action"] == "ip_matter_link.created" and row["ip_docket_id"] == docket["id"]
+        for row in events
+    )
+    assert "ip_matter_link.created" in exported
+
+
+def test_audit_export_hides_ip_events_behind_an_ethical_wall(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ethical_wall_hides_walled_ip_events(client, monkeypatch)
+
+
+def test_matter_audit_hides_link_events_for_a_walled_docket(client: TestClient) -> None:
+    matter_audit_hides_walled_link_events(client)
 
 
 def test_audit_export_streams_in_bounded_batches(

@@ -70,6 +70,7 @@ from caseops_api.services.audit_exports import (
     list_export_jobs,
     read_export_bytes,
     run_export_job,
+    visible_ip_audit_events_filter,
 )
 from caseops_api.services.calendar_sync import (
     outlook_tenant_configuration_status,
@@ -233,7 +234,13 @@ def export_audit_trail(
         # enlarge the window after it was counted against the cap.
         until_dt = datetime.now(UTC)
 
-    filters: list[Any] = [AuditEvent.company_id == context.company.id]
+    # The same IP ethical-wall filter as the async export, on both the cap
+    # count and the streamed rows, so neither the file nor a 422 reveals
+    # activity on a docket the caller cannot see.
+    filters: list[Any] = [
+        AuditEvent.company_id == context.company.id,
+        visible_ip_audit_events_filter(session, context=context),
+    ]
     if since_dt is not None:
         filters.append(AuditEvent.created_at >= since_dt)
     filters.append(AuditEvent.created_at <= until_dt)

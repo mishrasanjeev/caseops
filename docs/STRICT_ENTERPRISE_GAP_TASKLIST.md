@@ -29,15 +29,31 @@ issue613 download-body candidate (PR #655) recorded as open.
   a buffer that refuses any write past `max_attachment_size_bytes` (25 MiB), the
   limit for any single file. An oversized bundle stops while it is built and
   returns a typed 422 (`ip_filing_bundle_too_large`, `max_bundle_bytes`).
+- The Matter court-filing bundle (`services/filing_bundle.py`) read every
+  selected exhibit into memory and zipped them with no total cap. It now stops
+  reading exhibits once their stored size passes `max_attachment_size_bytes`,
+  builds into the same capped buffer, and returns a typed 422
+  (`matter_filing_bundle_too_large`, `max_bundle_bytes`).
+- Security: the synchronous export did not apply the IP ethical-wall audit
+  filter that the async job applies, so an admin walled off an IP docket could
+  read that docket's audit rows, or infer them from the row count. The filter
+  is now one shared function (`visible_ip_audit_events_filter` in
+  `services/audit_exports.py`) used by the async job, by both the cap count and
+  the streamed rows of the synchronous export, and by the Matter audit list,
+  count and export. The Matter audit path had the same gap: a Matter-IP link
+  event names the docket, and a member who can see the Matter but is walled
+  off the docket saw it. Other audit reads were checked: the IP docket audit
+  list is scoped to an already-authorized docket, employee audit reads only
+  employee and membership targets, and activity reports read only a per-tenant
+  latest timestamp.
 - Evidence: `apps/api/tests/test_audit_export_bounded_20261124.py` (with a
-  `_postgres` replay that also asserts the server-side cursor) and
-  `apps/api/tests/test_ip_filing_bundle_size_cap_20261124.py`. Every test fails
-  on the previous code.
-- Still open, not fixed here: the synchronous export does not apply the IP
-  ethical-wall audit filter that the async job applies; the async worker
-  (`run_export_job`) still loads up to 500,000 rows and the whole artifact into
-  memory; and the Matter filing bundle (`services/filing_bundle.py`) zips any
-  number of selected exhibits with no total size cap.
+  `_postgres` replay that also asserts the server-side cursor),
+  `apps/api/tests/test_ip_filing_bundle_size_cap_20261124.py` and
+  `apps/api/tests/test_matter_filing_bundle_size_cap_20261124.py`. Every test
+  fails on the previous code.
+- Still open, recorded follow-up: the async worker (`run_export_job`) still
+  loads up to 500,000 rows and the whole artifact into memory before storing
+  it.
 
 ## November22 — intermittent Admin API stall under SQLite release CI
 

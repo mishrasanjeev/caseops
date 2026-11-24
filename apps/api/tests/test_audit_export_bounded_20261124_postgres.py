@@ -6,6 +6,8 @@ import pytest
 from tests.test_audit_export_bounded_20261124 import (
     aborts_when_window_grows_while_streaming,
     cap_is_counted_per_tenant,
+    ethical_wall_hides_walled_ip_events,
+    matter_audit_hides_walled_link_events,
     real_cap_refuses_one_row_over,
     refuses_window_over_cap,
     streams_in_bounded_batches,
@@ -36,3 +38,13 @@ def test_audit_export_aborts_when_window_grows_while_streaming_postgres(
 
 def test_audit_export_cap_is_counted_per_tenant_postgres(isolated_postgres_client, monkeypatch):
     cap_is_counted_per_tenant(isolated_postgres_client, monkeypatch)
+
+
+def test_audit_export_hides_ip_events_behind_an_ethical_wall_postgres(
+    isolated_postgres_client, monkeypatch
+):
+    ethical_wall_hides_walled_ip_events(isolated_postgres_client, monkeypatch)
+
+
+def test_matter_audit_hides_link_events_for_a_walled_docket_postgres(isolated_postgres_client):
+    matter_audit_hides_walled_link_events(isolated_postgres_client)

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import io
 import json
 import zipfile
-from collections.abc import Buffer
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
@@ -14,6 +12,7 @@ from sqlalchemy.orm import Session
 from caseops_api.core.problem_details import ProblemHTTPException
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import DraftStatus
+from caseops_api.services.bounded_zip import CappedZipBuffer, ZipSizeExceeded
 from caseops_api.services.drafting import (
     get_ip_draft,
     load_draft_record,
@@ -29,24 +28,6 @@ IP_FILING_BUNDLE_TOO_LARGE_PROBLEM = "ip_filing_bundle_too_large"
 class IpDraftBundle:
     body: bytes
     filename: str
-
-
-class _BundleSizeExceeded(Exception):
-    pass
-
-
-class _CappedZipBuffer(io.BytesIO):
-    """In-memory zip target that refuses any write past ``max_bytes``, so an
-    oversized bundle stops while it is being built, not after."""
-
-    def __init__(self, max_bytes: int) -> None:
-        super().__init__()
-        self._max_bytes = max_bytes
-
-    def write(self, data: Buffer, /) -> int:
-        if self.tell() + memoryview(data).nbytes > self._max_bytes:
-            raise _BundleSizeExceeded
-        return super().write(data)
 
 
 def render_ip_draft_bundle(
@@ -128,7 +109,7 @@ def render_ip_draft_bundle(
     # A bundle is one file, so it gets the same ceiling as any file CaseOps
     # accepts (max_attachment_size_bytes, 25 MiB by default).
     max_bytes = get_settings().max_attachment_size_bytes
-    buffer = _CappedZipBuffer(max_bytes)
+    buffer = CappedZipBuffer(max_bytes)
     try:
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(f"filed-document/{docx_filename}", docx)
@@ -140,7 +121,7 @@ def render_ip_draft_bundle(
                 "internal/filing-checklist.json",
                 json.dumps(checklist, indent=2, sort_keys=True),
             )
-    except _BundleSizeExceeded:
+    except ZipSizeExceeded:
         raise ProblemHTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             problem_type=IP_FILING_BUNDLE_TOO_LARGE_PROBLEM,

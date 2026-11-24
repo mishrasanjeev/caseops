@@ -39,7 +39,6 @@ blocked unless the draft has been approved or finalized on record.
 """
 from __future__ import annotations
 
-import io
 import json
 import re
 import zipfile
@@ -49,6 +48,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.problem_details import ProblemHTTPException
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Draft,
     DraftStatus,
@@ -56,6 +57,7 @@ from caseops_api.db.models import (
     MatterAttachment,
 )
 from caseops_api.schemas.drafting_templates import DraftTemplateType
+from caseops_api.services.bounded_zip import CappedZipBuffer, ZipSizeExceeded
 from caseops_api.services.court_format_profiles import (
     CourtFormatProfile,
     resolve_profile,
@@ -64,6 +66,8 @@ from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.draft_pdf_export import _ascii_safe, render_pdf_bytes
 from caseops_api.services.drafting import _load_draft, _load_manifest, _load_matter
 from caseops_api.services.session_context import SessionContext
+
+MATTER_FILING_BUNDLE_TOO_LARGE_PROBLEM = "matter_filing_bundle_too_large"
 
 
 @dataclass(frozen=True)
@@ -184,34 +188,52 @@ def render_filing_bundle(
 
     estamp_pdf = _render_estamp_placeholder(profile=profile, matter=matter)
 
-    selected_attachments = _select_attachments(
-        session,
-        matter=matter,
-        attachment_ids=attachment_ids,
-    )
+    # A bundle is one file, so it gets the same ceiling as any file CaseOps
+    # accepts (max_attachment_size_bytes, 25 MiB by default). Exhibits stop
+    # being read once their stored size passes it, and the ZIP stops being
+    # written at it.
+    max_bytes = get_settings().max_attachment_size_bytes
+    try:
+        selected_attachments = _select_attachments(
+            session,
+            matter=matter,
+            attachment_ids=attachment_ids,
+            max_bytes=max_bytes,
+        )
 
-    index_pdf = _render_index_pdf(
-        profile=profile,
-        matter=matter,
-        draft=draft,
-        revision=version.revision,
-        vakalat_source=vakalat_source,
-        attachments=selected_attachments,
-    )
+        index_pdf = _render_index_pdf(
+            profile=profile,
+            matter=matter,
+            draft=draft,
+            revision=version.revision,
+            vakalat_source=vakalat_source,
+            attachments=selected_attachments,
+        )
 
-    safe_title = _safe_segment(draft.title)
-    memorandum_filename = f"01-memorandum-{safe_title}-r{version.revision}.pdf"
+        safe_title = _safe_segment(draft.title)
+        memorandum_filename = f"01-memorandum-{safe_title}-r{version.revision}.pdf"
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("00-index.pdf", index_pdf)
-        zf.writestr(memorandum_filename, memorandum_pdf)
-        zf.writestr("02-vakalatnama.pdf", vakalat_pdf)
-        zf.writestr("03-estamp-placeholder.pdf", estamp_pdf)
-        for idx, (att, exhibit_bytes) in enumerate(selected_attachments, start=1):
-            label = _safe_segment(att.original_filename) or f"exhibit-{idx}"
-            ext = _extension_from_filename(att.original_filename)
-            zf.writestr(f"04-exhibits/{idx:02d}-{label}{ext}", exhibit_bytes)
+        buf = CappedZipBuffer(max_bytes)
+        with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("00-index.pdf", index_pdf)
+            zf.writestr(memorandum_filename, memorandum_pdf)
+            zf.writestr("02-vakalatnama.pdf", vakalat_pdf)
+            zf.writestr("03-estamp-placeholder.pdf", estamp_pdf)
+            for idx, (att, exhibit_bytes) in enumerate(selected_attachments, start=1):
+                label = _safe_segment(att.original_filename) or f"exhibit-{idx}"
+                ext = _extension_from_filename(att.original_filename)
+                zf.writestr(f"04-exhibits/{idx:02d}-{label}{ext}", exhibit_bytes)
+    except ZipSizeExceeded:
+        raise ProblemHTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            problem_type=MATTER_FILING_BUNDLE_TOO_LARGE_PROBLEM,
+            detail=(
+                f"This filing bundle would be larger than {max_bytes / (1024 * 1024):g} MiB, "
+                "the limit for a single file, so it was not created. Select fewer "
+                "exhibits and export again."
+            ),
+            extras={"max_bundle_bytes": max_bytes},
+        ) from None
 
     bundle_filename = (
         f"{_safe_segment(matter.matter_code)}"
@@ -365,6 +387,7 @@ def _select_attachments(
     *,
     matter: Matter,
     attachment_ids: list[str] | None,
+    max_bytes: int,
 ) -> list[tuple[MatterAttachment, bytes]]:
     """Read selected attachments off disk + return ``(row, bytes)`` pairs.
 
@@ -397,15 +420,21 @@ def _select_attachments(
             )
 
     out: list[tuple[MatterAttachment, bytes]] = []
+    total = 0
     for row in rows:
         path = resolve_storage_path(row.storage_key)
         if not path.exists():
             # Skip unreadable files; the index page will note the gap.
             continue
         try:
+            size = path.stat().st_size
+            if total + size > max_bytes:
+                # Stop before reading: the exhibits alone exceed the bundle cap.
+                raise ZipSizeExceeded
             data = path.read_bytes()
         except OSError:
             continue
+        total += len(data)
         out.append((row, data))
     return out
 
