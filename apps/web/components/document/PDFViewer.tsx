@@ -73,6 +73,12 @@ interface PDFViewerProps {
   className?: string;
   /** Sprint Q10 — annotations to render as overlays on each page. */
   annotations?: PDFAnnotation[];
+  /** Controlled page number. When omitted the viewer keeps its own page. */
+  page?: number;
+  /** Called with the requested page when the page is controlled. */
+  onPageChange?: (page: number) => void;
+  /** Reports the page count once the PDF has loaded. */
+  onNumPages?: (numPages: number) => void;
 }
 
 export function PDFViewer({
@@ -81,9 +87,22 @@ export function PDFViewer({
   filename,
   className,
   annotations = [],
+  page: controlledPage,
+  onPageChange,
+  onNumPages,
 }: PDFViewerProps): React.JSX.Element {
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
+  const [internalPage, setInternalPage] = useState(1);
+  const controlled = controlledPage !== undefined;
+  const page = controlled ? controlledPage : internalPage;
+  const setPage = useCallback(
+    (next: number | ((current: number) => number)) => {
+      const value = typeof next === "function" ? next(page) : next;
+      if (!controlled) setInternalPage(value);
+      else if (value !== page) onPageChange?.(value);
+    },
+    [controlled, onPageChange, page],
+  );
   const [zoom, setZoom] = useState(1);
   const [query, setQuery] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
@@ -126,12 +145,16 @@ export function PDFViewer({
     };
     node.addEventListener("keydown", onKey);
     return () => node.removeEventListener("keydown", onKey);
-  }, [numPages]);
+  }, [numPages, setPage]);
 
-  const onDocumentLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
-    setNumPages(n);
-    setPage(1);
-  }, []);
+  const onDocumentLoadSuccess = useCallback(
+    ({ numPages: n }: { numPages: number }) => {
+      setNumPages(n);
+      onNumPages?.(n);
+      if (!controlled) setInternalPage(1);
+    },
+    [controlled, onNumPages],
+  );
 
   const searchNext = () => {
     if (!query) return;

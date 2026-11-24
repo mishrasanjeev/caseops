@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     IpDocumentVersion,
     Matter,
     MatterAttachment,
+    MatterAttachmentRendition,
 )
 from caseops_api.schemas.storage_governance import (
     FirmStorageUsageSummary,
@@ -126,10 +127,17 @@ def _used_bytes(session: Session, *, company_id: str) -> int:
             IpDocumentVersion.company_id == company_id
         )
     )
+    # Generated translation PDFs are stored objects owned by the workspace.
+    rendition_output_bytes = session.scalar(
+        select(func.coalesce(func.sum(MatterAttachmentRendition.output_size_bytes), 0)).where(
+            MatterAttachmentRendition.company_id == company_id
+        )
+    )
     return (
         int(matter_attachment_bytes or 0)
         + int(standalone_notice_bytes or 0)
         + int(ip_document_bytes or 0)
+        + int(rendition_output_bytes or 0)
     )
 
 

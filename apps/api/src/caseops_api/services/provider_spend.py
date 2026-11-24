@@ -25,12 +25,21 @@ from caseops_api.services.billing_entitlements import (
 )
 
 DEFAULT_MONTHLY_LIMIT_MINOR = 100_000
-PROVIDER_KEYS = ("indian-kanoon", "ecourtsindia", "msg91", "meta-whatsapp")
+PROVIDER_KEYS = (
+    "indian-kanoon",
+    "ecourtsindia",
+    "msg91",
+    "meta-whatsapp",
+    "sarvam",
+    "google-translation",
+)
 PROVIDER_LABELS = {
     "indian-kanoon": "Indian Kanoon",
     "ecourtsindia": "eCourtsIndia",
     "msg91": "MSG91 SMS",
     "meta-whatsapp": "WhatsApp",
+    "sarvam": "Sarvam Document AI (OCR)",
+    "google-translation": "Google Cloud Translation",
 }
 RESERVATION_TTL = timedelta(minutes=10)
 

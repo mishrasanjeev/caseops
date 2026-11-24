@@ -656,6 +656,15 @@ def run_document_processing_job(job_id: str) -> bool:
                 _process_contract_attachment_job(session, job)
             elif job.target_type == DocumentProcessingTargetType.IP_DOCUMENT_VERSION:
                 _process_ip_document_version_job(session, job)
+            elif job.target_type in {
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_OCR,
+                DocumentProcessingTargetType.MATTER_ATTACHMENT_TRANSLATION,
+            }:
+                from caseops_api.services.document_rendition_pipeline import (
+                    process_rendition_job,
+                )
+
+                process_rendition_job(session, job)
             else:
                 _mark_job_failed(
                     session,

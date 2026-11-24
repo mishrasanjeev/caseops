@@ -19,6 +19,10 @@ _PAID_PROVIDER_HOSTS = frozenset(
         # Billable per message: SMS reminders and WhatsApp template sends.
         "control.msg91.com",
         "graph.facebook.com",
+        # Billable per page (OCR) and per character (Translation LLM).
+        "api.sarvam.ai",
+        "translate.googleapis.com",
+        "translation.googleapis.com",
     }
 )
 _SYNTHETIC_TENANT_TOKENS = frozenset(
@@ -55,7 +59,7 @@ def paid_provider_test_tenant_reason(context: SessionContext) -> str | None:
 
 def paid_provider_block_reason(
     *,
-    context: SessionContext,
+    context: SessionContext | None,
     provider: str,
     base_url: str | None,
     transport_is_mocked: bool = False,
@@ -78,6 +82,8 @@ def paid_provider_block_reason(
     # automated. Human users of long-lived QA workspaces must retain paid
     # access. Only unattended scheduled polling uses the static tenant filter.
     if scheduled_tenant_filter:
+        if context is None:
+            raise ValueError("Scheduled provider work needs a tenant context.")
         tenant_reason = scheduled_paid_provider_tenant_reason(context, base_url=base_url)
         if tenant_reason is not None:
             return tenant_reason

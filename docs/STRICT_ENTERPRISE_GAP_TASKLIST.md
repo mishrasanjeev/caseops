@@ -6170,3 +6170,68 @@ manual connection step. The new flow is not yet deployed; actual native and
 production acceptance remain pending. Existing Android version 3 went live November
 17; Managed publishing now holds future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+
+## November 23 - Matter Documents OCR & Translate (EH-OCRT-01..04)
+
+New paid-provider surface. Statuses are separate for what is in code and what is
+deployed and verified.
+
+### EH-OCRT-01 - Paid OCR/translation providers are fenced and fail closed
+
+- **Status:** Partially implemented (2026-11-23, branch
+  `feat/ocr-translation-20261123`, not merged or deployed). Sarvam
+  (`api.sarvam.ai`) and Google Translation (`translate.googleapis.com`,
+  `translation.googleapis.com`) are in `_PAID_PROVIDER_HOSTS`. Calls need the
+  kill switch on (`CASEOPS_SARVAM_DOCUMENT_AI_ENABLED`,
+  `CASEOPS_GOOGLE_TRANSLATION_ENABLED`, both default off), credentials, a
+  verified actual cost profile (`ocr_page`/`sarvam`,
+  `translation_characters`/`google-translation`) and a spend reservation in the
+  shared provider budget (`sarvam`, `google-translation` added to
+  `PROVIDER_KEYS`). Documents with `native_local_processing_only` are never sent.
+  Tests prove each refusal makes no provider request
+  (`apps/api/tests/test_document_renditions_20261123.py`).
+- **Open:** no deploy binding and no live call, so live behaviour is unproven.
+  Sarvam's per-page output schema is unpublished and parsed defensively. A
+  tenant-level OCR/translation model allowlist (SEC-025 depth) is not in
+  `tenant_ai_policy` yet; only the per-document on-device flag and global
+  switches restrict it.
+
+### EH-OCRT-02 - Provider work holds no transaction and resumes instead of re-paying
+
+- **Status:** Partially implemented (same branch). Work runs as
+  `matter_attachment_ocr`/`matter_attachment_translation` jobs on the existing
+  claimed and fenced document queue, with no transaction open during provider
+  I/O. Sarvam job ids and spend holds are committed before polling. A run that
+  outlasts the lease queues a `resume` job that polls the saved ids. A
+  translation request with an unknown outcome keeps its hold and is not
+  re-sent automatically. The partial unique index `uq_matter_attachment_rendition_active`
+  blocks duplicate open runs.
+- **Proof (2026-11-24):** `apps/api/tests/test_document_renditions_20261123_postgres.py`
+  passes on pgvector/pg17 (3 passed, 0 skipped): OCR then chained translation and
+  a `resume` job both complete under the execution-protocol trigger, and the
+  partial unique index rejects a second open run. A local browser run against
+  PostgreSQL (providers off) showed a mixed PDF reaching `review_required` with
+  the scanned page listed as unread, and a review that required a note and
+  wrote `ocr_requested`, `ocr_completed` and `rendition_reviewed` audit events.
+- **Open:** production cadence pickup of `resume` jobs is unverified.
+
+### EH-OCRT-03 - Derived legal text is versioned, reviewable and never presented as certified
+
+- **Status:** Partially implemented (same branch).
+  `matter_attachment_renditions` links every OCR/translation version to its
+  company, matter and attachment, with page-level provenance, provider/model,
+  requester and review status. Review is `documents:manage` only and audited.
+  A version with unreadable pages needs a reviewer note. Generated PDFs use the
+  existing storage namespace, private download headers and the storage quota.
+- **Open:** derived text is deliberately not indexed for retrieval. Glossary
+  control, in-place edit and a legal-term benchmark are missing, so no
+  language pair may be called production-ready (PRD J16).
+
+### EH-OCRT-04 - Credentials and deploy wiring
+
+- **Status:** Missing (deploy). Settings and the `.env.example` placeholders
+  exist, Google auth uses ADC, and no key file is committed.
+  `scripts/deploy-prod.sh` deliberately does not bind
+  `caseops-sarvam-api-key` until the secret exists. See
+  `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
