@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `4d8077013be25f9284c59275ef2de79854469e987b8db5b28738ef6c3f908181`
-- SQL tables: `371`
-- SQL columns: `5924`
-- ORM indexes: `1845`
-- Alembic/raw index declarations: `1622`
+- Canonical map SHA-256: `2f5a69d720860bc7fa8ef212410c7d30d68574da005d7e8a156b789dba48b46a`
+- SQL tables: `372`
+- SQL columns: `5950`
+- ORM indexes: `1852`
+- Alembic/raw index declarations: `1629`
 - Non-SQL data classes: `18`
 
 ## Boundary
@@ -178,6 +178,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_journal_ingestion_runs` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
+| `ip_official_search_imports` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `ip_patent_application_identifiers` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_patent_application_identities` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |

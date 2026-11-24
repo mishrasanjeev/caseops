@@ -15,7 +15,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -186,6 +186,13 @@ export default function IpPortfolioImportsPage() {
     onSuccess: applyPreview,
     onError: (error) => toast.error(apiErrorMessage(error, "Could not load import details.")),
   });
+
+  // A page staged from Official trade mark search opens straight into its preview.
+  const { mutate: openJob } = detailMutation;
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (canRead && jobId) openJob(jobId);
+  }, [canRead, openJob]);
 
   const revalidateMutation = useMutation({
     mutationFn: revalidateIpPortfolioImport,

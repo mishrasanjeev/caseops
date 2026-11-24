@@ -1,7 +1,7 @@
 """OCR text and legal translation versions of matter attachments.
 
-Revision ID: 20261123_0001
-Revises: 20261122_0631
+Revision ID: 20261124_0001
+Revises: 20261123_0001
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-LOCK-RISK: acknowledged. One new empty table with nonunique and
 partial-unique indexes on its own columns references existing tenant, matter,
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "20261123_0001"
-down_revision = "20261122_0631"
+revision = "20261124_0001"
+down_revision = "20261123_0001"
 branch_labels = None
 depends_on = None
 

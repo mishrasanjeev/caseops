@@ -32,6 +32,7 @@ from tests.test_counsel_page_migration_20261027 import _catalog, _rows, _seed
 from tests.test_hearing_explicit_channels_20261027 import (
     forbid_unadmitted_network as forbid_unadmitted_network,
 )
+from tests.test_ip_official_search_migration_20261123 import seed_retained_import
 from tests.test_matter_task_queue_migration_20261028 import _artifact
 from tests.test_platform_console_migration import fresh_engine, migration_config
 from tests.test_postgres_validation import _seed_matter
@@ -61,6 +62,11 @@ OUTBOXES = (
     "in_app_notifications",
     "notification_delivery_intents",
     "notification_delivery_events",
+)
+
+# Current head 20261124_0001 (matter attachment renditions) refuses downgrade first.
+HEAD_REFUSAL = (
+    "OCR text, translations and their review evidence are retained; restore-forward only."
 )
 
 
@@ -547,14 +553,14 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
-        assert current == "20261123_0001"
-        # The current head refuses before touching retained OCR/translation versions.
-        # The named retained-read migration is rehearsed separately above.
-        expected_refusal = (
-            "OCR text, translations and their review evidence are retained; restore-forward only."
-        )
+        assert current == "20261124_0001"
+        # The current head refuses on its retained OCR/translation versions
+        # before touching any row. The named retained-read migration is
+        # rehearsed separately above.
+        expected_refusal = HEAD_REFUSAL
         command.upgrade(config, "head")
         scope, _, rows, _ = seed_old(engine)
+        seed_retained_import(engine)
         require_physical(engine, scope, rows)
         names = sorted(inspect(engine).get_table_names())
         before_rows, before_catalog = _rows(engine, names), _catalog(engine)
