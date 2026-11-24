@@ -1,0 +1,27 @@
+import { defineConfig } from "@playwright/test";
+
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
+// J05/M04 research answer acceptance against the exact serving release.
+// The no-paid marker routes the model call to the deterministic offline
+// provider, so this proves the deployed retrieval, verification, ordering and
+// UI contract without spending on a paid model.
+export default defineConfig({
+  testDir: "./tests/e2e",
+  testMatch: /research-answer-2026-11-24\.spec\.ts$/,
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
+  timeout: 240_000,
+  expect: { timeout: 15_000 },
+  reporter: "list",
+  use: {
+    browserName: "chromium",
+    baseURL: "https://caseops.ai",
+    extraHTTPHeaders: noPaidProviderHeaders,
+    storageState: { cookies: [], origins: [] },
+    trace: "off",
+    screenshot: "off",
+    video: "off",
+  },
+});

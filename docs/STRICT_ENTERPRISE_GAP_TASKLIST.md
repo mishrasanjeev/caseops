@@ -6305,3 +6305,25 @@ deployed and verified.
   contract with `--set-secrets`, so a manual binding on the job would be
   erased. See section A of
   `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
+
+
+## November 24 - Research three-part answer (EH-RA-01..02)
+
+### EH-RA-01 - Research answers run as in-process background work
+
+- **Status:** Partially implemented. `POST /api/research/answers` returns 202
+  and runs retrieval, the model call and verification in a FastAPI
+  BackgroundTask, the same pattern as intelligent reviews. Production Cloud Run
+  has `cpu-throttling=true`, so work after the response can be slowed. If the
+  instance is recycled, a run cannot resume. A read settles any run still
+  pending after 10 minutes as `failed/timed_out`, so the page never polls
+  forever. Durable orchestration (Temporal) is not used. Measure completion
+  time on the production provider before any claim of reliability.
+
+### EH-RA-02 - Model output cannot introduce an authority
+
+- **Status:** Implemented in code, not deployed. Titles, citations, courts,
+  dates, weight labels, links and paragraph numbers come from CaseOps records
+  or the source text. Unknown markers, untraceable names, citations,
+  quotations and links are removed after one retry and counted. Tests:
+  `apps/api/tests/test_research_answers_20261124.py`.

@@ -510,6 +510,7 @@ class Settings(BaseSettings):
     llm_model_recommendations: str | None = Field(default=None)
     llm_model_hearing_pack: str | None = Field(default=None)
     llm_model_metadata_extract: str | None = Field(default=None)
+    llm_model_research: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
     # OpenAI availability fallback (owner decision, 2026-11-01): one managed
@@ -544,6 +545,9 @@ class Settings(BaseSettings):
     llm_max_output_tokens_drafting: int = Field(default=8192, ge=512)
     llm_max_output_tokens_hearing_pack: int = Field(default=4096, ge=512)
     llm_max_output_tokens_assistant: int = Field(default=2048, ge=256, le=8192)
+    # Three-part research answers carry nine analysis sections plus an
+    # authority list; reasoning models also spend output budget on thought.
+    llm_max_output_tokens_research: int = Field(default=16384, ge=2048, le=32768)
     # BUG-005 2026-04-21: the default 2048 was truncating
     # recommendations mid-rationale — provider responses ended their JSON at
     # ~2k output tokens on a real matter, and the
