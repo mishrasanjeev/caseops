@@ -29,6 +29,13 @@ vi.mock("@/lib/api/endpoints", () => ({
   searchIndianKanoon: indianKanoonSearchMock,
 }));
 
+vi.mock("@/lib/api/research-answers", async (load) => ({
+  ...(await load<typeof import("@/lib/api/research-answers")>()),
+  listResearchAnswers: vi.fn().mockResolvedValue({ items: [] }),
+  createResearchAnswer: vi.fn(),
+  fetchResearchAnswer: vi.fn(),
+}));
+
 vi.mock("@/lib/capabilities", () => ({
   useCapability: (cap: string) => useCapabilityMock(cap),
 }));

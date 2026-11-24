@@ -30543,6 +30543,100 @@
       }
     },
     {
+      "id": "research_answers",
+      "table_name": "research_answers",
+      "purpose": "Repository SQL persistence class `research_answers`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "analysis_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "answer_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "context_matter_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "error_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "model_run_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "query": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "saved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "saved_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "source_manifest_json": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "source_link_reports",
       "table_name": "source_link_reports",
       "purpose": "Repository SQL persistence class `source_link_reports`; its exact column inventory is intentionally versioned below.",
@@ -34141,12 +34235,12 @@
       }
     }
   ],
-  "schema_fingerprint": "b0c2f059a9b6db89e958cbf4a36aec81312ed060d8096a872769aab58d68a7d7",
+  "schema_fingerprint": "3f3d9fb34f9f1b5c63debfefc3cae0964ce7098f223ad1b31e4340782b6233a9",
   "index_inventory": {
-    "orm_index_count": 1852,
-    "orm_index_fingerprint": "fefa5dd5ceb22c2565c9fdf15ce764941422a8ec01e349664a15b9e4b22ee20b",
-    "migration_index_count": 1629,
-    "migration_index_fingerprint": "00252861df2bc825ea0c805b1b6b165077b819e7a9832cde96642d3390b0130b",
+    "orm_index_count": 1859,
+    "orm_index_fingerprint": "5e5295698d93b12882a047f745312b02a95e2d94697f0b4a9763ea306de1c639",
+    "migration_index_count": 1636,
+    "migration_index_fingerprint": "4dbd52e454d1b89bbe8919c37c2f2c3d3339fef7bb2b61a32531a913a734e85e",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }
