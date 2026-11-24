@@ -618,7 +618,7 @@ async def get_record_access_foundation_contract(
     "/access/reconciliation",
     response_model=RecordAccessReconciliationReport,
 )
-async def get_record_access_reconciliation(
+def get_record_access_reconciliation(
     context: IpAccessManager,
     session: DbSession,
 ) -> RecordAccessReconciliationReport:
@@ -630,7 +630,7 @@ async def get_record_access_reconciliation(
     response_model=IpAccessPanelResponse,
     summary="Inspect internal IP access grants, ethical walls, and policy history",
 )
-async def get_ip_docket_access_panel(
+def get_ip_docket_access_panel(
     docket_id: str,
     context: IpAccessManager,
     session: DbSession,
@@ -647,7 +647,7 @@ async def get_ip_docket_access_panel(
     response_model=IpAccessPreviewResponse,
     summary="Preview an internal IP access-policy change without mutation",
 )
-async def post_ip_docket_access_preview(
+def post_ip_docket_access_preview(
     docket_id: str,
     payload: IpAccessChangeRequest,
     context: IpAccessManager,
@@ -666,7 +666,7 @@ async def post_ip_docket_access_preview(
     response_model=IpAccessChangeResponse,
     summary="Apply a previewed internal IP access-policy change",
 )
-async def post_ip_docket_access_change(
+def post_ip_docket_access_change(
     docket_id: str,
     payload: IpAccessApplyRequest,
     context: IpAccessManager,
@@ -689,7 +689,7 @@ async def post_ip_docket_access_change(
     "/shared-work/reconciliation",
     response_model=SharedWorkReconciliationReport,
 )
-async def get_shared_work_reconciliation(
+def get_shared_work_reconciliation(
     context: IpViewer,
     session: DbSession,
 ) -> SharedWorkReconciliationReport:
@@ -697,7 +697,7 @@ async def get_shared_work_reconciliation(
 
 
 @router.get("/tasks", response_model=IpSharedTaskListResponse)
-async def get_ip_shared_tasks(
+def get_ip_shared_tasks(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str, Query()],
@@ -712,7 +712,7 @@ async def get_ip_shared_tasks(
 
 
 @router.post("/tasks", response_model=IpSharedTaskRecord, status_code=status.HTTP_201_CREATED)
-async def post_ip_shared_task(
+def post_ip_shared_task(
     payload: IpSharedTaskCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -721,7 +721,7 @@ async def post_ip_shared_task(
 
 
 @router.patch("/tasks/{task_id}", response_model=IpSharedTaskRecord)
-async def patch_ip_shared_task(
+def patch_ip_shared_task(
     task_id: str,
     payload: IpSharedTaskUpdateRequest,
     context: IpWriter,
@@ -731,7 +731,7 @@ async def patch_ip_shared_task(
 
 
 @router.get("/hearings", response_model=IpSharedHearingListResponse)
-async def get_ip_shared_hearings(
+def get_ip_shared_hearings(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str, Query()],
@@ -744,7 +744,7 @@ async def get_ip_shared_hearings(
     response_model=IpSharedHearingRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_shared_hearing(
+def post_ip_shared_hearing(
     payload: IpSharedHearingCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -753,7 +753,7 @@ async def post_ip_shared_hearing(
 
 
 @router.patch("/hearings/{hearing_id}", response_model=IpSharedHearingRecord)
-async def patch_ip_shared_hearing(
+def patch_ip_shared_hearing(
     hearing_id: str,
     payload: IpSharedHearingUpdateRequest,
     context: IpWriter,
@@ -768,7 +768,7 @@ async def patch_ip_shared_hearing(
     "/operational-deadlines",
     response_model=IpOperationalDeadlineListResponse,
 )
-async def get_ip_operational_deadlines(
+def get_ip_operational_deadlines(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str, Query()],
@@ -787,7 +787,7 @@ async def get_ip_operational_deadlines(
     response_model=IpOperationalDeadlineRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_operational_deadline(
+def post_ip_operational_deadline(
     payload: IpOperationalDeadlineCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -799,7 +799,7 @@ async def post_ip_operational_deadline(
     "/operational-deadlines/{deadline_id}",
     response_model=IpOperationalDeadlineRecord,
 )
-async def patch_ip_operational_deadline(
+def patch_ip_operational_deadline(
     deadline_id: str,
     payload: IpOperationalDeadlineUpdateRequest,
     context: IpWriter,
@@ -814,7 +814,7 @@ async def patch_ip_operational_deadline(
     "/operational-deadlines/{deadline_id}/terminalize",
     response_model=IpOperationalDeadlineRecord,
 )
-async def post_ip_covered_deadline_terminalization(
+def post_ip_covered_deadline_terminalization(
     deadline_id: str,
     payload: IpOperationalDeadlineTransitionRequest,
     context: IpWriter,
@@ -843,7 +843,7 @@ async def get_ip_renewal_foundation_contract(
     "/renewals/portfolio",
     response_model=IpRenewalPortfolioResponse,
 )
-async def get_ip_renewal_portfolio(
+def get_ip_renewal_portfolio(
     context: IpViewer,
     session: DbSession,
 ) -> IpRenewalPortfolioResponse:
@@ -854,7 +854,7 @@ async def get_ip_renewal_portfolio(
     "/dockets/{docket_id}/renewal-terms",
     response_model=IpRenewalTermListResponse,
 )
-async def get_ip_renewal_terms(
+def get_ip_renewal_terms(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -867,7 +867,7 @@ async def get_ip_renewal_terms(
     response_model=IpRenewalTermRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_renewal_term(
+def post_ip_renewal_term(
     docket_id: str,
     payload: IpRenewalTermCreateRequest,
     context: IpWriter,
@@ -885,7 +885,7 @@ async def post_ip_renewal_term(
     "/dockets/{docket_id}/renewal-terms/{term_id}/instruction-reminders",
     response_model=IpRenewalReminderScheduleResponse,
 )
-async def post_ip_renewal_instruction_reminders(
+def post_ip_renewal_instruction_reminders(
     docket_id: str,
     term_id: str,
     payload: IpRenewalReminderScheduleRequest,
@@ -906,7 +906,7 @@ async def post_ip_renewal_instruction_reminders(
     response_model=IpRenewalTermRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_client_instruction(
+def post_ip_client_instruction(
     docket_id: str,
     term_id: str,
     payload: IpClientInstructionCreateRequest,
@@ -926,7 +926,7 @@ async def post_ip_client_instruction(
     "/dockets/{docket_id}/renewal-terms/{term_id}/instructions/{instruction_id}/acknowledge",
     response_model=IpRenewalTermRecord,
 )
-async def post_ip_client_instruction_acknowledgement(
+def post_ip_client_instruction_acknowledgement(
     docket_id: str,
     term_id: str,
     instruction_id: str,
@@ -948,7 +948,7 @@ async def post_ip_client_instruction_acknowledgement(
     "/dockets/{docket_id}/renewal-terms/{term_id}/transition-references",
     response_model=IpRenewalTransitionReferences,
 )
-async def get_ip_renewal_transition_references(
+def get_ip_renewal_transition_references(
     docket_id: str,
     term_id: str,
     context: IpWriter,
@@ -966,7 +966,7 @@ async def get_ip_renewal_transition_references(
     "/dockets/{docket_id}/renewal-terms/{term_id}/transition",
     response_model=IpRenewalTermRecord,
 )
-async def post_ip_renewal_term_transition(
+def post_ip_renewal_term_transition(
     docket_id: str,
     term_id: str,
     payload: IpRenewalTermTransitionRequest,
@@ -1006,7 +1006,7 @@ async def post_ip_document_naming_preview(
 
 
 @router.get("/documents", response_model=IpDocumentListResponse)
-async def get_ip_documents(
+def get_ip_documents(
     context: IpViewer,
     session: DbSession,
     docket_id: Annotated[str | None, Query(max_length=36)] = None,
@@ -1029,7 +1029,8 @@ async def post_ip_document_upload(
         metadata = IpDocumentUploadMetadata.model_validate_json(metadata_json)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    response, job_id = upload_ip_document(
+    response, job_id = await run_in_threadpool(
+        upload_ip_document,
         session,
         context=context,
         metadata=metadata,
@@ -1048,7 +1049,7 @@ async def post_ip_document_upload(
 
 
 @router.post("/documents/bulk-preview", response_model=IpDocumentBulkPreviewResponse)
-async def post_ip_document_bulk_preview(
+def post_ip_document_bulk_preview(
     payload: IpDocumentBulkPreviewRequest,
     context: IpWriter,
     session: DbSession,
@@ -1057,7 +1058,7 @@ async def post_ip_document_bulk_preview(
 
 
 @router.post("/documents/bulk-apply", response_model=IpDocumentListResponse)
-async def post_ip_document_bulk_apply(
+def post_ip_document_bulk_apply(
     payload: IpDocumentBulkApplyRequest,
     context: IpWriter,
     session: DbSession,
@@ -1066,7 +1067,7 @@ async def post_ip_document_bulk_apply(
 
 
 @router.get("/documents/{document_id}", response_model=IpDocumentRecord)
-async def get_ip_document_route(
+def get_ip_document_route(
     document_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1078,7 +1079,7 @@ async def get_ip_document_route(
     "/documents/{document_id}/retirement",
     response_model=IpDocumentRetirementPreview,
 )
-async def get_ip_document_retirement_preview(
+def get_ip_document_retirement_preview(
     document_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1087,7 +1088,7 @@ async def get_ip_document_retirement_preview(
 
 
 @router.post("/documents/{document_id}/retire", response_model=IpDocumentRecord)
-async def post_ip_document_retire(
+def post_ip_document_retire(
     document_id: str,
     payload: IpDocumentRetireRequest,
     context: IpWriter,
@@ -1099,7 +1100,7 @@ async def post_ip_document_retire(
 
 
 @router.post("/documents/{document_id}/links", response_model=IpDocumentRecord)
-async def post_ip_document_links(
+def post_ip_document_links(
     document_id: str,
     payload: IpDocumentAddLinksRequest,
     context: IpWriter,
@@ -1114,7 +1115,7 @@ async def post_ip_document_links(
 
 
 @router.get("/documents/{document_id}/policy", response_model=IpDocumentPolicyResponse)
-async def get_ip_document_policy_route(
+def get_ip_document_policy_route(
     document_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1126,7 +1127,7 @@ async def get_ip_document_policy_route(
     "/documents/{document_id}/authorize-action",
     response_model=IpDocumentPolicyActionResponse,
 )
-async def post_ip_document_authorize_action(
+def post_ip_document_authorize_action(
     document_id: str,
     payload: IpDocumentPolicyActionRequest,
     context: IpViewer,
@@ -1144,7 +1145,7 @@ async def post_ip_document_authorize_action(
     "/documents/{document_id}/versions/{version_number}/transition",
     response_model=IpDocumentRecord,
 )
-async def post_ip_document_state_transition(
+def post_ip_document_state_transition(
     document_id: str,
     version_number: int,
     payload: IpDocumentStateTransitionRequest,
@@ -1176,7 +1177,8 @@ async def post_ip_document_version_upload(
         metadata = IpDocumentNewVersionMetadata.model_validate_json(metadata_json)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    response, job_id = upload_ip_document_version(
+    response, job_id = await run_in_threadpool(
+        upload_ip_document_version,
         session,
         context=context,
         document_id=document_id,
@@ -1196,7 +1198,7 @@ async def post_ip_document_version_upload(
 
 
 @router.get("/documents/{document_id}/versions/{version_number}/download")
-async def get_ip_document_download(
+def get_ip_document_download(
     document_id: str,
     version_number: int,
     context: IpViewer,
@@ -1222,7 +1224,7 @@ async def get_ip_document_download(
     "/document-taxonomy",
     response_model=IpDocumentTaxonomyResponse,
 )
-async def get_ip_document_taxonomy_route(
+def get_ip_document_taxonomy_route(
     context: IpViewer,
     session: DbSession,
 ) -> IpDocumentTaxonomyResponse:
@@ -1233,7 +1235,7 @@ async def get_ip_document_taxonomy_route(
     "/document-taxonomy/seed",
     response_model=IpDocumentTaxonomyResponse,
 )
-async def post_ip_document_taxonomy_seed(
+def post_ip_document_taxonomy_seed(
     context: IpWorkspaceAdmin,
     session: DbSession,
 ) -> IpDocumentTaxonomyResponse:
@@ -1244,7 +1246,7 @@ async def post_ip_document_taxonomy_seed(
     "/document-taxonomy/{key}",
     response_model=IpDocumentTaxonomyEntryRecord,
 )
-async def put_ip_document_taxonomy_entry(
+def put_ip_document_taxonomy_entry(
     key: str,
     payload: IpDocumentTaxonomyUpsertRequest,
     context: IpWorkspaceAdmin,
@@ -1262,7 +1264,7 @@ async def put_ip_document_taxonomy_entry(
     "/document-taxonomy/import-aliases",
     response_model=IpDocumentAliasImportResponse,
 )
-async def post_ip_document_alias_import(
+def post_ip_document_alias_import(
     payload: IpDocumentAliasImportRequest,
     context: IpWorkspaceAdmin,
     session: DbSession,
@@ -1274,7 +1276,7 @@ async def post_ip_document_alias_import(
     "/dockets/{docket_id}/deadline-workspace",
     response_model=IpDeadlineWorkspaceResponse,
 )
-async def get_ip_deadline_workspace(
+def get_ip_deadline_workspace(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1287,7 +1289,7 @@ async def get_ip_deadline_workspace(
     response_model=IpRuleVersionRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_deadline_rule(
+def post_ip_deadline_rule(
     payload: IpRuleVersionProposalRequest,
     context: IpRuleProposer,
     session: DbSession,
@@ -1299,7 +1301,7 @@ async def post_ip_deadline_rule(
     "/deadline-rules/{rule_version_id}/impact",
     response_model=IpRuleImpactResponse,
 )
-async def get_ip_deadline_rule_impact(
+def get_ip_deadline_rule_impact(
     rule_version_id: str,
     context: IpRuleActivator,
     session: DbSession,
@@ -1311,7 +1313,7 @@ async def get_ip_deadline_rule_impact(
     "/deadline-rules/{rule_version_id}/activate",
     response_model=IpRuleVersionRecord,
 )
-async def post_ip_deadline_rule_activation(
+def post_ip_deadline_rule_activation(
     rule_version_id: str,
     payload: IpRuleActivationRequest,
     context: IpRuleActivator,
@@ -1329,7 +1331,7 @@ async def post_ip_deadline_rule_activation(
     "/deadline-rules/{rule_version_id}/transition",
     response_model=IpRuleVersionRecord,
 )
-async def post_ip_deadline_rule_transition(
+def post_ip_deadline_rule_transition(
     rule_version_id: str,
     payload: IpRuleTransitionRequest,
     context: IpRuleActivator,
@@ -1347,7 +1349,7 @@ async def post_ip_deadline_rule_transition(
     "/rule-policies",
     response_model=list[IpCompanyRulePolicyRecord],
 )
-async def get_ip_rule_policies(
+def get_ip_rule_policies(
     context: IpRulePolicyReader,
     session: DbSession,
 ) -> list[IpCompanyRulePolicyRecord]:
@@ -1358,7 +1360,7 @@ async def get_ip_rule_policies(
     "/rule-policies",
     response_model=IpCompanyRulePolicyRecord,
 )
-async def put_ip_rule_policy(
+def put_ip_rule_policy(
     payload: IpCompanyRuleSelectionRequest,
     context: IpRuleActivator,
     session: DbSession,
@@ -1371,7 +1373,7 @@ async def put_ip_rule_policy(
     response_model=LegalCalendarVersionRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_working_calendar(
+def post_ip_working_calendar(
     payload: LegalCalendarVersionProposalRequest,
     context: IpRuleProposer,
     session: DbSession,
@@ -1383,7 +1385,7 @@ async def post_ip_working_calendar(
     "/working-calendars/{calendar_version_id}/activate",
     response_model=LegalCalendarVersionRecord,
 )
-async def post_ip_working_calendar_activation(
+def post_ip_working_calendar_activation(
     calendar_version_id: str,
     payload: LegalCalendarActivationRequest,
     context: IpRuleActivator,
@@ -1401,7 +1403,7 @@ async def post_ip_working_calendar_activation(
     "/working-calendars/{calendar_version_id}/withdraw",
     response_model=LegalCalendarVersionRecord,
 )
-async def post_ip_working_calendar_withdrawal(
+def post_ip_working_calendar_withdrawal(
     calendar_version_id: str,
     payload: LegalCalendarWithdrawalRequest,
     context: IpRuleProposer,
@@ -1420,7 +1422,7 @@ async def post_ip_working_calendar_withdrawal(
     response_model=IpDeadlineRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_deadline_proposal(
+def post_ip_deadline_proposal(
     docket_id: str,
     payload: IpDeadlineProposalRequest,
     context: IpReviewer,
@@ -1433,7 +1435,7 @@ async def post_ip_deadline_proposal(
     "/deadlines/{deadline_id}/impact",
     response_model=IpDeadlineImpactResponse,
 )
-async def get_ip_deadline_impact(
+def get_ip_deadline_impact(
     deadline_id: str,
     context: IpReviewer,
     session: DbSession,
@@ -1445,7 +1447,7 @@ async def get_ip_deadline_impact(
     "/deadlines/{deadline_id}/dependencies",
     response_model=IpDeadlineDependencyResponse,
 )
-async def get_ip_deadline_dependencies(
+def get_ip_deadline_dependencies(
     deadline_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1457,7 +1459,7 @@ async def get_ip_deadline_dependencies(
     "/deadlines/{deadline_id}/notification-preview",
     response_model=IpNotificationPreviewResponse,
 )
-async def post_ip_deadline_notification_preview(
+def post_ip_deadline_notification_preview(
     deadline_id: str,
     payload: IpNotificationPreviewRequest,
     context: IpViewer,
@@ -1472,7 +1474,7 @@ async def post_ip_deadline_notification_preview(
     "/deadlines/{deadline_id}/notifications",
     response_model=IpNotificationStatusResponse,
 )
-async def get_ip_deadline_notifications(
+def get_ip_deadline_notifications(
     deadline_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1481,7 +1483,7 @@ async def get_ip_deadline_notifications(
 
 
 @router.post("/deadlines/{deadline_id}/confirm", response_model=IpDeadlineRecord)
-async def post_ip_deadline_confirmation(
+def post_ip_deadline_confirmation(
     deadline_id: str,
     payload: IpDeadlineConfirmRequest,
     context: IpReviewer,
@@ -1496,7 +1498,7 @@ async def post_ip_deadline_confirmation(
 
 
 @router.post("/deadlines/{deadline_id}/override", response_model=IpDeadlineRecord)
-async def post_ip_deadline_override(
+def post_ip_deadline_override(
     deadline_id: str,
     payload: IpDeadlineOverrideRequest,
     context: IpReviewer,
@@ -1511,7 +1513,7 @@ async def post_ip_deadline_override(
 
 
 @router.post("/deadlines/{deadline_id}/recalculate", response_model=IpDeadlineRecord)
-async def post_ip_deadline_recalculation(
+def post_ip_deadline_recalculation(
     deadline_id: str,
     payload: IpDeadlineRecalculateRequest,
     context: IpReviewer,
@@ -1526,7 +1528,7 @@ async def post_ip_deadline_recalculation(
 
 
 @router.post("/deadlines/{deadline_id}/complete", response_model=IpDeadlineRecord)
-async def post_ip_deadline_completion(
+def post_ip_deadline_completion(
     deadline_id: str,
     payload: IpDeadlineCompleteRequest,
     context: IpReviewer,
@@ -1541,7 +1543,7 @@ async def post_ip_deadline_completion(
 
 
 @router.get("/readiness", response_model=IpWorkspaceReadinessResponse)
-async def get_ip_workspace_readiness(
+def get_ip_workspace_readiness(
     context: IpViewer,
     session: DbSession,
 ) -> IpWorkspaceReadinessResponse:
@@ -1619,7 +1621,7 @@ async def get_ip_workspace_readiness(
     "/workspace/configuration",
     response_model=IpWorkspaceConfigurationStatusResponse,
 )
-async def get_ip_workspace_configuration(
+def get_ip_workspace_configuration(
     context: IpWorkspaceAdmin,
     session: DbSession,
 ) -> IpWorkspaceConfigurationStatusResponse:
@@ -1630,7 +1632,7 @@ async def get_ip_workspace_configuration(
     "/workspace/configuration",
     response_model=IpWorkspaceConfigurationStatusResponse,
 )
-async def put_ip_workspace_configuration(
+def put_ip_workspace_configuration(
     payload: IpWorkspaceConfigurationUpsertRequest,
     context: IpWorkspaceAdmin,
     session: DbSession,
@@ -1643,7 +1645,7 @@ async def put_ip_workspace_configuration(
     response_model=IpWorkspaceTestResultResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_workspace_test(
+def post_ip_workspace_test(
     payload: IpWorkspaceTestRunRequest,
     context: IpWorkspaceAdmin,
     session: DbSession,
@@ -1657,7 +1659,7 @@ async def post_ip_workspace_test(
     "/workspace/enable",
     response_model=IpWorkspaceConfigurationStatusResponse,
 )
-async def post_ip_workspace_enablement(
+def post_ip_workspace_enablement(
     payload: IpWorkspaceEnableRequest,
     context: IpWorkspaceAdmin,
     session: DbSession,
@@ -1669,7 +1671,7 @@ async def post_ip_workspace_enablement(
     "/identifiers/search",
     response_model=list[IpIdentifierResponse],
 )
-async def get_ip_identifier_search(
+def get_ip_identifier_search(
     context: IpViewer,
     session: DbSession,
     query: Annotated[str, Query(alias="q", min_length=1, max_length=160)],
@@ -1720,7 +1722,7 @@ async def post_ip_import_file(
     except HTTPException:
         raise
     except Exception as exc:
-        session.rollback()
+        await run_in_threadpool(session.rollback)
         # SQL exceptions can contain applicant cells; retain frames, not values.
         frames = [
             (frame.name, frame.lineno) for frame in traceback.extract_tb(exc.__traceback__)[-8:]
@@ -1859,7 +1861,7 @@ async def post_ip_import_resume(
 
 
 @router.get("/portfolio/views", response_model=IpPortfolioSavedViewListResponse)
-async def get_ip_portfolio_saved_views(
+def get_ip_portfolio_saved_views(
     context: IpViewer,
     session: DbSession,
 ) -> IpPortfolioSavedViewListResponse:
@@ -1871,7 +1873,7 @@ async def get_ip_portfolio_saved_views(
     response_model=IpPortfolioSavedViewRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_portfolio_saved_view(
+def post_ip_portfolio_saved_view(
     payload: IpPortfolioSavedViewCreate,
     context: IpViewer,
     session: DbSession,
@@ -1880,7 +1882,7 @@ async def post_ip_portfolio_saved_view(
 
 
 @router.put("/portfolio/views/{view_id}", response_model=IpPortfolioSavedViewRecord)
-async def put_ip_portfolio_saved_view(
+def put_ip_portfolio_saved_view(
     view_id: str,
     payload: IpPortfolioSavedViewUpdate,
     context: IpViewer,
@@ -1895,7 +1897,7 @@ async def put_ip_portfolio_saved_view(
 
 
 @router.delete("/portfolio/views/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_ip_portfolio_saved_view(
+def delete_ip_portfolio_saved_view(
     view_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1907,7 +1909,7 @@ async def delete_ip_portfolio_saved_view(
     "/portfolio/exports/preview",
     response_model=IpPortfolioExportPreview,
 )
-async def post_ip_portfolio_export_preview(
+def post_ip_portfolio_export_preview(
     payload: IpPortfolioExportPreviewRequest,
     context: IpViewer,
     session: DbSession,
@@ -1927,7 +1929,9 @@ async def post_ip_portfolio_export(
     session: DbSession,
 ) -> IpPortfolioExportRecord:
     require_portfolio_export_dispatch_ready()
-    job = enqueue_portfolio_export(session, context=context, payload=payload)
+    job = await run_in_threadpool(
+        enqueue_portfolio_export, session, context=context, payload=payload,
+    )
     await dispatch_portfolio_export(
         session=session, background_tasks=background_tasks, job_id=job.id,
     )
@@ -1946,7 +1950,9 @@ async def post_ip_portfolio_export_retry(
     session: DbSession,
 ) -> IpPortfolioExportRecord:
     require_portfolio_export_dispatch_ready()
-    job = retry_portfolio_export(session, context=context, job_id=job_id)
+    job = await run_in_threadpool(
+        retry_portfolio_export, session, context=context, job_id=job_id,
+    )
     await dispatch_portfolio_export(
         session=session, background_tasks=background_tasks, job_id=job.id,
     )
@@ -1954,7 +1960,7 @@ async def post_ip_portfolio_export_retry(
 
 
 @router.get("/portfolio/exports", response_model=IpPortfolioExportListResponse)
-async def get_ip_portfolio_exports(
+def get_ip_portfolio_exports(
     context: IpViewer,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -1965,7 +1971,7 @@ async def get_ip_portfolio_exports(
 
 
 @router.get("/portfolio/exports/{job_id}", response_model=IpPortfolioExportRecord)
-async def get_ip_portfolio_export(
+def get_ip_portfolio_export(
     job_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1974,7 +1980,7 @@ async def get_ip_portfolio_export(
 
 
 @router.get("/portfolio/exports/{job_id}/download")
-async def download_ip_portfolio_export(
+def download_ip_portfolio_export(
     job_id: str,
     context: IpViewer,
     session: DbSession,
@@ -1995,7 +2001,7 @@ async def download_ip_portfolio_export(
 
 
 @router.get("/portfolio/families", response_model=IpPortfolioFamilyResponse)
-async def get_ip_portfolio_families(
+def get_ip_portfolio_families(
     context: IpViewer,
     session: DbSession,
     grouping: Annotated[str, Query(pattern="^(mark|client)$")] = "mark",
@@ -2057,7 +2063,7 @@ async def get_ip_portfolio_families(
 
 
 @router.post("/docket-queues", response_model=IpDocketQueueRecord, status_code=201)
-async def post_ip_docket_queue(
+def post_ip_docket_queue(
     payload: IpDocketQueueSaveRequest,
     context: IpWriter,
     session: DbSession,
@@ -2066,7 +2072,7 @@ async def post_ip_docket_queue(
 
 
 @router.get("/docket-queues", response_model=IpDocketQueueListResponse)
-async def get_ip_docket_queues(
+def get_ip_docket_queues(
     context: IpWriter,
     session: DbSession,
 ) -> IpDocketQueueListResponse:
@@ -2074,7 +2080,7 @@ async def get_ip_docket_queues(
 
 
 @router.delete("/docket-queues/{queue_id}", status_code=204)
-async def delete_ip_docket_queue_route(
+def delete_ip_docket_queue_route(
     queue_id: str,
     context: IpWriter,
     session: DbSession,
@@ -2086,7 +2092,7 @@ async def delete_ip_docket_queue_route(
     "/deadline-coverages/bulk-acknowledge",
     response_model=IpCoverageBulkAcknowledgeResponse,
 )
-async def post_ip_coverage_bulk_acknowledge(
+def post_ip_coverage_bulk_acknowledge(
     payload: IpCoverageBulkAcknowledgeRequest,
     context: IpWriter,
     session: DbSession,
@@ -2098,7 +2104,7 @@ async def post_ip_coverage_bulk_acknowledge(
     "/calendar-projections/drift-check",
     response_model=IpCalendarDriftResponse,
 )
-async def post_ip_calendar_drift_check(
+def post_ip_calendar_drift_check(
     context: IpWriter,
     session: DbSession,
 ) -> IpCalendarDriftResponse:
@@ -2161,7 +2167,7 @@ def _calendar_reconciliation_candidate_record(row) -> IpCalendarReconciliationCa
     "/calendar-projections/reconciliation-candidates",
     response_model=IpCalendarReconciliationCandidateListResponse,
 )
-async def get_ip_calendar_reconciliation_candidates(
+def get_ip_calendar_reconciliation_candidates(
     context: IpViewer,
     session: DbSession,
     include_resolved: bool = False,
@@ -2190,7 +2196,7 @@ async def get_ip_calendar_reconciliation_candidates(
     "/calendar-projections/reconciliation-candidates/{candidate_id}/decision",
     response_model=IpCalendarReconciliationCandidateRecord,
 )
-async def post_ip_calendar_reconciliation_decision(
+def post_ip_calendar_reconciliation_decision(
     candidate_id: str,
     payload: IpCalendarReconciliationDecisionRequest,
     context: IpApprover,
@@ -2215,7 +2221,7 @@ async def post_ip_calendar_reconciliation_decision(
     "/deadline-coverages/mine",
     response_model=IpAssignedCoverageListResponse,
 )
-async def get_ip_assigned_coverage(
+def get_ip_assigned_coverage(
     context: IpWriter,
     session: DbSession,
     unacknowledged_only: bool = False,
@@ -2229,7 +2235,7 @@ async def get_ip_assigned_coverage(
     "/deadline-coverages/awaiting-me",
     response_model=IpCoverageTransfersAwaitingResponse,
 )
-async def get_ip_coverage_transfers_awaiting(
+def get_ip_coverage_transfers_awaiting(
     context: IpWriter,
     session: DbSession,
 ) -> IpCoverageTransfersAwaitingResponse:
@@ -2240,7 +2246,7 @@ async def get_ip_coverage_transfers_awaiting(
     "/deadline-coverages/reassign-preview",
     response_model=IpCoverageReassignPreviewResponse,
 )
-async def post_ip_coverage_reassign_preview(
+def post_ip_coverage_reassign_preview(
     payload: IpCoverageReassignPreviewRequest,
     context: IpWriter,
     session: DbSession,
@@ -2252,7 +2258,7 @@ async def post_ip_coverage_reassign_preview(
     "/deadline-coverages/reassign-propose",
     response_model=IpCoverageReassignPreviewResponse,
 )
-async def post_ip_coverage_reassign_propose(
+def post_ip_coverage_reassign_propose(
     payload: IpCoverageReassignProposeRequest,
     context: IpWriter,
     session: DbSession,
@@ -2264,7 +2270,7 @@ async def post_ip_coverage_reassign_propose(
     "/deadline-coverages/{coverage_id}/replacement-decision",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_coverage_replacement_decision(
+def post_ip_coverage_replacement_decision(
     coverage_id: str,
     payload: IpCoverageReplacementDecisionRequest,
     context: IpWriter,
@@ -2276,7 +2282,7 @@ async def post_ip_coverage_replacement_decision(
 
 
 @router.get("/daily-docket", response_model=IpDailyDocketResponse)
-async def get_ip_daily_docket(
+def get_ip_daily_docket(
     context: IpViewer,
     session: DbSession,
     team: Annotated[str | None, Query(max_length=120)] = None,
@@ -2295,7 +2301,7 @@ async def get_ip_daily_docket(
     response_model=IpControlReviewRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_control_review(
+def post_ip_control_review(
     payload: IpControlReviewCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -2304,7 +2310,7 @@ async def post_ip_control_review(
 
 
 @router.get("/control-reviews", response_model=IpControlReviewListResponse)
-async def get_ip_control_reviews(
+def get_ip_control_reviews(
     context: IpViewer,
     session: DbSession,
 ) -> IpControlReviewListResponse:
@@ -2312,7 +2318,7 @@ async def get_ip_control_reviews(
 
 
 @router.get("/control-reviews/{review_id}", response_model=IpControlReviewRecord)
-async def get_ip_control_review_detail(
+def get_ip_control_review_detail(
     review_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2321,7 +2327,7 @@ async def get_ip_control_review_detail(
 
 
 @router.post("/control-reviews/{review_id}/export", response_model=IpControlReviewRecord)
-async def post_ip_control_review_export(
+def post_ip_control_review_export(
     review_id: str,
     payload: IpControlReviewExportRequest,
     context: IpWriter,
@@ -2336,7 +2342,7 @@ async def post_ip_control_review_export(
     "/control-reviews/{review_id}/exceptions/{docket_id}/{exception_kind}/decision",
     response_model=IpControlReviewRecord,
 )
-async def post_ip_control_review_exception_decision(
+def post_ip_control_review_exception_decision(
     review_id: str,
     docket_id: str,
     exception_kind: str,
@@ -2358,7 +2364,7 @@ async def post_ip_control_review_exception_decision(
     "/control-reviews/{review_id}/samples",
     response_model=IpControlReviewRecord,
 )
-async def post_ip_control_review_sample(
+def post_ip_control_review_sample(
     review_id: str,
     payload: IpControlReviewSampleRequest,
     context: IpReviewer,
@@ -2373,7 +2379,7 @@ async def post_ip_control_review_sample(
 
 
 @router.post("/control-reviews/{review_id}/sign-off", response_model=IpControlReviewRecord)
-async def post_ip_control_review_sign_off(
+def post_ip_control_review_sign_off(
     review_id: str,
     payload: IpControlReviewSignOffRequest,
     context: IpReviewer,
@@ -2385,7 +2391,7 @@ async def post_ip_control_review_sign_off(
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)
-async def get_ip_dockets(
+def get_ip_dockets(
     context: IpViewer,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
@@ -2406,7 +2412,7 @@ async def get_ip_dockets(
 
 
 @router.get("/portfolio", response_model=IpPortfolioListResponse)
-async def get_ip_portfolio(
+def get_ip_portfolio(
     context: IpViewer,
     session: DbSession,
     query: Annotated[str | None, Query(max_length=200)] = None,
@@ -2470,7 +2476,7 @@ async def get_ip_portfolio(
     response_model=IpDocketRecordResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_docket(
+def post_ip_docket(
     payload: IpDocketCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -2483,7 +2489,7 @@ async def post_ip_docket(
     response_model=ManualTrademarkApplicationCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_manual_trademark_application(
+def post_manual_trademark_application(
     payload: ManualTrademarkApplicationCreateRequest,
     context: IpWriter,
     session: DbSession,
@@ -2505,7 +2511,7 @@ async def post_manual_trademark_application(
 
 
 @router.get("/dockets/{docket_id}/summary", response_model=IpDocketSummaryResponse)
-async def get_ip_docket_summary_record(
+def get_ip_docket_summary_record(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2514,7 +2520,7 @@ async def get_ip_docket_summary_record(
 
 
 @router.get("/dockets/{docket_id}", response_model=IpDocketRecordResponse)
-async def get_ip_docket_record(
+def get_ip_docket_record(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2526,7 +2532,7 @@ async def get_ip_docket_record(
     "/dockets/{docket_id}/matter-links",
     response_model=IpDocketMatterLinkListResponse,
 )
-async def get_ip_docket_matter_links(
+def get_ip_docket_matter_links(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2539,7 +2545,7 @@ async def get_ip_docket_matter_links(
     response_model=IpMatterLinkRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_docket_matter_link(
+def post_ip_docket_matter_link(
     docket_id: str,
     payload: IpMatterLinkCreateRequest,
     context: IpWriter,
@@ -2557,7 +2563,7 @@ async def post_ip_docket_matter_link(
     "/dockets/{docket_id}/matter-links/{link_id}/retire",
     response_model=IpMatterLinkRetireResponse,
 )
-async def post_ip_docket_matter_link_retirement(
+def post_ip_docket_matter_link_retirement(
     docket_id: str,
     link_id: str,
     payload: IpMatterLinkRetireRequest,
@@ -2577,7 +2583,7 @@ async def post_ip_docket_matter_link_retirement(
     "/dockets/{docket_id}/audit",
     response_model=IpDocketAuditListResponse,
 )
-async def get_ip_docket_audit(
+def get_ip_docket_audit(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2597,7 +2603,7 @@ async def get_ip_docket_audit(
     "/dockets/{docket_id}/prosecution",
     response_model=IpProsecutionWorkspaceResponse,
 )
-async def get_ip_docket_prosecution_workspace(
+def get_ip_docket_prosecution_workspace(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2613,7 +2619,7 @@ async def get_ip_docket_prosecution_workspace(
     "/dockets/{docket_id}/events",
     response_model=list[IpDocketEventResponse],
 )
-async def get_ip_docket_events(
+def get_ip_docket_events(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2632,7 +2638,7 @@ async def get_ip_docket_events(
     "/dockets/{docket_id}/events/preview",
     response_model=IpDocketEventPreviewResponse,
 )
-async def post_ip_docket_event_preview(
+def post_ip_docket_event_preview(
     docket_id: str,
     payload: IpDocketEventCreateRequest,
     context: IpWriter,
@@ -2651,7 +2657,7 @@ async def post_ip_docket_event_preview(
     response_model=IpDocketEventResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_docket_event(
+def post_ip_docket_event(
     docket_id: str,
     payload: IpDocketEventCreateRequest,
     context: IpWriter,
@@ -2671,7 +2677,7 @@ async def post_ip_docket_event(
     "/dockets/{docket_id}/lifecycle/preview",
     response_model=IpLifecyclePreviewResponse,
 )
-async def post_ip_docket_lifecycle_preview(
+def post_ip_docket_lifecycle_preview(
     docket_id: str,
     payload: IpLifecycleTransitionRequest,
     context: IpReviewer,
@@ -2689,7 +2695,7 @@ async def post_ip_docket_lifecycle_preview(
     "/dockets/{docket_id}/lifecycle",
     response_model=IpLifecycleTransitionResponse,
 )
-async def post_ip_docket_lifecycle_transition(
+def post_ip_docket_lifecycle_transition(
     docket_id: str,
     payload: IpLifecycleTransitionRequest,
     context: IpReviewer,
@@ -2715,7 +2721,7 @@ async def post_ip_docket_lifecycle_transition(
     "/dockets/{docket_id}/core-records",
     response_model=IpCoreRecordResponse,
 )
-async def get_ip_docket_core_records(
+def get_ip_docket_core_records(
     docket_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2730,7 +2736,7 @@ async def get_ip_docket_core_records(
     response_model=IpAssetResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_asset(
+def post_ip_asset(
     docket_id: str,
     payload: IpAssetCreateRequest,
     context: IpWriter,
@@ -2746,7 +2752,7 @@ async def post_ip_asset(
     response_model=TrademarkApplicationMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_trademark_application(
+def post_trademark_application(
     docket_id: str,
     payload: TrademarkApplicationCreateRequest,
     context: IpWriter,
@@ -2771,7 +2777,7 @@ async def post_trademark_application(
     "/applications/{application_id}/filing-phase",
     response_model=TrademarkApplicationResponse,
 )
-async def patch_trademark_application_phase(
+def patch_trademark_application_phase(
     application_id: str,
     payload: TrademarkApplicationPhaseUpdateRequest,
     context: IpWriter,
@@ -2804,7 +2810,7 @@ def _filing_transaction_response(
     response_model=IpFilingTransactionMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_filing_preparation_transaction(
+def post_ip_filing_preparation_transaction(
     application_id: str,
     payload: IpFilingPreparationTransactionRequest,
     context: IpFilingPreparer,
@@ -2825,7 +2831,7 @@ async def post_ip_filing_preparation_transaction(
     response_model=IpFilingTransactionMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_filing_confirmation_transaction(
+def post_ip_filing_confirmation_transaction(
     application_id: str,
     payload: IpFilingConfirmationTransactionRequest,
     context: IpFilingConfirmer,
@@ -2845,7 +2851,7 @@ async def post_ip_filing_confirmation_transaction(
     "/applications/{application_id}/filing-transactions",
     response_model=IpFilingTransactionListResponse,
 )
-async def get_ip_filing_transactions(
+def get_ip_filing_transactions(
     application_id: str,
     context: IpViewer,
     session: DbSession,
@@ -2868,7 +2874,7 @@ async def get_ip_filing_transactions(
     response_model=IpProceedingResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_proceeding(
+def post_ip_proceeding(
     docket_id: str,
     payload: IpProceedingCreateRequest,
     context: IpWriter,
@@ -2888,7 +2894,7 @@ async def post_ip_proceeding(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/stage",
     response_model=IpOppositionStageTransitionResponse,
 )
-async def post_ip_opposition_stage_transition(
+def post_ip_opposition_stage_transition(
     docket_id: str,
     proceeding_id: str,
     payload: IpOppositionStageTransitionRequest,
@@ -2912,7 +2918,7 @@ async def post_ip_opposition_stage_transition(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace",
     response_model=IpOppositionWorkspaceResponse,
 )
-async def get_ip_opposition_workspace(
+def get_ip_opposition_workspace(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -2930,7 +2936,7 @@ async def get_ip_opposition_workspace(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace",
     response_model=IpOppositionWorkspaceResponse,
 )
-async def put_ip_opposition_workspace(
+def put_ip_opposition_workspace(
     docket_id: str,
     proceeding_id: str,
     payload: IpOppositionWorkspaceUpsertRequest,
@@ -2950,7 +2956,7 @@ async def put_ip_opposition_workspace(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-workspace",
     response_model=IpPostRegistrationWorkspaceResponse,
 )
-async def get_ip_post_registration_workspace(
+def get_ip_post_registration_workspace(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -2968,7 +2974,7 @@ async def get_ip_post_registration_workspace(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-workspace",
     response_model=IpPostRegistrationWorkspaceResponse,
 )
-async def put_ip_post_registration_workspace(
+def put_ip_post_registration_workspace(
     docket_id: str,
     proceeding_id: str,
     payload: IpPostRegistrationWorkspaceUpsertRequest,
@@ -2989,7 +2995,7 @@ async def put_ip_post_registration_workspace(
     response_model=IpPostRegistrationWorkspaceResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_post_registration_action(
+def post_ip_post_registration_action(
     docket_id: str,
     proceeding_id: str,
     payload: IpPostRegistrationActionRequest,
@@ -3009,7 +3015,7 @@ async def post_ip_post_registration_action(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-workflow",
     response_model=IpOppositionApplicantWorkflowResponse,
 )
-async def get_ip_opposition_applicant_workflow(
+def get_ip_opposition_applicant_workflow(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -3069,7 +3075,7 @@ def post_ip_opposition_applicant_deadline(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/opponent-workflow",
     response_model=IpOppositionOpponentWorkflowResponse,
 )
-async def get_ip_opposition_opponent_workflow(
+def get_ip_opposition_opponent_workflow(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -3129,7 +3135,7 @@ def post_ip_opposition_opponent_deadline(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-workflow",
     response_model=IpOppositionSharedWorkflowResponse,
 )
-async def get_ip_opposition_shared_workflow(
+def get_ip_opposition_shared_workflow(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -3169,7 +3175,7 @@ def post_ip_opposition_shared_action(
     response_model=IpIdentifierMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_identifier(
+def post_ip_identifier(
     docket_id: str,
     payload: IpIdentifierCreate,
     context: IpWriter,
@@ -3192,7 +3198,7 @@ async def post_ip_identifier(
     response_model=IpIdentifierMutationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_identifier_correction(
+def post_ip_identifier_correction(
     docket_id: str,
     identifier_id: str,
     payload: IpIdentifierCorrectionCreate,
@@ -3216,7 +3222,7 @@ async def post_ip_identifier_correction(
     "/dockets/{docket_id}/identifiers/{identifier_id}/duplicates",
     response_model=IpDuplicatePreviewResponse,
 )
-async def get_ip_identifier_duplicates(
+def get_ip_identifier_duplicates(
     docket_id: str,
     identifier_id: str,
     context: IpViewer,
@@ -3234,7 +3240,7 @@ async def get_ip_identifier_duplicates(
     "/dockets/{docket_id}/identifiers/{identifier_id}/reconcile",
     response_model=IpDuplicateResolutionResponse,
 )
-async def post_ip_identifier_reconciliation(
+def post_ip_identifier_reconciliation(
     docket_id: str,
     identifier_id: str,
     payload: IpDuplicateResolutionRequest,
@@ -3306,7 +3312,7 @@ async def get_portfolio_renewal_tracker(
 
 
 @router.post("/dockets/{docket_id}/versions", response_model=IpDocketRecordResponse)
-async def post_ip_docket_version(
+def post_ip_docket_version(
     docket_id: str,
     payload: IpDocketVersionCreateRequest,
     context: IpWriter,
@@ -3316,7 +3322,7 @@ async def post_ip_docket_version(
 
 
 @router.post("/dockets/{docket_id}/notice-links", response_model=IpDocketRecordResponse)
-async def post_ip_notice_link(
+def post_ip_notice_link(
     docket_id: str,
     payload: IpNoticeLinkCreateRequest,
     context: IpWriter,
@@ -3329,7 +3335,7 @@ async def post_ip_notice_link(
     "/dockets/{docket_id}/evidence/discover",
     response_model=IpEvidenceDiscoveryResponse,
 )
-async def post_ip_evidence_discovery(
+def post_ip_evidence_discovery(
     docket_id: str,
     context: IpReviewer,
     session: DbSession,
@@ -3345,7 +3351,7 @@ async def post_ip_evidence_discovery(
     "/dockets/{docket_id}/evidence/{candidate_id}/review",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_evidence_review(
+def post_ip_evidence_review(
     docket_id: str,
     candidate_id: str,
     payload: IpEvidenceCandidateReviewRequest,
@@ -3365,7 +3371,7 @@ async def post_ip_evidence_review(
     "/dockets/{docket_id}/deadline-coverages",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_coverage(
+def post_ip_deadline_coverage(
     docket_id: str,
     payload: IpDeadlineCoverageCreateRequest,
     context: IpReviewer,
@@ -3378,7 +3384,7 @@ async def post_ip_deadline_coverage(
     "/dockets/{docket_id}/deadline-coverages/{coverage_id}/reassign",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_coverage_reassignment(
+def post_ip_deadline_coverage_reassignment(
     docket_id: str,
     coverage_id: str,
     payload: IpDeadlineCoverageReassignRequest,
@@ -3398,7 +3404,7 @@ async def post_ip_deadline_coverage_reassignment(
     "/deadline-coverages/bulk-reassign",
     response_model=IpCoverageBulkReassignResponse,
 )
-async def post_ip_deadline_coverage_bulk_reassignment(
+def post_ip_deadline_coverage_bulk_reassignment(
     payload: IpCoverageBulkReassignRequest,
     context: IpReviewer,
     session: DbSession,
@@ -3414,7 +3420,7 @@ async def post_ip_deadline_coverage_bulk_reassignment(
     "/dockets/{docket_id}/deadline-incidents",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident(
+def post_ip_deadline_incident(
     docket_id: str,
     payload: IpDeadlineIncidentCreateRequest,
     context: IpReviewer,
@@ -3427,7 +3433,7 @@ async def post_ip_deadline_incident(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/impact-scan",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident_impact_scan(
+def post_ip_deadline_incident_impact_scan(
     docket_id: str,
     incident_id: str,
     payload: IpDeadlineIncidentImpactScanRequest,
@@ -3447,7 +3453,7 @@ async def post_ip_deadline_incident_impact_scan(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/actions",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident_action(
+def post_ip_deadline_incident_action(
     docket_id: str,
     incident_id: str,
     payload: IpDeadlineIncidentActionRequest,
@@ -3467,7 +3473,7 @@ async def post_ip_deadline_incident_action(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/notification-decisions",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident_notification_decision(
+def post_ip_deadline_incident_notification_decision(
     docket_id: str,
     incident_id: str,
     payload: IpDeadlineIncidentNotificationDecisionRequest,
@@ -3487,7 +3493,7 @@ async def post_ip_deadline_incident_notification_decision(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/verify",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident_verification(
+def post_ip_deadline_incident_verification(
     docket_id: str,
     incident_id: str,
     payload: IpDeadlineIncidentVerifyRequest,
@@ -3507,7 +3513,7 @@ async def post_ip_deadline_incident_verification(
     "/dockets/{docket_id}/deadline-incidents/{incident_id}/kill-switches/{feature_id}/release",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_deadline_incident_kill_switch_release(
+def post_ip_deadline_incident_kill_switch_release(
     docket_id: str,
     incident_id: str,
     feature_id: str,
@@ -3526,7 +3532,7 @@ async def post_ip_deadline_incident_kill_switch_release(
 
 
 @router.delete("/dockets/{docket_id}/deadline-incidents/{incident_id}")
-async def delete_ip_deadline_incident(
+def delete_ip_deadline_incident(
     docket_id: str,
     incident_id: str,
     context: IpReviewer,
@@ -3541,7 +3547,7 @@ async def delete_ip_deadline_incident(
 
 
 @router.post("/dockets/{docket_id}/title-interests", response_model=IpDocketRecordResponse)
-async def post_ip_title_interest(
+def post_ip_title_interest(
     docket_id: str,
     payload: IpTitleInterestCreateRequest,
     context: IpReviewer,
@@ -3554,7 +3560,7 @@ async def post_ip_title_interest(
     "/dockets/{docket_id}/related-right-obligations",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_related_right_obligation(
+def post_ip_related_right_obligation(
     docket_id: str,
     payload: IpRelatedRightObligationCreateRequest,
     context: IpReviewer,
@@ -3572,7 +3578,7 @@ async def post_ip_related_right_obligation(
     "/dockets/{docket_id}/related-right-obligations/{obligation_id}/complete",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_related_right_obligation_completion(
+def post_ip_related_right_obligation_completion(
     docket_id: str,
     obligation_id: str,
     payload: IpRelatedRightObligationCompleteRequest,
@@ -3589,7 +3595,7 @@ async def post_ip_related_right_obligation_completion(
 
 
 @router.post("/dockets/{docket_id}/cost-items", response_model=IpDocketRecordResponse)
-async def post_ip_cost_item(
+def post_ip_cost_item(
     docket_id: str,
     payload: IpCostItemCreateRequest,
     context: IpFinance,
@@ -3602,7 +3608,7 @@ async def post_ip_cost_item(
     "/dockets/{docket_id}/cost-items/{cost_item_id}/corrections",
     response_model=IpDocketRecordResponse,
 )
-async def post_ip_cost_item_correction(
+def post_ip_cost_item_correction(
     docket_id: str,
     cost_item_id: str,
     payload: IpCostItemCorrectionRequest,
@@ -3622,7 +3628,7 @@ async def post_ip_cost_item_correction(
     "/dockets/{docket_id}/cost-items/reconcile",
     response_model=IpCostReconciliationReport,
 )
-async def post_ip_cost_reconciliation(
+def post_ip_cost_reconciliation(
     docket_id: str,
     context: IpFinance,
     session: DbSession,
@@ -3635,7 +3641,7 @@ async def post_ip_cost_reconciliation(
 
 
 @router.get("/reports/docket-control", response_model=IpDocketControlReport)
-async def get_ip_docket_control_report(
+def get_ip_docket_control_report(
     context: IpViewer,
     session: DbSession,
 ) -> IpDocketControlReport:
@@ -3654,7 +3660,7 @@ async def get_ip_report_foundation_contract(
 
 
 @router.post("/reports/preview", response_model=IpReportPreviewResponse)
-async def post_ip_report_preview(
+def post_ip_report_preview(
     payload: IpReportPreviewRequest,
     context: IpViewer,
     session: DbSession,
@@ -3666,7 +3672,7 @@ async def post_ip_report_preview(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/pleading-templates",
     response_model=IpPleadingTemplateListResponse,
 )
-async def get_ip_pleading_templates(
+def get_ip_pleading_templates(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -3686,7 +3692,7 @@ async def get_ip_pleading_templates(
     response_model=DraftRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_pleading_draft(
+def post_ip_pleading_draft(
     docket_id: str,
     proceeding_id: str,
     payload: IpPleadingDraftCreateRequest,
@@ -3709,7 +3715,7 @@ async def post_ip_pleading_draft(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts",
     response_model=DraftListResponse,
 )
-async def get_ip_pleading_drafts(
+def get_ip_pleading_drafts(
     docket_id: str,
     proceeding_id: str,
     context: IpViewer,
@@ -3730,7 +3736,7 @@ async def get_ip_pleading_drafts(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}",
     response_model=DraftRecord,
 )
-async def get_ip_pleading_draft(
+def get_ip_pleading_draft(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3751,7 +3757,7 @@ async def get_ip_pleading_draft(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}",
     response_model=DraftRecord,
 )
-async def patch_ip_pleading_draft(
+def patch_ip_pleading_draft(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3774,7 +3780,7 @@ async def patch_ip_pleading_draft(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/generate",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_draft_generation(
+def post_ip_pleading_draft_generation(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3819,7 +3825,7 @@ def _transition_ip_pleading(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/submit",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_draft_submission(
+def post_ip_pleading_draft_submission(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3842,7 +3848,7 @@ async def post_ip_pleading_draft_submission(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/request-changes",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_draft_changes_request(
+def post_ip_pleading_draft_changes_request(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3865,7 +3871,7 @@ async def post_ip_pleading_draft_changes_request(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/approve",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_draft_approval(
+def post_ip_pleading_draft_approval(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3888,7 +3894,7 @@ async def post_ip_pleading_draft_approval(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/finalize",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_draft_finalization(
+def post_ip_pleading_draft_finalization(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3911,7 +3917,7 @@ async def post_ip_pleading_draft_finalization(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/validate",
     response_model=IpDraftValidationReportRecord,
 )
-async def get_ip_pleading_draft_validation(
+def get_ip_pleading_draft_validation(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3934,7 +3940,7 @@ async def get_ip_pleading_draft_validation(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/compare",
     response_model=DraftCompareRecord,
 )
-async def get_ip_pleading_draft_comparison(
+def get_ip_pleading_draft_comparison(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -3986,7 +3992,7 @@ def _transition_ip_pleading_lifecycle(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/file",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_filing(
+def post_ip_pleading_filing(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -4009,7 +4015,7 @@ async def post_ip_pleading_filing(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/reject-filing",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_filing_rejection(
+def post_ip_pleading_filing_rejection(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -4032,7 +4038,7 @@ async def post_ip_pleading_filing_rejection(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/serve",
     response_model=DraftRecord,
 )
-async def post_ip_pleading_service(
+def post_ip_pleading_service(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -4055,7 +4061,7 @@ async def post_ip_pleading_service(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx",
     response_class=Response,
 )
-async def download_ip_pleading_draft_docx(
+def download_ip_pleading_draft_docx(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,
@@ -4082,7 +4088,7 @@ async def download_ip_pleading_draft_docx(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/filing-bundle.zip",
     response_class=Response,
 )
-async def download_ip_pleading_filing_bundle(
+def download_ip_pleading_filing_bundle(
     docket_id: str,
     proceeding_id: str,
     draft_id: str,

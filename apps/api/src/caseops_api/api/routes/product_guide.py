@@ -96,7 +96,7 @@ async def get_product_guide_catalog() -> ProductGuideCatalogResponse:
     response_model=ProductGuideSearchResponse,
     summary="Search approved help topics and capability-filtered navigation commands.",
 )
-async def search_product_guide_catalog(
+def search_product_guide_catalog(
     context: CurrentContext,
     session: DbSession,
     q: Annotated[str, Query(min_length=2, max_length=MAX_QUERY_CHARS)],

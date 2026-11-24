@@ -57,7 +57,7 @@ IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
 
 
 @public_router.get("/ip-records", response_model=PortalIpRecordListResponse)
-async def get_portal_ip_records(
+def get_portal_ip_records(
     portal_user: CurrentPortalUser,
     session: DbSession,
 ) -> PortalIpRecordListResponse:
@@ -65,7 +65,7 @@ async def get_portal_ip_records(
 
 
 @public_router.get("/ip-records/{docket_id}", response_model=PortalIpRecord)
-async def get_portal_ip_record_route(
+def get_portal_ip_record_route(
     docket_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -74,7 +74,7 @@ async def get_portal_ip_record_route(
 
 
 @public_router.get("/publications", response_model=PortalPublicationListResponse)
-async def get_portal_publications(
+def get_portal_publications(
     portal_user: CurrentPortalUser,
     session: DbSession,
 ) -> PortalPublicationListResponse:
@@ -82,7 +82,7 @@ async def get_portal_publications(
 
 
 @public_router.get("/publications/{publication_id}", response_model=PortalPublicationRecord)
-async def get_portal_publication_route(
+def get_portal_publication_route(
     publication_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -91,7 +91,7 @@ async def get_portal_publication_route(
 
 
 @public_router.get("/publications/{publication_id}/document", response_model=None)
-async def download_portal_publication_document(
+def download_portal_publication_document(
     publication_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -112,7 +112,7 @@ async def download_portal_publication_document(
     response_model=PortalInstructionRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_portal_publication_instruction(
+def post_portal_publication_instruction(
     publication_id: str,
     payload: PortalInstructionSubmitRequest,
     portal_user: CurrentPortalUser,
@@ -127,7 +127,7 @@ async def post_portal_publication_instruction(
 
 
 @admin_router.get("/portal/ip-grants", response_model=PortalIpGrantListResponse)
-async def get_admin_portal_ip_grants(
+def get_admin_portal_ip_grants(
     context: PortalGrantManager,
     session: DbSession,
 ) -> PortalIpGrantListResponse:
@@ -135,7 +135,7 @@ async def get_admin_portal_ip_grants(
 
 
 @admin_router.post("/portal/ip-grants/{grant_id}/revoke", response_model=PortalIpGrantRecord)
-async def post_admin_portal_ip_grant_revoke(
+def post_admin_portal_ip_grant_revoke(
     grant_id: str,
     payload: PortalGrantRevokeRequest,
     context: PortalGrantManager,
@@ -149,7 +149,7 @@ async def post_admin_portal_ip_grant_revoke(
     response_model=PortalPublicationRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_portal_report_publication(
+def post_ip_portal_report_publication(
     payload: PortalReportPublicationCreate,
     context: PortalGrantManager,
     _approval: IpApprover,
@@ -162,7 +162,7 @@ async def post_ip_portal_report_publication(
     "/portal/grants/{grant_id}/shareable-documents",
     response_model=PortalShareableDocumentListResponse,
 )
-async def get_ip_portal_grant_shareable_documents(
+def get_ip_portal_grant_shareable_documents(
     grant_id: str,
     context: PortalGrantManager,
     _approval: IpApprover,
@@ -176,7 +176,7 @@ async def get_ip_portal_grant_shareable_documents(
     response_model=PortalPublicationRecord,
     status_code=status.HTTP_201_CREATED,
 )
-async def post_ip_portal_document_publication(
+def post_ip_portal_document_publication(
     payload: PortalDocumentPublicationCreate,
     context: PortalGrantManager,
     _approval: IpApprover,
@@ -186,7 +186,7 @@ async def post_ip_portal_document_publication(
 
 
 @internal_router.get("/portal/client-instructions", response_model=PortalInstructionListResponse)
-async def get_ip_portal_client_instructions(
+def get_ip_portal_client_instructions(
     context: IpWriter,
     session: DbSession,
 ) -> PortalInstructionListResponse:
@@ -197,7 +197,7 @@ async def get_ip_portal_client_instructions(
     "/portal/client-instructions/{instruction_id}/acknowledge",
     response_model=PortalInstructionRecord,
 )
-async def post_ip_portal_client_instruction_acknowledgement(
+def post_ip_portal_client_instruction_acknowledgement(
     instruction_id: str,
     payload: PortalInstructionAcknowledgeRequest,
     context: IpWriter,

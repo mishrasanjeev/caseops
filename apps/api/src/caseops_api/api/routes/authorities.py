@@ -270,7 +270,7 @@ async def get_authority_sources(
     response_model=AuthorityIngestionRunRecord,
     summary="Pull authority documents from an official live source",
 )
-async def pull_authority_source(
+def pull_authority_source(
     payload: AuthorityIngestionRequest,
     context: AuthorityIngester,
     session: DbSession,
@@ -283,7 +283,7 @@ async def pull_authority_source(
     response_model=AuthorityDocumentListResponse,
     summary="List recently ingested authority documents",
 )
-async def get_recent_authority_documents(
+def get_recent_authority_documents(
     context: CurrentContext,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=20)] = 12,
@@ -321,7 +321,7 @@ def post_authority_search(
     response_model=AuthorityResearchReportListResponse,
     summary="List immutable saved research reports",
 )
-async def get_authority_research_reports(
+def get_authority_research_reports(
     context: AuthoritySearcher,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -335,7 +335,7 @@ async def get_authority_research_reports(
     status_code=status.HTTP_201_CREATED,
     summary="Freeze a source-backed authority research report",
 )
-async def post_authority_research_report(
+def post_authority_research_report(
     payload: AuthorityResearchReportCreateRequest,
     context: AuthoritySearcher,
     session: DbSession,
@@ -348,7 +348,7 @@ async def post_authority_research_report(
     response_model=JudgmentAlertRuleListResponse,
     summary="List saved judgment alert rules",
 )
-async def get_judgment_alert_rules(
+def get_judgment_alert_rules(
     context: AuthoritySearcher,
     session: DbSession,
 ) -> JudgmentAlertRuleListResponse:
@@ -361,7 +361,7 @@ async def get_judgment_alert_rules(
     status_code=status.HTTP_201_CREATED,
     summary="Create a saved judgment alert rule",
 )
-async def post_judgment_alert_rule(
+def post_judgment_alert_rule(
     payload: JudgmentAlertRuleCreateRequest,
     context: AuthoritySearcher,
     session: DbSession,
@@ -374,7 +374,7 @@ async def post_judgment_alert_rule(
     response_model=JudgmentAlertRuleRecord,
     summary="Update or archive a saved judgment alert rule",
 )
-async def patch_judgment_alert_rule(
+def patch_judgment_alert_rule(
     rule_id: str,
     payload: JudgmentAlertRuleUpdateRequest,
     context: AuthoritySearcher,
@@ -393,7 +393,7 @@ async def patch_judgment_alert_rule(
     response_model=JudgmentAlertRunResponse,
     summary="Preview or generate in-app judgment alerts from existing authorities",
 )
-async def post_judgment_alert_rule_run(
+def post_judgment_alert_rule_run(
     rule_id: str,
     payload: JudgmentAlertRunRequest,
     context: AuthoritySearcher,
@@ -412,7 +412,7 @@ async def post_judgment_alert_rule_run(
     response_model=JudgmentAlertListResponse,
     summary="List in-app judgment alerts",
 )
-async def get_judgment_alerts(
+def get_judgment_alerts(
     context: AuthoritySearcher,
     session: DbSession,
     include_dismissed: Annotated[bool, Query()] = False,
@@ -431,7 +431,7 @@ async def get_judgment_alerts(
     response_model=JudgmentAlertDigestPreviewResponse,
     summary="Preview an in-app-only judgment alert digest",
 )
-async def get_judgment_alert_digest_preview(
+def get_judgment_alert_digest_preview(
     context: AuthoritySearcher,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
@@ -448,7 +448,7 @@ async def get_judgment_alert_digest_preview(
     response_model=JudgmentAlertRecord,
     summary="Mark an in-app judgment alert read or dismissed",
 )
-async def patch_judgment_alert(
+def patch_judgment_alert(
     alert_id: str,
     payload: JudgmentAlertUpdateRequest,
     context: AuthoritySearcher,
@@ -467,7 +467,7 @@ async def patch_judgment_alert(
     response_model=AuthorityTreatmentSummaryResponse,
     summary="Good-law treatment summary for one authority (PG-006)",
 )
-async def get_authority_treatment_summary(
+def get_authority_treatment_summary(
     authority_document_id: str,
     context: AuthoritySearcher,
     session: DbSession,
@@ -530,7 +530,7 @@ def _annotation_record(annotation) -> AuthorityAnnotationRecord:
     summary="List this tenant's annotations on an authority document",
     tags=["authorities"],
 )
-async def get_authority_annotations(
+def get_authority_annotations(
     authority_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -561,7 +561,7 @@ async def get_authority_annotations(
     status_code=status.HTTP_201_CREATED,
     tags=["authorities"],
 )
-async def post_authority_annotation(
+def post_authority_annotation(
     authority_id: str,
     payload: AuthorityAnnotationCreateRequest,
     context: AuthorityAnnotator,
@@ -584,7 +584,7 @@ async def post_authority_annotation(
     summary="Update a tenant-private authority annotation",
     tags=["authorities"],
 )
-async def patch_authority_annotation(
+def patch_authority_annotation(
     annotation_id: str,
     payload: AuthorityAnnotationUpdateRequest,
     context: AuthorityAnnotator,
@@ -608,7 +608,7 @@ async def patch_authority_annotation(
     tags=["authorities"],
     responses={204: {"description": "Annotation deleted"}},
 )
-async def delete_authority_annotation(
+def delete_authority_annotation(
     annotation_id: str,
     context: AuthorityAnnotator,
     session: DbSession,
@@ -628,7 +628,7 @@ async def delete_authority_annotation(
     ),
     tags=["authorities"],
 )
-async def get_saved_annotations(
+def get_saved_annotations(
     context: CurrentContext,
     session: DbSession,
     include_archived: Annotated[bool, Query()] = False,

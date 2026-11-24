@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -47,7 +48,7 @@ PaymentSyncer = Annotated[SessionContext, Depends(require_capability('payments:s
     response_model=InvoicePaymentAttemptRecord,
     summary="Create a Pine Labs payment link for an invoice",
 )
-async def create_current_company_invoice_payment_link(
+def create_current_company_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
     payload: PaymentLinkCreateRequest,
@@ -70,7 +71,7 @@ async def create_current_company_invoice_payment_link(
     response_model=InvoicePaymentAttemptRecord,
     summary="Sync the latest Pine Labs payment attempt for an invoice",
 )
-async def sync_current_company_invoice_payment_link(
+def sync_current_company_invoice_payment_link(
     matter_id: str,
     invoice_id: str,
     context: PaymentSyncer,
@@ -113,4 +114,7 @@ async def pine_labs_webhook(
     request: Request,
     session: DbSession,
 ) -> PaymentWebhookAckResponse:
-    return await handle_pine_labs_webhook(session, request=request)
+    raw_body = await request.body()
+    return await run_in_threadpool(
+        handle_pine_labs_webhook, session, raw_body=raw_body, headers=request.headers,
+    )

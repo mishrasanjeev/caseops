@@ -43,7 +43,7 @@ IntakePromoter = Annotated[
     response_model=IntakeRequestListResponse,
     summary="List intake requests for the current company",
 )
-async def get_intake_requests(
+def get_intake_requests(
     context: CurrentContext,
     session: DbSession,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
@@ -62,7 +62,7 @@ async def get_intake_requests(
     response_model=IntakeRequestRecord,
     summary="File a new intake request",
 )
-async def post_intake_request(
+def post_intake_request(
     payload: IntakeRequestCreateRequest,
     context: IntakeSubmitter,
     session: DbSession,
@@ -77,7 +77,7 @@ async def post_intake_request(
     response_model=IntakeRequestRecord,
     summary="Triage, reassign, or update an intake request",
 )
-async def patch_intake_request(
+def patch_intake_request(
     request_id: str,
     payload: IntakeRequestUpdateRequest,
     context: IntakeTriager,
@@ -95,7 +95,7 @@ async def patch_intake_request(
     response_model=IntakeRequestRecord,
     summary="Promote an intake request into a matter",
 )
-async def post_intake_promote(
+def post_intake_promote(
     request_id: str,
     payload: IntakeRequestPromoteRequest,
     context: IntakePromoter,

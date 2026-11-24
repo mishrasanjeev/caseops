@@ -47,7 +47,7 @@ WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace
     response_model=GoogleDriveStatusResponse,
     summary="List the caller's Google Drive connector status.",
 )
-async def get_google_drive_status(
+def get_google_drive_status(
     context: DriveViewer,
     session: DbSession,
 ) -> GoogleDriveStatusResponse:
@@ -59,7 +59,7 @@ async def get_google_drive_status(
     response_model=GoogleDriveConnectionStartResponse,
     summary="Start Google Drive OAuth without exposing tokens.",
 )
-async def start_google_drive(
+def start_google_drive(
     context: DriveViewer,
     session: DbSession,
 ) -> GoogleDriveConnectionStartResponse:
@@ -117,7 +117,7 @@ def revoke_google_drive(
     response_model=GoogleDriveFileListResponse,
     summary="List recent Google Drive file metadata for the current user.",
 )
-async def get_google_drive_files(
+def get_google_drive_files(
     context: DriveViewer,
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -130,7 +130,7 @@ async def get_google_drive_files(
     response_model=DriveSyncControlRecord,
     summary="Read tenant Google Drive review/import controls.",
 )
-async def get_google_drive_controls(
+def get_google_drive_controls(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> DriveSyncControlRecord:
@@ -142,7 +142,7 @@ async def get_google_drive_controls(
     response_model=DriveSyncControlRecord,
     summary="Update tenant Google Drive controls without enabling auto-import.",
 )
-async def patch_google_drive_controls(
+def patch_google_drive_controls(
     payload: DriveSyncControlUpdateRequest,
     context: WorkspaceAdmin,
     session: DbSession,
@@ -155,7 +155,7 @@ async def patch_google_drive_controls(
     response_model=DriveCandidateSyncResponse,
     summary="Sync Google Drive file metadata into a review-first queue.",
 )
-async def post_google_drive_candidate_sync(
+def post_google_drive_candidate_sync(
     payload: DriveCandidateSyncRequest,
     context: DriveViewer,
     session: DbSession,
@@ -168,7 +168,7 @@ async def post_google_drive_candidate_sync(
     response_model=DriveCandidateListResponse,
     summary="List tenant-safe Drive file candidates.",
 )
-async def get_drive_candidates(
+def get_drive_candidates(
     context: DriveViewer,
     session: DbSession,
     provider: str | None = Query(default=None),
@@ -193,7 +193,7 @@ async def get_drive_candidates(
     response_model=DriveCandidateReviewResponse,
     summary="Review one Drive candidate and optionally import its content.",
 )
-async def patch_drive_candidate(
+def patch_drive_candidate(
     candidate_id: str,
     payload: DriveCandidateReviewRequest,
     context: DriveViewer,

@@ -108,7 +108,7 @@ _MAX_SUMMARY_RANGE_DAYS = 365
     response_model=CalendarEventListResponse,
     summary="Aggregate hearings, tasks, and deadlines into one calendar feed.",
 )
-async def list_calendar_events(
+def list_calendar_events(
     context: CalendarViewer,
     session: DbSession,
     range_from: Annotated[
@@ -166,7 +166,7 @@ async def list_calendar_events(
     response_model=CalendarSummaryResponse,
     summary="Per-day open-item counts by display type for up to one year.",
 )
-async def summarize_calendar(
+def summarize_calendar(
     context: CalendarViewer,
     session: DbSession,
     range_from: Annotated[
@@ -200,7 +200,7 @@ async def summarize_calendar(
     response_class=ICalendarResponse,
     summary="Download the calendar as iCalendar (FT-043).",
 )
-async def list_calendar_events_ical(
+def list_calendar_events_ical(
     context: CalendarViewer,
     session: DbSession,
     range_from: Annotated[date, Query(alias="from")],
@@ -257,7 +257,7 @@ async def list_calendar_events_ical(
     response_model=CalendarConnectionListResponse,
     summary="List the caller's calendar connection state.",
 )
-async def list_calendar_connections(
+def list_calendar_connections(
     context: CalendarViewer,
     session: DbSession,
 ) -> CalendarConnectionListResponse:
@@ -269,7 +269,7 @@ async def list_calendar_connections(
     response_model=CalendarConnectionStartResponse,
     summary="Start Outlook calendar OAuth without exposing tokens.",
 )
-async def start_calendar_outlook_connection(
+def start_calendar_outlook_connection(
     context: CalendarSyncer,
     session: DbSession,
 ) -> CalendarConnectionStartResponse:
@@ -309,7 +309,7 @@ def complete_calendar_outlook_connection(
     response_model=CalendarConnectionStartResponse,
     summary="Start Google Calendar OAuth without exposing tokens.",
 )
-async def start_calendar_google_connection(
+def start_calendar_google_connection(
     context: CalendarSyncer,
     session: DbSession,
 ) -> CalendarConnectionStartResponse:
@@ -367,7 +367,7 @@ def revoke_calendar_connection(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one hearing to Outlook.",
 )
-async def sync_hearing(
+def sync_hearing(
     context: CalendarSyncer,
     session: DbSession,
     hearing_id: str,
@@ -380,7 +380,7 @@ async def sync_hearing(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one dated task to Outlook.",
 )
-async def sync_task_outlook(
+def sync_task_outlook(
     context: CalendarSyncer,
     session: DbSession,
     task_id: str,
@@ -393,7 +393,7 @@ async def sync_task_outlook(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one deadline to Outlook.",
 )
-async def sync_deadline_outlook(
+def sync_deadline_outlook(
     context: CalendarSyncer,
     session: DbSession,
     deadline_id: str,
@@ -410,7 +410,7 @@ async def sync_deadline_outlook(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one hearing to Google Calendar.",
 )
-async def sync_hearing_google_calendar(
+def sync_hearing_google_calendar(
     context: CalendarSyncer,
     session: DbSession,
     hearing_id: str,
@@ -427,7 +427,7 @@ async def sync_hearing_google_calendar(
     response_model=CalendarEventSyncResponse,
     summary="Delete one previously synced hearing event from Google Calendar.",
 )
-async def delete_hearing_google_calendar(
+def delete_hearing_google_calendar(
     context: CalendarSyncer,
     session: DbSession,
     hearing_id: str,
@@ -444,7 +444,7 @@ async def delete_hearing_google_calendar(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one dated task to Google Calendar.",
 )
-async def sync_task_google_calendar(
+def sync_task_google_calendar(
     context: CalendarSyncer,
     session: DbSession,
     task_id: str,
@@ -461,7 +461,7 @@ async def sync_task_google_calendar(
     response_model=CalendarEventSyncResponse,
     summary="Manually sync one deadline to Google Calendar.",
 )
-async def sync_deadline_google_calendar(
+def sync_deadline_google_calendar(
     context: CalendarSyncer,
     session: DbSession,
     deadline_id: str,
@@ -481,7 +481,7 @@ async def sync_deadline_google_calendar(
         "to Outlook. Bounded; no durable background automation."
     ),
 )
-async def sync_outlook_visible_range(
+def sync_outlook_visible_range(
     context: CalendarSyncer,
     session: DbSession,
     payload: OutlookBulkSyncRequest,
@@ -513,7 +513,7 @@ async def sync_outlook_visible_range(
         "to Google Calendar. Bounded; no durable background automation."
     ),
 )
-async def sync_google_calendar_visible_range(
+def sync_google_calendar_visible_range(
     context: CalendarSyncer,
     session: DbSession,
     payload: OutlookBulkSyncRequest,
@@ -526,7 +526,7 @@ async def sync_google_calendar_visible_range(
     response_model=CalendarSyncStatusResponse,
     summary="List manual calendar sync status for the caller.",
 )
-async def get_calendar_sync_status(
+def get_calendar_sync_status(
     context: CalendarViewer,
     session: DbSession,
 ) -> CalendarSyncStatusResponse:
@@ -538,7 +538,7 @@ async def get_calendar_sync_status(
     response_model=CalendarProviderEventCandidateListResponse,
     summary="List provider calendar event candidates and conflicts.",
 )
-async def get_provider_event_candidates(
+def get_provider_event_candidates(
     context: CalendarViewer,
     session: DbSession,
     provider: str | None = Query(default=None),
@@ -561,7 +561,7 @@ async def get_provider_event_candidates(
     response_model=CalendarProviderEventCandidateRecord,
     summary="Create a local-safe provider calendar event candidate.",
 )
-async def post_provider_event_candidate(
+def post_provider_event_candidate(
     payload: CalendarProviderEventCandidateCreateRequest,
     context: CalendarSyncer,
     session: DbSession,
@@ -574,7 +574,7 @@ async def post_provider_event_candidate(
     response_model=CalendarProviderEventCandidateReviewResponse,
     summary="Review one provider calendar event candidate.",
 )
-async def patch_provider_event_candidate(
+def patch_provider_event_candidate(
     candidate_id: str,
     payload: CalendarProviderEventCandidateReviewRequest,
     context: CalendarSyncer,
@@ -593,7 +593,7 @@ async def patch_provider_event_candidate(
     response_model=EmailInvitationCandidateListResponse,
     summary="List reviewable email invitation calendar candidates.",
 )
-async def get_email_invitation_candidates(
+def get_email_invitation_candidates(
     context: CalendarViewer,
     session: DbSession,
     matter_id: str | None = None,
@@ -617,7 +617,7 @@ async def get_email_invitation_candidates(
         "already imported email metadata."
     ),
 )
-async def post_email_invitation_candidate_extract(
+def post_email_invitation_candidate_extract(
     context: CalendarSyncer,
     session: DbSession,
     payload: EmailInvitationCandidateExtractRequest,
@@ -634,7 +634,7 @@ async def post_email_invitation_candidate_extract(
     response_model=EmailInvitationCandidateRecord,
     summary="Approve or reject one email invitation calendar candidate.",
 )
-async def patch_email_invitation_candidate(
+def patch_email_invitation_candidate(
     candidate_id: str,
     payload: EmailInvitationCandidateReviewRequest,
     context: CalendarSyncer,
