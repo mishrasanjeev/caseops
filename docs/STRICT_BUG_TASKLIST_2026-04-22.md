@@ -823,6 +823,15 @@ See BUGS5 triage and the dated sidecar for exact failures and scope.
 
 ## November 12 Disclosure Hydration Reopening: Issue616
 
+**November24, recorded by Sanjeev Kumar: Properly fixed for the reported
+stale-statistics disclosure hydration on main 609914f5a; the index-after-cohort
+acceptance is pending hosted CI.** The original failing scale test passes on a
+local pgvector pg17. The stale53 disclosure and application tests now also build
+the identity index after the 10,000-row cohort and run adverse joins. Details,
+local results and the 5 s old-shape-control timing caveat are in
+STRICT_ENTERPRISE_GAP_TASKLIST.md under PERF-PATENT-2026-11-12. The entries
+below are historical.
+
 Later7949 API11 fails three SQLite setup paths before chain assertions because
 the reused PG fixture opens plain Session. Correct the fixture to use the
 canonical CaseOpsSession plus enforced foreign keys, retain plain-Session

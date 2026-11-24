@@ -714,6 +714,36 @@ native source or MacBook execution under the server/shared-CI task.
 
 ## PERF-PATENT-2026-11-12: Imported Disclosure Hydration
 
+**November24 (issue616), recorded by Sanjeev Kumar: Implemented in code on
+main; the reopened index-after-cohort acceptance now has tests, pending hosted
+CI.** The exact-identity disclosure seek and the two expression indexes (main
+since 34ce599d) still hold on main 609914f5a, the release production runs.
+`test_patent_family_list_10000_rows_has_bounded_queries_and_acl_on_postgres`
+passes on a local pgvector pg17 (1 passed, 777 s). No product source changes.
+
+The November14 reopening asked for plans with the identity index built after
+the 10,000-row cohort, under default and adverse joins. Both stale53 tests
+(disclosure and the adjacent application loader) are now parametrized over
+`index_before_cohort`/`index_after_cohort` x `default`/`adverse` (hash and
+merge joins off). The after-cohort layout drops the indexes with the released
+migration before training and rebuilds them with the same migration after the
+import. Its catalog is asserted, not assumed: reltuples becomes 10,055, while
+column statistics stay stale (40 tenants of 53 rows) and the new expression
+index has no statistics. Budgets (<50,000 work, <10,000 root blocks, at most
+one version row per admitted key), ACL, exact versions and both red old-shape
+controls are unchanged.
+
+Local results: application before-cohort default/adverse and after-cohort
+default/adverse all pass. In all four disclosure layouts, every current-shape
+plan meets the unchanged budgets: each disclosure plan charges 501 work/400
+blocks and the worst admission plan 3,521/2,237. Both old-shape controls still
+reproduce 1,000,701-1,000,702 work/59,900 blocks. Caveat: on this shared
+Windows host that deliberately expensive control runs 2.4-6.3 s. So all four
+disclosure cases, and main's unmodified test, stopped at the test's 5 s
+statement timeout inside the control, after the current-shape plans had been
+retained. A local diagnostic with the timeout removed passed every assertion in
+both after-cohort cases. The timeout was not raised; hosted CI is the gate.
+
 Shared-CI readiness is separately source-only: actual Windows preparation
 refusals prevented audit, not evidence of vulnerable installed dependencies.
 Owner authorized one literal pinned-artifact DACL hardening path, preserving
