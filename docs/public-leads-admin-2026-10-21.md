@@ -210,3 +210,53 @@ a random password and no canonical founder company. A clean local replay used
 normal bootstrap/login/authenticated-context APIs, all200, not password reset or
 grant mutation. This operator setup is not production owner acceptance; the owner
 explicitly deferred personal MFA setup. Full release acceptance is still pending.
+
+## Issue 513 Exit-Criteria Reconciliation (2026-11-24)
+
+Checked on main `609914f5a` against GitHub issue #513 and its four owner
+comments. PRD mapping is unchanged: J19/M21/US-063, NFT-023, SEC-031 and
+J14/M14/US-040/042, FT-060/061; LEAD-04/05 own the notification contract.
+
+- Unified durable admission: implemented. All seven public entry points,
+  including the homepage CTA and pricing, render the shared form, post one
+  validated payload to `/api/demo-request`, and acknowledge only a backend
+  202 whose `id` equals the request key and whose status is `demo_requested`.
+  The API commits the enrollment before responding, replays the same key and
+  refuses changed details under it with 409, and keeps the 5/hour limiter.
+  No public CTA is a mailto-only lead path; GA4 and Tag Manager are absent.
+- Worker-owned, retryable notification: implemented. HTTP never sends; the
+  scheduled reminders job claims, sends and finalizes. Known refusals and
+  missing configuration back off and retry within the attempt bound; an
+  uncertain send becomes Outcome unknown and is never blindly resent.
+- Observable failure: **partially implemented before this change.** The
+  worker recorded every outcome durably and the Leads view displays it, but
+  only `retry_pending` was logged, its message carried no reference in the
+  worker's plain log format, and `outcome_unknown`/`exhausted` results
+  (provider timeout, 5xx, rejection, expired claim, attempt limit, blocked
+  automated or test transport) wrote no log line at all. Each of these now
+  writes one warning naming the lead reference, recorded status and fixed
+  error code only, emitted after the worker's conditional write succeeds.
+- Regressions: `test_public_lead_issue513_20261124.py` runs on SQLite and
+  PostgreSQL. It admits a homepage and a pricing lead through the real route,
+  proves pending/zero-attempt state before any transport, same-key replay,
+  conflicting-key 409, validation rejection, one accepted and one timed-out
+  real SendGrid-adapter send, no resend after the timeout, the failure log
+  without contact data or provider text, and MFA-manager Leads readback with
+  signed two-page pagination. A second test proves the log for every
+  undelivered outcome and its absence after acceptance. Before this change
+  the Leads manager readback had SQLite-only native coverage. Alembic's
+  `fileConfig` disables the already-imported service logger in native test
+  sessions, so older caplog PII assertions in the lead modules are vacuous;
+  the new module enables that logger explicitly. Unchanged main failed 8/9
+  of its SQLite cases; only the accepted (no-log) case passed.
+
+Still open and not closed by code: browser proof of a failed notification is
+native and component-level only (the local Leads journey's capture adapter
+always accepts); complete release, Docker and exact-production acceptance;
+and these owner decisions: approving the outbound sender and enabling
+`CASEOPS_DEMO_NOTIFICATION_ENABLED` in production, the 90-day expiry for
+unconverted requests (`CASEOPS_DEMO_RETENTION_ENABLED` stays false; the
+purge query currently selects only notice version `2026-10-09` requests),
+privacy-notice and consent review, whether an Outcome unknown alert may ever
+be re-sent, and the documented first-party attribution schema required before
+any organic-conversion claim. GA4 and client analytics stay disabled.

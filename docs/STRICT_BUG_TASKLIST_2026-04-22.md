@@ -1,3 +1,23 @@
+## November24 — issue #513 public lead failure observability
+
+**Partially fixed / Inconclusive; issue stays open.** Issue #513 exit criteria
+were rechecked on main609914f5a. Unified durable, idempotent admission across
+all seven public forms, worker-owned retryable notification and MFA-manager
+readback were already implemented. One adjacent defect was reproduced: the
+reminders worker logged only `retry_pending` (as a bare event name whose
+reference was dropped by the worker's plain log format), while timeouts, 5xx,
+rejections, expired claims and attempt-limit results wrote no log at all.
+Each undelivered outcome now logs the lead reference, recorded status and fixed
+code only, after the conditional write succeeds. RED on unchanged main: the new
+module failed8/9 on SQLite (only the accepted case passed). The new
+SQLite/PostgreSQL module also gives the Leads manager readback its first native
+PostgreSQL coverage. Adjacent, not changed: alembic `fileConfig` disables the
+already-imported service logger in native sessions, so older caplog PII checks
+in the lead modules are vacuous; the new module enables the logger explicitly.
+Browser proof of a failed alert, Docker/CI and exact-production acceptance,
+and the owner sender/retention/consent/attribution decisions remain open.
+See `docs/public-leads-admin-2026-10-21.md`.
+
 ## November 24 — report console invitation completion returns 401
 
 **Inconclusive (fix in code and tests, not yet deployed).** Reported:
