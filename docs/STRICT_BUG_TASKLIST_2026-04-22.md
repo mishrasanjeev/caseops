@@ -1,3 +1,31 @@
+## November 24 — report console invitation completion returns 401
+
+**Inconclusive (fix in code and tests, not yet deployed).** Reported:
+`POST https://api.caseops.ai/api/platform-console/auth/invitations/complete`
+returns 401 from `https://caseops.ai/platform/setup`. Production request logs
+for 2026-11-24 09:04–09:33 UTC show six 401s for one invitee, including one 58
+seconds after a fresh invitation and others within minutes of two resends, so
+the cause is not link expiry or revocation. Root cause: when the invited email
+already has a CaseOps identity, the backend correctly requires that identity's
+current password (`test_existing_identity_invite_never_replaces_password`).
+The setup page, however, always asked the invitee to choose a password with
+confirmation, and turned every 401 into "link invalid, expired or already
+used". Resends could never help.
+
+Repair: a read-only `POST /auth/invitations/inspect` tells the page whether
+the link creates a new account or belongs to an existing one, without
+consuming the link. Existing accounts get a single "Current CaseOps password"
+field with no name or confirmation fields, plus a path to reset that password.
+A wrong current password is now a distinct, audited
+`console_invitation_password_invalid` failure that leaves the link usable. A new
+account still needs a name, and a nameless request returns 422 without
+consuming the link. Evidence:
+`apps/api/tests/test_platform_console_existing_identity_invite_20261124.py`
+plus the console route matrix and guard inventory, and
+`components/platform/PlatformAccountLink.test.tsx` plus the setup page tests.
+A verdict is due after deployment, from a production invitation by a real
+invitee.
+
 ## November18 — journal availability and Docker fixture filename failures
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

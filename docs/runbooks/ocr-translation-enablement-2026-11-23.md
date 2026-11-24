@@ -124,8 +124,9 @@ on its next revision. Revocation: set `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=false`
    check that the API is enabled or the role is granted; if either is missing,
    translation runs fail with a Google permission error and no charge.
 4. Data location: `us-central1` processes the extracted text in the United
-   States. Confirm that this is acceptable for client documents before merging
-   the binding change.
+   States. The owner confirmed on 2026-11-24 that this is acceptable for
+   client documents. Changing the location needs the same confirmation and a
+   region where Translation LLM is offered.
 
 ### C. Cost profiles and budgets
 

@@ -157,6 +157,7 @@ CONSOLE_OWN_AUTH_MUTATING_ROUTES = frozenset({
     ("POST", "/api/platform-console/auth/mfa/verify"),
     ("POST", "/api/platform-console/auth/logout"),
     ("POST", "/api/platform-console/auth/invitations/complete"),
+    ("POST", "/api/platform-console/auth/invitations/inspect"),
     ("POST", "/api/platform-console/auth/password-reset/start"),
     ("POST", "/api/platform-console/auth/invitations/resend"),
     ("POST", "/api/platform-console/auth/password-reset/complete"),

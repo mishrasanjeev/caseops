@@ -540,7 +540,7 @@
     "matter_task_queue_groups": "Derived tenant/Matter/owner group identities for the current open Matter-task queue. NULL owner is distinct from a retained empty key. No copied Matter labels, additional access grant, parent row lock, disposition or approved retention policy is introduced; current tenant, actor, Matter lifecycle/ACL and team policy are rechecked on each read.",
     "contract_obligations": "Canonical recorded contractual obligations. Exact-contract read pages use the existing tenant read authority, preserve nullable dates and responsible people, and infer no legal due date or completion.",
     "native_device_sessions": "J20/M22 membership-owned native session families retain a random public session identifier, client-reported platform, original browser cutoff timestamp, captured MFA proof, creation/use/absolute expiry and durable revocation metadata. Every native tenant request rechecks this family plus current company, user, membership cutoff and MFA; refresh never slides the thirty-day default family expiry. Session-bound bearer authority is not a hardware-bound key or app/device attestation. Listing/revocation is caller-membership scoped and cannot grant portal/platform authority or mint browser cookies. Authentication expiry does not authorize deletion or approve a retention period.",
-    "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
+    "platform_console_tokens": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. A non-consuming inspection of a live invite link discloses to that link's holder only whether it creates a new identity or confirms an existing one, and the invited email, so the correct credential form is shown; a wrong existing-credential attempt is audited as denied and leaves the link unconsumed. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
     "matter_task_queue_pages": "Lossless derived fixed 25-slot task read pages: source Task identity/title/status/priority/due date and UTC timestamps are retained without text truncation. Transactional source bridges rebuild affected groups; these private legal/operational fields inherit source restrictions and create no export, retention, purge, external-provider or budget-decision authority. Current Matter labels/lifecycle remain authoritative joins.",
     "platform_report_admins": "Global operational reports grants linked to an existing or explicitly invited User, the configured founder provenance and, for viewers, the inviting report manager. MFA-complete managers additionally read the protected public-enquiry contact projection; report viewers receive no lead PII. Manager/viewer roles, pending/active/revoked status and credential epoch are not tenant membership, client-document access, founder billing authority or impersonation. The nullable removed_at timestamp is an access-lifecycle marker for hiding a revoked grant from the operational directory, not deletion of the User, tenant data or immutable audit history. Explicit same-issuer re-admission reuses that identity, preserves shared credentials and first-password initialization semantics, clears the directory marker and advances the grant epoch; prior links and sessions remain invalid. A separate versioned management read fences stale resend, revoke and remove commands while legacy read DTOs remain unchanged. This security class also owns encrypted realm-specific TOTP enrollment, accepted counter, hashed single-use recovery codes and bounded factor-failure lockout metadata. Passwords remain in the existing User credential class; ordinary tenant login and founder seeding do not create these grants. Named initial provisioning is a separately admitted post-release operational action, never startup seeding. No retention or disposition authority is added.",
     "counsel_read_page_dirty": "Private transient current-transaction scope coordination for atomic counsel projection maintenance. Server-derived transaction and source scope identifiers are inserted by existing source/label triggers and removed only by the successful same-transaction deferred finalizer; rollback removes uncommitted markers. This is normal projection coordination, not retention disposition or authority to delete source/legal/audit rows. No endpoint, content payload, credentials, tenant export or independent access authority is added.",
@@ -28318,7 +28318,7 @@
     {
       "id": "platform_console_tokens",
       "table_name": "platform_console_tokens",
-      "purpose": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
+      "purpose": "Hash-only, expiring, single-use report-console invitation and password-reset receipts bound to current report grant epoch and credential fingerprint. Link consumption, revocation and issue/expiry metadata prevent stale or repeated acceptance. A pending new identity may initialize a password; an invitation to an existing identity must prove its existing credential, not silently overwrite it. A non-consuming inspection of a live invite link discloses to that link's holder only whether it creates a new identity or confirms an existing one, and the invited email, so the correct credential form is shown; a wrong existing-credential attempt is audited as denied and leaves the link unconsumed. Reset changes the authoritative User credential/session fence without granting tenant membership or bypassing report MFA. Link expiry is not a record deletion policy.",
       "policy_profile_id": "security_identity_control",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
@@ -30540,6 +30540,100 @@
         "truncated": {
           "category_id": "domain_attribute",
           "sql_type": "BOOLEAN",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "research_answers",
+      "table_name": "research_answers",
+      "purpose": "Repository SQL persistence class `research_answers`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "analysis_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "answer_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "context_matter_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "error_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "model_run_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "query": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "saved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "saved_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "source_manifest_json": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
           "nullable": false
         }
       }
@@ -34143,12 +34237,12 @@
       }
     }
   ],
-  "schema_fingerprint": "b0c2f059a9b6db89e958cbf4a36aec81312ed060d8096a872769aab58d68a7d7",
+  "schema_fingerprint": "3f3d9fb34f9f1b5c63debfefc3cae0964ce7098f223ad1b31e4340782b6233a9",
   "index_inventory": {
-    "orm_index_count": 1852,
-    "orm_index_fingerprint": "fefa5dd5ceb22c2565c9fdf15ce764941422a8ec01e349664a15b9e4b22ee20b",
-    "migration_index_count": 1629,
-    "migration_index_fingerprint": "00252861df2bc825ea0c805b1b6b165077b819e7a9832cde96642d3390b0130b",
+    "orm_index_count": 1859,
+    "orm_index_fingerprint": "5e5295698d93b12882a047f745312b02a95e2d94697f0b4a9763ea306de1c639",
+    "migration_index_count": 1636,
+    "migration_index_fingerprint": "4dbd52e454d1b89bbe8919c37c2f2c3d3339fef7bb2b61a32531a913a734e85e",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

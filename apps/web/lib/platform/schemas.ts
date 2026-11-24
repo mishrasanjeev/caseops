@@ -29,6 +29,7 @@ export const consoleEnrollmentResponse = z.object({
 }).strict();
 export const consoleAccepted = z.object({ status: z.literal("accepted") }).strict();
 export const consoleComplete = z.object({ status: z.literal("complete") }).strict();
+export const consoleInvitationInspect = z.object({ account: z.enum(["new", "existing"]), email: z.string().email().max(320) }).strict();
 export const consoleSignedOut = z.object({ status: z.literal("signed_out") }).strict();
 
 const money = z.number().int().safe();

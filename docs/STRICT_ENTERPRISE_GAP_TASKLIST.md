@@ -6081,9 +6081,17 @@ compile, CI, production and recovery evidence remains pending.
 ## November 23 - assisted official trade mark search and TMview pre-search (IPLF-052D)
 
 **Partially implemented.** UJ-07/UJ-31, IP-REG-02/03, IP-CLR-02/03. Code,
-migration `20261123_0001` (down_revision `20261122_0631`, the current `main` head),
-governance map/projection, OpenAPI types and tests land on branch
-`feat/ip-assisted-search-tmview`; nothing is merged, deployed or migrated.
+migration `20261123_0001` (down_revision `20261122_0631`), governance
+map/projection, OpenAPI types and tests merged in PR #641 (fa4ad2e4e; main CI
+run 45322921246 passed). Released 2026-11-24: the pre-migration backup and
+migrate job caseops-migrate-job-7cxzc applied `20261123_0001`; API revision
+caseops-api-00533-88f and web revision caseops-web-00509-ksn serve 100%;
+exact-release prod-verify dispatch 45332944119 passed; the private projection
+cadence resumed through its guard after clean executions zcj6j (3 rebuilds)
+and jxcrc (0). No prod-verify journey covers this page yet, so production
+proof of the feature itself is limited to an unauthenticated probe: the
+imports route answers 401 (a sibling unknown path answers 404) and the page
+serves 200.
 
 - **Implemented in code:** assisted IP India search links and entry steps; saved
   page upload with extension/content-type/signature checks, a 5 MB cap, the
@@ -6277,7 +6285,7 @@ deployed and verified.
 ### EH-OCRT-04 - Credentials and deploy wiring
 
 - **Status:** Partially implemented (2026-11-24). The binding change
-  (branch `feat/ocr-translation-enablement-20261124`, draft until the secret
+  (branch `feat/ocr-translation-enablement-20261124`, PR #651; it was a draft until the secret
   exists) binds `caseops-sarvam-api-key` and the OCR/translation settings in
   `scripts/deploy-prod.sh` (`caseops-api`, with service readback) and in the
   `caseops-document-processing` contract in
@@ -6285,7 +6293,34 @@ deployed and verified.
   release before any build or migration unless the secret has an enabled
   latest version. Covered by `tests/test_deploy_prod_hardening.py`
   (binding pins, preflight refusal, readback drift for secret, flag and
-  location). Not yet `Implemented`: the secret, the Translation API and the
-  `roles/cloudtranslate.user` grant are not confirmed, no release has carried
-  the binding, and no live provider call has been recorded. See sections A
-  and B of `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
+  location). Setup confirmed by read-only checks on 2026-11-24: the secret
+  has an enabled version without a trailing newline, the runtime service
+  account can read it, `translate.googleapis.com` is enabled and the runtime
+  service account holds `roles/cloudtranslate.user`. The owner accepted
+  `us-central1` (United States) translation processing on 2026-11-24. Not
+  yet `Implemented`: no release has carried the binding, no provider cost
+  profile is recorded (so no paid call is made), and no live provider call
+  has been recorded. See sections A to C of
+  `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
+
+
+## November 24 - Research three-part answer (EH-RA-01..02)
+
+### EH-RA-01 - Research answers run as in-process background work
+
+- **Status:** Partially implemented. `POST /api/research/answers` returns 202
+  and runs retrieval, the model call and verification in a FastAPI
+  BackgroundTask, the same pattern as intelligent reviews. Production Cloud Run
+  has `cpu-throttling=true`, so work after the response can be slowed. If the
+  instance is recycled, a run cannot resume. A read settles any run still
+  pending after 10 minutes as `failed/timed_out`, so the page never polls
+  forever. Durable orchestration (Temporal) is not used. Measure completion
+  time on the production provider before any claim of reliability.
+
+### EH-RA-02 - Model output cannot introduce an authority
+
+- **Status:** Implemented in code, not deployed. Titles, citations, courts,
+  dates, weight labels, links and paragraph numbers come from CaseOps records
+  or the source text. Unknown markers, untraceable names, citations,
+  quotations and links are removed after one retry and counted. Tests:
+  `apps/api/tests/test_research_answers_20261124.py`.

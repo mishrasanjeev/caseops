@@ -13730,6 +13730,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-console/auth/invitations/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Invitation */
+        post: operations["inspect_invitation_api_platform_console_auth_invitations_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/platform-console/auth/invitations/resend": {
         parameters: {
             query?: never;
@@ -14462,6 +14479,58 @@ export interface paths {
         put?: never;
         /** Record an accept/reject/edit decision on a recommendation */
         post: operations["create_decision_api_recommendations__recommendation_id__decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List my research answers, or those saved to a matter */
+        get: operations["list_answers_api_research_answers_get"];
+        put?: never;
+        /** Queue a source-verified three-part research answer */
+        post: operations["create_answer_api_research_answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/answers/{answer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one research answer */
+        get: operations["read_answer_api_research_answers__answer_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/answers/{answer_id}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save a completed research answer to a matter */
+        post: operations["save_answer_api_research_answers__answer_id__save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -21203,11 +21272,29 @@ export interface components {
         /** ConsoleInviteCompleteRequest */
         ConsoleInviteCompleteRequest: {
             /** Full Name */
-            full_name: string;
+            full_name?: string | null;
             /** Password */
             password: string;
             /** Token */
             token: string;
+        };
+        /** ConsoleInviteInspectRequest */
+        ConsoleInviteInspectRequest: {
+            /** Token */
+            token: string;
+        };
+        /** ConsoleInviteInspectResponse */
+        ConsoleInviteInspectResponse: {
+            /**
+             * Account
+             * @enum {string}
+             */
+            account: "new" | "existing";
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** ConsoleInviteRequest */
         ConsoleInviteRequest: {
@@ -49048,6 +49135,253 @@ export interface components {
             updated_at: string;
             /** Version */
             version: number;
+        };
+        /** ResearchAnswerBody */
+        ResearchAnswerBody: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Authorities */
+            authorities?: components["schemas"]["ResearchAuthorityEntry"][];
+            /** Disclaimer */
+            disclaimer: string;
+            /**
+             * Facts Insufficient
+             * @default false
+             */
+            facts_insufficient: boolean;
+            /** Key Points */
+            key_points?: components["schemas"]["ResearchCitedText"][];
+            /**
+             * Law Checked As Of
+             * Format: date
+             */
+            law_checked_as_of: string;
+            /** Matter Facts */
+            matter_facts?: components["schemas"]["ResearchMatterFact"][];
+            /** Missing Facts */
+            missing_facts?: string[];
+            /** Sections */
+            sections?: components["schemas"]["ResearchSection"][];
+            short_answer: components["schemas"]["ResearchCitedText"];
+            /** Sources Retrieved From */
+            sources_retrieved_from?: string | null;
+            /** Sources Retrieved To */
+            sources_retrieved_to?: string | null;
+            verification?: components["schemas"]["ResearchVerification"];
+        };
+        /** ResearchAnswerCreateRequest */
+        ResearchAnswerCreateRequest: {
+            /** Context Matter Id */
+            context_matter_id?: string | null;
+            /** Query */
+            query: string;
+        };
+        /** ResearchAnswerListResponse */
+        ResearchAnswerListResponse: {
+            /** Items */
+            items: components["schemas"]["ResearchAnswerSummary"][];
+        };
+        /** ResearchAnswerRecord */
+        ResearchAnswerRecord: {
+            /** Analysis Version */
+            analysis_version: string;
+            answer?: components["schemas"]["ResearchAnswerBody"] | null;
+            /** Completed At */
+            completed_at?: string | null;
+            context_matter?: components["schemas"]["ResearchMatterRef"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: string | null;
+            /** Id */
+            id: string;
+            /** Message */
+            message?: string | null;
+            /** Query */
+            query: string;
+            /** Saved At */
+            saved_at?: string | null;
+            saved_matter?: components["schemas"]["ResearchMatterRef"] | null;
+            /** Sources */
+            sources?: components["schemas"]["ResearchSource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "answered" | "abstained" | "failed";
+        };
+        /** ResearchAnswerSaveRequest */
+        ResearchAnswerSaveRequest: {
+            /** Matter Id */
+            matter_id: string;
+        };
+        /** ResearchAnswerSummary */
+        ResearchAnswerSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Query */
+            query: string;
+            /** Saved At */
+            saved_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "answered" | "abstained" | "failed";
+        };
+        /** ResearchAuthorityEntry */
+        ResearchAuthorityEntry: {
+            /**
+             * Cited Inline
+             * @default false
+             */
+            cited_inline: boolean;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "supporting" | "contrary" | "context";
+            /** Paragraph */
+            paragraph?: string | null;
+            /** Passage */
+            passage?: string | null;
+            /**
+             * Passage Verified
+             * @default false
+             */
+            passage_verified: boolean;
+            /** Proposition */
+            proposition?: string | null;
+            /** Relevance */
+            relevance?: string | null;
+            /** Source */
+            source: number;
+        };
+        /**
+         * ResearchCitedText
+         * @description Answer text with inline ``[n]`` markers that resolve to ``sources``.
+         */
+        ResearchCitedText: {
+            /** Citations */
+            citations?: number[];
+            /** Text */
+            text: string;
+            /**
+             * Unsupported
+             * @default false
+             */
+            unsupported: boolean;
+        };
+        /** ResearchMatterFact */
+        ResearchMatterFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** ResearchMatterRef */
+        ResearchMatterRef: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** ResearchSection */
+        ResearchSection: {
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "issues" | "applicable_law" | "ingredients" | "time_limits" | "procedure" | "jurisdiction" | "evidence" | "defences" | "application";
+            /** Paragraphs */
+            paragraphs?: components["schemas"]["ResearchCitedText"][];
+            /** Steps */
+            steps?: components["schemas"]["ResearchCitedText"][];
+            /** Timeline */
+            timeline?: components["schemas"]["ResearchTimelineRow"][];
+            /** Title */
+            title: string;
+        };
+        /** ResearchSource */
+        ResearchSource: {
+            /** Bench */
+            bench?: string | null;
+            /** Citation */
+            citation?: string | null;
+            /** Court */
+            court?: string | null;
+            /** Decision Date */
+            decision_date?: string | null;
+            /** Id */
+            id: string;
+            /** In App Href */
+            in_app_href?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "statute_section" | "judgment";
+            /** Number */
+            number: number;
+            /** Retrieved At */
+            retrieved_at?: string | null;
+            source_action?: components["schemas"]["SourceActionRecord"] | null;
+            /** Title */
+            title: string;
+            treatment_signal?: components["schemas"]["ResearchTreatmentSignal"] | null;
+            /** Weight */
+            weight: string;
+        };
+        /** ResearchTimelineRow */
+        ResearchTimelineRow: {
+            detail: components["schemas"]["ResearchCitedText"];
+            /** Period */
+            period: string;
+            /** Starts */
+            starts: string;
+        };
+        /** ResearchTreatmentSignal */
+        ResearchTreatmentSignal: {
+            /**
+             * Adverse Count
+             * @default 0
+             */
+            adverse_count: number;
+            /** Worst Treatment */
+            worst_treatment?: string | null;
+        };
+        /** ResearchVerification */
+        ResearchVerification: {
+            /** Notes */
+            notes?: string[];
+            /**
+             * Removed Citation Markers
+             * @default 0
+             */
+            removed_citation_markers: number;
+            /**
+             * Removed Unverified Mentions
+             * @default 0
+             */
+            removed_unverified_mentions: number;
+            /**
+             * Uncited Paragraphs
+             * @default 0
+             */
+            uncited_paragraphs: number;
+            /**
+             * Unverified Passages
+             * @default 0
+             */
+            unverified_passages: number;
         };
         /**
          * ResolvedBenchMember
@@ -81009,6 +81343,39 @@ export interface operations {
             };
         };
     };
+    inspect_invitation_api_platform_console_auth_invitations_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsoleInviteInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleInviteInspectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     resend_invitation_api_platform_console_auth_invitations_resend_post: {
         parameters: {
             query?: never;
@@ -82395,6 +82762,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecommendationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_answers_api_research_answers_get: {
+        parameters: {
+            query?: {
+                matter_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchAnswerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_answer_api_research_answers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchAnswerCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchAnswerRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_answer_api_research_answers__answer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                answer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchAnswerRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_answer_api_research_answers__answer_id__save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                answer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchAnswerSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchAnswerRecord"];
                 };
             };
             /** @description Validation Error */
