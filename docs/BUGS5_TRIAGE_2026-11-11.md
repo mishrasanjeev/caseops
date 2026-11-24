@@ -838,6 +838,22 @@ recheck behaviour of the viewers is unchanged and not separately proven here.
 Caveat for the owner: a valid download that needs more than 90 seconds now
 fails instead of finishing; no deadline was raised.
 
+The same candidate also moves the sibling downloads that kept their own status
+handling (employee and Matter import templates, Matter import errors, the
+cause-list PDF, the shared `downloadApiFile` path and the admin audit export)
+onto `fetchBlobWithTimeout`. It reads the complete body of any status inside the
+existing request deadline and caller signal, with no client byte cap. Their
+auth, request headers, error messages, file names, MIME type, browser
+hand-off for a request that never reached headers and revoke timing are
+unchanged. Stall, truncation, stalled-error-body, caller-abort and audit-export
+page tests fail on the previous source and pass on the candidate. Their
+success-path tests are parity guards and pass on both. Server size ceilings
+measured from source: stored originals, notices, renditions and portfolio
+exports are capped at the 25 MiB storage limit, which over 90 seconds needs
+about 2.3 Mbit/s. The IP filing bundle has no explicit cap. The audit export
+is unbounded in rows when no limit is sent. The API's Cloud Run request
+timeout is 120 seconds. The deadline value remains an open owner decision.
+
 The existing Matter email transport still retains its parent lock across
 SendGrid I/O. The new template fence now permits compatible readers and excludes
 edit/archive, proven by two actual PostgreSQL cases, but does not certify

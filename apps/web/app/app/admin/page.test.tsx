@@ -30,13 +30,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   let originalCreateObjectURL: typeof URL.createObjectURL;
   let originalRevokeObjectURL: typeof URL.revokeObjectURL;
   const fetchMock = vi.fn();
-  let auditResponse: () => Promise<Response | {
-    ok: boolean;
-    status: number;
-    headers?: { get: (key: string) => string | null };
-    blob?: () => Promise<Blob>;
-    json?: () => Promise<unknown>;
-  }>;
+  let auditResponse: () => Promise<Response>;
 
   function jsonResponse(data: unknown, status = 200): Response {
     return new Response(JSON.stringify(data), {
@@ -49,17 +43,14 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
     capabilityMock.mockReset();
     capabilityMock.mockImplementation(() => true);
     fetchMock.mockReset();
-    auditResponse = async () => ({
-      ok: true,
-      status: 200,
-      headers: {
-        get: (k: string) =>
-          k.toLowerCase() === "content-disposition"
-            ? 'attachment; filename="audit-export.jsonl"'
-            : null,
-      },
-      blob: async () => new Blob(["row\n"], { type: "application/jsonl" }),
-    });
+    auditResponse = async () =>
+      new Response("row\n", {
+        status: 200,
+        headers: {
+          "content-type": "application/jsonl",
+          "content-disposition": 'attachment; filename="audit-export.jsonl"',
+        },
+      });
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/admin/tenant-ai-policy")) {
@@ -290,11 +281,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   });
 
   it("surfaces an actionable error on 401 instead of throwing 'session expired'", async () => {
-    auditResponse = async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ detail: "no" }),
-    });
+    auditResponse = async () => jsonResponse({ detail: "no" }, 401);
     const { toast } = await import("sonner");
     const user = userEvent.setup();
     renderWithQuery(<AdminPage />);
@@ -307,11 +294,7 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
   });
 
   it("surfaces an actionable error on 403 with the capability hint", async () => {
-    auditResponse = async () => ({
-      ok: false,
-      status: 403,
-      json: async () => ({ detail: "denied" }),
-    });
+    auditResponse = async () => jsonResponse({ detail: "denied" }, 403);
     const { toast } = await import("sonner");
     const user = userEvent.setup();
     renderWithQuery(<AdminPage />);
@@ -321,6 +304,61 @@ describe("AdminPage audit export (P0-001 cookie-auth regression)", () => {
         expect.stringMatching(/audit:export/i),
       ),
     );
+  });
+
+  it("fails the export at the deadline and cancels a body that stalls after headers", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const cancel = vi.fn();
+      auditResponse = async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) { controller.enqueue(new TextEncoder().encode("row\n")); },
+            cancel,
+          }),
+          { status: 200, headers: { "content-type": "application/jsonl" } },
+        );
+      const { toast } = await import("sonner");
+      vi.mocked(toast.error).mockClear();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithQuery(<AdminPage />);
+      await user.click(screen.getByTestId("download-audit-export"));
+      await waitFor(() =>
+        expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/api/admin/audit/export"))).toBe(true),
+      );
+      await vi.advanceTimersByTimeAsync(90_000);
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("did not respond within 90 seconds")),
+      );
+      expect(cancel).toHaveBeenCalled();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a truncated export body instead of saving a partial file", async () => {
+    let pulls = 0;
+    auditResponse = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (pulls === 1) controller.enqueue(new TextEncoder().encode("row\n"));
+            else controller.error(new TypeError("terminated: other side closed"));
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/jsonl" } },
+      );
+    const { toast } = await import("sonner");
+    vi.mocked(toast.error).mockClear();
+    const user = userEvent.setup();
+    renderWithQuery(<AdminPage />);
+    await user.click(screen.getByTestId("download-audit-export"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("The download was interrupted. Try again."),
+    );
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("invites outside counsel with a selected matter grant and OC permissions", async () => {

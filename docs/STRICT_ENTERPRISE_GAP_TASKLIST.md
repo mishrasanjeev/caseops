@@ -769,7 +769,9 @@ Open adjacent boundaries: eight legacy authenticated binary-success consumers
 finished body reads outside `apiBlobRequest`'s deadline; the November24
 [issue613](https://github.com/mishrasanjeev/caseops/issues/613) candidate moves
 them (and the later rendition download) onto the whole-body helper with no
-client byte cap. Partially implemented until merged, deployed and verified in a
+client byte cap, and bounds the sibling status-handling downloads (import
+templates and errors, cause-list PDF, `downloadApiFile`, audit export) the same
+way. Partially implemented until merged, deployed and verified in a
 browser; see the triage. Matter email
 transport still owns its parent lock during external I/O. The new private
 draft/contract helper and template shared-reader fence do not close those

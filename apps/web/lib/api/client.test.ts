@@ -5,6 +5,7 @@ import {
   apiBlobDataRequest,
   apiDownloadRequest,
   apiRequest,
+  fetchBlobWithTimeout,
   fetchJsonWithTimeout,
   fetchWithTimeout,
   getCsrfHeaders,
@@ -575,6 +576,29 @@ describe("apiBlobDataRequest", () => {
     expect(result.blob.size).toBe(total * megabyte.byteLength);
     expect(result.blob.type).toBe("application/zip");
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a status-handling download body when the caller aborts after headers", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const onHeaders = vi.fn();
+    let pulled!: () => void;
+    const reading = new Promise<void>((resolve) => { pulled = resolve; });
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ pull: pulled, cancel })));
+    const operation = fetchBlobWithTimeout("/api/export", { signal: controller.signal }, 5_000, onHeaders);
+    await reading;
+    expect(onHeaders).toHaveBeenCalledTimes(1);
+    controller.abort(new DOMException("Export dialog closed", "AbortError"));
+    await expect(operation).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancel).toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
+  it("does not report headers for a request that never reached them", async () => {
+    const onHeaders = vi.fn();
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(fetchBlobWithTimeout("/api/export", {}, 5_000, onHeaders)).rejects.toBeInstanceOf(TypeError);
+    expect(onHeaders).not.toHaveBeenCalled();
   });
 
   it("keeps one total deadline while the shared authentication refresh is pending", async () => {

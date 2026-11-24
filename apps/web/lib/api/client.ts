@@ -514,6 +514,32 @@ export function apiDownloadRequest(
   return apiBlobDataRequest(path, { ...init, maxBytes: Number.POSITIVE_INFINITY });
 }
 
+export type FetchedBlob = { ok: boolean; status: number; headers: Headers; blob: Blob };
+
+/**
+ * A download that keeps its caller's own auth and status handling: one deadline
+ * and the caller's signal cover the headers and the complete body of any
+ * status, with no client byte cap. Failures before headers match
+ * `fetchWithTimeout`; `onHeaders` lets a caller tell the two phases apart.
+ */
+export async function fetchBlobWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  onHeaders?: () => void,
+): Promise<FetchedBlob> {
+  return consumeResponseWithTimeout(input, init, timeoutMs, async (response, signal) => {
+    onHeaders?.();
+    try {
+      const blob = await binaryBody(response, signal, Number.POSITIVE_INFINITY);
+      return { ok: response.ok, status: response.status, headers: response.headers, blob };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new NetworkError("The download was interrupted. Try again.", error);
+    }
+  });
+}
+
 async function authenticatedBinaryRequest<T>(
   path: string, init: Omit<ApiRequestInit, "body">,
   consume: (response: Response, signal: AbortSignal) => Promise<T>,

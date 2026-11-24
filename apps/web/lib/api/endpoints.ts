@@ -1,8 +1,9 @@
 import {
   apiDownloadRequest,
   apiRequest,
-  fetchWithTimeout,
+  fetchBlobWithTimeout,
   getCsrfHeaders,
+  type FetchedBlob,
 } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import type { components } from "./openapi-types";
@@ -5304,7 +5305,7 @@ export async function commitEmployeeOffboarding(input: {
 export async function downloadEmployeeImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetchWithTimeout(
+  const response = await fetchBlobWithTimeout(
     `${API_BASE_URL}/api/companies/current/employees/import-template?format=${format}`,
     {
       method: "GET",
@@ -5315,7 +5316,7 @@ export async function downloadEmployeeImportTemplate(
   if (!response.ok) {
     throw new Error(`Template download failed (${response.status}).`);
   }
-  return response.blob();
+  return response.blob;
 }
 
 export async function previewEmployeeImport(file: File): Promise<EmployeeImportJob> {
@@ -5554,12 +5555,12 @@ export async function assignMatterTeam(input: {
 export async function downloadMatterImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetchWithTimeout(
+  const response = await fetchBlobWithTimeout(
     `${API_BASE_URL}/api/matters/imports/template?format=${format}`,
     { method: "GET", credentials: "include" },
   );
   if (!response.ok) throw new Error(`Matter template download failed (${response.status}).`);
-  return response.blob();
+  return response.blob;
 }
 
 export async function previewMatterImport(file: File): Promise<MatterImportJob> {
@@ -5602,12 +5603,12 @@ export async function cancelMatterImport(jobId: string): Promise<MatterImportJob
 }
 
 export async function downloadMatterImportErrors(jobId: string): Promise<Blob> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
+  const response = await fetchBlobWithTimeout(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
     method: "GET",
     credentials: "include",
   });
   if (!response.ok) throw new Error(`Matter error report download failed (${response.status}).`);
-  return response.blob();
+  return response.blob;
 }
 
 // --- Sprint 8b BG-025: GC intake queue ---
@@ -7205,7 +7206,7 @@ async function downloadApiFileWithPost(
   fallbackName: string,
 ): Promise<void> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchBlobWithTimeout(url, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -7219,7 +7220,7 @@ async function downloadApiFileWithPost(
     let detail = `Download failed (${response.status}).`;
     let parsed: unknown = null;
     try {
-      parsed = await response.json();
+      parsed = JSON.parse(await response.blob.text());
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -7232,8 +7233,7 @@ async function downloadApiFileWithPost(
     }
     throw new ApiError(response.status, detail, parsed, null);
   }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
+  const href = URL.createObjectURL(response.blob);
   const a = document.createElement("a");
   a.href = href;
   a.download = downloadNameFromDisposition(
@@ -8841,19 +8841,23 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
   const url = path.startsWith("http")
     ? path
     : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  let response: Response;
+  let response: FetchedBlob;
+  let receivedHeaders = false;
   try {
-    response = await fetchWithTimeout(url, {
+    response = await fetchBlobWithTimeout(url, {
       credentials: "include",
       headers: { Accept: "*/*" },
-    });
+    }, undefined, () => { receivedHeaders = true; });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw err;
     }
-    if (startBrowserDownload(url, fallbackName)) {
+    // Hand an unreachable request to the browser; a body that failed after
+    // headers is reported, not silently retried.
+    if (!receivedHeaders && startBrowserDownload(url, fallbackName)) {
       return;
     }
+    if (err instanceof NetworkError) throw err;
     throw new NetworkError(
       "Could not reach the workspace API. Check your connection and try again.",
       err,
@@ -8863,7 +8867,7 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
     let detail = `Download failed (${response.status}).`;
     let parsed: unknown = null;
     try {
-      parsed = await response.json();
+      parsed = JSON.parse(await response.blob.text());
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -8876,8 +8880,7 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
     }
     throw new ApiError(response.status, detail, parsed, null);
   }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
+  const href = URL.createObjectURL(response.blob);
   const a = document.createElement("a");
   a.href = href;
   a.download = downloadNameFromDisposition(

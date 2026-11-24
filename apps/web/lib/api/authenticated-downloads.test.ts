@@ -2,13 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NetworkError } from "./config";
 import {
+  downloadApiFile,
   downloadAttachmentRendition,
   downloadBulkImportErrors,
+  downloadCauseListPdf,
+  downloadEmployeeImportTemplate,
   downloadIpPleadingDraft,
   downloadIpPleadingFilingBundle,
   downloadIpPortfolioExport,
   downloadIpPortfolioImportErrors,
   downloadMatterBulkUpdateTemplate,
+  downloadMatterImportErrors,
+  downloadMatterImportTemplate,
   fetchMatterAttachmentBlob,
 } from "./endpoints";
 import { downloadNoticeFile } from "./notices";
@@ -149,32 +154,32 @@ function json(body: unknown, status: number, contentType = "application/json"): 
   return new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
 }
 
+beforeEach(() => {
+  window.localStorage.clear();
+  vi.stubGlobal("fetch", vi.fn());
+  createObjectURL.mockClear();
+  revokeObjectURL.mockClear();
+  savedNames.length = 0;
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    savedNames.push(this.download);
+  });
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  window.localStorage.clear();
+  if (createDescriptor) Object.defineProperty(URL, "createObjectURL", createDescriptor);
+  else Reflect.deleteProperty(URL, "createObjectURL");
+  if (revokeDescriptor) Object.defineProperty(URL, "revokeObjectURL", revokeDescriptor);
+  else Reflect.deleteProperty(URL, "revokeObjectURL");
+});
+
 describe("authenticated downloads read the complete body inside one deadline", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-    vi.stubGlobal("fetch", vi.fn());
-    createObjectURL.mockClear();
-    revokeObjectURL.mockClear();
-    savedNames.length = 0;
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
-      savedNames.push(this.download);
-    });
-  });
-
-  afterEach(async () => {
-    vi.useRealTimers();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-    window.localStorage.clear();
-    if (createDescriptor) Object.defineProperty(URL, "createObjectURL", createDescriptor);
-    else Reflect.deleteProperty(URL, "createObjectURL");
-    if (revokeDescriptor) Object.defineProperty(URL, "revokeObjectURL", revokeDescriptor);
-    else Reflect.deleteProperty(URL, "revokeObjectURL");
-  });
-
   it.each(callers)("$name returns the original chunked bytes from a private no-store request", async (caller) => {
     vi.useFakeTimers();
     vi.mocked(fetch).mockResolvedValue(new Response(chunkedBody(), { headers: headersFor(caller) }));
@@ -274,4 +279,145 @@ describe("authenticated downloads read the complete body inside one deadline", (
     expect(cancel).toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+// Downloads that keep their own status handling (no session refresh) read the
+// complete body inside the same request deadline.
+type StatusCaller = {
+  name: string;
+  url: string;
+  init: Record<string, unknown>;
+  type: string;
+  savedName?: string;
+  revokeAfterMs?: number;
+  run: () => Promise<Blob>;
+};
+
+const statusCallers: StatusCaller[] = [
+  {
+    name: "downloadEmployeeImportTemplate",
+    url: `${API}/api/companies/current/employees/import-template?format=xlsx`,
+    init: { method: "GET", credentials: "include", headers: { Accept: "application/octet-stream" } },
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    run: () => downloadEmployeeImportTemplate("xlsx"),
+  },
+  {
+    name: "downloadMatterImportTemplate",
+    url: `${API}/api/matters/imports/template?format=csv`,
+    init: { method: "GET", credentials: "include" },
+    type: "text/csv",
+    run: () => downloadMatterImportTemplate("csv"),
+  },
+  {
+    name: "downloadMatterImportErrors",
+    url: `${API}/api/matters/imports/job-1/errors`,
+    init: { method: "GET", credentials: "include" },
+    type: "text/csv",
+    run: () => downloadMatterImportErrors("job-1"),
+  },
+  {
+    name: "downloadCauseListPdf",
+    url: `${API}/api/cause-lists/download`,
+    init: {
+      method: "POST", credentials: "include", body: JSON.stringify({ date: "2026-07-10" }),
+      headers: expect.objectContaining({ Accept: "*/*", "Content-Type": "application/json" }),
+    },
+    type: "application/pdf",
+    savedName: "cause-list-2026-07-10.pdf",
+    revokeAfterMs: 0,
+    run: () => savedFile(() => downloadCauseListPdf({ date: "2026-07-10" })),
+  },
+  {
+    name: "downloadApiFile",
+    url: `${API}/api/ip/documents/doc-1/versions/2/download`,
+    init: { credentials: "include", headers: { Accept: "*/*" } },
+    type: "application/pdf",
+    savedName: "server-version.pdf",
+    revokeAfterMs: 30_000,
+    run: () => savedFile(() => downloadApiFile("/api/ip/documents/doc-1/versions/2/download", "fallback.pdf")),
+  },
+];
+
+function statusHeaders(caller: StatusCaller): Record<string, string> {
+  return {
+    "content-type": caller.type,
+    ...(caller.savedName ? { "content-disposition": `attachment; filename="${caller.savedName}"` } : {}),
+  };
+}
+
+describe("status-handling downloads read the complete body inside one deadline", () => {
+  it.each(statusCallers)("$name keeps its request and returns the original chunked bytes", async (caller) => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockResolvedValue(new Response(chunkedBody(), { headers: statusHeaders(caller) }));
+
+    const blob = await caller.run();
+
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(ORIGINAL);
+    expect(blob.type).toBe(caller.type);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(caller.url, expect.objectContaining(caller.init));
+    if (caller.savedName) {
+      expect(savedNames).toEqual([caller.savedName]);
+      await vi.advanceTimersByTimeAsync(caller.revokeAfterMs ?? 0);
+      expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(OBJECT_URL);
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(statusCallers)("$name fails at the deadline and cancels a body that stalls after headers", async (caller) => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.mocked(fetch).mockResolvedValue(new Response(stalledBody(cancel), { headers: statusHeaders(caller) }));
+
+    const assertion = expect(caller.run()).rejects.toMatchObject({
+      name: "NetworkError", message: expect.stringContaining("90 seconds"),
+    });
+    await vi.advanceTimersByTimeAsync(DEADLINE_MS);
+    await assertion;
+
+    expect(cancel).toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // No partial file and no hand-off to a browser download.
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(savedNames).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(statusCallers)("$name reports a truncated body instead of saving a partial file", async (caller) => {
+    vi.mocked(fetch).mockResolvedValue(new Response(truncatedBody(), { headers: statusHeaders(caller) }));
+
+    const failure = await caller.run().then(() => null, (error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(NetworkError);
+    expect(failure).toMatchObject({ message: "The download was interrupted. Try again." });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(savedNames).toEqual([]);
+  });
+
+  it.each(statusCallers.filter((caller) => caller.savedName))(
+    "$name bounds a stalled error body and keeps the typed denial when it completes",
+    async (caller) => {
+      vi.useFakeTimers();
+      const cancel = vi.fn();
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(new Response(stalledBody(cancel), {
+          status: 403, headers: { "content-type": "application/json" },
+        }))
+        .mockResolvedValueOnce(json({ detail: "Document is unavailable" }, 403));
+
+      const stalled = expect(caller.run()).rejects.toMatchObject({
+        name: "NetworkError", message: expect.stringContaining("90 seconds"),
+      });
+      await vi.advanceTimersByTimeAsync(DEADLINE_MS);
+      await stalled;
+      expect(cancel).toHaveBeenCalled();
+
+      await expect(caller.run()).rejects.toMatchObject({
+        name: "ApiError", status: 403, detail: "Document is unavailable",
+      });
+      expect(savedNames).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 });
