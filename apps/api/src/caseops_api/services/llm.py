@@ -228,6 +228,8 @@ class MockProvider:
         contract_response = _mock_contract_response(messages)
         if contract_response is not None:
             text = contract_response
+        elif "caseops_research_answer_v1" in lowered and "research_input:" in lowered:
+            text = _mock_research_answer_response(joined)
         elif "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
             text = _mock_intelligent_review_response(joined)
         elif "workspace_assistant_qa" in lowered:
@@ -303,6 +305,70 @@ def _mock_contract_response(messages: list[LLMMessage]) -> str | None:
              "assigned_party": "ambiguous", "ambiguity_reason": "Offline fixture needs review.",
              "snippet": excerpt, "locator": None}]
     return json.dumps({"items": rows if excerpt else []})
+
+
+def _mock_research_answer_response(prompt: str) -> str:
+    """Offline research answer that cites only the supplied numbered sources.
+
+    It is a contract fixture for tests and no-paid production checks, not
+    legal-quality evidence.
+    """
+    raw = _extract_between(prompt, "RESEARCH_INPUT:\n", "\n\nReturn this schema:")
+    try:
+        payload = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    sources = [item for item in payload.get("sources", []) if isinstance(item, dict)]
+    numbers = [int(item.get("number", 0)) for item in sources if item.get("number")]
+    first = numbers[0] if numbers else 1
+    second = numbers[1] if len(numbers) > 1 else first
+    marker, both = f"[{first}]", f"[{first}][{second}]"
+    sections = [
+        {"key": "issues", "paragraphs": ["The question raises the conditions for the remedy, "
+            "the applicable time limits and the procedure to invoke it."]},
+        {"key": "applicable_law", "paragraphs": [f"The governing provision is in the supplied "
+            f"statutory source {marker}."]},
+        {"key": "ingredients", "paragraphs": [f"Each statutory condition must be established "
+            f"on the facts {both}."]},
+        {"key": "time_limits", "paragraphs": [f"Each period runs from its own trigger {marker}."],
+         "timeline": [{"period": "Statutory period", "starts": "From the triggering event",
+                       "detail": f"Counted from the event the provision names {marker}."}]},
+        {"key": "procedure", "steps": [f"Confirm the triggering event {marker}.",
+                                       f"Take the statutory step within time {marker}."]},
+        {"key": "jurisdiction", "paragraphs": [f"The competent forum follows the provision "
+            f"and the authorities supplied {both}."]},
+        {"key": "evidence", "paragraphs": [f"Keep the documents that prove each condition "
+            f"{marker}."]},
+        {"key": "defences", "paragraphs": [f"Material defences and qualifications can displace "
+            f"the general rule [{second}]."]},
+        {"key": "application", "paragraphs": ["The stated facts do not include the dates "
+            "needed to calculate any deadline."]},
+    ]
+    def _passage(source: dict[str, Any]) -> str | None:
+        text = " ".join(str(source.get("untrusted_excerpt") or "").split())
+        return text[:160] if len(text) >= 40 else None
+
+    authorities = [
+        {
+            "source": int(source["number"]),
+            "disposition": "supporting" if index == 0 else "context",
+            "proposition": "States the rule relied on in the answer.",
+            "relevance": "Directly addresses the question asked.",
+            "passage": _passage(source),
+        }
+        for index, source in enumerate(sources[:6])
+        if source.get("number")
+    ]
+    return json.dumps({
+        "short_answer": f"Offline research summary: the remedy is available only if the "
+                        f"statutory conditions and time limits are met {both}.",
+        "key_points": [f"Each time limit runs from its own trigger {marker}."],
+        "facts_insufficient": True,
+        "missing_facts": ["The dates of each triggering event."],
+        "assumptions": ["No payment has been made."],
+        "sections": sections,
+        "authorities": authorities,
+    })
 
 
 def _mock_intelligent_review_response(prompt: str) -> str:
@@ -1834,6 +1900,7 @@ PURPOSE_RECOMMENDATIONS = "recommendations"
 PURPOSE_HEARING_PACK = "hearing_pack"
 PURPOSE_METADATA_EXTRACT = "metadata_extract"
 PURPOSE_EVAL = "eval"
+PURPOSE_RESEARCH = "research"
 
 
 def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
@@ -1851,6 +1918,7 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
         PURPOSE_HEARING_PACK: getattr(settings, "llm_model_hearing_pack", None),
         PURPOSE_METADATA_EXTRACT: getattr(settings, "llm_model_metadata_extract", None),
         PURPOSE_EVAL: getattr(settings, "llm_model_eval", None),
+        PURPOSE_RESEARCH: getattr(settings, "llm_model_research", None),
     }
     override = mapping.get(purpose) if purpose else None
     if override and str(override).strip():
@@ -1954,6 +2022,9 @@ def _build_inner_provider(
         # memorandum, 8K output tokens) — keep its budget generous.
         PURPOSE_DRAFTING: 120.0,
         PURPOSE_EVAL: 60.0,
+        # Research answers run in a background task, not behind the request
+        # deadline, and produce a long nine-section structured answer.
+        PURPOSE_RESEARCH: 240.0,
     }
     per_purpose_retries: dict[str, int] = {
         "case_tracking:update_summary": 0,
@@ -1963,6 +2034,7 @@ def _build_inner_provider(
         PURPOSE_METADATA_EXTRACT: 1,
         PURPOSE_DRAFTING: 1,
         PURPOSE_EVAL: 2,
+        PURPOSE_RESEARCH: 0,
     }
     timeout_for_purpose = per_purpose_timeout.get(purpose or "", 60.0)
     retries_for_purpose = per_purpose_retries.get(purpose or "", 2)
@@ -2043,6 +2115,8 @@ def max_tokens_for_purpose(purpose: str | None) -> int:
         return getattr(settings, "llm_max_output_tokens_assistant", 2048)
     if purpose == PURPOSE_RECOMMENDATIONS:
         return getattr(settings, "llm_max_output_tokens_recommendations", 4096)
+    if purpose == PURPOSE_RESEARCH:
+        return getattr(settings, "llm_max_output_tokens_research", 16384)
     return settings.llm_max_output_tokens
 
 

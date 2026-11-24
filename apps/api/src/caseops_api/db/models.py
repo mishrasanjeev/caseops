@@ -10456,6 +10456,59 @@ class AuthorityResearchReport(Base):
     )
 
 
+class ResearchAnswer(Base):
+    """Tenant-owned, source-verified three-part research answer.
+
+    The verified answer and the frozen source manifest are stored together so a
+    saved or exported answer always shows exactly the sources it was verified
+    against. A saved answer is attached to at most one matter; matter access
+    then governs who else may read it.
+    """
+
+    __tablename__ = "research_answers"
+    __table_args__ = (
+        Index("ix_research_answers_company_creator", "company_id", "created_by_membership_id"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'answered', 'abstained', 'failed')",
+            name="ck_research_answers_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    context_matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    saved_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analysis_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AuthorityDocument(Base):
     __tablename__ = "authority_documents"
     __table_args__ = (

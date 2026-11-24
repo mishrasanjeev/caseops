@@ -19,6 +19,8 @@ export function MatterCockpitNav({ matterId }: { matterId: string }) {
     { href: `${base}/drafts`, label: "Drafts" },
     { href: `${base}/hearings`, label: "Hearings" },
     { href: `${base}/recommendations`, label: "AI Recommendations" },
+    // J05/M04: research launched from a matter uses only its recorded facts.
+    { href: `/app/research?tab=answer&matter=${encodeURIComponent(matterId)}`, label: "Research" },
     // MOD-LSE-5 (2026-05-03) — Litigation strategy + escalation planner.
     { href: `${base}/strategy`, label: "Strategy Plan" },
     { href: `${base}/predictive-intelligence`, label: "Predictive Intelligence" },
