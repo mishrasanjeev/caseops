@@ -9,18 +9,21 @@ from __future__ import annotations
 import csv
 import io
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from caseops_api.api.dependencies import (
     DbSession,
     require_capability,
 )
-from caseops_api.db.models import AuditEvent, AuditExportJob
+from caseops_api.core.problem_details import ProblemHTTPException
+from caseops_api.db.models import AuditEvent, AuditExportJob, AuditResult
+from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.ai_token_governance import (
     AITokenGovernancePatchRequest,
     AITokenGovernanceSummary,
@@ -152,9 +155,60 @@ def _event_row(event: AuditEvent) -> dict[str, object]:
     }
 
 
+# The synchronous export must finish inside the 120 s request ceiling that
+# Cloud Run and the web client's download both apply, so one download holds at
+# most this many rows. A wider window is refused with a typed 422 before any
+# byte is sent; tenants that need more use POST /api/admin/audit/export/async.
+AUDIT_EXPORT_MAX_ROWS = 50_000
+# Rows fetched per server-side cursor round trip while the file streams.
+AUDIT_EXPORT_BATCH_SIZE = 1_000
+AUDIT_EXPORT_ROW_CAP_PROBLEM = "audit_export_row_cap_exceeded"
+
+
+class AuditExportCapExceededDuringStream(RuntimeError):
+    """More rows appeared mid-stream than the cap allows; abort, never truncate."""
+
+
+def _stream_audit_events(
+    filters: list[Any], *, row_bound: int, cap_enforced: bool
+) -> Iterator[AuditEvent]:
+    """Yield the window's rows in (created_at, id) order from a server-side
+    cursor, holding at most one batch of ORM rows in memory at a time.
+
+    The request session is finalized when the route returns, so the stream
+    reads through its own short-lived session.
+    """
+    stmt = (
+        select(AuditEvent)
+        .where(*filters)
+        .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
+        .limit(row_bound + 1 if cap_enforced else row_bound)
+        .execution_options(yield_per=AUDIT_EXPORT_BATCH_SIZE)
+    )
+    with get_session_factory()() as session:
+        emitted = 0
+        for event in session.scalars(stmt):
+            if emitted == row_bound:
+                # Rows committed late into the counted window would push the
+                # file past the cap. Breaking the stream makes the download
+                # fail visibly instead of ending as a complete-looking file.
+                raise AuditExportCapExceededDuringStream(
+                    f"Audit export window grew past {row_bound} rows while streaming."
+                )
+            emitted += 1
+            yield event
+
+
 @router.get(
     "/audit/export",
     summary="Stream the tenant audit trail as JSONL or CSV",
+    description=(
+        "Defaults to the last 30 days; an open `until` is pinned to the request "
+        f"time. One download holds at most {AUDIT_EXPORT_MAX_ROWS} rows: a wider "
+        "window returns 422 `audit_export_row_cap_exceeded` with `row_cap`, and "
+        "no partial file. A `limit` at or under the cap returns the first "
+        "`limit` rows. Use `POST /api/admin/audit/export/async` for larger exports."
+    ),
     response_class=StreamingResponse,
 )
 def export_audit_trail(
@@ -173,22 +227,61 @@ def export_audit_trail(
         # the entire history of a busy tenant.
         until_dt = datetime.now(UTC)
         since_dt = until_dt - timedelta(days=30)
+    elif until_dt is None:
+        # Pin an open upper bound to the request time, so rows written while
+        # the file streams (this export's own audit row included) cannot
+        # enlarge the window after it was counted against the cap.
+        until_dt = datetime.now(UTC)
 
-    stmt = (
-        select(AuditEvent)
-        .where(AuditEvent.company_id == context.company.id)
-        .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
-    )
+    filters: list[Any] = [AuditEvent.company_id == context.company.id]
     if since_dt is not None:
-        stmt = stmt.where(AuditEvent.created_at >= since_dt)
-    if until_dt is not None:
-        stmt = stmt.where(AuditEvent.created_at <= until_dt)
+        filters.append(AuditEvent.created_at >= since_dt)
+    filters.append(AuditEvent.created_at <= until_dt)
     if action:
-        stmt = stmt.where(AuditEvent.action == action)
-    if limit is not None and limit > 0:
-        stmt = stmt.limit(min(limit, 100_000))
+        filters.append(AuditEvent.action == action)
 
-    events = list(session.scalars(stmt))
+    # A caller-supplied `limit` at or under the cap is an explicit request for
+    # the first N rows. Otherwise the whole window must fit under the cap, or
+    # the export is refused before any byte is sent: never a silent cut-off.
+    explicit_limit = limit is not None and 0 < limit <= AUDIT_EXPORT_MAX_ROWS
+    row_bound = limit if explicit_limit and limit is not None else AUDIT_EXPORT_MAX_ROWS
+    matched = session.scalar(
+        select(func.count()).select_from(
+            select(AuditEvent.id).where(*filters).limit(row_bound + 1).subquery()
+        )
+    ) or 0
+    metadata: dict[str, object] = {
+        "since": since_dt.isoformat() if since_dt else None,
+        "until": until_dt.isoformat(),
+        "action_filter": action,
+        "format": format,
+    }
+    if matched > row_bound and not explicit_limit:
+        record_from_context(
+            session,
+            context,
+            action="audit.exported",
+            target_type="audit_export",
+            target_id=None,
+            result=AuditResult.DENIED,
+            metadata={
+                **metadata,
+                "reason": AUDIT_EXPORT_ROW_CAP_PROBLEM,
+                "row_cap": AUDIT_EXPORT_MAX_ROWS,
+            },
+            commit=True,
+        )
+        raise ProblemHTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            problem_type=AUDIT_EXPORT_ROW_CAP_PROBLEM,
+            detail=(
+                f"This export matches more than {AUDIT_EXPORT_MAX_ROWS:,} audit events, "
+                "the most one download can hold. Narrow the Since and Until dates "
+                "or add an action filter, then download again."
+            ),
+            extras={"row_cap": AUDIT_EXPORT_MAX_ROWS},
+        )
+    row_count = min(matched, row_bound)
 
     # Record the export itself so compliance can see who downloaded what.
     record_from_context(
@@ -197,15 +290,13 @@ def export_audit_trail(
         action="audit.exported",
         target_type="audit_export",
         target_id=None,
-        metadata={
-            "since": since_dt.isoformat() if since_dt else None,
-            "until": until_dt.isoformat() if until_dt else None,
-            "action_filter": action,
-            "row_count": len(events),
-            "format": format,
-        },
+        metadata={**metadata, "row_count": row_count},
         commit=True,
     )
+    events = _stream_audit_events(filters, row_bound=row_bound, cap_enforced=not explicit_limit)
+    # One response chunk per batch of rows, not per row: per-chunk overhead
+    # dominated the time to send a large window.
+    batch_size = AUDIT_EXPORT_BATCH_SIZE
 
     stamp = datetime.now(UTC).strftime("%Y%m%d")
     filename_base = f"audit-{context.company.slug}-{stamp}"
@@ -216,10 +307,8 @@ def export_audit_trail(
             buffer = io.StringIO()
             writer = csv.DictWriter(buffer, fieldnames=_AUDIT_COLUMNS)
             writer.writeheader()
-            yield buffer.getvalue().encode("utf-8")
+            pending = 0
             for event in events:
-                buffer.seek(0)
-                buffer.truncate()
                 row = _event_row(event)
                 row["metadata"] = (
                     json.dumps(row["metadata"], separators=(",", ":"))
@@ -227,7 +316,13 @@ def export_audit_trail(
                     else ""
                 )
                 writer.writerow(csv_safe_mapping(row))
-                yield buffer.getvalue().encode("utf-8")
+                pending += 1
+                if pending == batch_size:
+                    yield buffer.getvalue().encode("utf-8")
+                    buffer.seek(0)
+                    buffer.truncate()
+                    pending = 0
+            yield buffer.getvalue().encode("utf-8")
 
         return StreamingResponse(
             iter_csv(),
@@ -236,8 +331,14 @@ def export_audit_trail(
         )
 
     def iter_jsonl():
+        lines: list[str] = []
         for event in events:
-            yield (json.dumps(_event_row(event), separators=(",", ":")) + "\n").encode("utf-8")
+            lines.append(json.dumps(_event_row(event), separators=(",", ":")) + "\n")
+            if len(lines) == batch_size:
+                yield "".join(lines).encode("utf-8")
+                lines.clear()
+        if lines:
+            yield "".join(lines).encode("utf-8")
 
     return StreamingResponse(
         iter_jsonl(),

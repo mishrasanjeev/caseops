@@ -5,11 +5,14 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from collections.abc import Buffer
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from caseops_api.core.problem_details import ProblemHTTPException
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import DraftStatus
 from caseops_api.services.drafting import (
     get_ip_draft,
@@ -19,11 +22,31 @@ from caseops_api.services.drafting import (
 )
 from caseops_api.services.session_context import SessionContext
 
+IP_FILING_BUNDLE_TOO_LARGE_PROBLEM = "ip_filing_bundle_too_large"
+
 
 @dataclass(frozen=True)
 class IpDraftBundle:
     body: bytes
     filename: str
+
+
+class _BundleSizeExceeded(Exception):
+    pass
+
+
+class _CappedZipBuffer(io.BytesIO):
+    """In-memory zip target that refuses any write past ``max_bytes``, so an
+    oversized bundle stops while it is being built, not after."""
+
+    def __init__(self, max_bytes: int) -> None:
+        super().__init__()
+        self._max_bytes = max_bytes
+
+    def write(self, data: Buffer, /) -> int:
+        if self.tell() + memoryview(data).nbytes > self._max_bytes:
+            raise _BundleSizeExceeded
+        return super().write(data)
 
 
 def render_ip_draft_bundle(
@@ -102,17 +125,32 @@ def render_ip_draft_bundle(
             {"key": "filing_and_service_are_human_events", "passed": True},
         ],
     }
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"filed-document/{docx_filename}", docx)
-        archive.writestr(
-            "internal/generation-manifest.json",
-            json.dumps(internal_manifest, indent=2, default=str, sort_keys=True),
-        )
-        archive.writestr(
-            "internal/filing-checklist.json",
-            json.dumps(checklist, indent=2, sort_keys=True),
-        )
+    # A bundle is one file, so it gets the same ceiling as any file CaseOps
+    # accepts (max_attachment_size_bytes, 25 MiB by default).
+    max_bytes = get_settings().max_attachment_size_bytes
+    buffer = _CappedZipBuffer(max_bytes)
+    try:
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(f"filed-document/{docx_filename}", docx)
+            archive.writestr(
+                "internal/generation-manifest.json",
+                json.dumps(internal_manifest, indent=2, default=str, sort_keys=True),
+            )
+            archive.writestr(
+                "internal/filing-checklist.json",
+                json.dumps(checklist, indent=2, sort_keys=True),
+            )
+    except _BundleSizeExceeded:
+        raise ProblemHTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            problem_type=IP_FILING_BUNDLE_TOO_LARGE_PROBLEM,
+            detail=(
+                f"This filing bundle would be larger than {max_bytes / (1024 * 1024):g} MiB, "
+                "the limit for a single file, so it was not created. Download the "
+                "DOCX instead, or shorten the pleading and finalize a new revision."
+            ),
+            extras={"max_bundle_bytes": max_bytes},
+        ) from None
     safe_title = "".join(
         char if char.isalnum() or char in {"-", "_"} else "-" for char in draft.title
     ).strip("-")[:60] or "trademark-pleading"
