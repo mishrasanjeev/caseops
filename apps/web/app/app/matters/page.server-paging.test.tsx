@@ -193,4 +193,44 @@ describe("Matters list pages and searches on the server", () => {
       "MAT-006", "MAT-007", "MAT-008", "MAT-009",
     ]);
   });
+
+  it("sorts in the browser only when one page holds every match", async () => {
+    renderPage();
+    await screen.findByText("MAT-001");
+    // 130 matters over three pages: ordering one page would misstate the list.
+    expect(screen.queryByRole("button", { name: "Code" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: "Code" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
+      target: { value: "Client 00" },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("data-table-range")).toHaveTextContent("1-9 of 9"),
+    );
+    const code = screen.getByRole("button", { name: "Code" });
+    fireEvent.click(code);
+    fireEvent.click(code);
+    expect(visibleCodes()[0]).toBe("MAT-009");
+  });
+
+  it("keeps a way out when a search fails", async () => {
+    listMattersMock.mockImplementation((params: { q?: string }) =>
+      params.q ? Promise.reject(new Error("search failed")) : fakeServer(params),
+    );
+    renderPage();
+    await screen.findByText("MAT-001");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
+      target: { value: "boom" },
+    });
+    const reset = await screen.findByRole("button", { name: /reset filters/i });
+    expect(screen.getByLabelText("Search")).toHaveValue("boom");
+    fireEvent.click(reset);
+    await screen.findByText("MAT-001");
+  });
+
+  it("caps the search at the server's limit", async () => {
+    renderPage();
+    await screen.findByText("MAT-001");
+    expect(screen.getByRole("searchbox", { name: "Search all rows" })).toHaveAttribute("maxLength", "255");
+  });
 });

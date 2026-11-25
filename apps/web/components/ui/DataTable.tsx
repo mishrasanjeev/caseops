@@ -41,6 +41,14 @@ export type DataTableServerMode = {
   canNextPage: boolean;
   /** A search or page request is in flight. */
   busy?: boolean;
+  /**
+   * The current page holds every matching row (one page, no next page), so
+   * sorting it in the browser orders the whole result. Otherwise headers do
+   * not sort: ordering one page would misstate the list.
+   */
+  allRowsLoaded?: boolean;
+  /** The server's limit for the search text. */
+  searchMaxLength?: number;
   onPreviousPage: () => void;
   onNextPage: () => void;
 };
@@ -86,7 +94,7 @@ export function DataTable<TData, TValue>({
     onSortingChange: setSorting,
     globalFilterFn: "includesString",
     // Sorting one server page would present a partial order as the whole list.
-    enableSorting: !server,
+    enableSorting: !server || Boolean(server.allRowsLoaded),
     manualFiltering: Boolean(server),
     manualPagination: Boolean(server),
     getCoreRowModel: getCoreRowModel(),
@@ -132,6 +140,7 @@ export function DataTable<TData, TValue>({
             className="pl-8"
             aria-label={server ? "Search all rows" : "Filter rows"}
             type={server ? "search" : undefined}
+            maxLength={server?.searchMaxLength}
           />
         </div>
         <div
@@ -164,7 +173,11 @@ export function DataTable<TData, TValue>({
                         pinLastColumn && index === group.headers.length - 1 && PINNED_HEADER,
                       )}
                     >
-                      {header.isPlaceholder ? null : (
+                      {header.isPlaceholder ? null : !canSort ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={canSort ? header.column.getToggleSortingHandler() : undefined}

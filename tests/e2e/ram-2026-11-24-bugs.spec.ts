@@ -197,20 +197,24 @@ test("row 2 Today and Next action open the exact task and deadline", async ({ pa
   const deadlineTitle = stamp("Nov24 open deadline");
   await openWorkspace(page, rt, `/app/matters/${matterId}/tasks`);
 
-  const taskForm = page.locator("form").nth(0);
-  await taskForm.getByLabel("Task").fill(taskTitle);
-  await taskForm.getByLabel("Due").fill(today);
-  const createdTask = page.waitForResponse((r) => r.request().method() === "POST" && /\/tasks$/.test(new URL(r.url()).pathname));
-  await taskForm.getByRole("button", { name: /Add/ }).click();
-  const task = await json<{ id: string }>(await createdTask, "Create task through the Tasks page");
-  const deadlineForm = page.locator("form").nth(1);
-  await deadlineForm.getByLabel("Deadline").fill(deadlineTitle);
-  await deadlineForm.getByLabel("Due").fill(today);
-  const createdDeadline = page.waitForResponse((r) => r.request().method() === "POST" && /\/deadlines$/.test(new URL(r.url()).pathname));
-  await deadlineForm.getByRole("button", { name: /Add/ }).click();
-  const deadline = await json<{ id: string }>(await createdDeadline, "Create deadline through the Tasks page");
-
+  // Each created item is retired on its own, even when a later step fails.
+  const created: { kind: "task" | "deadline"; id: string }[] = [];
   try {
+    const taskForm = page.locator("form").nth(0);
+    await taskForm.getByLabel("Task").fill(taskTitle);
+    await taskForm.getByLabel("Due").fill(today);
+    const createdTask = page.waitForResponse((r) => r.request().method() === "POST" && /\/tasks$/.test(new URL(r.url()).pathname));
+    await taskForm.getByRole("button", { name: /Add/ }).click();
+    const task = await json<{ id: string }>(await createdTask, "Create task through the Tasks page");
+    created.push({ kind: "task", id: task.id });
+    const deadlineForm = page.locator("form").nth(1);
+    await deadlineForm.getByLabel("Deadline").fill(deadlineTitle);
+    await deadlineForm.getByLabel("Due").fill(today);
+    const createdDeadline = page.waitForResponse((r) => r.request().method() === "POST" && /\/deadlines$/.test(new URL(r.url()).pathname));
+    await deadlineForm.getByRole("button", { name: /Add/ }).click();
+    const deadline = await json<{ id: string }>(await createdDeadline, "Create deadline through the Tasks page");
+    created.push({ kind: "deadline", id: deadline.id });
+
     // Today -> task.
     await page.goto(`${rt.web.origin}/app/today`);
     const taskLink = page.getByTestId(`today-task-${task.id}`).getByRole("link");
@@ -231,31 +235,43 @@ test("row 2 Today and Next action open the exact task and deadline", async ({ pa
     await expect(page).toHaveURL(new RegExp(`/app/matters/${matterId}/tasks\\?deadline=${deadline.id}$`));
     const deadlineRow = page.getByTestId(`matter-deadline-${deadline.id}`);
     await expect(deadlineRow).toHaveAttribute("aria-current", "true");
+    await expect(deadlineRow).toBeFocused();
     await expect(deadlineRow).toContainText(deadlineTitle);
 
-    // Overview -> Next action -> Open.
+    // Overview -> Next action -> Open. The card shows the matter's most urgent
+    // item, which may be an older overdue item rather than this run's.
     await page.goto(`${rt.web.origin}/app/matters/${matterId}`);
     const card = page.getByTestId("matter-next-action");
     await expect(card).toBeVisible();
     const open = card.getByTestId("matter-next-action-go");
-    const href = await open.getAttribute("href");
-    expect(href, "Open never points at the overview it is shown on").not.toBe(`/app/matters/${matterId}`);
+    const href = (await open.getAttribute("href")) ?? "";
+    expect(href, "Open goes to the item's own page, never the overview it is shown on").toMatch(
+      new RegExp(`^/app/matters/${matterId}/(?:tasks\\?(?:task|deadline)=[0-9a-f-]{36}$|hearings$|billing$|drafts/[0-9a-f-]{36}$)`),
+    );
     const label = (await card.locator("p").nth(1).innerText()).trim();
     await open.click();
-    await expect(page).not.toHaveURL(new RegExp(`/app/matters/${matterId}$`));
-    const focused = page.locator('[aria-current="true"][id^="task-"], [aria-current="true"][id^="deadline-"]');
-    if (href && /[?&](task|deadline)=/.test(href)) {
+    await expect(page).toHaveURL(`${rt.web.origin}${href}`);
+    if (href.includes("/tasks?")) {
+      const focused = page.locator('[aria-current="true"][id^="task-"], [aria-current="true"][id^="deadline-"]');
       await expect(focused).toHaveCount(1);
+      await expect(focused).toBeFocused();
       await expect(focused).toContainText(label);
       await expect(focused).toBeInViewport();
     }
   } finally {
-    // Retire what this run created, through the page.
-    await page.goto(`${rt.web.origin}/app/matters/${matterId}/tasks`);
-    await page.getByTestId(`matter-task-${task.id}`).getByRole("button", { name: "Complete" }).click();
-    await expect(page.getByTestId(`matter-task-${task.id}`).getByRole("button", { name: "Reopen" })).toBeVisible();
-    await page.getByTestId(`matter-deadline-${deadline.id}`).getByRole("button", { name: "Complete" }).click();
-    await expect(page.getByTestId(`matter-deadline-${deadline.id}`).getByRole("button", { name: "Reopen" })).toBeVisible();
+    // Retire what this run created, through the page, each independently.
+    const failures: string[] = [];
+    if (created.length) await page.goto(`${rt.web.origin}/app/matters/${matterId}/tasks`).catch(() => undefined);
+    for (const item of created) {
+      try {
+        const row = page.getByTestId(`matter-${item.kind}-${item.id}`);
+        await row.getByRole("button", { name: "Complete" }).click();
+        await expect(row.getByRole("button", { name: "Reopen" })).toBeVisible();
+      } catch (error) {
+        failures.push(`${item.kind} ${item.id}: ${(error as Error).message.split("\n")[0]}`);
+      }
+    }
+    if (failures.length) throw new Error(`Could not retire created items: ${failures.join("; ")}`);
   }
   await rt.release();
 });
@@ -322,7 +338,9 @@ test("row 4 Next reaches page four without Load more", async ({ page, request, b
     await expect(page.getByTestId("data-table-range")).toHaveText(`${from}-${to} of ${total}`);
     await expect(page.getByTestId("data-table-page")).toHaveText(`Page ${index + 1} of ${Math.ceil(total / PAGE)}`);
     const codes = await visibleCodes(table);
-    expect(codes, `Page ${index + 1} shows the server's page ${index + 1}`).toEqual(oracle[index].matters.map((m) => m.matter_code));
+    // Re-read the oracle now: test-legal is a live tenant and edits reorder pages.
+    const fresh = (await oraclePages(request, rt, index + 1))[index];
+    expect(codes, `Page ${index + 1} shows the server's page ${index + 1}`).toEqual(fresh.matters.map((m) => m.matter_code));
     for (const code of codes) {
       expect(seen.has(code), `${code} appears once`).toBe(false);
       seen.add(code);
@@ -388,7 +406,6 @@ test("row 6 Suggested Counsel cards align at 80-150% zoom", async ({ page, reque
     for (const zoom of [0.8, 0.9, 1, 1.1, 1.25, 1.5]) {
       const width = Math.round(screen / zoom);
       await page.setViewportSize({ width, height: 900 });
-      await page.waitForTimeout(50);
       const boxes = (await Promise.all((await cards.all()).map((card) => card.boundingBox()))).map((box) => {
         if (!box) throw new Error("Card geometry unavailable");
         return box;
@@ -401,9 +418,15 @@ test("row 6 Suggested Counsel cards align at 80-150% zoom", async ({ page, reque
       const at = `${screen}px screen at ${Math.round(zoom * 100)}%`;
       const widths = boxes.map((box) => box.width);
       expect(Math.max(...widths) - Math.min(...widths), `Equal card widths, ${at}`).toBeLessThanOrEqual(1);
-      for (const row of rows.values()) {
-        const heights = row.map((box) => box.height);
-        expect(Math.max(...heights) - Math.min(...heights), `Equal heights in a row, ${at}`).toBeLessThanOrEqual(1);
+      // Cards are top-aligned (not stretched), so equal heights here mean equal content.
+      const heights = boxes.map((box) => box.height);
+      expect(Math.max(...heights) - Math.min(...heights), `Equal card heights, ${at}`).toBeLessThanOrEqual(1);
+      const scoreTops = await page.getByTestId("counsel-score-row").evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().top));
+      for (const [top, row] of rows) {
+        const inRow = boxes.map((box, i) => [box, scoreTops[i]] as const).filter(([box]) => row.includes(box));
+        const tops = inRow.map(([, t]) => t);
+        expect(Math.max(...tops) - Math.min(...tops), `Score and status line up across the row at y=${Math.round(top)}, ${at}`).toBeLessThanOrEqual(1);
       }
       const perRow = [...rows.values()].map((row) => row.length);
       expect(perRow.slice(0, -1).every((n) => n === perRow[0]), `Full rows before the last, ${at}`).toBe(true);
@@ -415,5 +438,13 @@ test("row 6 Suggested Counsel cards align at 80-150% zoom", async ({ page, reque
       }
     }
   }
+  // Opening one card shows its details and full name without stretching the others.
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const before = await cards.nth(1).boundingBox();
+  await cards.first().locator("summary").click();
+  await expect(cards.first().locator("details")).toHaveAttribute("open", "");
+  const after = await cards.nth(1).boundingBox();
+  expect(Math.abs((after?.height ?? 0) - (before?.height ?? -10)), "Neighbour height unchanged").toBeLessThanOrEqual(1);
+  await cards.first().locator("summary").click();
   await rt.release();
 });

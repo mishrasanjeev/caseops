@@ -173,11 +173,18 @@ export default function ContractsPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : isError ? (
-        <QueryErrorState
-          title="Could not load contracts"
-          error={error}
-          onRetry={refetch}
-        />
+        <div className="flex flex-col gap-3">
+          <QueryErrorState
+            title={query ? "Could not search contracts" : "Could not load contracts"}
+            error={error}
+            onRetry={refetch}
+          />
+          {query ? (
+            <Button type="button" variant="outline" className="self-start" onClick={() => setSearch("")}>
+              <RotateCcw className="h-4 w-4" /> Clear search
+            </Button>
+          ) : null}
+        </div>
       ) : contracts.length === 0 && !query && !search.trim() && !isPlaceholderData ? (
         <EmptyState
           icon={Scale}
@@ -212,6 +219,8 @@ export default function ContractsPage() {
             canPreviousPage: pager.canPreviousPage,
             canNextPage: pager.canNextPage,
             busy: isFetchingNextPage || isPlaceholderData,
+            allRowsLoaded: (data?.pages.length ?? 0) === 1 && !hasNextPage && !isPlaceholderData,
+            searchMaxLength: 200,
             onPreviousPage: pager.goToPreviousPage,
             onNextPage: () => void pager.goToNextPage(),
           }}

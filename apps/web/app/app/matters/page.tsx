@@ -57,6 +57,8 @@ import { formatLegalDate } from "@/lib/dates";
 // Next always reaches the following page (Nov 24 workbook rows 4-5).
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+// MatterListFilters.q max_length on the API.
+const SEARCH_MAX_LENGTH = 255;
 const CLAIM_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
 const FORUMS: Record<string, string> = {
@@ -434,6 +436,7 @@ export default function MattersPage() {
               setDraftFilters((prev) => ({ ...prev, q: event.target.value }))
             }
             placeholder="Party, code, court"
+            maxLength={SEARCH_MAX_LENGTH}
           />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -619,7 +622,8 @@ export default function MattersPage() {
         }
       />
 
-      {!isPending && !isError ? filterPanel : null}
+      {/* A failed search keeps the filters on screen so it can be changed. */}
+      {!isPending && (!isError || hasActiveFilters) ? filterPanel : null}
 
       {isPending ? (
         <div className="flex flex-col gap-3">
@@ -627,11 +631,18 @@ export default function MattersPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : isError ? (
-        <QueryErrorState
-          title="Could not load matters"
-          error={error}
-          onRetry={refetch}
-        />
+        <div className="flex flex-col gap-3">
+          <QueryErrorState
+            title={hasActiveFilters ? "Could not search matters" : "Could not load matters"}
+            error={error}
+            onRetry={refetch}
+          />
+          {hasActiveFilters ? (
+            <Button type="button" variant="outline" className="self-start" onClick={clearFilters}>
+              <RotateCcw className="h-4 w-4" /> Reset filters
+            </Button>
+          ) : null}
+        </div>
       ) : matters.length === 0 &&
         !hasActiveFilters &&
         !searchText.trim() &&
@@ -685,6 +696,8 @@ export default function MattersPage() {
             canPreviousPage: pager.canPreviousPage,
             canNextPage: pager.canNextPage,
             busy: isFetchingNextPage || isPlaceholderData,
+            allRowsLoaded: (data?.pages.length ?? 0) === 1 && !hasNextPage && !isPlaceholderData,
+            searchMaxLength: SEARCH_MAX_LENGTH,
             onPreviousPage: pager.goToPreviousPage,
             onNextPage: () => void pager.goToNextPage(),
           }}

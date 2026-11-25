@@ -119,6 +119,10 @@ export default function MatterTasksPage() {
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "tasks"] }),
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "deadlines"] }),
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] }),
+      // The cockpit Next action and Today list these items; refresh them so
+      // Back after Complete does not offer the finished item again.
+      queryClient.invalidateQueries({ queryKey: ["matter", matterId, "next-action"] }),
+      queryClient.invalidateQueries({ queryKey: ["today"] }),
     ]);
   }
 

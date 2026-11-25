@@ -518,6 +518,11 @@ function ActiveWalls({
           </Button>
         </div>
       ) : null}
+      {usingServer && serverSearch.data?.truncated ? (
+        <p className="text-sm text-[var(--color-warning-700)]">
+          Showing the 500 most recent walls that match. Narrow the search to see older ones.
+        </p>
+      ) : null}
       {usingServer && serverSearch.isPending ? (
         <p className="text-sm text-[var(--color-mute)]">Searching all walls…</p>
       ) : usingServer && serverSearch.isError ? (

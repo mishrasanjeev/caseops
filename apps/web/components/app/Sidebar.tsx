@@ -131,7 +131,7 @@ function readCollapsedGroups(): NavItem["section"][] {
   try {
     const stored = JSON.parse(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) ?? "[]");
     return Array.isArray(stored)
-      ? stored.filter((key): key is NavItem["section"] => typeof key === "string" && key in SECTION_LABEL)
+      ? stored.filter((key): key is NavItem["section"] => typeof key === "string" && Object.hasOwn(SECTION_LABEL, key))
       : [];
   } catch {
     return [];
@@ -225,7 +225,7 @@ export function SidebarBody({
                 onClick={() => toggleGroup(group.key)}
                 data-testid={`sidebar-group-${group.key}`}
                 className={cn(
-                  "flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.18em] hover:bg-[var(--color-bg-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]",
+                  "flex min-h-8 items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.18em] hover:bg-[var(--color-bg-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]",
                   holdsActive && !expanded ? "text-[var(--color-ink)]" : "text-[var(--color-mute-2)]",
                 )}
               >
