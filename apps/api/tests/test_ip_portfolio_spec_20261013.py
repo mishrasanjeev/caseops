@@ -753,6 +753,7 @@ def test_file_failures_remain_typed_http_errors(client, name, content, expected)
     assert response.json()["status"] == expected
 
 
+@pytest.mark.usefixtures("live_logs")
 def test_unexpected_upload_exception_is_not_network_error_or_sensitive_log(
     client, monkeypatch, caplog
 ):

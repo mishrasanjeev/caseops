@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import logging.config
 import os
 import shutil
 from collections.abc import Generator
@@ -147,6 +149,30 @@ def _migrated_template_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if not template.exists():  # pragma: no cover - defensive
         raise RuntimeError("migrated template database was not created")
     return template
+
+
+@pytest.fixture
+def live_logs(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch):
+    """``caplog`` that observes every logger, for log-absence (PII/secret) checks.
+
+    ``alembic/env.py`` calls ``logging.config.fileConfig``, whose default
+    ``disable_existing_loggers=True`` silences every logger that already exists,
+    such as ``caseops_api.*`` module loggers imported at collection, for the rest
+    of the session. ``secret not in caplog.text`` is then vacuous. This fixture
+    re-enables them for one test only, keeps a migration that runs during the
+    test's own setup from disabling them again, and restores both afterwards.
+    """
+    original = logging.config.fileConfig
+
+    def keep_existing_loggers(fname, defaults=None, disable_existing_loggers=True, encoding=None):
+        return original(fname, defaults, disable_existing_loggers=False, encoding=encoding)
+
+    monkeypatch.setattr(logging.config, "fileConfig", keep_existing_loggers)
+    for logger in list(logging.Logger.manager.loggerDict.values()):
+        if isinstance(logger, logging.Logger) and logger.disabled:
+            monkeypatch.setattr(logger, "disabled", False)
+    caplog.set_level(logging.INFO)
+    return caplog
 
 
 @pytest.fixture

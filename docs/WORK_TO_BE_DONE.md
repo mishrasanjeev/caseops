@@ -1,3 +1,13 @@
+## November24 — issue #513 public lead reconciliation (J19/M21/US-063, J14/M14)
+
+**Partially implemented.** Durable admission, idempotent replay, rate limits,
+worker-owned retry and manager readback are implemented and natively tested on
+SQLite and PostgreSQL. Undelivered owner alerts are now logged by reference
+and fixed code without contact data. Remaining: browser proof of a failed
+alert, complete release/deployed acceptance, and owner decisions on sender
+approval, 90-day expiry, consent/privacy review, any re-send of an Outcome
+unknown alert, and a first-party attribution schema before conversion claims.
+
 ## November22 — Matter ethical walls admin screen
 
 **Partially implemented.** Admin now has an Ethical walls card that lists

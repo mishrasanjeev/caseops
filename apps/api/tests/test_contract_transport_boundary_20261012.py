@@ -722,6 +722,7 @@ def test_gemini_invalid_wire_usage_components_charge_conservative_caps(
 
 
 @pytest.mark.parametrize("damage", ["missing-http-response", "missing-body", "malformed-body"])
+@pytest.mark.usefixtures("live_logs")
 def test_gemini_raw_body_decoder_failure_accounts_before_sanitized_format_error(
     completion_native_boundary, monkeypatch, caplog, damage,
 ):

@@ -90,6 +90,7 @@ def test_actual_propagator_enforces_combined_length_and_keeps_traceparent(length
 
 
 @pytest.mark.parametrize("whitespace", [" ", "\t"], ids=["spaces", "tabs"])
+@pytest.mark.usefixtures("live_logs")
 def test_oversized_malformed_header_never_enters_the_member_parser(monkeypatch, caplog, whitespace):
     from opentelemetry.trace import TraceState
 
