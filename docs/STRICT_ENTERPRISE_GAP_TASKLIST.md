@@ -80,6 +80,63 @@ desktop and phone in exact-release prod-verify 45388561841. Open:
   that container hangs. That is the inferred cause of the November 14
   later-login 504s.
 
+## November24 — bounded synchronous audit export and IP filing bundle cap
+
+**Partially implemented: landed in code with tests; not merged, deployed or
+verified in production.** These are the two server-side follow-ups that the
+issue613 download-body candidate (PR #655) recorded as open.
+
+- `GET /api/admin/audit/export` loaded every row of the window into memory, and
+  a `since` without `until` had no upper bound. It now counts the window with a
+  bounded `COUNT(... LIMIT cap+1)` and streams rows in (created_at, id) order
+  through a server-side cursor (`yield_per` 1,000), so at most one batch of rows
+  is held at a time, and sends one response chunk per batch instead of one per
+  row. One download holds at most `AUDIT_EXPORT_MAX_ROWS` = 50,000 rows, about
+  24 MB of JSONL or 15 MB of CSV at ~480 bytes a row. Measured locally on
+  SQLite through the test client, 50,000 rows took 6.1 s (JSONL) and 11.5 s
+  (CSV); with one chunk per row they took 51 s and 56 s. On local PostgreSQL
+  17 through the server-side cursor they took 11.5 s and 17.0 s. That leaves the
+  120 s Cloud Run and browser deadlines room for network transfer; no timeout
+  was raised. A wider window gets a typed 422 problem
+  (`audit_export_row_cap_exceeded`, `row_cap`) before any byte is sent, and the
+  refusal is audited as `audit.exported` with result `denied`. An open `until`
+  is pinned to the request time. If rows committed late push the counted window
+  past the cap while it streams, the stream aborts instead of ending as a
+  complete-looking file. An explicit `limit` at or under the cap still returns
+  the first rows; a larger `limit` no longer bypasses the cap (it used to be
+  clamped silently to 100,000). CSV/JSONL format, tenant scoping, the
+  `audit:export` gate, export auditing and the 30-day default are unchanged.
+  The admin page already shows the problem's `detail`, so no web change.
+- The IP pleading filing bundle (`/api/ip/.../filing-bundle.zip`) is built into
+  a buffer that refuses any write past `max_attachment_size_bytes` (25 MiB), the
+  limit for any single file. An oversized bundle stops while it is built and
+  returns a typed 422 (`ip_filing_bundle_too_large`, `max_bundle_bytes`).
+- The Matter court-filing bundle (`services/filing_bundle.py`) read every
+  selected exhibit into memory and zipped them with no total cap. It now stops
+  reading exhibits once their stored size passes `max_attachment_size_bytes`,
+  builds into the same capped buffer, and returns a typed 422
+  (`matter_filing_bundle_too_large`, `max_bundle_bytes`).
+- Security: the synchronous export did not apply the IP ethical-wall audit
+  filter that the async job applies, so an admin walled off an IP docket could
+  read that docket's audit rows, or infer them from the row count. The filter
+  is now one shared function (`visible_ip_audit_events_filter` in
+  `services/audit_exports.py`) used by the async job, by both the cap count and
+  the streamed rows of the synchronous export, and by the Matter audit list,
+  count and export. The Matter audit path had the same gap: a Matter-IP link
+  event names the docket, and a member who can see the Matter but is walled
+  off the docket saw it. Other audit reads were checked: the IP docket audit
+  list is scoped to an already-authorized docket, employee audit reads only
+  employee and membership targets, and activity reports read only a per-tenant
+  latest timestamp.
+- Evidence: `apps/api/tests/test_audit_export_bounded_20261124.py` (with a
+  `_postgres` replay that also asserts the server-side cursor),
+  `apps/api/tests/test_ip_filing_bundle_size_cap_20261124.py` and
+  `apps/api/tests/test_matter_filing_bundle_size_cap_20261124.py`. Every test
+  fails on the previous code.
+- Still open, recorded follow-up: the async worker (`run_export_job`) still
+  loads up to 500,000 rows and the whole artifact into memory before storing
+  it.
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
