@@ -76,27 +76,25 @@ calls.
    (gcloud secrets versions access latest --secret caseops-sarvam-api-key --project perfect-period-305406).Length
    ```
 
-5. Bind it in the deploy contracts, in one change merged to `main`, **only after
-   steps 2 and 3 are done**. A release that references a missing or unreadable
-   secret fails. Do not bind it by hand with `gcloud run ... update`: every
-   release re-applies the job contract with `--set-secrets`, which would erase
-   a manual binding on the job.
+5. Merge the deploy-contract binding change to `main` **only after steps 2
+   to 4 and B.1 to B.2 are done**. Do not bind anything by hand with
+   `gcloud run ... update`: every release re-applies the job contract with
+   `--set-secrets`, which would erase a manual binding on the job. The change
+   binds:
    - `infra/cloudrun/scheduler-inventory.json`, job
      `caseops-document-processing`, `bootstrap`:
-     - add `"CASEOPS_SARVAM_API_KEY": "caseops-sarvam-api-key:latest"` to
-       `secrets`;
-     - add `"CASEOPS_SARVAM_DOCUMENT_AI_ENABLED": "true"` to `environment`.
-   - `scripts/deploy-prod.sh`, `caseops-api` deploy:
-     - add `CASEOPS_SARVAM_API_KEY=caseops-sarvam-api-key:latest` to
-       `--update-secrets`;
-     - add `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=true` to `--update-env-vars`;
-     - extend the service readback to fail the release unless
-       `CASEOPS_SARVAM_API_KEY` is bound to `caseops-sarvam-api-key` at
-       `latest` and the flag is `true` (same pattern as
-       `CASEOPS_INDIAN_KANOON_API_TOKEN`).
-   - Run `scripts/verify-backend.sh tests/test_scheduler_inventory.py
-     tests/test_cloudrun_manifest_secrets.py tests/test_deploy_prod_hardening.py`
-     and update any pinned secret or environment lists they assert.
+     `CASEOPS_SARVAM_API_KEY=caseops-sarvam-api-key:latest` in `secrets`;
+     `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=true`,
+     `CASEOPS_GOOGLE_TRANSLATION_ENABLED=true` and
+     `CASEOPS_GOOGLE_TRANSLATION_LOCATION=us-central1` in `environment`.
+   - `scripts/deploy-prod.sh`, `caseops-api` deploy: the same secret in
+     `--update-secrets` and the same three settings in `--update-env-vars`.
+     The service readback fails the release unless the secret is bound to
+     `caseops-sarvam-api-key` at `latest` and the three settings match.
+   - A read-only preflight, before any build or migration, refuses the
+     release (exit 2) unless `caseops-sarvam-api-key` has an `ENABLED`
+     latest version. A release can therefore not half-apply because the
+     secret is missing.
 6. Record the Sarvam price as a cost profile (step C). Until then readiness
    reports `cost_not_verified` and no Sarvam call is made.
 7. Release from `main`, then check the readback on both targets:
@@ -118,12 +116,17 @@ on its next revision. Revocation: set `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=false`
 
 1. Enable the API: `gcloud services enable translate.googleapis.com --project perfect-period-305406`.
 2. Grant the runtime service account `roles/cloudtranslate.user` on the project.
-3. Bind `CASEOPS_GOOGLE_TRANSLATION_ENABLED=true` and
-   `CASEOPS_GOOGLE_TRANSLATION_LOCATION=us-central1` the same way as A.5
-   (job `environment` and the `caseops-api` `--update-env-vars`, with
-   readback). The project falls back to `CASEOPS_GCP_PROJECT_ID`, which both
-   already set. No secret is needed: Google auth uses the runtime service
-   account.
+3. `CASEOPS_GOOGLE_TRANSLATION_ENABLED=true` and
+   `CASEOPS_GOOGLE_TRANSLATION_LOCATION=us-central1` are bound by the same
+   change as A.5, with readback. The project falls back to
+   `CASEOPS_GCP_PROJECT_ID`, which both targets already set. No secret is
+   needed: Google auth uses the runtime service account. The release does not
+   check that the API is enabled or the role is granted; if either is missing,
+   translation runs fail with a Google permission error and no charge.
+4. Data location: `us-central1` processes the extracted text in the United
+   States. The owner confirmed on 2026-11-24 that this is acceptable for
+   client documents. Changing the location needs the same confirmation and a
+   region where Translation LLM is offered.
 
 ### C. Cost profiles and budgets
 
