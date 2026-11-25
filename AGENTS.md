@@ -3276,6 +3276,27 @@ requirements when using the fallback.
   specs, run from the tester's workflow, reports no blocking or major finding.
   Every first implementation in the 2026-10-31 batch had them; an
   implementer's "Properly fixed locally" is a claim to review, not a verdict.
+- A shared list primitive must never filter, page, count or sort a partial
+  set as if it were complete. Fixing the screens a defect report names leaves
+  the primitive unsafe for the next caller: B4-ADJ-03 converted four hub lists
+  and the main Matters and Contracts tables kept the defect until the Nov 24
+  workbook (rows 4-5). Make callers declare complete rows or server mode in the
+  type, audit by mechanism (any client search, pager, count or sort over a
+  capped, cursor or "Load more" read), not by a literal such as `limit=100`,
+  and regress with more rows than one page: cross two page boundaries and find
+  a record on a page nobody opened, through the reported screen.
+- A layout fix is proven by geometry at the tester's zoom matrix (80-150% as
+  CSS viewport widths): equal widths, equal heights within a row, columns per
+  row and no overflow. Overflow, keyboard and touch proofs do not cover
+  "uneven or misaligned"; B5-016 reopened as Nov 24 row 6 for exactly that.
+- An Open or primary action must leave the page it is on and land on the exact
+  item (focused, marked, in view), and say so when the item is gone. Assert
+  every kind's link against the current route; a link to the same URL reads as
+  a dead button (Nov 24 row 2: task and deadline next-actions linked to the
+  overview that rendered them).
+- One- or two-row fixtures cannot falsify paging, search, totals or uniform
+  layout. Run every new regression against the pre-fix code and keep it only
+  if it fails there; a test that passes on the broken build is not coverage.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
