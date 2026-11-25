@@ -27,7 +27,7 @@ const [mode, file, pin, size] = process.argv.slice(2);
 if (mode === '--list') {
   assert.equal(process.argv.length,3); console.log(JSON.stringify({ profile:'ios-sdk-local-archive-controls-v1', cases:archiveControlCases, phases:24, nativeAcceptance:false }));
 } else {
-  assert.ok(mode === '--run' && process.argv.length === 6 && process.platform === 'darwin' && process.versions.node === '24.15.0');
+  assert.ok(mode === '--run' && process.argv.length === 6 && process.platform === 'darwin' && process.versions.node === '24.22.3');
   const configBytes = held({path:file,sha256:pin,sizeBytes:Number(size)}), q = JSON.parse(configBytes); configBytes.fill(0);
   assert.equal(q.kind,'ios-sdk-local-archive-controls-v1'); assert.equal(path.dirname(q.sourceRoot),q.outputRoot); assert.equal(path.dirname(q.policyDirectory),q.outputRoot);
   const code = held(q.helper), m = await import('data:text/javascript;base64,' + code.toString('base64')); code.fill(0);

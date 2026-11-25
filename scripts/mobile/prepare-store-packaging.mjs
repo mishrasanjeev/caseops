@@ -101,7 +101,8 @@ export function packagingPlan(request, { root, output, links, settings, source, 
     ] };
 }
 export function prepare(requestRef, output, { allowSynthetic = false, root = path.resolve(fileURLToPath(new URL('../../', import.meta.url))) } = {}) {
-  assert.equal(process.versions.node, '24.15.0', 'PINNED_NODE_24_15_REQUIRED');
+  // Draft-only preparation does not admit the separate signing/execution host.
+  assert.ok(['24.15.0', '24.22.3'].includes(process.versions.node), 'STORE_PREPARATION_PINNED_NODE_REQUIRED');
   const requestInput = readJson(reference(requestRef));
   const request = requestInput.value;
   const links = readNativeLinkConfig({ CASEOPS_NATIVE_LINK_CONFIG_FILE: request.nativeLinks?.path, CASEOPS_NATIVE_LINK_CONFIG_SHA256: request.nativeLinks?.sha256 }, { allowSynthetic });

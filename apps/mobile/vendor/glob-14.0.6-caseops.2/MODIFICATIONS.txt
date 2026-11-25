@@ -1,0 +1,8 @@
+CaseOps dependency artifact repair
+
+glob 14.0.6-caseops.2 retains official glob 14.0.6 source, raw dist, types and APIs.
+Only the default CommonJS/ESM minified bundles and maps are rebuilt with official
+minimatch 11.0.8, @isaacs/nonrecursive-glob-match 1.1.0 and brace-expansion 5.0.13 inputs.
+Glob's upstream main and Ignore braceExpandMax guards are retained unchanged.
+Full bundled notices and immutable official input identities are retained.
+No network access or npm lifecycle is used during rebuilding.

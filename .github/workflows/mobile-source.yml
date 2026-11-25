@@ -3,10 +3,10 @@ name: Mobile source gates
 on:
   pull_request:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", "tests/e2e/drafting-formats20261115.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/node-local-tls-certificates.cjs", "tests/fixtures/contract-preview-probe.ts", "tests/fixtures/statutes/structured-schedule-api.json"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", "tests/e2e/drafting-formats20261115.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/undici-loopback-redirect-probe.cjs", "tests/fixtures/node-local-tls-certificates.cjs", "tests/fixtures/contract-preview-probe.ts", "tests/fixtures/statutes/structured-schedule-api.json"]
   push:
     branches: [main]
-    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", "tests/e2e/drafting-formats20261115.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/node-local-tls-certificates.cjs", "tests/fixtures/contract-preview-probe.ts", "tests/fixtures/statutes/structured-schedule-api.json"]
+    paths: ["package.json", "package-lock.json", "apps/mobile/**", "apps/api/**", "apps/web/**", "tests/e2e/support/**", "tests/mobile-web-auth/**", "scripts/mobile/**", "playwright.mobile-handoff.config.ts", "tsconfig.e2e.json", ".github/workflows/mobile-source.yml", ".github/actions/node-trust/**", ".dockerignore", ".gcloudignore", "docs/security/js-license-compliance-review-2026-10-12.md", "license-policy/reviewed-packages.json", "license-policy/upstream/**", "tests/e2e/ram-2026-11-11-bugs.spec.ts", "tests/e2e/ram-2026-10-22-drafting.prod.spec.ts", "tests/e2e/drafting-formats20261115.spec.ts", "tests/fixtures/node-default-tls-probe.cjs", "tests/fixtures/undici-loopback-redirect-probe.cjs", "tests/fixtures/node-local-tls-certificates.cjs", "tests/fixtures/contract-preview-probe.ts", "tests/fixtures/statutes/structured-schedule-api.json"]
 
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.15.0"
+          node-version: "24.22.3"
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - uses: ./.github/actions/node-trust
@@ -48,12 +48,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $archive = Join-Path $env:GITHUB_WORKSPACE 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz'
           $item = Get-Item -LiteralPath $archive -Force
-          if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 4067054) { throw 'NPM_ARCHIVE_TYPE_OR_EXTENT' }
+          if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 4144718) { throw 'NPM_ARCHIVE_TYPE_OR_EXTENT' }
           $rights = [Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions
           $stream = [IO.FileStream]::new($archive, [IO.FileMode]::Open, $rights, [IO.FileShare]::Read, 4096, [IO.FileOptions]::None)
           $hash = [Security.Cryptography.SHA256]::Create()
           try {
-            $expected = 'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b'
+            $expected = '3b5af1e81a20ae19f3759a281ad2074564b0cca5392100c9c0043b4ac97c45cc'
             $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
             if ($actual -ne $expected) { throw 'NPM_ARCHIVE_DIGEST' }
             $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -68,7 +68,7 @@ jobs:
             if (-not $stream.GetAccessControl().AreAccessRulesProtected) { throw 'NPM_ARCHIVE_ACL_NOT_PROTECTED' }
             $stream.Position = 0
             $actual = [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
-            if ($actual -ne $expected -or $stream.Length -ne 4067054) { throw 'NPM_ARCHIVE_CHANGED' }
+            if ($actual -ne $expected -or $stream.Length -ne 4144718) { throw 'NPM_ARCHIVE_CHANGED' }
             Write-Output 'Protected only the held, digest-pinned public installer archive; installer ACL checks remain mandatory.'
           } finally { $hash.Dispose(); $stream.Dispose() }
       - name: Install this platform's exact locked mobile graph
@@ -208,7 +208,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.15.0"
+          node-version: "24.22.3"
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -324,7 +324,7 @@ jobs:
           NPM_CONFIG_GLOBALCONFIG: ${{ steps.node_trust.outputs.NPM_CONFIG_GLOBALCONFIG }}
           NPM_CONFIG_STRICT_SSL: ${{ steps.node_trust.outputs.NPM_CONFIG_STRICT_SSL }}
           NPM_CONFIG_REGISTRY: ${{ steps.node_trust.outputs.NPM_CONFIG_REGISTRY }}
-        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-files-facts.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/camera-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs apps/mobile/e2e/evidence.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/store-artifact-postflight.test.mjs scripts/mobile/store-packaging-execution.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/deepmerge-security.test.mjs scripts/mobile/deepmerge-installed.test.mjs scripts/mobile/npm-tooling.test.mjs scripts/mobile/picomatch-security.test.mjs scripts/mobile/picomatch-installed.test.mjs scripts/mobile/privacy-policy.test.mjs scripts/mobile/prepare-source-exports.test.mjs apps/mobile/e2e/v1-workflows.test.mjs scripts/mobile/v1-workflows-credentials.test.mjs apps/mobile/e2e/queue-privacy.test.mjs scripts/mobile/client-extensions.test.mjs scripts/mobile/android-qa-observer.test.mjs scripts/mobile/android-qa-observer-build.test.mjs scripts/mobile/android-https-qualification.test.mjs scripts/mobile/android-qualification-promotion.test.mjs scripts/mobile/android-https-subject.test.mjs scripts/mobile/ios-https-qualification.test.mjs
+        run: node --test scripts/mobile/build-config.test.mjs scripts/mobile/tooling.test.mjs scripts/mobile/local-owner-controls.test.mjs apps/mobile/e2e/files-20261025.test.mjs apps/mobile/e2e/ios-files.test.mjs apps/mobile/e2e/android-files.test.mjs scripts/mobile/ios-browser-context.test.mjs scripts/mobile/ios-native-locators.test.mjs scripts/mobile/ios-files-facts.test.mjs scripts/mobile/ios-simulator-signing.test.mjs scripts/mobile/prepare-gateway-routes.test.mjs scripts/mobile/prepare-ios-local-run.test.mjs scripts/mobile/ios-files-privacy.test.mjs scripts/mobile/camera-files-privacy.test.mjs scripts/mobile/run-ios-files.test.mjs scripts/mobile/filesystem-security.test.mjs apps/mobile/e2e/evidence.test.mjs scripts/mobile/build-android-local-acceptance.test.mjs scripts/mobile/android-native-proof.test.mjs scripts/mobile/prepare-android-local-run.test.mjs scripts/mobile/android-files-privacy.test.mjs scripts/mobile/run-android-files.test.mjs scripts/mobile/store-packaging.test.mjs scripts/mobile/store-artifact-postflight.test.mjs scripts/mobile/store-packaging-execution.test.mjs scripts/mobile/forge-security.test.mjs scripts/mobile/deepmerge-security.test.mjs scripts/mobile/deepmerge-installed.test.mjs scripts/mobile/npm-tooling.test.mjs scripts/mobile/picomatch-security.test.mjs scripts/mobile/picomatch-installed.test.mjs scripts/mobile/vite-security.test.mjs scripts/mobile/privacy-policy.test.mjs scripts/mobile/prepare-source-exports.test.mjs apps/mobile/e2e/v1-workflows.test.mjs scripts/mobile/v1-workflows-credentials.test.mjs apps/mobile/e2e/queue-privacy.test.mjs scripts/mobile/client-extensions.test.mjs scripts/mobile/android-qa-observer.test.mjs scripts/mobile/android-qa-observer-build.test.mjs scripts/mobile/android-https-qualification.test.mjs scripts/mobile/android-qualification-promotion.test.mjs scripts/mobile/android-https-subject.test.mjs scripts/mobile/ios-https-qualification.test.mjs
       - name: Verify guarded local store packaging child transport
         run: python3 scripts/mobile/store-packaging-host.test.py
       - name: Verify QA-only Android observer merged manifest projection
@@ -437,7 +437,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.15.0"
+          node-version: "24.22.3"
           cache: npm
       - uses: ./.github/actions/node-trust
         id: node_trust

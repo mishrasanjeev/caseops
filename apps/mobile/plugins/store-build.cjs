@@ -91,7 +91,8 @@ function readStoreBuildSettings(env, links, options) {
   const baseline = readJson(reference(build.value.baseline));
   return { ...validateStoreBuild(build.value, baseline.value, links, options), ref, build, baseline };
 }
-function storeNumberReservations(build) {
+function storeNumberReservations(build, platform) {
+  if (platform !== undefined && !['ios', 'android'].includes(platform)) fail('STORE_RESERVATION_PLATFORM_REQUIRED');
   iosBuild(build.iosBuildNumber);
   androidBuild(build.androidVersionCode);
   shape(build.identities, ['iosBundleIdentifier', 'androidPackageName'], 'STORE_IDENTITIES_REQUIRED');
@@ -103,12 +104,15 @@ function storeNumberReservations(build) {
     records.push({ platform: 'ios', appId: iosBundleIdentifier, value: build.iosBuildNumber });
   }
   records.push({ platform: 'android', appId: androidPackageName, value: String(build.androidVersionCode) });
-  return records;
+  if (platform === undefined) return records; // Existing batch callers retain both identities.
+  const selected = records.filter(record => record.platform === platform);
+  if (selected.length !== 1) fail('STORE_RESERVATION_PLATFORM_REQUIRED');
+  return selected;
 }
 
 // Reserve before any future build or secret access. Partial reservations survive failure.
-function reserveBuildNumbers(root, build, requestSha256) {
-  const records = storeNumberReservations(build);
+function reserveBuildNumbers(root, build, requestSha256, platform) {
+  const records = storeNumberReservations(build, platform);
   if (!path.isAbsolute(root) || fs.realpathSync(root) !== root || !/^[a-f0-9]{64}$/.test(requestSha256)) fail('EXPLICIT_CANONICAL_RESERVATION_ROOT_REQUIRED');
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink() || (process.platform !== 'win32' && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid()))) fail('OWNED_PRIVATE_RESERVATION_ROOT_REQUIRED');

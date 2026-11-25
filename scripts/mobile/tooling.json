@@ -4,36 +4,36 @@
   "xcuitest": "12.22.2",
   "webdriverio": "10.1.0",
   "jdk": {
-    "version": "17.0.20.1+1",
-    "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_windows_hotspot_17.0.20.1_1.zip",
-    "sha256": "e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0"
+    "version": "17.0.21.1+2",
+    "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.21.1%2B2/OpenJDK17U-jdk_x64_windows_hotspot_17.0.21.1_2.zip",
+    "sha256": "eafba0944f777abdc74d5aad16049c9b5a1275b6ce99e2939ba9f7f3e6f08c87"
   },
-  "node": "24.15.0",
+  "node": "24.22.3",
   "npm": "11.12.1",
   "hostNodeTrust": {
-    "helperSha256": "0cab5ecea35f5420b749b20796abca918c341549333ef00284239bdd7896a36e",
-    "bootstrapSha256": "5dfd52600a80d998d5ee6f5e305d2bace317b35efb90ce9aaa468a187fd7c499"
+    "helperSha256": "fe59defc0356456c496f3f7e7ecf30da5ce09b17d970111d9b76983baaaa0623",
+    "bootstrapSha256": "d30ea50bbe6e026fa2dea1fee1e62afda00c3b49d05de8547c8207f976330431"
   },
   "sourceGateObserver": {
     "recorder": {
       "file": "source-gate-observer.mjs",
-      "sha256": "d150ae337d97ff8e1ce5b4bfb35871a1195f2d0f4f637bd0cf590d155dcdc8d0",
-      "sizeBytes": 40696
+      "sha256": "f6c20fbf20b9c3861852a7ee0c9eae22a8f090b89d294b19e3284115e5f944e4",
+      "sizeBytes": 40728
     },
     "bootstrapReadable": {
       "file": "host-node-trust-start.source.mjs",
-      "sha256": "cdd1c0547bda26e71e216325054a727ff4b7b516ef250d0f374a6aacf14b966e",
+      "sha256": "ad9678d59e8d04a104a82202921b4f40367560f8cca3180a3209212cfe564d6d",
       "sizeBytes": 7096
     },
     "generator": {
       "file": "rebuild-host-node-bootstrap.mjs",
-      "sha256": "7e5ca2d3ce15c09b0069b2f7a93acbd0dc30dd006f4551fa3d1e5bcbea01e0f7",
-      "sizeBytes": 7172
+      "sha256": "9039369eb907625b6986b735fa3ab8ab7d7179a2a9b760842a8e5eb000a78f8c",
+      "sizeBytes": 7507
     },
     "provenance": {
       "file": "host-node-trust-start.provenance.json",
-      "sha256": "103fb0b03abf2f1eb2dc3efb62fe204d510e5a2d19f894e355b7a2de2122075b",
-      "sizeBytes": 799
+      "sha256": "9ac961e4c1a07f054db7db7b1376e797f57f8032f948b8fb9ab5ede7cfb814fd",
+      "sizeBytes": 789
     }
   }
 }

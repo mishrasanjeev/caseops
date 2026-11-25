@@ -19,17 +19,19 @@ const registry = (name, version) => `https://registry.npmjs.org/${name}/-/${name
 // One npm project holds appium, webdriverio and the driver, so the driver's
 // appium peer resolves to the installed core and one lock covers the graph.
 export const APPIUM_TOOLING_PROJECT = 'scripts/mobile/appium-tooling';
-export const VENDORED_GLOB = Object.freeze({ name: 'glob', version: '14.0.2-caseops.1',
-  relative: 'apps/mobile/vendor/glob-14.0.2-caseops.1/glob-14.0.2-caseops.1.tgz',
-  sha256: '6a1eb71056c3c6138d30c06c4c9e0877b4a9bf79ee66c684a9405c6c4442ae25' });
+export const VENDORED_GLOB = Object.freeze({ name: 'glob', version: '14.0.6-caseops.2',
+  relative: 'apps/mobile/vendor/glob-14.0.6-caseops.2/glob-14.0.6-caseops.2.tgz',
+  sha256: 'f9c33abe2f13a5965bd3c32d70955742821d4e5e8ee6edb7a7f16d1c0aaaf374' });
 // Each replacement directory must hold exactly the named old version (or be
 // absent for a new dependency) before it is replaced.
 const DRIVER_REPLACEMENTS = Object.freeze([
-  Object.freeze({ into: 'node_modules/glob', name: 'glob', version: '14.0.2-caseops.1', replaces: '13.0.6', vendored: true, sha256: VENDORED_GLOB.sha256 }),
-  Object.freeze({ into: 'node_modules/minimatch', name: 'minimatch', version: '11.0.1', replaces: '10.2.6',
-    integrity: 'sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==' }),
-  Object.freeze({ into: 'node_modules/@isaacs/nonrecursive-glob-match', name: '@isaacs/nonrecursive-glob-match', version: '1.0.3', replaces: null,
-    integrity: 'sha512-SI7kyKHq4XXDRozw+r9GlRZkia1ZkFrpLW98r2IC2Bpr8YkFGE3fvjzmxCG0x78A++69HmDNrDvSMYBZmHGpKA==' }),
+  Object.freeze({ into: 'node_modules/glob', name: 'glob', version: '14.0.6-caseops.2', replaces: '13.0.6', vendored: true, sha256: VENDORED_GLOB.sha256 }),
+  Object.freeze({ into: 'node_modules/minimatch', name: 'minimatch', version: '11.0.8', replaces: '10.2.6',
+    integrity: 'sha512-nFQuYSTVrGvysVBps5Ih+0BdnYFN/Cj3C816r6+p7yK+FHrVLGE4O4N9AFwykrlNlvM2HYt+Rad1Uiro6h88Ig==' }),
+  Object.freeze({ into: 'node_modules/@isaacs/nonrecursive-glob-match', name: '@isaacs/nonrecursive-glob-match', version: '1.1.0', replaces: null,
+    integrity: 'sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw==' }),
+  Object.freeze({ into: 'node_modules/brace-expansion', name: 'brace-expansion', version: '5.0.13', replaces: '5.0.12',
+    integrity: 'sha512-Vh3dmFbc4wZeox7M9I/0L9GfFd83Su4+yCck/OF9Gi/P/dAHn0RT7X4K9R7gMNMhDck3DvhR6QXsnQdjjgwNvQ==' }),
   // glob 14 requires path-scurry ^3; other bundled consumers keep 2.0.2.
   Object.freeze({ into: 'node_modules/glob/node_modules/path-scurry', name: 'path-scurry', version: '3.0.0', replaces: null,
     integrity: 'sha512-1pTbQqH1wIwMi/eleQ5leFTTCkzFsPcgXNjwOA8YGGW/W4/kHT3dssE7Z6NH+zuqNLOzOB0uaD61yl7cAcVhgg==' }),
@@ -38,21 +40,21 @@ export const UIA2_REBUNDLE = Object.freeze({
   driver: 'uiautomator2',
   upstream: Object.freeze({ name: 'appium-uiautomator2-driver', version: '8.7.3',
     integrity: 'sha512-Aa+CPtxasGBVg30d62Lun45ike7p8QNpN8n7i1FrRv7V8A04cfPulPYFzl5t71VdICXADaU6bzP7hsLXE2ahFQ==' }),
-  localVersion: '8.7.3-caseops.1',
+  localVersion: '8.7.3-caseops.3',
   replacements: DRIVER_REPLACEMENTS,
   provenanceFile: 'CASEOPS-REBUNDLE.json',
-  tarSha256: '4f55ebc09906251558b33f593664d34eb3ecd6c95fcd46dcdd65f70634a90c75',
-  tgzIntegrity: 'sha512-OS9PpU9Eoyl7QmSpkO+eSoo/JcqsUyXO8lqHWaDUb0StsSv+WK3HLeME1XRkZJ52sFh0c2MAP5kSYU01YmpbvA==',
+  tarSha256: '14d09422e649ec87e438503d54b6e8f2b636bb628a65851ad61e791db28d52ad',
+  tgzIntegrity: 'sha512-rdOC3zcTsyDopWz4J6+kabAx9oRuWEDvGoTkX0z0UC6wuVbL1aBAB4KdCbKSzdEb+n6tkbhkiLkf9H1X2GXLxA==',
 });
 export const XCUITEST_REBUNDLE = Object.freeze({
   driver: 'xcuitest',
   upstream: Object.freeze({ name: 'appium-xcuitest-driver', version: '12.22.2',
     integrity: 'sha512-Zgtv+BBZ35QyONs3I972JjEz1d9cBlzHWIJNug33jslu6OcIUKyNKr79xwpiOb1Kpcs8Pzq0yctdzcwZ7FjBkQ==' }),
-  localVersion: '12.22.2-caseops.1',
+  localVersion: '12.22.2-caseops.3',
   replacements: DRIVER_REPLACEMENTS,
   provenanceFile: 'CASEOPS-REBUNDLE.json',
-  tarSha256: 'b69fc94c1180820fa5864d2659a9f91e73d81e658a7dffbde934eb06df86bc14',
-  tgzIntegrity: 'sha512-3L0NpmjThZZj7f+/8M0qik6kPn14q4uLKNfSv9lTMYqXzZTQ3sURMAf2i+c96QwysAmh/RjAUGsuLcbPKX2DLQ==',
+  tarSha256: 'f7791a8d6d33487dbf480c076750f9e3aaae22005e63bcc5f538dc6ce014a712',
+  tgzIntegrity: 'sha512-8UgvXmPyO7Txgg2sHy39UQT61Ef52FexYD+QuI+WvN6hvd7tD3QLweLYPz4mBAPrgWsIz6/Y/q+t6whWuXh2FQ==',
 });
 export const DRIVER_REBUNDLES = Object.freeze([UIA2_REBUNDLE, XCUITEST_REBUNDLE]);
 
@@ -162,7 +164,7 @@ export function rebundleDriver(archives, spec) {
       licenseFile: licenceFile(added, prefix), archiveSha256: sha256(archive), removedFiles: removed.length, addedFiles: added.length });
   }
   const driverLicence = { package: `${original.name}@${original.version}`, license: original.license, licenseFile: licenceFile(rows, 'package/') };
-  for (const name of ['glob', 'minimatch']) {
+  for (const name of ['glob', 'minimatch', 'brace-expansion', '@isaacs/nonrecursive-glob-match']) {
     const copies = rows.filter(r => r.path.endsWith('/package.json') && new RegExp(`/node_modules/${name}/package\\.json$`).test(r.path));
     assert.deepEqual(copies.map(r => r.path), [`package/node_modules/${name}/package.json`], 'APPIUM_TOOLING_SINGLE_FIXED_COPY');
   }
@@ -181,7 +183,7 @@ export function rebundleDriver(archives, spec) {
   });
   const provenance = { kind: 'caseops-appium-driver-rebundle-v1', name: spec.upstream.name,
     upstreamVersion: spec.upstream.version, localVersion: spec.localVersion, upstreamIntegrity: spec.upstream.integrity,
-    advisories: ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249'], driverLicence, replacements: replaced, dependentSpecs: dependents,
+    advisories: ['GHSA-3g3m-2fjr-6pw4', 'GHSA-g3hv-75wg-m249', 'GHSA-6jwq-xf8q-xcwh'], driverLicence, replacements: replaced, dependentSpecs: dependents,
     unchanged: 'All other upstream members are byte-identical; the root package.json changes only version and files.' };
   const manifest = { ...original, version: spec.localVersion, files: [...original.files, spec.provenanceFile] };
   rows = rows.filter(r => r.path !== 'package/package.json');
@@ -318,17 +320,84 @@ export function platformExcluded(entry) {
   return mismatched(entry.os, process.platform) || mismatched(entry.cpu, process.arch)
     || (Array.isArray(entry.libc) && (currentLibc() === null || mismatched(entry.libc, currentLibc())));
 }
+/** Only absent optional ancestors can explain a transitive platform omission. */
+function optionalPlatformAbsence(state, lock, installed, placeholders) {
+  const entries = Object.entries(lock.packages), incoming = new Map(entries.map(([key]) => [key, []]));
+  const missing = entries.filter(([key]) => key && !installed.has(key) && !placeholders.has(key));
+  const resolve = (parent, name) => {
+    assert.ok(typeof name === 'string' && /^(?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+$/.test(name)
+      && !name.split('/').some(part => ['.', '..', 'node_modules'].includes(part)), 'APPIUM_TOOLING_LOCK_DEPENDENCY_NAME');
+    // Use the declaration key, including npm aliases; never its version/spec target.
+    // Walking directories also handles a scoped parent's enclosing namespace.
+    for (let directory = parent; ; directory = path.posix.dirname(directory)) {
+      state.budget.entry();
+      if (path.posix.basename(directory) !== 'node_modules') {
+        const key = (directory ? directory + '/' : '') + 'node_modules/' + name;
+        if (Object.hasOwn(lock.packages, key)) return key;
+      }
+      if (!directory || directory === '.') return null;
+      if (path.posix.dirname(directory) === '.') directory = '';
+      if (!directory) {
+        state.budget.entry(); const key = 'node_modules/' + name;
+        return Object.hasOwn(lock.packages, key) ? key : null;
+      }
+    }
+  };
+  for (const [parent, entry] of entries) {
+    state.budget.entry();
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta', 'devDependencies']) {
+      const value = entry[field];
+      assert.ok(value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value)), 'APPIUM_TOOLING_LOCK_DEPENDENCY_MAP');
+    }
+    for (const field of ['bundleDependencies', 'bundledDependencies'])
+      assert.ok(entry[field] === undefined || typeof entry[field] === 'boolean' || Array.isArray(entry[field]), 'APPIUM_TOOLING_LOCK_DEPENDENCY_MAP');
+    const optional = entry.optionalDependencies ?? {}, dependencies = entry.dependencies ?? {};
+    const add = (name, spec, optionalEdge) => {
+      state.budget.entry(); assert.equal(typeof spec, 'string', 'APPIUM_TOOLING_LOCK_DEPENDENCY_SPEC');
+      const target = resolve(parent, name);
+      if (target) incoming.get(target).push({ parent, optional: optionalEdge });
+    };
+    for (const [name, spec] of Object.entries(dependencies)) if (!Object.hasOwn(optional, name)) add(name, spec, false);
+    for (const [name, spec] of Object.entries(optional)) add(name, spec, true);
+    for (const [name, spec] of Object.entries(entry.peerDependencies ?? {})) add(name, spec, entry.peerDependenciesMeta?.[name]?.optional === true);
+    if (!parent) for (const [name, spec] of Object.entries(entry.devDependencies ?? {}))
+      if (!Object.hasOwn(dependencies, name) && !Object.hasOwn(optional, name)) add(name, spec, false);
+    for (const names of [entry.bundleDependencies, entry.bundledDependencies]) if (Array.isArray(names))
+      for (const name of names) add(name, '*', Object.hasOwn(optional, name));
+  }
+  const excluded = new Set();
+  for (const [key, entry] of missing) {
+    state.budget.entry();
+    const liveRequired = incoming.get(key).some(edge => !edge.optional
+      && (!edge.parent || installed.has(edge.parent) || placeholders.has(edge.parent)));
+    if (entry.optional === true && platformExcluded(entry) && !liveRequired) excluded.add(key);
+  }
+  // A fixed point leaves every unanchored cycle and unknown parent unresolved.
+  // Placeholders are not platform-excluded anchors, and live/root edges never close.
+  let changed;
+  do {
+    changed = false;
+    for (const [key, entry] of missing) {
+      state.budget.entry(); const parents = incoming.get(key);
+      if (!excluded.has(key) && entry.optional === true && parents.length > 0
+        && parents.every(edge => excluded.has(edge.parent))) { excluded.add(key); changed = true; }
+    }
+  } while (changed);
+  return excluded;
+}
+
 /** Reconcile installed packages and placeholders with the lockfile and npm's hidden lock. */
 function reconcileLock(state, lock) {
   const installed = new Map(state.packages.map(row => [row.path, row])), placeholders = new Set(state.placeholders), absentOptional = [];
   assert.equal(installed.size, state.packages.length, 'APPIUM_TOOLING_DUPLICATE_PACKAGE_PATH');
+  const excludedOptional = optionalPlatformAbsence(state, lock, installed, placeholders);
   for (const [key, entry] of Object.entries(lock.packages)) {
     if (!key) continue;
     const row = installed.get(key);
     if (row) {
       assert.ok(entry.version === row.version && (entry.name ?? key.split('node_modules/').pop()) === row.name, 'APPIUM_TOOLING_LOCK_IDENTITY_MISMATCH');
     } else if (placeholders.has(key)) assert.equal(entry.optional, true, 'APPIUM_TOOLING_PLACEHOLDER_NOT_OPTIONAL');
-    else { assert.ok(entry.optional === true && platformExcluded(entry), 'APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT'); absentOptional.push(key); }
+    else { assert.ok(entry.optional === true && excludedOptional.has(key), 'APPIUM_TOOLING_LOCKED_PACKAGE_ABSENT'); absentOptional.push(key); }
   }
   for (const key of [...installed.keys(), ...placeholders]) assert.ok(Object.hasOwn(lock.packages, key), 'APPIUM_TOOLING_UNLOCKED_PACKAGE');
   if (state.hidden) {
@@ -418,6 +487,38 @@ function run(command, args, options) {
   return new Promise((resolve, reject) => { child.once('error', reject);
     child.once('exit', (status, signal) => signal ? reject(new Error('APPIUM_TOOLING_CHILD_SIGNAL')) : resolve(status)); });
 }
+/** Execute only the canonical install/prune pair; this is not runtime acceptance. */
+export async function installAppiumProject(runtime, { execute = run } = {}) {
+  assert.equal(process.versions.node, '24.22.3', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(path.isAbsolute(runtime) && fs.realpathSync(runtime) === runtime, 'APPIUM_TOOLING_CANONICAL_RUNTIME_REQUIRED');
+  const relative = path.relative(REPO, runtime);
+  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+  const uid = process.getuid?.();
+  assert.ok(Number.isInteger(uid), 'APPIUM_TOOLING_OWNER_OBSERVATION_REQUIRED');
+  const fd = fs.openSync(runtime, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  const identity = value => ['dev', 'ino', 'mode', 'uid', 'gid'].map(key => String(value[key])).join(':');
+  let failed = false, original;
+  try {
+    const initial = fs.fstatSync(fd, { bigint: true });
+    const check = () => {
+      const named = fs.lstatSync(runtime, { bigint: true }), held = fs.fstatSync(fd, { bigint: true });
+      assert.ok(named.isDirectory() && !named.isSymbolicLink() && held.isDirectory() && held.uid === BigInt(uid)
+        && identity(held) === identity(initial) && frame(held) === frame(named), 'APPIUM_TOOLING_INSTALL_DIRECTORY_CHANGED');
+    };
+    check();
+    const npm = path.join(REPO, 'scripts/mobile/npm-tooling.mjs');
+    assert.equal(await execute(process.execPath, [npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'], { cwd: runtime }), 0, 'APPIUM_TOOLING_INSTALL');
+    check();
+    assert.equal(await execute(process.execPath, [npm, 'prune', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: runtime }), 0, 'APPIUM_TOOLING_PRUNE');
+    check();
+  } catch (error) { failed = true; original = error; }
+  try { fs.closeSync(fd); }
+  catch (error) {
+    if (!failed) { failed = true; original = error; }
+    else console.error('APPIUM_TOOLING_INSTALL_DIRECTORY_CLOSE_FAILED');
+  }
+  if (failed) throw original;
+}
 export const DRIVER_LIST_LIMITS = Object.freeze({ entries: 512, bytes: 1048576, milliseconds: 60000 });
 /** Keep the child's original stdout descriptor until its JSON and name are reconciled. */
 export async function readInstalledDrivers(runtime, { limits = DRIVER_LIST_LIMITS } = {}) {
@@ -475,15 +576,20 @@ export async function readInstalledDrivers(runtime, { limits = DRIVER_LIST_LIMIT
     return installed;
   } finally { fs.closeSync(list); }
 }
+/** Validate runtime placement without admitting a Node runtime or performing writes. */
+export function assertAppiumRuntimePath(runtime) {
+  assert.ok(path.isAbsolute(runtime) && !fs.existsSync(runtime), 'APPIUM_TOOLING_NEW_RUNTIME_REQUIRED');
+  const relative = path.relative(REPO, runtime);
+  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+}
+
 /**
  * Install the repaired Appium project into a new runtime (also its APPIUM_HOME)
  * and audit its locked and physical graphs.
  */
 export async function prepareAppiumTooling(runtime, { request = globalThis.fetch } = {}) {
-  assert.equal(process.versions.node, '24.15.0', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
-  assert.ok(path.isAbsolute(runtime) && !fs.existsSync(runtime), 'APPIUM_TOOLING_NEW_RUNTIME_REQUIRED');
-  const relative = path.relative(REPO, runtime);
-  assert.ok(relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative), 'APPIUM_TOOLING_RUNTIME_OUTSIDE_REPOSITORY');
+  assert.equal(process.versions.node, '24.22.3', 'APPIUM_TOOLING_PINNED_NODE_REQUIRED');
+  assertAppiumRuntimePath(runtime);
   const vendor = path.join(runtime, 'vendor'); fs.mkdirSync(vendor, { recursive: true, mode: 0o700 });
   const glob = fs.readFileSync(path.join(REPO, VENDORED_GLOB.relative)); assert.equal(sha256(glob), VENDORED_GLOB.sha256, 'APPIUM_TOOLING_VENDORED_DIGEST');
   fs.writeFileSync(path.join(vendor, path.basename(VENDORED_GLOB.relative)), glob, { flag: 'wx' });
@@ -501,9 +607,7 @@ export async function prepareAppiumTooling(runtime, { request = globalThis.fetch
 
   for (const name of ['package.json', 'package-lock.json'])
     fs.copyFileSync(path.join(REPO, APPIUM_TOOLING_PROJECT, name), path.join(runtime, name), fs.constants.COPYFILE_EXCL);
-  const npm = [path.join(REPO, 'scripts/mobile/npm-tooling.mjs'), 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=60000', '--fetch-retries=1'];
-  const installStatus = await run(process.execPath, npm, { cwd: runtime });
-  assert.equal(installStatus, 0, 'APPIUM_TOOLING_INSTALL');
+  await installAppiumProject(runtime);
   await readInstalledDrivers(runtime);
 
   const inventories = { locked: lockedAdvisoryInventory(path.join(runtime, 'package-lock.json')), physical: physicalAdvisoryInventory(runtime) };

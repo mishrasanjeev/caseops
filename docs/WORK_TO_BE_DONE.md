@@ -8,6 +8,51 @@ alert, complete release/deployed acceptance, and owner decisions on sender
 approval, 90-day expiry, consent/privacy review, any re-send of an Outcome
 unknown alert, and a first-party attribution schema before conversion claims.
 
+## November 23 — Firefox handoff inspection and scoped store history
+
+Partially fixed; native acceptance remains open. The isolated harness candidate
+avoids URL-editor inspection after a grant and retains callback/state/verifier,
+identity, ledger, one-click and original deadline requirements. Store execution
+must observe and reserve only its selected platform; legacy helper callers keep
+joint behavior. See [dated evidence](mobile/NATIVE_FIREFOX_POSTGRANT_2026-11-23.md).
+No current86 failure or artifact is relabeled as successor acceptance.
+
+## November23 — root dependency release prerequisite
+
+The targeted source repair is locally verified, with the original parser
+fixture failure retained. Complete current-source CI and current-built public
+notice browser acceptance before claiming the14 distribution prerequisites.
+No qualification build or signing has run. Details and remaining conditional
+supplier scope are in [the dated record](security/ROOT_DEPENDENCY_SECURITY_2026-11-23.md).
+
+## November23 - source reconciliation before dependency repair
+
+The security repair branch combines deployed main `66f687380dda` with the five
+FDD native-tooling commits. Both dated records below are retained. Current Play
+production is version1.0.0(3); the earlier public-refresh description of mobile as
+not in app stores is historical and does not supersede the signed-in store
+observation. FDD APK, Simulator, backend and native evidence remain bound to FDD;
+they do not certify this combined source or the pending dependency repair.
+
+## 2026-11-22 - live login update and remaining native work
+
+PR642/6cdbe791 web login is live at100% traffic. The owned-QA production browser
+passed one MFA step-up and automatic authorization through Open CaseOps readiness;
+the callback was not opened and no native token exchanged. Keep the complete
+native verification verdict Inconclusive. Actual Play Console confirms existing
+CaseOps1.0.0(3) at100% production rollout, no unpublished changes, and managed
+publishing on for future updates. No new native binary was submitted for the
+web update. Canonical main Web and Security are green; the rest of CI remains
+separate until terminal results are reconciled.
+
+Continue J20/M22 in an isolated current-main native build cohort: verified new
+Node/CLI admissions, owned mobile installation, fresh Android and iOS Simulator
+artifacts, then independently bound complete83-case platform suites. Do not reuse
+old-binary passes, import optional root web tool changes, relax deadlines or
+claim a physical-device callback from browser readiness. The OnePlus is connected
+with Play-installed code3 but currently locked. Apple organization enrollment
+GZQJ2D9M4N remains Pending; no additional owner action is shown on its page.
+
 ## November22 — Matter ethical walls admin screen
 
 **Partially implemented.** Admin now has an Ethical walls card that lists
@@ -4439,3 +4484,35 @@ manual connection step. The new flow is not yet deployed; actual native and
 production acceptance remain pending. Existing Android version 3 went live November
 17; Managed publishing now holds future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+2026-11-23 PR645 dependency-release follow-up: the actual hosted licence scan
+selected Vite's development-only Nanoid copy for a production identity. Preserve
+that failed report and the strict installed-path guard. The host producer now
+uses canonical production pruning before inventory, scan and verification,
+matching the shipped production stage; both inventory and verification require
+a pruned tree. All 153 offline controls pass, including both duplicate-copy
+orders and missing/reordered pruning. The actual Darwin production phase passes
+125 identities/161 physical paths with no denied licence; Linux's 129-identity
+replacement remains separate hosted evidence. The original local supervisor
+exit1 is retained: acknowledged pruning changed only the root lock timestamps,
+with all 4,392 source byte maps unchanged. Governance rendering and the complete
+12-command contract step pass on committed inputs; no release/store acceptance
+is inferred from these component checks.
+
+2026-11-23 PR645 Windows scheduling follow-up: retained actual native discovery
+reports prove short 8.3 and long paths for the same owned fixture. Canonicalize
+the fixture and reported files before relative identity checks, retain explicit
+outside-root/missing-file rejection, and preserve every four-case role, pooled
+negative and phase timing assertion. Fresh installation and the complete local
+scheduling test pass; actual Windows acceptance remains the replacement CI job.
+
+2026-11-23 PR645 deadline-inventory follow-up: retain the hosted API shard9
+failure (1 failed/1463 passed/528 skipped). Move the existing npm Undici
+redirect regression to one explicit repository test fixture, preserving the
+actual npm client, two owned loopback endpoints, fixed public headers, received
+NoPaid markers, Authorization stripping and original 4500/3000/500ms bounds.
+The original default-runtime TLS probe and cross-language inventory remain
+unchanged. Reconcile the new fixture across exact builder COPY, upload, deploy
+and source-fingerprint inventories. Complete local regression, typing and
+contract-step outcomes are retained separately; current-source hosted and
+native qualification remain required before release.

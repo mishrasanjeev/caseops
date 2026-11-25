@@ -107,7 +107,7 @@ export function createV1Worker({docker,dockerReceipt,cache,sourceSha,store},comm
 export async function runV1FixtureProducer(q,{admitPublic=admitProducerPublic,now=Date.now,command=execFileSync}={}) {
   const noSecrets=value=>{if(value&&typeof value==='object')for(const[k,v]of Object.entries(value)){assert.ok(!/^(password|access_token|refresh_token|totp_secret|code_verifier|cookies?|authorization|private_key)$/i.test(k),'PRODUCER_PUBLIC_SECRET_REFUSED');noSecrets(v);}};noSecrets(q);
   assert.equal(q.schemaVersion,1);assert.equal(q.kind,'produce-v1-fixture');assert.equal(q.readyForLive,true);assert.equal(q.preparedOnly,false);
-  assert.equal(process.versions.node,'24.15.0');assert.equal(q.repoRoot,ROOT);assert.equal(q.admission.repoRoot,ROOT);
+  assert.equal(process.versions.node,'24.22.3');assert.equal(q.repoRoot,ROOT);assert.equal(q.admission.repoRoot,ROOT);
   for(const name of ['outputRoot','privateRoot','workerCache'])assert.ok(path.isAbsolute(q[name])&&q[name]!==ROOT&&!q[name].startsWith(ROOT+path.sep),'PRODUCER_OUTPUT_OUTSIDE_REPOSITORY_REQUIRED');
   assert.deepEqual(Object.keys(q.plans),['base','viewer','inbox','readthrough']);
   const store=createProducerStore(q.outputRoot);store.claim('v1-producer:'+q.runId);store.write('request.json',q);

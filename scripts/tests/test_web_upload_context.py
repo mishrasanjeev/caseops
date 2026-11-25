@@ -40,6 +40,32 @@ ARBORIST_MATERIALS = {
     "license-policy/upstream/_npmcli_arborist_9.9.3/LICENSE.md",
     "license-policy/upstream/_npmcli_arborist_9.9.3/package.json",
 }
+MOBILE_MATCHER_MATERIALS = {
+    "license-policy/upstream/glob_14.0.6/LICENSE.md",
+    "license-policy/upstream/glob_14.0.6/package.json",
+    "license-policy/upstream/minimatch_11.0.8/LICENSE.md",
+    "license-policy/upstream/minimatch_11.0.8/package.json",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/LICENSE.md",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/package.json",
+    "license-policy/upstream/brace-expansion_5.0.13/LICENSE",
+    "license-policy/upstream/brace-expansion_5.0.13/package.json",
+    "license-policy/upstream/brace-expansion_5.0.13/brace-expansion-5.0.13.tgz",
+}
+ROOT_SECURITY_MATERIALS = {
+    "license-policy/upstream/vite_8.2.6/package.json",
+    "license-policy/upstream/vite_8.2.6/LICENSE.md",
+    "license-policy/upstream/rolldown_1.2.19/LICENSE",
+    "license-policy/upstream/rolldown_1.2.19/THIRD-PARTY-LICENSE",
+    "license-policy/upstream/rolldown_1.2.19/package.json",
+    "license-policy/upstream/undici_7.30.2/lib/web/fetch/LICENSE",
+    "license-policy/upstream/undici_7.30.2/LICENSE",
+    "license-policy/upstream/undici_7.30.2/package.json",
+    "apps/web/public/third-party-notices/vite-8.2.6-LICENSE.txt",
+    "apps/web/public/third-party-notices/rolldown-1.2.19-LICENSE.txt",
+    "apps/web/public/third-party-notices/rolldown-1.2.19-THIRD-PARTY-LICENSE.txt",
+    "apps/web/public/third-party-notices/undici-7.30.2-FETCH-LICENSE.txt",
+    "apps/web/public/third-party-notices/undici-7.30.2-LICENSE.txt",
+}
 NPM_TOOLING_INPUTS = {
     "scripts/mobile/npm-tooling.mjs", "scripts/mobile/npm-registry.mjs",
     "apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz",
@@ -65,6 +91,7 @@ BUILDER_INPUTS = {
     "apps/web/scripts/node-trust.cjs", "apps/web/scripts/node-trust-start.cjs",
     "tests/fixtures/statutes/structured-schedule-api.json",
     "tests/fixtures/node-default-tls-probe.cjs",
+    "tests/fixtures/undici-loopback-redirect-probe.cjs",
     "tests/fixtures/node-local-tls-certificates.cjs",
     "tests/fixtures/contract-preview-probe.ts",
     "tests/e2e/ram-2026-11-11-bugs.spec.ts",
@@ -146,11 +173,11 @@ class NativeUploadTests(unittest.TestCase):
         record = json.loads((ROOT / REGISTRY).read_text(encoding="utf-8"))
         self.required = {
             REGISTRY, REVIEW, *QR_MATERIALS, *NODE_MATERIALS, *NEXT_MATERIALS,
-            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS,
+            *PICOMATCH_MATERIALS, *ARBORIST_MATERIALS, *MOBILE_MATCHER_MATERIALS, *ROOT_SECURITY_MATERIALS,
             *PDF_PUBLIC_NOTICES,
             *(value["path"] for entry in record["packages"] for value in entry["materials"]),
         }
-        self.assertEqual(len(self.required), 82)
+        self.assertEqual(len(self.required), 104)
 
     def files(self, paths):
         for relative in paths:
@@ -189,7 +216,7 @@ class NativeUploadTests(unittest.TestCase):
         operator = {name for name in present if name.startswith("license-policy/")}
         required_operator = {name for name in self.required if name.startswith("license-policy/")}
         self.assertEqual(operator, required_operator)
-        self.assertEqual(len(operator), 63)
+        self.assertEqual(len(operator), 80)
         self.assertTrue(
             BUILDER_INPUTS <= present,
             f"Missing builder inputs: {sorted(BUILDER_INPUTS - present)}",

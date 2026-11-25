@@ -96,7 +96,7 @@ function fixture(t, stage = 'consent', selectedProfile = null) {
       save('apk-signing.log', `Verifies\nVerified using v2 scheme (APK Signature Scheme v2): true\nNumber of signers: 1\nV2 Signer: certificate SHA-256 digest: ${'3'.repeat(64)}\n`),
       save('apk-abi.json', { schemaVersion: 1, abis: ['arm64-v8a'], nativeLibraryCount: 4, elfClass: 64, elfMachine: 183 }),
       save('generated-android-inputs.json', { schemaVersion: 1, files: inputs }),
-      save('java21.log', 'Temurin-21.0.12.1+1 explicit synthetic fixture'), save('java17.log', 'Temurin-17.0.20.1+1 explicit synthetic fixture')] };
+      save('java21.log', 'Temurin-21.0.13.1+2 explicit synthetic fixture'), save('java17.log', 'Temurin-17.0.21.1+2 explicit synthetic fixture')] };
   const build = { platform: 'android', profile: 'android-local-acceptance', appId: APP, sourceSha: receipt.backendSha,
     sourceFingerprint: 'c'.repeat(64), sourceDirty: false, devEnabled: false, automatedTest: true,
     apiOrigin: receipt.apiOrigin, webOrigin: receipt.webOrigin, artifact: artifact.path, binaryHash: artifact.sha256,

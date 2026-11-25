@@ -212,6 +212,49 @@ Still open:
   they run concurrently wherever an instance serves more than one request.
   Production runs at concurrency 1.
 
+## November24 — Android compiler classpath gap
+
+**Not fixed; replacement release remains NO-GO.** The actual `a782b66d`
+Android QA build failed before native compilation because the retained Expo
+compiler plug-ins do not publish their current base versions for Kotlin
+2.4.21. The earlier successful dependency inventory covered compile/runtime
+and buildscript views, omitting compiler plug-in classpaths. Its QA-scoped
+supplier closure does not establish full SDK or APK acceptance. A plug-in-only
+V2 upgrade also changes generated runtime APIs and is incompatible with the
+retained runtime. Preserve the failed build, repair the supported version
+combination, extend the actual task-input inventory, then complete the actual
+APK/AAB and unchanged native acceptance. See
+[the exact failure and retained evidence](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md#24-november-actual-compiler-dependency-failure).
+
+The isolated source repair selects the published Kotlin 2.4.20 intersection
+without changing the Expo runtime or plug-in base versions. The maintainer's
+fixed boundary, immutable fix ancestry and 19 fresh zero-finding candidate
+queries support that deliberate pin supersession. Complete affected Node
+modules report 638 passes and two existing Windows-only skips. Native-build
+verification remains **Inconclusive**; full selected compiler/task supplier
+capture, Groovy controls and actual APK/AAB acceptance are still required.
+
+## November23 — Android release supplier closure
+
+**Partially implemented; replacement release remains NO-GO.** Actual native
+Gradle resolution and fresh advisory queries found affected app runtime and
+build suppliers, including an obsolete WebView AGP classpath and suppliers
+bundled in Gradle itself. A scoped minimum-version repair is being verified;
+the supporting Maven/local plugin outputs and bundled tools also require
+complete supplier and licence reconciliation. Candidate metadata is not proof
+of resolved, rebuilt or tested Android bytes. Full 83-case native acceptance,
+the replacement signed AAB and submission remain open. See
+[the measured finding and acceptance requirements](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md).
+
+## November23 — targeted root dependency security repair
+
+Partially implemented. The new candidate replaces affected Vite/Undici and the
+associated Rolldown supplier, with actual local ci, strict audits, complete
+parser/notice regressions and web/E2E typing. Full current-source CI, normal CSS
+build, public-content browser replay and all14 qualification gates remain open;
+no native, signing or deployment credit transfers from FDD. See
+[the dated evidence record](security/ROOT_DEPENDENCY_SECURITY_2026-11-23.md).
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision

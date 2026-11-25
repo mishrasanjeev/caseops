@@ -131,6 +131,26 @@ function promotionFixture(t) {
   return { ...f, q, gateValue, candidateValue, sourceReader: () => ({ sourceSha: source.sourceSha, tree: candidateValue.tree, fullSourceFingerprint: candidateValue.fullSourceFingerprint }) };
 }
 test('unchanged-byte promotion is explicit all-15 and synthetic adapters never authorize submission', async t => {
+  // Exercise the actual entry fence without arming promotion or reading inputs.
+  const version = Object.getOwnPropertyDescriptor(process.versions, 'node');
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const go = process.env.CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO; let inputReads = 0;
+  const unread = new Proxy({}, { get() { inputReads++; throw new Error('UNREACHED_PROMOTION_INPUT'); } });
+  for (const nodeVersion of ['24.22.3', '24.15.0', '22.23.5']) {
+    let pending;
+    try {
+      Object.defineProperty(process.versions, 'node', { ...version, value: nodeVersion });
+      Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
+      delete process.env.CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO;
+      pending = promoteAndroidQualification(unread);
+    } finally {
+      Object.defineProperty(process.versions, 'node', version); Object.defineProperty(process, 'platform', platform);
+      if (go === undefined) delete process.env.CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO;
+      else process.env.CASEOPS_ANDROID_QUALIFICATION_PROMOTE_GO = go;
+    }
+    await assert.rejects(pending, nodeVersion === '24.22.3' ? /QUALIFICATION_PROMOTION_NOT_ARMED/ : /QUALIFICATION_PINNED_HOST_REQUIRED/);
+  }
+  assert.equal(inputReads, 0);
   const f = promotionFixture(t), ref = f.save('request.json', f.q);
   const result = await promoteAndroidQualification(ref, { root: path.join(f.root, 'source'), sourceReader: f.sourceReader, harnesses: f.harnesses });
   assert.equal(result.native.nativeCasesPassed, 83); assert.equal(result.contractOnly, true); assert.equal(result.submissionAllowed, false);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,7 +12,15 @@ const config = pathToFileURL(path.join(root, 'apps/web/vitest.config.ts')).href;
 const vitest = pathToFileURL(path.join(root, 'node_modules/vitest/dist/index.js')).href;
 
 test('actual frontend discovery and workers keep both native phases exclusive', { timeout: 60_000 }, () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'co-phases-'));
+  const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'co-phases-')));
+  const fixtureFile = file => {
+    const relative = path.relative(dir, realpathSync.native(file));
+    assert.ok(relative && relative !== '..' && !relative.startsWith('..' + path.sep)
+      && !path.isAbsolute(relative), 'FRONTEND_FIXTURE_FILE_OUTSIDE_ROOT');
+    return relative.split(path.sep).join('/');
+  };
+  assert.throws(() => fixtureFile(fileURLToPath(import.meta.url)), /FRONTEND_FIXTURE_FILE_OUTSIDE_ROOT/);
+  assert.throws(() => fixtureFile(path.join(dir, 'not-created.test.ts')), { code: 'ENOENT' });
   const retained = path.join(root, 'test-results/frontend-scheduling', path.basename(dir));
   mkdirSync(retained, { recursive: true });
   const marker = path.join(dir, 'phases.jsonl');
@@ -63,7 +71,7 @@ export default { ...base, root: ${JSON.stringify(dir)}, test: { ...base.test,
     assert.equal(run.error, undefined, name);
     assert.equal(run.status, 0, run.stderr);
     const rows = JSON.parse(readFileSync(listFile, 'utf8')).map(row => ({
-      file: path.relative(dir, row.file).replaceAll('\\', '/'), project: row.projectName,
+      file: fixtureFile(row.file), project: row.projectName,
     })).sort((a, b) => a.file.localeCompare(b.file));
     const expected = files.map(([file, phase]) => ({ file,
       project: phase === 'source' ? 'source-inventory' : phase === 'native' ? 'native-libraries' : 'web',
@@ -90,7 +98,7 @@ export default { ...base, root: ${JSON.stringify(dir)}, test: { ...base.test,
   assert.equal(native.numPassedTests, 4);
   for (const key of ['numFailedTests', 'numPendingTests', 'numTodoTests']) assert.equal(native[key], 0);
   assert.equal(native.testResults.length, 4);
-  const byFile = new Map(native.testResults.map(file => [path.relative(dir, file.name).replaceAll('\\', '/'), file]));
+  const byFile = new Map(native.testResults.map(file => [fixtureFile(file.name), file]));
   assert.deepEqual([...byFile.keys()].sort(), files.map(([file]) => file).sort());
   for (const file of native.testResults) {
     assert.equal(file.assertionResults.length, 1);

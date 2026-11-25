@@ -32,7 +32,7 @@ import { once } from 'node:events';
 import { openProducerRouteFile } from '../../../scripts/mobile/native-producer-route-file.mjs';
 import { producerRouteProvenance } from '../../../scripts/mobile/native-producer-route-provenance.mjs';
 import { createProducerHttp, createProducerStore, readProducerReference, readProducerActor, producerHash, producerTimeout, producerServerDate, producerServerDateUpperBound } from '../../../scripts/mobile/native-producer-host.mjs';
-import { createV1PrivateWriter, resolveProducedReferences, createV1Worker, v1ProducerFailureCode } from '../../../scripts/mobile/produce-v1-fixture.mjs';
+import { createV1PrivateWriter, resolveProducedReferences, createV1Worker, v1ProducerFailureCode, runV1FixtureProducer } from '../../../scripts/mobile/produce-v1-fixture.mjs';
 
 import { V1RunEvidence, V1OwnedSessions, validateV1EvidenceStreams, verifyV1SessionAbsence, finishV1Evidence, readV1SessionStatus } from './v1-run-evidence.mjs';
 import { nativeCalendarRowFields, admitV1SegmentPresentation } from './v1-native-presentation.mjs';
@@ -1051,7 +1051,21 @@ test('V1-PRODUCER-11 output namespace refusal preserves bytes and one-shot priva
   fs.renameSync(root,root+'-retained');fs.symlinkSync(root+'-retained',root);t.after(()=>{fs.rmSync(root,{force:true});fs.rmSync(root+'-retained',{recursive:true,force:true});});
   await assert.rejects(writer({...value,totp_secret:'JBSWY3DPEHPK3PXP'},{...writerOptions,createExclusive:false,expectedEvidence:first.evidence,sameOwnedDescriptor:true}),/WRITE_INCOMPLETE_NO_REPLAY/);assert.deepEqual(fs.readFileSync(first.evidence.path),bytes);
 });
-test('V1-PRODUCER-12 acknowledged output references cannot select future stages or executable paths',()=>{
+test('V1-PRODUCER-12 acknowledged output references cannot select future stages or executable paths',async t=>{
+  const descriptor = Object.getOwnPropertyDescriptor(process.versions, 'node');
+  const output = path.join(producerRoot(t), 'unreached-runtime-output'); let publicAdmissions = 0;
+  const request = { schemaVersion: 1, kind: 'produce-v1-fixture', readyForLive: true, preparedOnly: false,
+    repoRoot: 'SYNTHETIC_UNADMITTED_ROOT', outputRoot: output };
+  for (const version of ['24.22.3', '24.15.0', '22.23.5']) {
+    let pending;
+    try {
+      Object.defineProperty(process.versions, 'node', { ...descriptor, value: version });
+      pending = runV1FixtureProducer(request, { admitPublic() { publicAdmissions++; throw new Error('UNREACHED_PUBLIC_ADMISSION'); } });
+    } finally { Object.defineProperty(process.versions, 'node', descriptor); }
+    await assert.rejects(pending, error => error.code === 'ERR_ASSERTION' && (version === '24.22.3'
+      ? error.actual === 'SYNTHETIC_UNADMITTED_ROOT' : error.actual === version && error.expected === '24.22.3'));
+  }
+  assert.equal(publicAdmissions, 0); assert.equal(fs.existsSync(output), false);
   const actual={base:{receiptEvidence:ref('actual-base'),receipt:{secondaryOwner:{companyId:uuid(99)}}}};
   assert.deepEqual(resolveProducedReferences({owner:{$produced:'base.receipt.secondaryOwner.companyId'}},actual),{owner:uuid(99)});
   for(const key of ['inbox.receipt.notificationId','base.constructor','base.receipt.__proto__','../private'])assert.throws(()=>resolveProducedReferences({$produced:key},actual));

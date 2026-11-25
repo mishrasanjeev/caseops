@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -12,7 +13,7 @@ const rootManifest = readJson("package.json");
 const lock = readJson("package-lock.json") as {
   packages: Record<string, { version?: string; dependencies?: Record<string, string> }>;
 };
-const require = createRequire(path.join(root, "apps/web/package.json"));
+const require = createRequire(import.meta.url);
 
 describe("October25 security advisory closure (#559)", () => {
   for (const [name, version] of [["zod", "4.6.7"], ["nodemailer", "10.2.1"]]) {
@@ -27,11 +28,23 @@ describe("October25 security advisory closure (#559)", () => {
   }
 
   it("excludes every vulnerable undici copy while preserving the supported Node runtime", () => {
-    expect(rootManifest.overrides.undici).toBe("7.30.1");
+    expect(rootManifest.overrides.undici).toBe("7.30.2");
     const copies = Object.entries(lock.packages).filter(([key]) => key.endsWith("/node_modules/undici") || key === "node_modules/undici");
     expect(copies.length).toBeGreaterThan(0);
-    for (const [key, value] of copies) expect(value.version, key).toBe("7.30.1");
-    expect(require("undici/package.json").version).toBe("7.30.1");
+    for (const [key, value] of copies) expect(value.version, key).toBe("7.30.2");
+    expect(require("undici/package.json").version).toBe("7.30.2");
+  });
+
+  it("preserves ordinary cross-origin redirect header policy with tuple-array headers", async () => {
+    // This explicitly exercises npm Undici, not Node's embedded fetch runtime.
+    expect(require("undici/package.json").version).toBe("7.30.2");
+    expect(require.resolve("undici")).toContain(`${path.sep}node_modules${path.sep}undici${path.sep}`);
+    const { fetch } = require("undici") as typeof import("undici");
+    expect(fetch).not.toBe(globalThis.fetch);
+    const { probeUndiciRedirect } = require("../../../tests/fixtures/undici-loopback-redirect-probe.cjs") as {
+      probeUndiciRedirect: (client: typeof fetch) => Promise<void>;
+    };
+    await probeUndiciRedirect(fetch);
   });
 
   it("does not turn nested address comments into a different notification recipient", () => {
