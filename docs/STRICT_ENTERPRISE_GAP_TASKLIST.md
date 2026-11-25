@@ -6419,10 +6419,15 @@ until the owner-run enablement in
   pending after 10 minutes as `failed/timed_out`, so the page never polls
   forever. Durable orchestration (Temporal) is not used. Measure completion
   time on the production provider before any claim of reliability.
+  Deployed 2026-11-25 in `bce18d1d2` (API `caseops-api-00535-8qh`,
+  prod-verify 45513817072 passed); no production completion time has been
+  measured yet.
 
 ### EH-RA-02 - Model output cannot introduce an authority
 
-- **Status:** Implemented in code, not deployed. Titles, citations, courts,
+- **Status:** Partially implemented. Deployed 2026-11-25 in `bce18d1d2`
+  (prod-verify 45513817072 passed), but no production answer has yet been
+  run through the verifier, so runtime proof is pending. Titles, citations, courts,
   dates, weight labels, links and paragraph numbers come from CaseOps records
   or the source text. Unknown markers, untraceable names, citations,
   quotations and links are removed after one retry and counted. Tests:
