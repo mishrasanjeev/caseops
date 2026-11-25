@@ -213,6 +213,35 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
     assert "INDIAN_KANOON_API_TOKEN_SECRET=caseops-indian-kanoon-api-token" in deploy
 
 
+def test_production_deploy_binds_ocr_and_translation_providers_with_readback() -> None:
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+
+    assert "SARVAM_API_KEY_SECRET=caseops-sarvam-api-key" in deploy
+    assert "GOOGLE_TRANSLATION_LOCATION=us-central1" in deploy
+    assert ",CASEOPS_SARVAM_API_KEY=${SARVAM_API_KEY_SECRET}:latest" in deploy
+    assert (
+        "|CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=true|CASEOPS_GOOGLE_TRANSLATION_ENABLED=true"
+        "|CASEOPS_GOOGLE_TRANSLATION_LOCATION=${GOOGLE_TRANSLATION_LOCATION}"
+    ) in deploy
+    assert 'env.get("CASEOPS_SARVAM_API_KEY")' in deploy
+    assert "expected_document_rendition_env" in deploy
+    # The secret is checked before any image build or migration.
+    preflight = deploy.index("--- read-only OCR provider secret preflight ---")
+    assert preflight < deploy.index("--- 1/6 build images (parallel) ---")
+
+    inventory = json.loads(_read_repo_text("infra/cloudrun/scheduler-inventory.json"))
+    job = next(
+        row["bootstrap"] for row in inventory["jobs"]
+        if row["run_job_name"] == "caseops-document-processing"
+    )
+    assert job["secrets"]["CASEOPS_SARVAM_API_KEY"] == "caseops-sarvam-api-key:latest"
+    assert job["environment"]["CASEOPS_SARVAM_DOCUMENT_AI_ENABLED"] == "true"
+    assert job["environment"]["CASEOPS_GOOGLE_TRANSLATION_ENABLED"] == "true"
+    assert job["environment"]["CASEOPS_GOOGLE_TRANSLATION_LOCATION"] == "us-central1"
+    # Google falls back to the project id; both targets set it.
+    assert job["environment"]["CASEOPS_GCP_PROJECT_ID"] == "perfect-period-305406"
+
+
 def test_production_deploy_pins_openai_and_verifies_runtime_readback() -> None:
     deploy = _read_repo_text("scripts/deploy-prod.sh")
 
@@ -2331,6 +2360,7 @@ def _run_deploy_with_fakes(
     live_governance_expiry: str | None = None,
     native_link_config: str | None = None,
     native_secret_state: str = "ENABLED",
+    sarvam_secret_state: str = "ENABLED",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -2457,6 +2487,10 @@ if [[ "${1:-} ${2:-} ${3:-}" == "run services describe" && \
   printf '%s\n' 'Cloud Run service description requires an explicit release project.' >&2
   exit 98
 fi
+if [[ "$*" == "secrets versions describe latest --secret caseops-sarvam-api-key "* ]]; then
+  printf '%s\n' "${FAKE_SARVAM_SECRET_STATE}"
+  exit 0
+fi
 if [[ "$*" == "secrets versions describe latest --secret caseops-native-signing-secret "* ]]; then
   printf '%s\n' "${FAKE_NATIVE_SECRET_STATE}"
   exit 0
@@ -2570,6 +2604,9 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_MACHINE_SECRET='caseops-machine-readiness-evidence-secret'
   FAKE_LLM_PROVIDER='openai'
   FAKE_LLM_SECRET='caseops-openai-api-key'
+  FAKE_SARVAM_SECRET='caseops-sarvam-api-key'
+  FAKE_SARVAM_FLAG='true'
+  FAKE_TRANSLATION_LOCATION='us-central1'
   FAKE_SERVICE_MIN='4'
   FAKE_SERVICE_MAX='20'
   FAKE_REVISION_MAX='20'
@@ -2611,6 +2648,12 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_LLM_PROVIDER='mock'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "llm-secret-drift" ]]; then
     FAKE_LLM_SECRET='wrong-llm-secret'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "sarvam-secret-drift" ]]; then
+    FAKE_SARVAM_SECRET='wrong-sarvam-secret'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "sarvam-flag-drift" ]]; then
+    FAKE_SARVAM_FLAG='false'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "translation-location-drift" ]]; then
+    FAKE_TRANSLATION_LOCATION='europe-west4'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "scanner-disabled" ]]; then
     FAKE_SCANNER_REQUIRED='false'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "api-probe-drift" ]]; then
@@ -2711,6 +2754,14 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_INDIAN_KANOON_API_TOKEN",' \
     '"valueFrom":{"secretKeyRef":{"key":"latest",' \
     '"name":"caseops-indian-kanoon-api-token"}}},' \
+    '{"name":"CASEOPS_SARVAM_DOCUMENT_AI_ENABLED","value":"' \
+    "${FAKE_SARVAM_FLAG}" '"},' \
+    '{"name":"CASEOPS_GOOGLE_TRANSLATION_ENABLED","value":"true"},' \
+    '{"name":"CASEOPS_GOOGLE_TRANSLATION_LOCATION","value":"' \
+    "${FAKE_TRANSLATION_LOCATION}" '"},' \
+    '{"name":"CASEOPS_SARVAM_API_KEY",' \
+    '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
+    "${FAKE_SARVAM_SECRET}" '"}}},' \
     '{"name":"CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",' \
     '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
     "${FAKE_MACHINE_SECRET}" '"}}},' \
@@ -3098,6 +3149,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             ),
             "FAKE_NATIVE_LINK_CONFIG": native_link_config or "",
             "FAKE_NATIVE_SECRET_STATE": native_secret_state,
+            "FAKE_SARVAM_SECRET_STATE": sarvam_secret_state,
             "FAKE_A1_MIGRATION": "present" if a1_migration else "absent",
             "FAKE_REAL_GIT": _bash_path(Path(shutil.which("git") or "git")),
             "FAKE_LIVE_GOVERNANCE_FLAG": _bash_path(tmp_path / "live-governance-flag"),
@@ -3527,6 +3579,11 @@ _API_RUNTIME_CONTRACT_ERRORS = {
     "court-mode-drift": "CASEOPS_COURT_SYNC_DISPATCH_MODE is missing or stale",
     "court-region-drift": "CASEOPS_COURT_SYNC_RUN_REGION is missing or stale",
     "court-job-drift": "CASEOPS_COURT_SYNC_RUN_JOB is missing or stale",
+    "sarvam-secret-drift": (
+        "CASEOPS_SARVAM_API_KEY is not bound to the dedicated latest Secret Manager version"
+    ),
+    "sarvam-flag-drift": "CASEOPS_SARVAM_DOCUMENT_AI_ENABLED is missing or stale",
+    "translation-location-drift": "CASEOPS_GOOGLE_TRANSLATION_LOCATION is missing or stale",
     "billing-drift": "request-based billing is not in effect (cpu-throttling is not true)",
     "cpu-boost-drift": "startup CPU boost is not enabled",
     "cpu-boost-missing": "startup CPU boost is not enabled",
@@ -4413,6 +4470,23 @@ def test_deploy_prod_admits_an_android_only_native_link_input(tmp_path: Path) ->
     digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
     assert f"CASEOPS_NATIVE_LINK_CONFIG_SHA256={digest} " in _web_deploy_call(tmp_path)
     assert "|CASEOPS_NATIVE_AUTH_ENABLED=true|" in _api_deploy_call(tmp_path)
+
+
+@pytest.mark.parametrize("state", ["", "DISABLED", "DESTROYED"])
+def test_deploy_prod_refuses_ocr_without_an_enabled_sarvam_secret_before_mutation(
+    tmp_path: Path, state: str,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, sarvam_secret_state=state)
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "OCR needs an enabled caseops-sarvam-api-key version" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(
+        call.startswith("secrets versions describe latest --secret caseops-sarvam-api-key ")
+        for call in calls
+    )
+    for mutation in ("builds submit", "run jobs", "run deploy", "scheduler jobs"):
+        assert not any(call.startswith(mutation) for call in calls), mutation
 
 
 def test_deploy_prod_refuses_native_sign_in_without_an_enabled_signing_secret(

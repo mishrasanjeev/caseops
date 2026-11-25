@@ -332,13 +332,17 @@
           "CASEOPS_EMBEDDING_PROVIDER": "voyage",
           "CASEOPS_EMBEDDING_MODEL": "voyage-4-large",
           "CASEOPS_EMBEDDING_DIMENSIONS": "1024",
-          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal"
+          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal",
+          "CASEOPS_SARVAM_DOCUMENT_AI_ENABLED": "true",
+          "CASEOPS_GOOGLE_TRANSLATION_ENABLED": "true",
+          "CASEOPS_GOOGLE_TRANSLATION_LOCATION": "us-central1"
         },
         "secrets": {
           "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
           "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
           "CASEOPS_LLM_API_KEY": "caseops-openai-api-key:latest",
-          "CASEOPS_EMBEDDING_API_KEY": "caseops-voyage-api-key:latest"
+          "CASEOPS_EMBEDDING_API_KEY": "caseops-voyage-api-key:latest",
+          "CASEOPS_SARVAM_API_KEY": "caseops-sarvam-api-key:latest"
         },
         "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
         "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",

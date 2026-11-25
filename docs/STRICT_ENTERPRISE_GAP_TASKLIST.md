@@ -6387,14 +6387,23 @@ until the owner-run enablement in
 
 ### EH-OCRT-04 - Credentials and deploy wiring
 
-- **Status:** Missing (deploy). Settings and the `.env.example` placeholders
-  exist, Google auth uses ADC, and no key file is committed.
-  Neither `scripts/deploy-prod.sh` (`caseops-api`) nor the
+- **Status:** Partially implemented (2026-11-24). The binding change
+  (branch `feat/ocr-translation-enablement-20261124`, PR #651; it was a draft until the secret
+  exists) binds `caseops-sarvam-api-key` and the OCR/translation settings in
+  `scripts/deploy-prod.sh` (`caseops-api`, with service readback) and in the
   `caseops-document-processing` contract in
-  `infra/cloudrun/scheduler-inventory.json` binds `caseops-sarvam-api-key`
-  yet, deliberately, until the secret exists. Releases re-apply that job
-  contract with `--set-secrets`, so a manual binding on the job would be
-  erased. See section A of
+  `infra/cloudrun/scheduler-inventory.json`. A read-only preflight refuses the
+  release before any build or migration unless the secret has an enabled
+  latest version. Covered by `tests/test_deploy_prod_hardening.py`
+  (binding pins, preflight refusal, readback drift for secret, flag and
+  location). Setup confirmed by read-only checks on 2026-11-24: the secret
+  has an enabled version without a trailing newline, the runtime service
+  account can read it, `translate.googleapis.com` is enabled and the runtime
+  service account holds `roles/cloudtranslate.user`. The owner accepted
+  `us-central1` (United States) translation processing on 2026-11-24. Not
+  yet `Implemented`: no release has carried the binding, no provider cost
+  profile is recorded (so no paid call is made), and no live provider call
+  has been recorded. See sections A to C of
   `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
 
 
