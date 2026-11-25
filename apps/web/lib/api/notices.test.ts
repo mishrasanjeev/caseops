@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { apiBlobRequestMock, apiRequestMock } = vi.hoisted(() => ({
-  apiBlobRequestMock: vi.fn(),
+const { apiDownloadRequestMock, apiRequestMock } = vi.hoisted(() => ({
+  apiDownloadRequestMock: vi.fn(),
   apiRequestMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  apiBlobRequest: apiBlobRequestMock,
+  apiDownloadRequest: apiDownloadRequestMock,
   apiRequest: apiRequestMock,
 }));
 
@@ -22,7 +22,7 @@ import {
 
 describe("notices API client", () => {
   beforeEach(() => {
-    apiBlobRequestMock.mockReset();
+    apiDownloadRequestMock.mockReset();
     apiRequestMock.mockReset();
     apiRequestMock.mockResolvedValue({ id: "notice-1" });
   });
@@ -132,18 +132,17 @@ describe("notices API client", () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
-    apiBlobRequestMock.mockResolvedValue(
-      new Response("notice bytes", {
-        status: 200,
-        headers: {
-          "content-disposition": 'attachment; filename="server-name.txt"',
-        },
+    apiDownloadRequestMock.mockResolvedValue({
+      blob: new Blob(["notice bytes"], { type: "text/plain;charset=utf-8" }),
+      headers: new Headers({
+        "content-disposition": 'attachment; filename="server-name.txt"',
       }),
-    );
+      status: 200,
+    });
 
     await downloadNoticeFile("notice/unsafe", "fallback.txt");
 
-    expect(apiBlobRequestMock).toHaveBeenCalledWith(
+    expect(apiDownloadRequestMock).toHaveBeenCalledWith(
       "/api/notices/notice%2Funsafe/download",
     );
     const downloadedBlob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined;

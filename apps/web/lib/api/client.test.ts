@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./config";
 import {
-  apiBlobRequest,
   apiBlobDataRequest,
+  apiDownloadRequest,
   apiRequest,
+  fetchBlobWithTimeout,
   fetchJsonWithTimeout,
   fetchWithTimeout,
   getCsrfHeaders,
@@ -261,11 +262,12 @@ describe("apiRequest", () => {
         }),
       );
 
-    const result = await apiBlobRequest("/api/notices/notice-1/download", {
+    const result = await apiDownloadRequest("/api/notices/notice-1/download", {
       token: "stale-download-token",
     });
 
-    await expect(result.text()).resolves.toBe("notice bytes");
+    await expect(result.blob.text()).resolves.toBe("notice bytes");
+    expect(result.headers.get("content-disposition")).toBe('attachment; filename="notice.txt"');
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe(
       "http://localhost:8000/api/auth/refresh",
@@ -555,6 +557,48 @@ describe("apiBlobDataRequest", () => {
     vi.mocked(fetch).mockResolvedValue(new Response("too many source bytes", { headers: declared ? { "content-length": "21" } : {} }));
     await expect(apiBlobDataRequest("/api/private/oversized", { maxBytes: 4 })).rejects.toMatchObject({ name: "NetworkError", message: expect.stringContaining("allowed size") });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a whole download's size policy to the server instead of the preview default", async () => {
+    const megabyte = new Uint8Array(1024 * 1024).fill(0x5a);
+    const total = 33;
+    const declared = { "content-type": "application/zip", "content-length": String(total * megabyte.byteLength) };
+    let sent = 0;
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response("unread", { headers: declared }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent < total) { controller.enqueue(megabyte); sent += 1; } else controller.close();
+        },
+      }), { headers: declared }));
+    await expect(apiBlobDataRequest("/api/private/preview")).rejects.toMatchObject({ name: "NetworkError", message: expect.stringContaining("allowed size") });
+    const result = await apiDownloadRequest("/api/ip/filing-bundle.zip");
+    expect(result.blob.size).toBe(total * megabyte.byteLength);
+    expect(result.blob.type).toBe("application/zip");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels a status-handling download body when the caller aborts after headers", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const onHeaders = vi.fn();
+    let pulled!: () => void;
+    const reading = new Promise<void>((resolve) => { pulled = resolve; });
+    vi.mocked(fetch).mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ pull: pulled, cancel })));
+    const operation = fetchBlobWithTimeout("/api/export", { signal: controller.signal }, 5_000, onHeaders);
+    await reading;
+    expect(onHeaders).toHaveBeenCalledTimes(1);
+    controller.abort(new DOMException("Export dialog closed", "AbortError"));
+    await expect(operation).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancel).toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
+  it("does not report headers for a request that never reached them", async () => {
+    const onHeaders = vi.fn();
+    vi.mocked(fetch).mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(fetchBlobWithTimeout("/api/export", {}, 5_000, onHeaders)).rejects.toBeInstanceOf(TypeError);
+    expect(onHeaders).not.toHaveBeenCalled();
   });
 
   it("keeps one total deadline while the shared authentication refresh is pending", async () => {

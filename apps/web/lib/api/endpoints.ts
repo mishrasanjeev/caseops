@@ -1,8 +1,9 @@
 import {
-  apiBlobRequest,
+  apiDownloadRequest,
   apiRequest,
-  fetchWithTimeout,
+  fetchBlobWithTimeout,
   getCsrfHeaders,
+  type FetchedBlob,
 } from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import type { components } from "./openapi-types";
@@ -645,10 +646,10 @@ export type MatterBulkUpdateOperation = {
 export async function downloadMatterBulkUpdateTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/matters/bulk-update/template?format=${format}`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function listMatterBulkUpdateHistory(
@@ -2443,10 +2444,10 @@ export async function downloadIpPleadingDraft(input: {
   proceedingId: string;
   draftId: string;
 }): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/export.docx`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function validateIpPleadingDraft(input: {
@@ -2485,10 +2486,10 @@ export async function downloadIpPleadingFilingBundle(input: {
   proceedingId: string;
   draftId: string;
 }): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}/filing-bundle.zip`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function transitionIpPleadingLifecycle(input: {
@@ -3093,8 +3094,8 @@ export async function fetchMatterAttachmentBlob(input: {
   signal?: AbortSignal;
 }): Promise<Blob> {
   const path = `/api/matters/${input.matterId}/attachments/${input.attachmentId}/download${input.inline ? "?inline=true" : ""}`;
-  const response = await apiBlobRequest(path, { signal: input.signal });
-  return response.blob();
+  const { blob } = await apiDownloadRequest(path, { signal: input.signal });
+  return blob;
 }
 
 // OCR & Translate: versions of a matter document produced by OCR and
@@ -3226,13 +3227,12 @@ export async function downloadAttachmentRendition(input: {
   renditionId: string;
   fallbackName: string;
 }): Promise<void> {
-  const response = await apiBlobRequest(`${renditionPath(input)}/download`);
-  const blob = await response.blob();
+  const { blob, headers } = await apiDownloadRequest(`${renditionPath(input)}/download`);
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.download = downloadNameFromDisposition(
-    response.headers.get("content-disposition"),
+    headers.get("content-disposition"),
     input.fallbackName,
   );
   document.body.appendChild(anchor);
@@ -5305,7 +5305,7 @@ export async function commitEmployeeOffboarding(input: {
 export async function downloadEmployeeImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetchWithTimeout(
+  const response = await fetchBlobWithTimeout(
     `${API_BASE_URL}/api/companies/current/employees/import-template?format=${format}`,
     {
       method: "GET",
@@ -5316,7 +5316,7 @@ export async function downloadEmployeeImportTemplate(
   if (!response.ok) {
     throw new Error(`Template download failed (${response.status}).`);
   }
-  return response.blob();
+  return response.blob;
 }
 
 export async function previewEmployeeImport(file: File): Promise<EmployeeImportJob> {
@@ -5555,12 +5555,12 @@ export async function assignMatterTeam(input: {
 export async function downloadMatterImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetchWithTimeout(
+  const response = await fetchBlobWithTimeout(
     `${API_BASE_URL}/api/matters/imports/template?format=${format}`,
     { method: "GET", credentials: "include" },
   );
   if (!response.ok) throw new Error(`Matter template download failed (${response.status}).`);
-  return response.blob();
+  return response.blob;
 }
 
 export async function previewMatterImport(file: File): Promise<MatterImportJob> {
@@ -5603,12 +5603,12 @@ export async function cancelMatterImport(jobId: string): Promise<MatterImportJob
 }
 
 export async function downloadMatterImportErrors(jobId: string): Promise<Blob> {
-  const response = await fetchWithTimeout(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
+  const response = await fetchBlobWithTimeout(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
     method: "GET",
     credentials: "include",
   });
   if (!response.ok) throw new Error(`Matter error report download failed (${response.status}).`);
-  return response.blob();
+  return response.blob;
 }
 
 // --- Sprint 8b BG-025: GC intake queue ---
@@ -7206,7 +7206,7 @@ async function downloadApiFileWithPost(
   fallbackName: string,
 ): Promise<void> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchBlobWithTimeout(url, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -7220,7 +7220,7 @@ async function downloadApiFileWithPost(
     let detail = `Download failed (${response.status}).`;
     let parsed: unknown = null;
     try {
-      parsed = await response.json();
+      parsed = JSON.parse(await response.blob.text());
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -7233,8 +7233,7 @@ async function downloadApiFileWithPost(
     }
     throw new ApiError(response.status, detail, parsed, null);
   }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
+  const href = URL.createObjectURL(response.blob);
   const a = document.createElement("a");
   a.href = href;
   a.download = downloadNameFromDisposition(
@@ -8842,19 +8841,23 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
   const url = path.startsWith("http")
     ? path
     : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  let response: Response;
+  let response: FetchedBlob;
+  let receivedHeaders = false;
   try {
-    response = await fetchWithTimeout(url, {
+    response = await fetchBlobWithTimeout(url, {
       credentials: "include",
       headers: { Accept: "*/*" },
-    });
+    }, undefined, () => { receivedHeaders = true; });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw err;
     }
-    if (startBrowserDownload(url, fallbackName)) {
+    // Hand an unreachable request to the browser; a body that failed after
+    // headers is reported, not silently retried.
+    if (!receivedHeaders && startBrowserDownload(url, fallbackName)) {
       return;
     }
+    if (err instanceof NetworkError) throw err;
     throw new NetworkError(
       "Could not reach the workspace API. Check your connection and try again.",
       err,
@@ -8864,7 +8867,7 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
     let detail = `Download failed (${response.status}).`;
     let parsed: unknown = null;
     try {
-      parsed = await response.json();
+      parsed = JSON.parse(await response.blob.text());
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -8877,8 +8880,7 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
     }
     throw new ApiError(response.status, detail, parsed, null);
   }
-  const blob = await response.blob();
-  const href = URL.createObjectURL(blob);
+  const href = URL.createObjectURL(response.blob);
   const a = document.createElement("a");
   a.href = href;
   a.download = downloadNameFromDisposition(
@@ -11964,10 +11966,10 @@ export async function retryIpPortfolioExport(id: string): Promise<IpPortfolioExp
 }
 
 export async function downloadIpPortfolioExport(id: string): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/ip/portfolio/exports/${encodeURIComponent(id)}/download`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function uploadIpPortfolioImport(file: File): Promise<IpImportPreview> {
@@ -12097,10 +12099,10 @@ export async function resumeIpPortfolioImport(input: {
 }
 
 export async function downloadIpPortfolioImportErrors(id: string): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/ip/imports/${encodeURIComponent(id)}/errors`,
   );
-  return response.blob();
+  return blob;
 }
 
 export async function listBulkImportJobs(
@@ -12125,10 +12127,10 @@ export async function downloadBulkImportErrors(
   domain: BulkImportDomain,
   jobId: string,
 ): Promise<Blob> {
-  const response = await apiBlobRequest(
+  const { blob } = await apiDownloadRequest(
     `/api/imports/${encodeURIComponent(domain)}/${encodeURIComponent(jobId)}/errors`,
   );
-  return response.blob();
+  return blob;
 }
 
 export type IpDocketListPage = {

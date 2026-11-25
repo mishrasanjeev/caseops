@@ -1,4 +1,4 @@
-import { apiBlobRequest, apiRequest } from "@/lib/api/client";
+import { apiDownloadRequest, apiRequest } from "@/lib/api/client";
 
 export type NoticeDirection = "received" | "sent";
 export type NoticeSourceKind = "standalone" | "legacy_attachment";
@@ -219,16 +219,15 @@ export async function downloadNoticeFile(
   noticeId: string,
   fallbackName = "notice-document",
 ): Promise<void> {
-  const response = await apiBlobRequest(
+  const { blob, headers } = await apiDownloadRequest(
     `/api/notices/${encodeURIComponent(noticeId)}/download`,
   );
 
-  const blob = await response.blob();
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = href;
   anchor.download = downloadName(
-    response.headers.get("content-disposition"),
+    headers.get("content-disposition"),
     fallbackName,
   );
   document.body.appendChild(anchor);

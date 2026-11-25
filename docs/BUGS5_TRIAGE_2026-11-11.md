@@ -819,6 +819,51 @@ This audit does not certify them as repaired. A separate
 bounded migration must preserve each source's supported sizes, cancellation,
 headers, original bytes and authorization before closing that class globally.
 
+November24 candidate for [issue613](https://github.com/mishrasanjeev/caseops/issues/613)
+(branch `fix/issue-613-download-bodies-20261124`, base `609914f5a`): the unread
+`apiBlobRequest` Response contract is removed. All eight consumers above, plus
+the later OCR rendition download that had adopted the same contract, now read
+through `apiDownloadRequest`. It delegates to the existing whole-body
+`apiBlobDataRequest` with no client byte cap, so server size policy is
+unchanged, while the caller signal and one total download deadline cover
+session refresh, the retried request and the complete body. Cookie, explicit-token and
+portal handling, typed denials, Content-Disposition names, original bytes, the
+Content-Type-derived Blob type, a `no-store` request and object-URL revocation
+are retained. Offline vitest streams (chunked, stalled after headers, truncated,
+refresh then stalled retry, caller abort and an actual Matter image-preview
+unmount) fail on the base and pass on the candidate. Status: Partially
+implemented. The candidate is not merged, deployed or browser-verified, so it
+is not Properly fixed. Changed-source, post-load revocation and current-source
+recheck behaviour of the viewers is unchanged and not separately proven here.
+By owner decision the whole-body download paths use
+`DOWNLOAD_REQUEST_TIMEOUT_MS` = 120 seconds, equal to the API's Cloud Run
+request ceiling (`API_TIMEOUT_SECONDS=120` in `scripts/deploy-prod.sh`), so the
+client never abandons a response the server could still deliver. Ordinary API
+requests keep the 90-second deadline. A test pins the constant and proves a
+download still in progress at 90 seconds completes before 120 seconds.
+
+The same candidate also moves the sibling downloads that kept their own status
+handling (employee and Matter import templates, Matter import errors, the
+cause-list PDF, the shared `downloadApiFile` path and the admin audit export)
+onto `fetchBlobWithTimeout`. It reads the complete body of any status inside the
+existing request deadline and caller signal, with no client byte cap. Their
+auth, request headers, error messages, file names, MIME type, browser
+hand-off for a request that never reached headers and revoke timing are
+unchanged. Stall, truncation, stalled-error-body, caller-abort and audit-export
+page tests fail on the previous source and pass on the candidate. Their
+success-path tests are parity guards and pass on both. Server size ceilings
+measured from source: stored originals, notices, renditions and portfolio
+exports are capped at the 25 MiB storage limit, which within the 120-second
+ceiling needs about 1.75 Mbit/s.
+
+Separate server-side follow-ups, outside the issue613 candidate: (1) the
+synchronous admin audit export (`GET /api/admin/audit/export`) has no size
+bound. Without a `limit` it loads every row in the date window into memory
+and streams it, so a large tenant can exceed the 120-second server ceiling.
+(2) The IP pleading filing bundle (`filing-bundle.zip`) is built in memory
+with no explicit size cap. Both remain open server work, not client deadline
+work.
+
 The existing Matter email transport still retains its parent lock across
 SendGrid I/O. The new template fence now permits compatible readers and excludes
 edit/archive, proven by two actual PostgreSQL cases, but does not certify

@@ -42,7 +42,7 @@ import {
   updateStorageGovernance,
   type FirmStorageUsageSummary,
 } from "@/lib/api/endpoints";
-import { fetchWithTimeout } from "@/lib/api/client";
+import { fetchBlobWithTimeout } from "@/lib/api/client";
 import {
   invitePortalUser,
   type PortalUserRole,
@@ -283,7 +283,7 @@ export default function AdminPage() {
       const url =
         `${API_BASE_URL}/api/admin/audit/export` +
         (params.toString() ? `?${params.toString()}` : "");
-      const resp = await fetchWithTimeout(url, {
+      const resp = await fetchBlobWithTimeout(url, {
         credentials: "include",
         headers: { Accept: "*/*" },
       });
@@ -298,19 +298,18 @@ export default function AdminPage() {
       if (!resp.ok) {
         let detail = "Could not export the audit trail.";
         try {
-          const body = await resp.json();
+          const body = JSON.parse(await resp.blob.text());
           if (body?.detail) detail = body.detail;
         } catch {
           /* ignore */
         }
         throw new Error(detail);
       }
-      const blob = await resp.blob();
       const downloadName =
         resp.headers
           .get("content-disposition")
           ?.match(/filename="([^"]+)"/)?.[1] ?? `audit-export.${format}`;
-      const href = URL.createObjectURL(blob);
+      const href = URL.createObjectURL(resp.blob);
       const a = document.createElement("a");
       a.href = href;
       a.download = downloadName;
