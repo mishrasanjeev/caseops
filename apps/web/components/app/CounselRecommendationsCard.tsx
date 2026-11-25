@@ -28,25 +28,33 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
     !/^Approved spend history totals \d+ minor units across prior matters\.$/.test(reason),
   );
   return (
-    <li className="min-w-0 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)]">
+    // Every card in a row has the same width and height: the grid stretches
+    // the <li>, the name always reserves two lines, and the face carries the
+    // same three lines for every counsel (Nov 24 workbook row 6, BUG-016 reopen).
+    <li
+      className="flex min-w-0 flex-col rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)]"
+      data-testid="counsel-recommendation"
+    >
       <details className="group">
-        <summary tabIndex={0} className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
-          <span className="min-w-0 break-words text-sm font-semibold text-[var(--color-ink)]">
-            {rec.counsel_name}
+        <summary tabIndex={0} className="flex min-h-11 cursor-pointer list-none flex-col gap-1.5 rounded-lg px-3 py-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-start justify-between gap-2">
+            <span className="min-h-[2.5rem] min-w-0 text-sm font-semibold leading-5 text-[var(--color-ink)] [overflow-wrap:anywhere]">
+              {rec.counsel_name}
+            </span>
+            <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 group-open:rotate-180" aria-hidden />
           </span>
-          <span className="flex shrink-0 items-center gap-2">
+          <span className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <span className="tabular text-sm font-semibold text-[var(--color-ink)]">
               {rec.score} pts
             </span>
-            <ChevronDown className="h-4 w-4 group-open:rotate-180" aria-hidden />
+            <StatusBadge status={rec.panel_status} />
           </span>
-        </summary>
-        <div className="space-y-2 border-t border-[var(--color-line)] px-3 py-2">
-          <StatusBadge status={rec.panel_status} />
           <span className="text-[11px] text-[var(--color-mute-2)]">
             {rec.total_matters_count} matter{rec.total_matters_count === 1 ? "" : "s"}
             {rec.active_matters_count > 0 ? ` · ${rec.active_matters_count} active` : ""}
           </span>
+        </summary>
+        <div className="space-y-2 border-t border-[var(--color-line)] px-3 py-2">
           {spend?.length ? (
             <div className="text-xs text-[var(--color-mute)]">
               <p className="font-medium">Approved spend</p>
@@ -133,7 +141,12 @@ export function CounselRecommendationsCard({
             description="Add counsel to the panel and we'll rank them for this matter."
           />
         ) : (
-          <ul className="grid items-start gap-2 sm:grid-cols-2">
+          // Up to five equal columns in one row; narrower screens and higher
+          // zoom drop to fewer columns, never to uneven widths.
+          <ul
+            className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(max(min(100%,11.5rem),calc((100%_-_3rem)/5)),1fr))]"
+            data-testid="counsel-recommendations-grid"
+          >
             {data.results.map((rec) => (
               <CounselRow key={rec.counsel_id} rec={rec} />
             ))}

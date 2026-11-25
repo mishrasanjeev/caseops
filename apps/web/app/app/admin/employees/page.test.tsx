@@ -584,7 +584,7 @@ describe("EmployeesAdminPage", () => {
 
     await user.click(screen.getByTestId("employee-offboard-asha@example.com"));
     expect(screen.getByText("Offboard employee")).toBeInTheDocument();
-    expect(screen.getByTestId("offboard-replacement")).toHaveValue("m2");
+    await waitFor(() => expect(screen.getByTestId("offboard-replacement")).toHaveValue("m2"));
     await user.click(screen.getByTestId("offboard-preview"));
 
     await waitFor(() =>
@@ -608,6 +608,29 @@ describe("EmployeesAdminPage", () => {
     expect(toastSuccessMock).toHaveBeenCalledWith(
       "Employee offboarded and supported work reassigned.",
     );
+  });
+
+  // Nov 24 workbook adjacent path: the replacement list was built from the
+  // directory as filtered, so searching for the leaver hid every replacement.
+  it("offers replacements from the whole directory while the list is searched", async () => {
+    const everyone = await listEmployeesMock();
+    listEmployeesMock.mockImplementation(async (params?: { q?: string }) =>
+      params?.q
+        ? { employees: everyone.employees.filter((row: { full_name: string }) => row.full_name.toLowerCase().includes(params.q!.toLowerCase())) }
+        : everyone,
+    );
+    const user = userEvent.setup();
+    render(withClient(<EmployeesAdminPage />));
+    await screen.findByText("Dev Mehta");
+    await user.type(screen.getByTestId("employee-search"), "asha");
+    await waitFor(() => expect(screen.queryByText("Dev Mehta")).toBeNull());
+
+    await user.click(screen.getByTestId("employee-offboard-asha@example.com"));
+    await waitFor(() => expect(screen.getByTestId("offboard-replacement")).toHaveValue("m2"));
+    expect(
+      within(screen.getByTestId("offboard-replacement")).getByRole("option", { name: /Dev Mehta/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No active replacement available")).toBeNull();
   });
 
   it("reports setup and reset delivery failures without exposing token values", async () => {

@@ -51,6 +51,7 @@ from caseops_api.db.models import (
     NotificationDeliveryStatus,
     Team,
     TeamMembership,
+    User,
 )
 from caseops_api.schemas.ip_access import (
     IpAccessAffectedMembership,
@@ -2849,6 +2850,8 @@ def list_matter_ethical_wall_directory(
     session: Session,
     *,
     context: SessionContext,
+    q: str | None = None,
+    matter_id: str | None = None,
 ) -> MatterEthicalWallDirectoryResponse:
     """Active Matter walls across the tenant, newest first, for the admin screen.
 
@@ -2857,6 +2860,32 @@ def list_matter_ethical_wall_directory(
     Owners bypass walls and therefore see every wall. The read is audited.
     """
     _require_admin(context)
+    # `q` and `matter_id` narrow on the server, so a wall older than the 500
+    # most recent can still be found and a Matter's existing walls are known
+    # when the directory is truncated (Nov 24 workbook adjacent path).
+    narrowing = []
+    if matter_id:
+        narrowing.append(EthicalWall.matter_id == matter_id)
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        person_matches = (
+            select(CompanyMembership.id)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(
+                CompanyMembership.id == EthicalWall.excluded_membership_id,
+                CompanyMembership.company_id == context.company.id,
+                or_(User.full_name.ilike(pattern), User.email.ilike(pattern)),
+            )
+            .exists()
+        )
+        narrowing.append(
+            or_(
+                Matter.matter_code.ilike(pattern),
+                Matter.title.ilike(pattern),
+                person_matches,
+            )
+        )
     rows = session.execute(
         select(EthicalWall, Matter)
         .join(Matter, Matter.id == EthicalWall.matter_id)
@@ -2865,6 +2894,7 @@ def list_matter_ethical_wall_directory(
             EthicalWall.excluded_membership_id.is_not(None),
             EthicalWall.revoked_at.is_(None),
             visible_matters_filter(session, context=context),
+            *narrowing,
         )
         .order_by(EthicalWall.created_at.desc(), EthicalWall.id.desc())
         .limit(MATTER_WALL_DIRECTORY_LIMIT + 1)
@@ -2920,7 +2950,13 @@ def list_matter_ethical_wall_directory(
         context,
         action="matter.ethical_walls_viewed",
         target_type="ethical_wall_directory",
-        metadata={"wall_count": len(records), "truncated": truncated},
+        metadata={
+            "wall_count": len(records),
+            "truncated": truncated,
+            # Narrowed reads say so; the search text itself is not recorded.
+            **({"searched": True} if needle else {}),
+            **({"matter_id": matter_id} if matter_id else {}),
+        },
     )
     session.commit()
     return MatterEthicalWallDirectoryResponse(walls=records, truncated=truncated)

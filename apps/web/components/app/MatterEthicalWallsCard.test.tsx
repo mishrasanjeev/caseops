@@ -375,3 +375,65 @@ describe("MatterEthicalWallsCard", () => {
     expect(await screen.findByTestId("matter-wall-row-w-1")).toBeInTheDocument();
   });
 });
+
+// Nov 24 workbook adjacent path: the directory stops at the 500 most recent
+// walls, and the filter and the "already walled" check only saw those rows.
+describe("truncated wall directory", () => {
+  function truncatedDirectory() {
+    const recent = Array.from({ length: 9 }, (_, index) =>
+      wall({
+        id: `w-recent-${index}`,
+        excluded_membership_id: "m-rao",
+        matter_id: `matter-r${index}`,
+        matter_code: `LIT-R${index}`,
+        matter_title: `Recent matter ${index}`,
+      }),
+    );
+    const older = wall({
+      id: "w-older",
+      excluded_membership_id: "m-iyer",
+      matter_id: "matter-1",
+      matter_code: "LIT-101",
+      matter_title: "Kapoor v. Meridian",
+    });
+    listResponse = null;
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/matters/ethical-walls?")) {
+        const params = new URL(url, "http://local").searchParams;
+        if (params.get("q") === "Divya" || params.get("matter_id") === "matter-1") {
+          return json({ walls: [older], truncated: false });
+        }
+        return json({ walls: [], truncated: false });
+      }
+      if (url.includes("/api/matters/ethical-walls")) {
+        return json({ walls: recent, truncated: true });
+      }
+      return base(input, init);
+    });
+  }
+
+  it("searches every wall on the server when the local filter cannot see it", async () => {
+    truncatedDirectory();
+    const user = userEvent.setup();
+    renderCard();
+    await screen.findByTestId("matter-walls-LIT-R0");
+    await user.type(screen.getByLabelText("Filter walls by Matter or person"), "Divya");
+    expect(screen.getByText("No wall in the 500 most recent matches this filter.")).toBeInTheDocument();
+    await user.click(screen.getByTestId("matter-walls-search-all"));
+    await screen.findByTestId("matter-walls-LIT-101");
+    expect(calls("GET", "/api/matters/ethical-walls?q=Divya")).toHaveLength(1);
+  });
+
+  it("marks a person already walled by an older wall as unavailable", async () => {
+    truncatedDirectory();
+    const user = userEvent.setup();
+    renderCard();
+    await screen.findByTestId("matter-walls-LIT-R0");
+    await chooseMatter(user);
+    await waitFor(() => expect(calls("GET", "/api/matters/ethical-walls?matter_id=matter-1")).toHaveLength(1));
+    await waitFor(() => expect(personBox(/Divya Iyer/)).toBeDisabled());
+    expect(screen.getByText(/divya@firm\.in · Member · Already walled from this Matter/)).toBeInTheDocument();
+  });
+});

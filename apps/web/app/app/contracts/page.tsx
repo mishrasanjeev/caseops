@@ -1,10 +1,10 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Scale } from "lucide-react";
+import { RotateCcw, Scale } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { NewContractDialog } from "@/components/app/NewContractDialog";
 import { Button } from "@/components/ui/Button";
@@ -18,8 +18,11 @@ import { listContracts } from "@/lib/api/endpoints";
 import type { Contract } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
+import { useServerPages } from "@/lib/use-server-pages";
 
+// Search and paging run on the server; see components/ui/DataTable server mode.
 const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
 
 function formatDate(value: string | null | undefined): string {
   // Contract effective_on / expires_on are SQL Date values —
@@ -41,6 +44,12 @@ function formatMoney(minor: number | null, currency: string): string {
 }
 
 export default function ContractsPage() {
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const handle = window.setTimeout(() => setQuery(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [search]);
   const {
     data,
     isPending,
@@ -49,13 +58,27 @@ export default function ContractsPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isPlaceholderData,
     refetch,
   } = useInfiniteQuery({
-    queryKey: ["contracts", "list"],
+    queryKey: ["contracts", "list", { query }],
     queryFn: ({ pageParam }) =>
-      listContracts({ limit: PAGE_SIZE, cursor: pageParam ?? null }),
+      listContracts({
+        limit: PAGE_SIZE,
+        cursor: pageParam ?? null,
+        q: query || undefined,
+        include_total: pageParam === null,
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    placeholderData: keepPreviousData,
+  });
+  const pager = useServerPages({
+    listKey: query,
+    data,
+    hasNextPage: Boolean(hasNextPage),
+    fetchNextPage,
+    errorMessage: "Could not load the next page of contracts.",
   });
   const canCreateContract = useCapability("contracts:create");
 
@@ -133,10 +156,7 @@ export default function ContractsPage() {
     [],
   );
 
-  const contracts = useMemo(
-    () => data?.pages.flatMap((page) => page.contracts) ?? [],
-    [data],
-  );
+  const contracts = pager.page?.contracts ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -158,7 +178,7 @@ export default function ContractsPage() {
           error={error}
           onRetry={refetch}
         />
-      ) : contracts.length === 0 ? (
+      ) : contracts.length === 0 && !query && !search.trim() && !isPlaceholderData ? (
         <EmptyState
           icon={Scale}
           title="No contracts yet"
@@ -170,25 +190,32 @@ export default function ContractsPage() {
           action={canCreateContract ? <NewContractDialog /> : undefined}
         />
       ) : (
-        <>
-          <DataTable
-            data={contracts}
-            columns={columns}
-            filterPlaceholder="Search contracts, codes, counterparties…"
-            getRowId={(c) => c.id}
-          />
-          {hasNextPage ? (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
+        <DataTable
+          data={contracts}
+          columns={columns}
+          filterPlaceholder="Search contracts, codes, counterparties…"
+          getRowId={(c) => c.id}
+          emptyState={
+            <div className="flex flex-col items-center gap-3">
+              <span>No contracts match this search.</span>
+              <Button type="button" variant="outline" onClick={() => setSearch("")}>
+                <RotateCcw className="h-4 w-4" /> Clear search
               </Button>
             </div>
-          ) : null}
-        </>
+          }
+          server={{
+            search,
+            onSearchChange: setSearch,
+            pageIndex: pager.pageIndex,
+            pageSize: PAGE_SIZE,
+            totalCount: pager.firstPage?.total_count ?? null,
+            canPreviousPage: pager.canPreviousPage,
+            canNextPage: pager.canNextPage,
+            busy: isFetchingNextPage || isPlaceholderData,
+            onPreviousPage: pager.goToPreviousPage,
+            onNextPage: () => void pager.goToNextPage(),
+          }}
+        />
       )}
     </div>
   );

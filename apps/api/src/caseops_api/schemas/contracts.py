@@ -157,6 +157,8 @@ class ContractListResponse(BaseModel):
     company_id: str
     contracts: list[ContractRecord]
     next_cursor: str | None = None
+    # Every contract matching `q` across all pages; only with include_total=true.
+    total_count: int | None = None
 
 
 class ContractWorkspaceMembership(BaseModel):

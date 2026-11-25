@@ -32,6 +32,32 @@ describe("TodayPage smoke", () => {
     expect(screen.getByRole("heading", { name: /today/i })).toBeInTheDocument();
   });
 
+  // Nov 24 workbook row 2: a task or deadline opened from Today must land on
+  // that item, not on the Matter overview.
+  it("links tasks and deadlines to the exact item on the Matter Tasks page", async () => {
+    const matter = { id: "m-9", matter_code: "LIT-9", title: "Kapoor v. Meridian" };
+    vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue({
+      today: "2026-11-24",
+      horizon_days: 7,
+      hearings_next_7d: [],
+      drafts_in_review: [],
+      overdue_invoices: [],
+      tasks_due_or_overdue: [
+        { id: "t-1", matter, title: "File rejoinder", due_on: "2026-11-20", status: "todo", priority: "high", overdue: true },
+      ],
+      deadlines_next_7d: [
+        { id: "d-1", matter, title: "Reply due", due_on: "2026-11-26", severity: "normal", days_until: 2 },
+      ],
+    } as unknown as endpoints.TodayView);
+    renderWithQuery(<TodayPage />);
+    const task = await screen.findByRole("link", { name: "LIT-9 — File rejoinder" });
+    expect(task).toHaveAttribute("href", "/app/matters/m-9/tasks?task=t-1");
+    expect(screen.getByRole("link", { name: "LIT-9 — Reply due" })).toHaveAttribute(
+      "href",
+      "/app/matters/m-9/tasks?deadline=d-1",
+    );
+  });
+
   it("renders empty-state copy when nothing is due today", async () => {
     vi.spyOn(endpoints, "fetchTodayView").mockResolvedValue({
       hearings: [],

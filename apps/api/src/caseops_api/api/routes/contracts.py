@@ -106,8 +106,17 @@ def current_company_contracts(
     session: DbSession,
     limit: int | None = None,
     cursor: str | None = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    include_total: bool = False,
 ) -> ContractListResponse:
-    return list_contracts(session, context=context, limit=limit, cursor=cursor)
+    return list_contracts(
+        session,
+        context=context,
+        limit=limit,
+        cursor=cursor,
+        q=q,
+        include_total=include_total,
+    )
 
 
 @router.post("/", response_model=ContractRecord, summary="Create a contract in the current company")

@@ -2349,6 +2349,7 @@ def list_matters(
     limit: int | None = None,
     cursor: str | None = None,
     filters: MatterListFilters | None = None,
+    include_total: bool = False,
 ) -> MatterListResponse:
     from caseops_api.services.pagination import (
         clamp_limit,
@@ -2358,6 +2359,11 @@ def list_matters(
 
     page_size = clamp_limit(limit)
     decoded = decode_cursor(cursor)
+    effective_filters = filters or MatterListFilters()
+    scope = (
+        Matter.company_id == context.company.id,
+        visible_matters_filter(session, context=context),
+    )
 
     stmt = (
         select(Matter)
@@ -2365,13 +2371,19 @@ def list_matters(
             selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
             selectinload(Matter.court_orders),
         )
-        .where(
-            Matter.company_id == context.company.id,
-            visible_matters_filter(session, context=context),
-        )
+        .where(*scope)
         .order_by(Matter.updated_at.desc(), Matter.id.desc())
     )
-    stmt = _apply_list_filters(stmt, filters or MatterListFilters())
+    stmt = _apply_list_filters(stmt, effective_filters)
+    total_count = None
+    if include_total:
+        # Same tenant, access and filter predicates as the page query, but
+        # without the cursor, so the total never depends on the page asked for.
+        total_count = session.scalar(
+            _apply_list_filters(
+                select(func.count(Matter.id)).where(*scope), effective_filters
+            )
+        ) or 0
     if decoded is not None:
         stmt = stmt.where(
             or_(
@@ -2392,6 +2404,7 @@ def list_matters(
         company_id=context.company.id,
         matters=[_matter_record(matter) for matter in rows],
         next_cursor=next_cursor,
+        total_count=total_count,
     )
 
 

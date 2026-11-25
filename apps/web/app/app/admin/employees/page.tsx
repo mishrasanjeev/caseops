@@ -428,7 +428,6 @@ export default function EmployeesAdminPage() {
       {offboarding ? (
         <OffboardEmployeeDialog
           employee={offboarding}
-          employees={employees}
           onClose={() => setOffboarding(null)}
         />
       ) : null}
@@ -562,16 +561,22 @@ function activeReplacementOptions(
 
 function OffboardEmployeeDialog({
   employee,
-  employees,
   onClose,
 }: {
   employee: EmployeeRecord;
-  employees: EmployeeRecord[];
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const replacements = activeReplacementOptions(employees, employee);
-  const [replacementId, setReplacementId] = useState(replacements[0]?.membership_id ?? "");
+  // Replacements come from the whole directory, not the list as the admin
+  // searched it to find the leaver; otherwise a search for the leaver hides
+  // every valid replacement (Nov 24 workbook adjacent path).
+  const directory = useQuery({
+    queryKey: ["admin", "employees", "replacement-options"],
+    queryFn: () => listEmployees(),
+  });
+  const replacements = activeReplacementOptions(directory.data?.employees ?? [], employee);
+  const [chosenReplacementId, setReplacementId] = useState("");
+  const replacementId = chosenReplacementId || replacements[0]?.membership_id || "";
   const [notes, setNotes] = useState("");
   const [preview, setPreview] = useState<EmployeeOffboardingPreview | null>(null);
 
@@ -645,7 +650,11 @@ function OffboardEmployeeDialog({
                 className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
                 data-testid="offboard-replacement"
               >
-                {replacements.length === 0 ? (
+                {directory.isPending ? (
+                  <option value="">Loading employees…</option>
+                ) : directory.isError ? (
+                  <option value="">Employees could not be loaded</option>
+                ) : replacements.length === 0 ? (
                   <option value="">No active replacement available</option>
                 ) : null}
                 {replacements.map((candidate) => (

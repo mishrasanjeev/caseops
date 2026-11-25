@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -16,7 +17,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
@@ -48,9 +49,14 @@ import {
 } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
+import { useServerPages } from "@/lib/use-server-pages";
 import { formatLegalDate } from "@/lib/dates";
 
+// One server page per table page. Search, paging and the total all come from
+// the server, so a Matter on a page nobody has opened yet is still found and
+// Next always reaches the following page (Nov 24 workbook rows 4-5).
 const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
 const CLAIM_CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
 const FORUMS: Record<string, string> = {
@@ -174,6 +180,18 @@ export default function MattersPage() {
     }),
     [appliedFilters],
   );
+  // The table's search box and the filter panel's Search field are one
+  // server query (`q`), so typing in either searches every Matter.
+  const [searchText, setSearchText] = useState("");
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = searchText.trim();
+      setAppliedFilters((prev) => (prev.q === next ? prev : { ...prev, q: next }));
+      setDraftFilters((prev) => (prev.q === next ? prev : { ...prev, q: next }));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [searchText]);
+  const listKey = JSON.stringify(listParams);
   const {
     data,
     isPending,
@@ -182,6 +200,7 @@ export default function MattersPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isPlaceholderData,
     refetch,
   } = useInfiniteQuery({
     queryKey: ["matters", "list", listParams],
@@ -189,10 +208,20 @@ export default function MattersPage() {
       listMatters({
         limit: PAGE_SIZE,
         cursor: pageParam ?? null,
+        include_total: pageParam === null,
         ...listParams,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    // Keep the table (and its search box) on screen while a new search loads.
+    placeholderData: keepPreviousData,
+  });
+  const pager = useServerPages({
+    listKey,
+    data,
+    hasNextPage: Boolean(hasNextPage),
+    fetchNextPage,
+    errorMessage: "Could not load the next page of matters.",
   });
   const { data: tagData } = useQuery({
     queryKey: ["matter-tags"],
@@ -357,10 +386,8 @@ export default function MattersPage() {
     [canArchiveMatters, canEditMatters, queryClient, statusMutation],
   );
 
-  const matters = useMemo(
-    () => data?.pages.flatMap((page) => page.matters) ?? [],
-    [data],
-  );
+  // The rows on screen: the current server page. "Tag visible" acts on these.
+  const matters = pager.page?.matters ?? [];
   const matterTags = tagData?.tags ?? [];
   const bulkMutation = useMutation({
     mutationFn: () =>
@@ -380,12 +407,14 @@ export default function MattersPage() {
   );
 
   function applyFilters() {
-    setAppliedFilters({ ...draftFilters });
+    setAppliedFilters({ ...draftFilters, q: draftFilters.q.trim() });
+    setSearchText(draftFilters.q.trim());
   }
 
   function clearFilters() {
     setDraftFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
+    setSearchText("");
   }
 
   const filterPanel = (
@@ -603,7 +632,10 @@ export default function MattersPage() {
           error={error}
           onRetry={refetch}
         />
-      ) : matters.length === 0 ? (
+      ) : matters.length === 0 &&
+        !hasActiveFilters &&
+        !searchText.trim() &&
+        !isPlaceholderData ? (
         <EmptyState
           icon={Briefcase}
           title={
@@ -629,27 +661,34 @@ export default function MattersPage() {
           }
         />
       ) : (
-        <>
-          <DataTable
-            data={matters}
-            columns={columns}
-            filterPlaceholder="Search matters, codes, clients…"
-            onRowClick={(m) => router.push(`/app/matters/${m.id}`)}
-            getRowId={(m) => m.id}
-            pinLastColumn={canEditMatters || canArchiveMatters}
-          />
-          {hasNextPage ? (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
+        <DataTable
+          data={matters}
+          columns={columns}
+          filterPlaceholder="Search matters, codes, clients…"
+          onRowClick={(m) => router.push(`/app/matters/${m.id}`)}
+          getRowId={(m) => m.id}
+          pinLastColumn={canEditMatters || canArchiveMatters}
+          emptyState={
+            <div className="flex flex-col items-center gap-3">
+              <span>No matters match this search or these filters.</span>
+              <Button type="button" variant="outline" onClick={clearFilters}>
+                <RotateCcw className="h-4 w-4" /> Reset filters
               </Button>
             </div>
-          ) : null}
-        </>
+          }
+          server={{
+            search: searchText,
+            onSearchChange: setSearchText,
+            pageIndex: pager.pageIndex,
+            pageSize: PAGE_SIZE,
+            totalCount: pager.firstPage?.total_count ?? null,
+            canPreviousPage: pager.canPreviousPage,
+            canNextPage: pager.canNextPage,
+            busy: isFetchingNextPage || isPlaceholderData,
+            onPreviousPage: pager.goToPreviousPage,
+            onNextPage: () => void pager.goToNextPage(),
+          }}
+        />
       )}
     </div>
   );
