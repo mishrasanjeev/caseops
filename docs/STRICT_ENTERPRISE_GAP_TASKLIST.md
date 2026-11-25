@@ -6231,6 +6231,21 @@ entries describe earlier dates. See [contract, evidence and remaining gates](mob
 New paid-provider surface. Statuses are separate for what is in code and what is
 deployed and verified.
 
+Released 2026-11-24 in 609914f5a (PR #648 merge 1eeb75c04 plus docs PR #649),
+with the providers off. PR CI run 45329312890 and main CI run 45373936726
+passed. The pre-migration backup and migrate job caseops-migrate-job-jhh4v
+applied `20261124_0001` (one new empty `matter_attachment_renditions` table).
+API revision caseops-api-00534-477 and web revision caseops-web-00510-pff
+serve 100%. Exact-release prod-verify dispatch 45388561841 passed, and the
+private projection cadence resumed through its guard after clean executions
+2hqxp (3 rebuilds) and sflpt (0). Both kill switches are off and no Sarvam or
+Google Translation secret or setting is bound, so no provider call is possible.
+No prod-verify journey covers OCR & Translate. Production proof of the surface
+is an unauthenticated probe: `/api/matters/{id}/document-renditions` answers
+401, and a sibling unknown path answers 404. The statuses below are unchanged
+until the owner-run enablement in
+`docs/runbooks/ocr-translation-enablement-2026-11-23.md` and a live call.
+
 ### EH-OCRT-01 - Paid OCR/translation providers are fenced and fail closed
 
 - **Status:** Partially implemented (2026-11-23, branch
