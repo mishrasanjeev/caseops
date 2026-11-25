@@ -1,6 +1,7 @@
 ## November 24 — report console invitation completion returns 401
 
-**Inconclusive (fix in code and tests, not yet deployed).** Reported:
+**Inconclusive (deployed 2026-11-25 in `bce18d1d2`; real invitee retry
+pending).** Reported:
 `POST https://api.caseops.ai/api/platform-console/auth/invitations/complete`
 returns 401 from `https://caseops.ai/platform/setup`. Production request logs
 for 2026-11-24 09:04–09:33 UTC show six 401s for one invitee, including one 58
@@ -23,8 +24,17 @@ consuming the link. Evidence:
 `apps/api/tests/test_platform_console_existing_identity_invite_20261124.py`
 plus the console route matrix and guard inventory, and
 `components/platform/PlatformAccountLink.test.tsx` plus the setup page tests.
-A verdict is due after deployment, from a production invitation by a real
-invitee.
+A verdict is due from a production invitation completed by a real invitee.
+
+Release evidence, 2026-11-25: merged as PR #650 and released with PR #652 in
+`bce18d1d2` (API `caseops-api-00535-8qh`, web `caseops-web-00511-sdl`).
+Exact-release prod-verify run 45513817072 passed 15/15 jobs. The private
+projection maintenance runs `55lgr` (5 rebuilds) and `8q679` (0 rebuilds)
+were clean, and the guarded cadence resume passed. A production probe of
+`POST /api/platform-console/auth/invitations/inspect` with an unknown token
+returns 401 `console_link_invalid`, so the route is deployed. The verdict
+stays Inconclusive until the reporting invitee completes setup with the
+current CaseOps password on the new form.
 
 ## November18 — journal availability and Docker fixture filename failures
 
