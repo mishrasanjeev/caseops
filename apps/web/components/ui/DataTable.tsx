@@ -55,8 +55,14 @@ type DataTableProps<TData, TValue> = {
   getRowId?: (row: TData, index: number) => string;
   /** Keep the last column (a row's actions) on screen while the others scroll sideways. */
   pinLastColumn?: boolean;
-  server?: DataTableServerMode;
-};
+} & (
+  // Every caller must say which kind of rows it passes. The client search,
+  // pager and sorting are only truthful over the complete list; a page of a
+  // larger server list must use `server` (B4-ADJ-03 and Nov 24 rows 4-5 were
+  // this defect, fixed per screen while the table stayed unsafe by default).
+  | { server: DataTableServerMode; completeData?: never }
+  | { /** `data` is every row the reader may see, not one page or a capped read. */ completeData: true; server?: never }
+);
 
 export function DataTable<TData, TValue>({
   columns,

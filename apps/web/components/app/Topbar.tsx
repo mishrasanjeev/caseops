@@ -130,7 +130,7 @@ export function Topbar() {
           <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
             Workspace
           </span>
-          <span className="max-w-[16rem] truncate text-sm font-semibold text-[var(--color-ink)]" title={company?.name ?? undefined}>
+          <span className="max-w-[16rem] truncate text-sm font-semibold text-[var(--color-ink)]" title={company?.name ?? undefined} data-testid="topbar-workspace-name">
             {company?.name ?? "—"}
           </span>
         </div>

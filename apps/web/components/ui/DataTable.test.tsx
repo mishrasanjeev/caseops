@@ -21,7 +21,7 @@ const columns: ColumnDef<Row, unknown>[] = [
 describe("DataTable", () => {
   it("filters rows via the accessible text input", async () => {
     const user = userEvent.setup();
-    render(<DataTable columns={columns} data={rows} />);
+    render(<DataTable completeData columns={columns} data={rows} />);
     const filter = screen.getByRole("textbox", { name: "Filter rows" });
     await user.type(filter, "brav");
     expect(screen.getByText("Bravo")).toBeInTheDocument();
@@ -34,7 +34,7 @@ describe("DataTable", () => {
     const user = userEvent.setup();
     const onRowClick = vi.fn();
     render(
-      <DataTable
+      <DataTable completeData
         columns={columns}
         data={rows}
         onRowClick={onRowClick}
@@ -61,7 +61,7 @@ describe("DataTable", () => {
   });
 
   it("pins only the last column when the caller asks, so row actions stay on screen", () => {
-    const { unmount } = render(<DataTable columns={columns} data={rows} pinLastColumn />);
+    const { unmount } = render(<DataTable completeData columns={columns} data={rows} pinLastColumn />);
     const pinnedRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
     const cells = Array.from(pinnedRow.querySelectorAll("td"));
     // Pinned from 40rem up; below that the table stacks into labelled rows so nothing is covered.
@@ -71,14 +71,23 @@ describe("DataTable", () => {
     expect(pinnedRow.closest("table")?.className).toMatch(/@max-\[40rem\]:stacked-table/);
     expect(cells.map((cell) => cell.dataset.label)).toEqual(["Name", "Due"]);
     unmount();
-    render(<DataTable columns={columns} data={rows} />);
+    render(<DataTable completeData columns={columns} data={rows} />);
     const plainRow = screen.getByText("Bravo").closest("tr") as HTMLElement;
     expect(plainRow.innerHTML).not.toMatch(/sticky/);
   });
 
   it("labels Previous and Next pagination buttons for screen readers", () => {
-    render(<DataTable columns={columns} data={rows} />);
+    render(<DataTable completeData columns={columns} data={rows} />);
     expect(screen.getByRole("button", { name: /Previous page/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Next page/i })).toBeInTheDocument();
+  });
+});
+
+describe("DataTable data contract", () => {
+  it("does not compile without saying whether rows are complete or a server page", () => {
+    const columns: ColumnDef<{ id: string }>[] = [{ accessorKey: "id", header: "Id" }];
+    // @ts-expect-error A caller must pass completeData or server (B4-ADJ-03, Nov 24 rows 4-5).
+    const element = <DataTable columns={columns} data={[{ id: "a" }]} />;
+    expect(element).toBeTruthy();
   });
 });

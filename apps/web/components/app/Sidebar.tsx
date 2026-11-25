@@ -202,7 +202,9 @@ export function SidebarBody({
       return next;
     });
   }
-  const idPrefix = useId();
+  // Both the desktop sidebar and the phone drawer render this body; useId keeps
+  // their list ids distinct, stripped to characters a CSS selector accepts.
+  const idPrefix = `sidebar${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
     <>
