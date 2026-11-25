@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -96,7 +97,7 @@ UserManager = Annotated[
     response_model=AuthContextResponse,
     summary="Get the current company context",
 )
-async def current_company(
+def current_company(
     context: CurrentContext,
     session: DbSession,
 ) -> AuthContextResponse:
@@ -117,7 +118,7 @@ async def current_company_profile(context: CurrentContext) -> CompanyProfileResp
     response_model=CompanyProfileResponse,
     summary="Update the current company profile",
 )
-async def patch_current_company_profile(
+def patch_current_company_profile(
     payload: CompanyProfileUpdateRequest,
     context: ProfileManager,
     session: DbSession,
@@ -130,7 +131,7 @@ async def patch_current_company_profile(
     response_model=CompanyUsersResponse,
     summary="List users for the current company",
 )
-async def current_company_users(
+def current_company_users(
     context: CurrentContext,
     session: DbSession,
 ) -> CompanyUsersResponse:
@@ -142,7 +143,7 @@ async def current_company_users(
     response_model=CompanyUserRecord,
     summary="Create a user in the current company",
 )
-async def create_current_company_user(
+def create_current_company_user(
     payload: CompanyUserCreateRequest,
     context: UserManager,
     session: DbSession,
@@ -155,7 +156,7 @@ async def create_current_company_user(
     response_model=CompanyUserRecord,
     summary="Update a company user's role or active status",
 )
-async def update_current_company_user(
+def update_current_company_user(
     membership_id: str,
     payload: CompanyUserUpdateRequest,
     context: UserManager,
@@ -174,7 +175,7 @@ async def update_current_company_user(
     response_model=EmployeeListResponse,
     summary="List employee directory records for the current company",
 )
-async def current_company_employees(
+def current_company_employees(
     context: UserManager,
     session: DbSession,
     q: str | None = None,
@@ -197,7 +198,7 @@ async def current_company_employees(
     response_model=EmployeeCreateResponse,
     summary="Create an employee with a secure account setup link",
 )
-async def create_current_company_employee(
+def create_current_company_employee(
     payload: EmployeeCreateRequest,
     context: UserManager,
     session: DbSession,
@@ -233,7 +234,8 @@ async def preview_current_company_employee_import(
     file: Annotated[UploadFile, File(...)],
 ) -> EmployeeImportJobResponse:
     content = await file.read(EMPLOYEE_IMPORT_MAX_BYTES + 1)
-    return preview_employee_import(
+    return await run_in_threadpool(
+        preview_employee_import,
         session,
         context=context,
         filename=file.filename or "employees",
@@ -247,7 +249,7 @@ async def preview_current_company_employee_import(
     response_model=EmployeeImportCommitResponse,
     summary="Commit a validated bulk employee import",
 )
-async def commit_current_company_employee_import(
+def commit_current_company_employee_import(
     job_id: str,
     context: UserManager,
     session: DbSession,
@@ -260,7 +262,7 @@ async def commit_current_company_employee_import(
     response_model=EmployeeImportJobResponse,
     summary="Cancel a previewed bulk employee import",
 )
-async def cancel_current_company_employee_import(
+def cancel_current_company_employee_import(
     job_id: str,
     context: UserManager,
     session: DbSession,
@@ -273,7 +275,7 @@ async def cancel_current_company_employee_import(
     response_model=EmployeeRecord,
     summary="Read one employee directory record",
 )
-async def current_company_employee(
+def current_company_employee(
     membership_id: str,
     context: UserManager,
     session: DbSession,
@@ -286,7 +288,7 @@ async def current_company_employee(
     response_model=EmployeeRecord,
     summary="Update employee directory metadata",
 )
-async def update_current_company_employee(
+def update_current_company_employee(
     membership_id: str,
     payload: EmployeeUpdateRequest,
     context: UserManager,
@@ -305,7 +307,7 @@ async def update_current_company_employee(
     response_model=EmployeeTokenDelivery,
     summary="Resend an employee account setup link",
 )
-async def resend_current_company_employee_setup(
+def resend_current_company_employee_setup(
     membership_id: str,
     context: UserManager,
     session: DbSession,
@@ -326,7 +328,7 @@ async def resend_current_company_employee_setup(
     response_model=EmployeeMatterAccessResponse,
     summary="List matter-level access state for one employee (admin)",
 )
-async def current_company_employee_matter_access(
+def current_company_employee_matter_access(
     membership_id: str,
     context: UserManager,
     session: DbSession,
@@ -343,7 +345,7 @@ async def current_company_employee_matter_access(
     response_model=EmployeeTokenDelivery,
     summary="Issue an employee password reset link",
 )
-async def reset_current_company_employee_password(
+def reset_current_company_employee_password(
     membership_id: str,
     context: UserManager,
     session: DbSession,
@@ -360,7 +362,7 @@ async def reset_current_company_employee_password(
     response_model=EmployeeAuditResponse,
     summary="List employee audit and lifecycle history",
 )
-async def current_company_employee_audit(
+def current_company_employee_audit(
     membership_id: str,
     context: UserManager,
     session: DbSession,
@@ -379,7 +381,7 @@ async def current_company_employee_audit(
     response_model=EmployeeOffboardingPreviewResponse,
     summary="Preview employee offboarding impact",
 )
-async def preview_current_company_employee_offboarding(
+def preview_current_company_employee_offboarding(
     membership_id: str,
     payload: EmployeeOffboardingRequest,
     context: UserManager,
@@ -398,7 +400,7 @@ async def preview_current_company_employee_offboarding(
     response_model=EmployeeOffboardingCommitResponse,
     summary="Commit employee offboarding and supported reassignment",
 )
-async def commit_current_company_employee_offboarding(
+def commit_current_company_employee_offboarding(
     membership_id: str,
     payload: EmployeeOffboardingRequest,
     context: UserManager,
@@ -427,7 +429,7 @@ async def current_company_capabilities(context: UserManager) -> CapabilityCatalo
     response_model=CustomRoleListResponse,
     summary="List custom role templates for the current company",
 )
-async def current_company_custom_roles(
+def current_company_custom_roles(
     context: UserManager,
     session: DbSession,
     include_inactive: bool = Query(default=False),
@@ -444,7 +446,7 @@ async def current_company_custom_roles(
     response_model=CustomRoleRecord,
     summary="Create a custom role template",
 )
-async def create_current_company_custom_role(
+def create_current_company_custom_role(
     payload: CustomRoleCreateRequest,
     context: UserManager,
     session: DbSession,
@@ -457,7 +459,7 @@ async def create_current_company_custom_role(
     response_model=CustomRoleRecord,
     summary="Read one custom role template",
 )
-async def current_company_custom_role(
+def current_company_custom_role(
     role_id: str,
     context: UserManager,
     session: DbSession,
@@ -470,7 +472,7 @@ async def current_company_custom_role(
     response_model=CustomRoleRecord,
     summary="Update a custom role template",
 )
-async def update_current_company_custom_role(
+def update_current_company_custom_role(
     role_id: str,
     payload: CustomRoleUpdateRequest,
     context: UserManager,
@@ -484,7 +486,7 @@ async def update_current_company_custom_role(
     response_model=CustomRoleRecord,
     summary="Revoke a custom role template",
 )
-async def delete_current_company_custom_role(
+def delete_current_company_custom_role(
     role_id: str,
     context: UserManager,
     session: DbSession,
@@ -497,7 +499,7 @@ async def delete_current_company_custom_role(
     response_model=EmployeeRecord,
     summary="Assign or clear an employee's custom role template",
 )
-async def assign_current_company_employee_custom_role(
+def assign_current_company_employee_custom_role(
     membership_id: str,
     payload: EmployeeCustomRoleAssignRequest,
     context: UserManager,

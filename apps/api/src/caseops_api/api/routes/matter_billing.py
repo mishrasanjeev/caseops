@@ -32,7 +32,7 @@ BillingAdmin = Annotated[SessionContext, Depends(require_capability("workspace:a
     response_model=MatterBillingProfileListResponse,
     summary="List tenant matter billing profiles and rates",
 )
-async def get_matter_billing_profiles(
+def get_matter_billing_profiles(
     context: BillingAdmin,
     session: DbSession,
 ) -> MatterBillingProfileListResponse:
@@ -46,7 +46,7 @@ async def get_matter_billing_profiles(
     response_model=MatterBillingProfileRecord,
     summary="Create a tenant matter billing profile",
 )
-async def post_matter_billing_profile(
+def post_matter_billing_profile(
     payload: MatterBillingProfileCreateRequest,
     context: BillingAdmin,
     session: DbSession,
@@ -59,7 +59,7 @@ async def post_matter_billing_profile(
     response_model=MatterBillingProfileRecord,
     summary="Update a tenant matter billing profile",
 )
-async def patch_matter_billing_profile(
+def patch_matter_billing_profile(
     profile_id: str,
     payload: MatterBillingProfileUpdateRequest,
     context: BillingAdmin,
@@ -78,7 +78,7 @@ async def patch_matter_billing_profile(
     response_model=MatterBillingRateRecord,
     summary="Add a rate rule to a matter billing profile",
 )
-async def post_matter_billing_rate(
+def post_matter_billing_rate(
     profile_id: str,
     payload: MatterBillingRateCreateRequest,
     context: BillingAdmin,
@@ -97,7 +97,7 @@ async def post_matter_billing_rate(
     response_model=InvoiceNumberPreviewResponse,
     summary="Preview the next matter invoice number",
 )
-async def get_matter_invoice_number_preview(
+def get_matter_invoice_number_preview(
     context: BillingAdmin,
     session: DbSession,
     profile_id: str | None = None,

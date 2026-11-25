@@ -149,6 +149,69 @@ Remaining: new absence checks must opt in to `live_logs`; capsys-based stderr
 checks were not assessed. Evidence: `docs/STRICT_BUG_TASKLIST_2026-04-22.md`,
 section "November24 — issue #513 public lead failure observability".
 
+## November24 — async routes ran synchronous database work on the event loop
+
+**Partially implemented.** Code and a CI-enforced check are on branch
+`fix/async-routes-blocking-db-20261124` (PR #656). Not merged, released
+or verified on a deployed revision.
+
+FastAPI runs an `async def` route on the event loop and a `def` route in its
+worker threadpool. A synchronous SQLAlchemy call made directly in an `async def`
+route freezes every request on that instance until it returns. On 2026-11-14 a
+slow async Teams route blocked the loop; after Cloud Run returned a 504, the next
+request routed to that container (a login) also hung and returned a 504. PR #644
+fixed the same shape for the Admin ethical walls read (November22 entry).
+
+Inventory on origin/main 609914f5a: 555 `async def` routes under
+`caseops_api/api`, of which 515 used the request `DbSession` on the loop.
+
+- 501 awaited nothing and are now `def`: `ip_operations` 168, `matters` 109,
+  `companies` 23, `calendar` 22, `notifications` 19, `authorities` 17, `portal`
+  16, `mailbox` 15, `clients` 13, `portal_ip` 13, and 86 in 21 smaller modules.
+- 14 must stay async (they read an upload or raw body) and now run their
+  synchronous work through `run_in_threadpool`: employee import preview; IP
+  document upload and new version; IP import file upload (error-path rollback);
+  IP portfolio export and retry (admission write); inbound email webhook;
+  matter court-sync pull; matter attachment retry and reindex; SendGrid and
+  WhatsApp webhooks; Pine Labs webhook (`handle_pine_labs_webhook` is now
+  synchronous and takes the raw body and headers); the recommendation
+  strategy capability check.
+- Unchanged: 15 async routes that already offloaded all session work, and 25
+  async routes with no session that do only in-memory work (health, build,
+  metadata, templates, static catalogues).
+
+One reviewed exemption: the two portfolio export routes pass the session to
+`dispatch_portfolio_export` on the loop. It awaits the async Cloud Tasks client;
+its only session work ends the already-committed admission transaction.
+
+Proof:
+
+- `apps/api/tests/test_async_routes_event_loop_20261124.py` scans every route
+  under `caseops_api/api`. It fails when an async route takes a `DbSession` and
+  awaits nothing, uses its session outside `run_in_threadpool`/`to_thread`/
+  `run_sync` arguments, or calls a listed blocking primitive. It has a
+  positive-control sample and fails on stale exemptions. Run against origin/main
+  it reports 519 violations across 515 routes; it passes on the branch.
+- `apps/api/tests/test_async_route_loop_responsiveness_20261124.py` holds the
+  dashboard summary (converted to `def`) and the employee import preview
+  (offloaded) inside their database service and requires a concurrent
+  `/api/build` to answer within 1 s. Both cases fail with `TimeoutError` on the
+  origin/main route modules and pass on the branch.
+
+Still open:
+
+- Merge, release, and a deployed check: hold a slow request on one instance and
+  confirm a concurrent health check and login still answer.
+- The check reads route bodies only. Async dependencies and middleware are not
+  scanned (none does database work today; `get_db_session` closes the session
+  on the loop by design), and a service that opens its own session is caught
+  only when the route calls a listed primitive directly.
+- `dry_run_current_company_matter_import` still parses the document manifest
+  and ZIP entry names on the loop (CPU only, bounded by upload limits).
+- About 500 handlers now run in the threadpool (AnyIO default: 40 threads), so
+  they run concurrently wherever an instance serves more than one request.
+  Production runs at concurrency 1.
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
@@ -178,7 +241,8 @@ is not exposed: the API runs at Cloud Run concurrency 1, so one instance never
 serves the concurrent reads the deadlock needs. Open, not fixed: other `async def`
 routes still write synchronously on the event loop, and a read that leaves an
 uncommitted write holds SQLite's lock until teardown. Both remain possible
-CI-only stall sources.
+CI-only stall sources. The first is addressed in code by the November24
+async-route entry above.
 
 ## November22 — walled admins could change walls and grants on their Matter
 

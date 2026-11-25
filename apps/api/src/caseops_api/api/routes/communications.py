@@ -61,7 +61,7 @@ CommunicationTimelineQuery = Annotated[
     response_model=CommunicationListResponse,
     summary="List communications recorded against a matter (J12 / M11).",
 )
-async def list_current_matter_communications(
+def list_current_matter_communications(
     matter_id: str,
     context: CommunicationsViewer,
     session: DbSession,
@@ -76,7 +76,7 @@ async def list_current_matter_communications(
     response_model=CommunicationTimelineResponse,
     summary="List the unified communications timeline for a matter (ADP-05).",
 )
-async def list_current_matter_communication_timeline(
+def list_current_matter_communication_timeline(
     matter_id: str,
     context: CommunicationsViewer,
     session: DbSession,
@@ -95,7 +95,7 @@ async def list_current_matter_communication_timeline(
     response_model=CommunicationRecord,
     summary="Log a communication against a matter (slice 1: manual entry).",
 )
-async def post_current_matter_communication(
+def post_current_matter_communication(
     matter_id: str,
     payload: CommunicationCreateRequest,
     context: CommunicationsWriter,
@@ -111,7 +111,7 @@ async def post_current_matter_communication(
     response_model=InboundEmailImportResponse,
     summary="Manually import one inbound email into an explicitly selected matter.",
 )
-async def import_current_matter_inbound_email(
+def import_current_matter_inbound_email(
     matter_id: str,
     payload: InboundEmailImportRequest,
     context: CommunicationsWriter,
@@ -126,14 +126,14 @@ async def import_current_matter_inbound_email(
 
 
 @router.get("/{matter_id}/communications/email-templates", response_model=EmailTemplateListResponse)
-async def list_current_matter_email_templates(
+def list_current_matter_email_templates(
     matter_id: str, context: CommunicationsWriter, session: DbSession,
 ) -> EmailTemplateListResponse:
     return list_matter_email_templates(session, context=context, matter_id=matter_id)
 
 
 @router.post("/{matter_id}/communications/preview-email", response_model=MatterEmailPreviewResponse)
-async def preview_current_matter_email(
+def preview_current_matter_email(
     matter_id: str, payload: MatterEmailPreviewRequest,
     context: CommunicationsWriter, session: DbSession,
 ) -> MatterEmailPreviewResponse:
@@ -145,7 +145,7 @@ async def preview_current_matter_email(
     response_model=CommunicationRecord,
     summary="Compose & send an email via a template (Phase B M11 slice 2).",
 )
-async def send_current_matter_email(
+def send_current_matter_email(
     matter_id: str,
     payload: EmailSendRequest,
     context: CommunicationsWriter,

@@ -10,6 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.api.oauth_browser import OAuthCallbackRoute, complete_browser_oauth, oauth_callback
@@ -78,7 +79,7 @@ WorkspaceAdmin = Annotated[SessionContext, Depends(require_capability("workspace
     response_model=MailboxStatusResponse,
     summary="List the caller's Gmail mailbox connector status.",
 )
-async def get_gmail_status(
+def get_gmail_status(
     context: MailboxViewer,
     session: DbSession,
 ) -> MailboxStatusResponse:
@@ -90,7 +91,7 @@ async def get_gmail_status(
     response_model=MailboxConnectionStartResponse,
     summary="Start Gmail OAuth without exposing tokens.",
 )
-async def start_gmail(
+def start_gmail(
     context: MailboxOperator,
     session: DbSession,
 ) -> MailboxConnectionStartResponse:
@@ -148,7 +149,7 @@ def revoke_gmail(
     response_model=MailboxImportResponse,
     summary="Import recent Gmail metadata into review-first CaseOps records.",
 )
-async def import_gmail(
+def import_gmail(
     payload: MailboxImportRequest,
     context: MailboxOperator,
     session: DbSession,
@@ -161,7 +162,7 @@ async def import_gmail(
     response_model=MailboxWatchResponse,
     summary="Start Gmail Pub/Sub watch for the caller's connected mailbox.",
 )
-async def watch_gmail(
+def watch_gmail(
     context: MailboxOperator,
     session: DbSession,
 ) -> MailboxWatchResponse:
@@ -173,7 +174,7 @@ async def watch_gmail(
     response_model=MailboxWebhookIngestResponse,
     summary="Ingest a token-verified Gmail Pub/Sub webhook.",
 )
-async def gmail_webhook(
+def gmail_webhook(
     session: DbSession,
     payload: dict[str, Any],
     token: str | None = Query(default=None),
@@ -190,7 +191,7 @@ async def gmail_webhook(
     response_model=MailboxImportResponse,
     summary="List tenant-safe Gmail message import records.",
 )
-async def get_imports(
+def get_imports(
     context: MailboxViewer,
     session: DbSession,
     limit: int = Query(default=50, ge=1, le=100),
@@ -215,7 +216,7 @@ async def get_imports(
     response_model=MailboxMessageReviewResponse,
     summary="Review one mailbox metadata candidate without importing raw bodies.",
 )
-async def patch_message_import(
+def patch_message_import(
     import_id: str,
     payload: MailboxMessageReviewRequest,
     context: MailboxOperator,
@@ -234,7 +235,7 @@ async def patch_message_import(
     response_model=MailboxMessageImportRecord,
     summary="Create a local-safe Outlook Mail metadata review candidate.",
 )
-async def post_outlook_mail_candidate(
+def post_outlook_mail_candidate(
     payload: OutlookMailCandidateCreateRequest,
     context: MailboxOperator,
     session: DbSession,
@@ -247,7 +248,7 @@ async def post_outlook_mail_candidate(
     response_model=MailboxAttachmentCandidateListResponse,
     summary="List Gmail attachment candidates awaiting review.",
 )
-async def get_attachment_candidates(
+def get_attachment_candidates(
     context: MailboxViewer,
     session: DbSession,
     limit: int = Query(default=50, ge=1, le=100),
@@ -260,7 +261,7 @@ async def get_attachment_candidates(
     response_model=MailboxAttachmentCandidateReviewResponse,
     summary="Approve/import or reject one Gmail attachment candidate.",
 )
-async def patch_attachment_candidate(
+def patch_attachment_candidate(
     candidate_id: str,
     payload: MailboxAttachmentCandidateReviewRequest,
     context: MailboxOperator,
@@ -279,7 +280,7 @@ async def patch_attachment_candidate(
     response_model=InboundEmailAliasListResponse,
     summary="List tenant/matter inbound email aliases.",
 )
-async def get_inbound_email_aliases(
+def get_inbound_email_aliases(
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> InboundEmailAliasListResponse:
@@ -291,7 +292,7 @@ async def get_inbound_email_aliases(
     response_model=InboundEmailAliasRecord,
     summary="Create a disabled-by-default inbound email alias.",
 )
-async def post_inbound_email_alias(
+def post_inbound_email_alias(
     payload: InboundEmailAliasCreateRequest,
     context: WorkspaceAdmin,
     session: DbSession,
@@ -304,7 +305,7 @@ async def post_inbound_email_alias(
     response_model=InboundEmailAliasRecord,
     summary="Update inbound email alias controls.",
 )
-async def patch_inbound_email_alias(
+def patch_inbound_email_alias(
     alias_id: str,
     payload: InboundEmailAliasUpdateRequest,
     context: WorkspaceAdmin,
@@ -330,7 +331,8 @@ async def post_inbound_email_webhook(
     signature: str | None = Header(default=None, alias="X-CaseOps-Inbound-Signature"),
 ) -> InboundEmailWebhookResponse:
     raw_body = await request.body()
-    return ingest_inbound_email_webhook(
+    return await run_in_threadpool(
+        ingest_inbound_email_webhook,
         session,
         payload=payload,
         raw_body=raw_body,
@@ -343,7 +345,7 @@ async def post_inbound_email_webhook(
     response_model=InboundEmailEventListResponse,
     summary="List inbound email alias review events.",
 )
-async def get_inbound_email_events(
+def get_inbound_email_events(
     context: MailboxViewer,
     session: DbSession,
     status_filter: str | None = Query(default=None, alias="status"),
@@ -364,7 +366,7 @@ async def get_inbound_email_events(
     response_model=InboundEmailEventReviewResponse,
     summary="Review one inbound email event without importing raw bodies.",
 )
-async def patch_inbound_email_event(
+def patch_inbound_email_event(
     event_id: str,
     payload: InboundEmailEventReviewRequest,
     context: MailboxOperator,

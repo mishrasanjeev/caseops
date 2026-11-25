@@ -119,7 +119,7 @@ class TodayViewResponse(BaseModel):
         "tenant-scoped and matter-access-respecting (PG-004, 2026-05-01)."
     ),
 )
-async def get_my_today_view(
+def get_my_today_view(
     context: CurrentContext,
     session: DbSession,
     horizon_days: int = 7,

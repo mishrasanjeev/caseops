@@ -359,7 +359,7 @@ MatterBulkImporter = Annotated[
 
 
 @router.get("/", response_model=MatterListResponse, summary="List matters for the current company")
-async def current_company_matters(
+def current_company_matters(
     context: CurrentContext,
     session: DbSession,
     filters: Annotated[MatterListFilters, Depends()],
@@ -380,7 +380,7 @@ async def current_company_matters(
     response_model=MatterDashboardSummaryResponse,
     summary="Return portfolio dashboard aggregates for the current company",
 )
-async def current_company_matter_dashboard_summary(
+def current_company_matter_dashboard_summary(
     context: CurrentContext,
     session: DbSession,
     upcoming_limit: int = Query(default=50, ge=1, le=100),
@@ -399,7 +399,7 @@ async def current_company_matter_dashboard_summary(
     response_model=MatterPortfolioHealthResponse,
     summary="Count every visible matter by status, forum and practice area",
 )
-async def current_company_matter_portfolio_health(
+def current_company_matter_portfolio_health(
     context: CurrentContext,
     session: DbSession,
 ) -> MatterPortfolioHealthResponse:
@@ -411,7 +411,7 @@ async def current_company_matter_portfolio_health(
     response_model=MatterHearingPortfolioResponse,
     summary="Return visible matters with next-hearing dates",
 )
-async def current_company_matter_hearing_portfolio(
+def current_company_matter_hearing_portfolio(
     context: CurrentContext,
     session: DbSession,
     hearing_date: Annotated[date | None, Query(alias="date")] = None,
@@ -430,7 +430,7 @@ async def current_company_matter_hearing_portfolio(
     response_model=MatterHearingFollowUpResponse,
     summary="Return active matters needing hearing-date follow-up",
 )
-async def current_company_matter_hearing_follow_up(
+def current_company_matter_hearing_follow_up(
     context: CurrentContext,
     session: DbSession,
     limit: int = Query(default=200, ge=1, le=500),
@@ -465,7 +465,7 @@ async def current_company_matter_hearing_follow_up(
         "access — the creator is implicitly granted."
     ),
 )
-async def create_current_company_matter(
+def create_current_company_matter(
     payload: MatterCreateRequest,
     context: MatterCreator,
     session: DbSession,
@@ -477,7 +477,7 @@ async def create_current_company_matter(
     "/imports/template",
     summary="Download the CSV/XLSX bulk matter import template",
 )
-async def download_current_company_matter_import_template(
+def download_current_company_matter_import_template(
     context: MatterBulkImporter,
     session: DbSession,
     format: Literal["csv", "xlsx"] = Query(default="xlsx"),
@@ -496,7 +496,7 @@ async def download_current_company_matter_import_template(
     response_model=MatterImportHistoryResponse,
     summary="Search tenant-scoped matter import history",
 )
-async def current_company_matter_import_history(
+def current_company_matter_import_history(
     context: MatterBulkImporter,
     session: DbSession,
     q: str | None = Query(default=None, max_length=200),
@@ -576,7 +576,7 @@ async def download_matter_bulk_update_template(
     response_model=MatterBulkUpdateHistoryResponse,
     summary="List tenant-scoped bulk-update operation history",
 )
-async def current_company_matter_bulk_update_history(
+def current_company_matter_bulk_update_history(
     context: MatterEditor,
     session: DbSession,
     limit: int = Query(default=50, ge=1, le=100),
@@ -698,7 +698,7 @@ async def dry_run_current_company_matter_import(
     response_model=MatterImportJobResponse,
     summary="Read one tenant-scoped matter import job",
 )
-async def current_company_matter_import(
+def current_company_matter_import(
     job_id: str,
     context: MatterBulkImporter,
     session: DbSession,
@@ -711,7 +711,7 @@ async def current_company_matter_import(
     response_model=MatterImportCommitResponse,
     summary="Confirm a validated matter import and create every valid row",
 )
-async def commit_current_company_matter_import(
+def commit_current_company_matter_import(
     job_id: str,
     context: MatterBulkImporter,
     session: DbSession,
@@ -724,7 +724,7 @@ async def commit_current_company_matter_import(
     response_model=MatterImportJobResponse,
     summary="Cancel a validated matter import",
 )
-async def cancel_current_company_matter_import(
+def cancel_current_company_matter_import(
     job_id: str,
     context: MatterBulkImporter,
     session: DbSession,
@@ -736,7 +736,7 @@ async def cancel_current_company_matter_import(
     "/imports/{job_id}/errors",
     summary="Download row-level matter import errors as a safe CSV",
 )
-async def download_current_company_matter_import_errors(
+def download_current_company_matter_import_errors(
     job_id: str,
     context: MatterBulkImporter,
     session: DbSession,
@@ -764,7 +764,7 @@ async def download_current_company_matter_import_errors(
         "Drive payloads. Fails closed when any required setting is unset."
     ),
 )
-async def get_google_drive_provider_config_status(
+def get_google_drive_provider_config_status(
     context: CurrentContext,
     session: DbSession,
 ) -> GoogleDriveProviderConfigStatus:
@@ -783,7 +783,7 @@ async def get_google_drive_provider_config_status(
         "Drive payloads. Records a redacted audit summary only."
     ),
 )
-async def dry_run_current_company_matter_google_drive_import(
+def dry_run_current_company_matter_google_drive_import(
     matter_id: str,
     payload: GoogleDriveImportDryRunRequest,
     context: DocumentUploader,
@@ -810,7 +810,7 @@ async def dry_run_current_company_matter_google_drive_import(
         "other companies never leak."
     ),
 )
-async def check_matter_code_available(
+def check_matter_code_available(
     code: str,
     context: CurrentContext,
     session: DbSession,
@@ -843,7 +843,7 @@ def get_current_company_matter_ethical_walls(
     response_model=MatterBulkTagAssignResponse,
     summary="Assign one tag to multiple visible matters",
 )
-async def post_current_company_matter_bulk_tags(
+def post_current_company_matter_bulk_tags(
     payload: MatterBulkTagAssignRequest,
     context: MatterEditor,
     session: DbSession,
@@ -867,7 +867,7 @@ async def post_current_company_matter_bulk_tags(
         "matter the user is already looking at."
     ),
 )
-async def list_current_company_matter_reminders(
+def list_current_company_matter_reminders(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -901,7 +901,7 @@ async def list_current_company_matter_reminders(
 
 
 @router.get("/{matter_id}", response_model=MatterRecord, summary="Get a matter by id")
-async def get_current_company_matter(
+def get_current_company_matter(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -914,7 +914,7 @@ async def get_current_company_matter(
     response_model=MatterAuditListResponse,
     summary="List AuditEvent rows scoped to one visible matter",
 )
-async def get_current_company_matter_audit_events(
+def get_current_company_matter_audit_events(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -944,7 +944,7 @@ async def get_current_company_matter_audit_events(
     "/{matter_id}/audit-events/export",
     summary="Export AuditEvent rows scoped to one visible matter",
 )
-async def export_current_company_matter_audit_events(
+def export_current_company_matter_audit_events(
     matter_id: str,
     context: MatterAuditExporter,
     session: DbSession,
@@ -1038,7 +1038,7 @@ async def export_current_company_matter_audit_events(
     response_model=MatterTagAssignmentRecord,
     summary="Assign a tenant-scoped tag to a matter",
 )
-async def post_current_company_matter_tag(
+def post_current_company_matter_tag(
     matter_id: str,
     payload: MatterTagAssignmentCreateRequest,
     context: MatterEditor,
@@ -1054,7 +1054,7 @@ async def post_current_company_matter_tag(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove a tenant-scoped tag from a matter",
 )
-async def delete_current_company_matter_tag(
+def delete_current_company_matter_tag(
     matter_id: str,
     tag_id: str,
     context: MatterEditor,
@@ -1070,7 +1070,7 @@ async def delete_current_company_matter_tag(
     response_model=MatterTagSuggestionsResponse,
     summary="Return deterministic tenant-scoped tag suggestions",
 )
-async def get_current_company_matter_tag_suggestions(
+def get_current_company_matter_tag_suggestions(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1083,7 +1083,7 @@ async def get_current_company_matter_tag_suggestions(
     response_model=MatterWorkspaceResponse,
     summary="Get the full workspace for a matter",
 )
-async def get_current_company_matter_workspace(
+def get_current_company_matter_workspace(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1096,7 +1096,7 @@ async def get_current_company_matter_workspace(
     response_model=MatterTimelineResponse,
     summary="LegalWorkspace LW-S2 matter timeline",
 )
-async def get_current_company_matter_timeline(
+def get_current_company_matter_timeline(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1125,7 +1125,7 @@ async def get_current_company_matter_timeline(
     response_model=MatterIpLinkListResponse,
     summary="List independently governed IP records linked to a Matter",
 )
-async def get_current_company_matter_ip_links(
+def get_current_company_matter_ip_links(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1138,7 +1138,7 @@ async def get_current_company_matter_ip_links(
     response_model=ProceedingIntelligenceResponse,
     summary="LI-S1 proceeding/order-sheet intelligence for a matter",
 )
-async def get_current_company_matter_proceeding_intelligence(
+def get_current_company_matter_proceeding_intelligence(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1159,7 +1159,7 @@ async def get_current_company_matter_proceeding_intelligence(
     response_model=LitigationIntelligenceReviewResponse,
     summary="LI-S6 source-backed litigation intelligence review queue",
 )
-async def get_current_company_matter_litigation_intelligence_review(
+def get_current_company_matter_litigation_intelligence_review(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1180,7 +1180,7 @@ async def get_current_company_matter_litigation_intelligence_review(
     response_model=LitigationIntelligenceReviewMutationResponse,
     summary="LI-S9 mutate a source-backed litigation intelligence review item",
 )
-async def post_current_company_matter_litigation_intelligence_review_action(
+def post_current_company_matter_litigation_intelligence_review_action(
     matter_id: str,
     payload: LitigationIntelligenceReviewMutationRequest,
     context: HearingPackReviewer,
@@ -1203,7 +1203,7 @@ async def post_current_company_matter_litigation_intelligence_review_action(
     response_model=LegalKnowledgeGraphResponse,
     summary="LI-S11 source-backed legal knowledge graph for a matter",
 )
-async def get_current_company_matter_legal_knowledge_graph(
+def get_current_company_matter_legal_knowledge_graph(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1224,7 +1224,7 @@ async def get_current_company_matter_legal_knowledge_graph(
     response_model=LegalKnowledgeGraphResponse,
     summary="Materialize LI-S11 source-backed legal knowledge graph for a matter",
 )
-async def post_current_company_matter_legal_knowledge_graph_materialize(
+def post_current_company_matter_legal_knowledge_graph_materialize(
     matter_id: str,
     context: MatterWriter,
     session: DbSession,
@@ -1245,7 +1245,7 @@ async def post_current_company_matter_legal_knowledge_graph_materialize(
     response_model=ProceedingIntelligenceResponse,
     summary="Extract LI-S1 proceeding signals from a source-backed court order",
 )
-async def post_current_company_matter_order_proceeding_intelligence_extract(
+def post_current_company_matter_order_proceeding_intelligence_extract(
     matter_id: str,
     order_id: str,
     context: MatterWriter,
@@ -1268,7 +1268,7 @@ async def post_current_company_matter_order_proceeding_intelligence_extract(
     response_model=AffidavitIntelligenceResponse,
     summary="LI-S2 affidavit hearing-prep intelligence for a matter",
 )
-async def get_current_company_matter_affidavit_intelligence(
+def get_current_company_matter_affidavit_intelligence(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1289,7 +1289,7 @@ async def get_current_company_matter_affidavit_intelligence(
     response_model=AffidavitIntelligenceResponse,
     summary="Analyze a source-backed affidavit attachment for hearing prep",
 )
-async def post_current_company_matter_attachment_affidavit_intelligence_analyze(
+def post_current_company_matter_attachment_affidavit_intelligence_analyze(
     matter_id: str,
     attachment_id: str,
     context: HearingPackGenerator,
@@ -1312,7 +1312,7 @@ async def post_current_company_matter_attachment_affidavit_intelligence_analyze(
     response_model=MockHearingSessionRecord,
     summary="Start a text-first mock hearing session from affidavit questions",
 )
-async def post_current_company_matter_mock_hearing(
+def post_current_company_matter_mock_hearing(
     matter_id: str,
     payload: MockHearingStartRequest,
     context: HearingPackGenerator,
@@ -1333,7 +1333,7 @@ async def post_current_company_matter_mock_hearing(
     response_model=MockHearingListResponse,
     summary="List mock hearing sessions for a matter",
 )
-async def get_current_company_matter_mock_hearings(
+def get_current_company_matter_mock_hearings(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1352,7 +1352,7 @@ async def get_current_company_matter_mock_hearings(
     response_model=MockHearingSessionRecord,
     summary="Get one mock hearing session",
 )
-async def get_current_company_matter_mock_hearing(
+def get_current_company_matter_mock_hearing(
     matter_id: str,
     session_id: str,
     context: CurrentContext,
@@ -1373,7 +1373,7 @@ async def get_current_company_matter_mock_hearing(
     response_model=HearingCoachStatusResponse,
     summary="LI-S13 transcript-first hearing coach readiness",
 )
-async def get_current_company_matter_hearing_coach(
+def get_current_company_matter_hearing_coach(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1392,7 +1392,7 @@ async def get_current_company_matter_hearing_coach(
     response_model=HearingCoachReportResponse,
     summary="LI-S13 generate consent-gated transcript-first hearing coach report",
 )
-async def post_current_company_matter_mock_hearing_coach(
+def post_current_company_matter_mock_hearing_coach(
     matter_id: str,
     session_id: str,
     payload: HearingCoachRunRequest,
@@ -1415,7 +1415,7 @@ async def post_current_company_matter_mock_hearing_coach(
     response_model=MockHearingSessionRecord,
     summary="Record a typed mock hearing response and deterministic feedback",
 )
-async def post_current_company_matter_mock_hearing_response(
+def post_current_company_matter_mock_hearing_response(
     matter_id: str,
     session_id: str,
     payload: MockHearingResponseCreateRequest,
@@ -1438,7 +1438,7 @@ async def post_current_company_matter_mock_hearing_response(
     response_model=MockHearingSessionRecord,
     summary="Complete a mock hearing session",
 )
-async def post_current_company_matter_mock_hearing_complete(
+def post_current_company_matter_mock_hearing_complete(
     matter_id: str,
     session_id: str,
     context: HearingPackGenerator,
@@ -1462,7 +1462,7 @@ async def post_current_company_matter_mock_hearing_complete(
         "facts, timeline, legal issues, sections cited)."
     ),
 )
-async def get_current_company_matter_summary(
+def get_current_company_matter_summary(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1480,7 +1480,7 @@ async def get_current_company_matter_summary(
     ),
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def post_current_company_matter_summary_regenerate(
+def post_current_company_matter_summary_regenerate(
     request: Request,
     matter_id: str,
     context: CurrentContext,
@@ -1499,7 +1499,7 @@ async def post_current_company_matter_summary_regenerate(
     summary="Download the matter executive summary as DOCX (Sprint Q7).",
     response_class=Response,
 )
-async def get_current_company_matter_summary_docx(
+def get_current_company_matter_summary_docx(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1531,7 +1531,7 @@ async def get_current_company_matter_summary_docx(
     summary="Download the matter executive summary as PDF (Sprint Q7 PDF slice).",
     response_class=Response,
 )
-async def get_current_company_matter_summary_pdf(
+def get_current_company_matter_summary_pdf(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1601,7 +1601,7 @@ def _annotation_to_response(record: AnnotationRecord) -> AnnotationResponse:
     response_model=AnnotationListResponse,
     summary="Sprint Q10 — list annotations on a matter attachment.",
 )
-async def get_attachment_annotations(
+def get_attachment_annotations(
     matter_id: str,
     attachment_id: str,
     context: CurrentContext,
@@ -1627,7 +1627,7 @@ async def get_attachment_annotations(
         "1-based."
     ),
 )
-async def post_attachment_annotation(
+def post_attachment_annotation(
     matter_id: str,
     attachment_id: str,
     payload: AnnotationCreateRequest,
@@ -1654,7 +1654,7 @@ async def post_attachment_annotation(
     status_code=204,
     summary="Sprint Q10 — archive (soft-delete) an attachment annotation.",
 )
-async def delete_attachment_annotation(
+def delete_attachment_annotation(
     matter_id: str,
     attachment_id: str,
     annotation_id: str,
@@ -1710,7 +1710,7 @@ class NextActionResponse(BaseModel):
         "(PG-004, 2026-05-01). Returns null when nothing is queued."
     ),
 )
-async def get_matter_next_action(
+def get_matter_next_action(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1774,7 +1774,7 @@ class DraftCompareResponse(BaseModel):
         "Structured diff between two revisions of the same draft (PG-005 Sprint 6, 2026-05-01)."
     ),
 )
-async def get_current_company_matter_draft_compare(
+def get_current_company_matter_draft_compare(
     matter_id: str,
     draft_id: str,
     prev_revision: int,
@@ -1842,7 +1842,7 @@ async def get_current_company_matter_draft_compare(
         "sitting judges for this matter (not favorability)."
     ),
 )
-async def get_current_company_matter_bench_match(
+def get_current_company_matter_bench_match(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -1951,7 +1951,7 @@ class BenchStrategyContextResponse(BaseModel):
         "card. No favorability scoring."
     ),
 )
-async def get_current_company_matter_bench_strategy_context(
+def get_current_company_matter_bench_strategy_context(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2116,7 +2116,7 @@ class BenchStrategyResponse(BaseModel):
         "a not-legal-advice disclaimer. Tenant-scoped via matter_id."
     ),
 )
-async def get_current_company_matter_bench_strategy(
+def get_current_company_matter_bench_strategy(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2171,7 +2171,7 @@ async def get_current_company_matter_bench_strategy(
         "Requires tenant opt-in and source-backed confidence bands."
     ),
 )
-async def get_current_company_matter_predictive_intelligence(
+def get_current_company_matter_predictive_intelligence(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2231,7 +2231,7 @@ class AppealStrengthReportResponse(BaseModel):
         "Strict no-favorability rule applies."
     ),
 )
-async def get_current_company_matter_appeal_strength(
+def get_current_company_matter_appeal_strength(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2306,7 +2306,7 @@ def _judge_stub_to_response(stub: JudgeStubDC) -> BenchMatchJudge:
 
 
 @router.patch("/{matter_id}", response_model=MatterRecord, summary="Update a matter")
-async def patch_current_company_matter(
+def patch_current_company_matter(
     matter_id: str,
     payload: MatterUpdateRequest,
     context: MatterEditor,
@@ -2339,7 +2339,7 @@ def patch_current_company_matter_lifecycle_status(
     response_model=MatterNoteRecord,
     summary="Add an internal note to a matter",
 )
-async def post_current_company_matter_note(
+def post_current_company_matter_note(
     matter_id: str,
     payload: MatterNoteCreateRequest,
     context: MatterWriter,
@@ -2353,7 +2353,7 @@ async def post_current_company_matter_note(
     response_model=MatterTaskRecord,
     summary="Add a task to a matter workspace",
 )
-async def post_current_company_matter_task(
+def post_current_company_matter_task(
     matter_id: str,
     payload: MatterTaskCreateRequest,
     context: MatterWriter,
@@ -2367,7 +2367,7 @@ async def post_current_company_matter_task(
     response_model=MatterTaskListResponse,
     summary="List matter tasks",
 )
-async def get_current_company_matter_tasks(
+def get_current_company_matter_tasks(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2389,7 +2389,7 @@ async def get_current_company_matter_tasks(
     response_model=MatterTaskRecord,
     summary="Update a matter task",
 )
-async def patch_current_company_matter_task(
+def patch_current_company_matter_task(
     matter_id: str,
     task_id: str,
     payload: MatterTaskUpdateRequest,
@@ -2410,7 +2410,7 @@ async def patch_current_company_matter_task(
     response_model=MatterDeadlineListResponse,
     summary="List matter deadlines",
 )
-async def get_current_company_matter_deadlines(
+def get_current_company_matter_deadlines(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2432,7 +2432,7 @@ async def get_current_company_matter_deadlines(
     response_model=MatterDeadlineRecord,
     summary="Create a matter deadline",
 )
-async def post_current_company_matter_deadline(
+def post_current_company_matter_deadline(
     matter_id: str,
     payload: MatterDeadlineCreateRequest,
     context: MatterWriter,
@@ -2457,7 +2457,7 @@ async def post_current_company_matter_deadline(
     response_model=MatterDeadlineRecord,
     summary="Update a matter deadline",
 )
-async def patch_current_company_matter_deadline(
+def patch_current_company_matter_deadline(
     matter_id: str,
     deadline_id: str,
     payload: MatterDeadlineUpdateRequest,
@@ -2480,7 +2480,7 @@ async def patch_current_company_matter_deadline(
     response_model=TimeEntryRecord,
     summary="Log a time entry against a matter",
 )
-async def post_current_company_matter_time_entry(
+def post_current_company_matter_time_entry(
     matter_id: str,
     payload: TimeEntryCreateRequest,
     context: TimeEntryWriter,
@@ -2494,7 +2494,7 @@ async def post_current_company_matter_time_entry(
     response_model=MatterHearingRecord,
     summary="Add a hearing entry to a matter",
 )
-async def post_current_company_matter_hearing(
+def post_current_company_matter_hearing(
     matter_id: str,
     payload: MatterHearingCreateRequest,
     context: MatterWriter,
@@ -2508,7 +2508,7 @@ async def post_current_company_matter_hearing(
     response_model=MatterHearingRecord,
     summary="Update a hearing entry (status, outcome, reschedule)",
 )
-async def patch_current_company_matter_hearing(
+def patch_current_company_matter_hearing(
     matter_id: str,
     hearing_id: str,
     payload: MatterHearingUpdateRequest,
@@ -2529,7 +2529,7 @@ async def patch_current_company_matter_hearing(
     response_model=MatterNextHearingHistoryResponse,
     summary="List next-hearing provenance history and review suggestions",
 )
-async def get_current_company_matter_next_hearing_history(
+def get_current_company_matter_next_hearing_history(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2547,7 +2547,7 @@ async def get_current_company_matter_next_hearing_history(
     response_model=MatterNextHearingHistoryResponse,
     summary="Accept or reject a next-hearing review suggestion",
 )
-async def decide_current_company_matter_next_hearing_suggestion(
+def decide_current_company_matter_next_hearing_suggestion(
     matter_id: str,
     suggestion_id: str,
     payload: MatterNextHearingSuggestionActionRequest,
@@ -2574,7 +2574,7 @@ async def decide_current_company_matter_next_hearing_suggestion(
     response_model=MatterCourtSyncRunRecord,
     summary="Import cause list and court order data into a matter workspace",
 )
-async def import_current_company_matter_court_sync(
+def import_current_company_matter_court_sync(
     matter_id: str,
     payload: MatterCourtSyncImportRequest,
     context: CourtSyncRunner,
@@ -2596,7 +2596,7 @@ async def import_current_company_matter_court_sync(
         "Optional pre-uploaded attachment is referenced by ID."
     ),
 )
-async def post_current_company_matter_court_order(
+def post_current_company_matter_court_order(
     matter_id: str,
     payload: MatterCourtOrderCreateRequest,
     context: MatterEditor,
@@ -2625,7 +2625,7 @@ async def post_current_company_matter_court_order(
     response_model=MatterCourtOrderRecord,
     summary="Update court order metadata, interim flag, and stay status",
 )
-async def patch_current_company_matter_court_order(
+def patch_current_company_matter_court_order(
     matter_id: str,
     order_id: str,
     payload: MatterCourtOrderUpdateRequest,
@@ -2646,7 +2646,7 @@ async def patch_current_company_matter_court_order(
     response_model=ComplianceListResponse,
     summary="List review-required court-order compliance items for a matter",
 )
-async def get_current_company_matter_compliance(
+def get_current_company_matter_compliance(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -2660,7 +2660,7 @@ async def get_current_company_matter_compliance(
     response_model=ComplianceListResponse,
     summary="Confirm, reject, waive, complete, or edit a compliance item",
 )
-async def patch_current_company_matter_compliance_item(
+def patch_current_company_matter_compliance_item(
     matter_id: str,
     item_id: str,
     payload: ComplianceItemUpdateRequest,
@@ -2684,7 +2684,7 @@ async def patch_current_company_matter_compliance_item(
     response_model=ComplianceRetryResponse,
     summary="Retry compliance extraction for a court order",
 )
-async def retry_current_company_matter_order_compliance(
+def retry_current_company_matter_order_compliance(
     matter_id: str,
     order_id: str,
     context: MatterWriter,
@@ -2714,7 +2714,8 @@ async def pull_current_company_matter_court_sync(
     context: CourtSyncRunner,
     session: DbSession,
 ) -> MatterCourtSyncJobRecord:
-    job = create_matter_court_sync_job(
+    job = await run_in_threadpool(
+        create_matter_court_sync_job,
         session,
         context=context,
         matter_id=matter_id,
@@ -2735,7 +2736,7 @@ async def pull_current_company_matter_court_sync(
     response_model=InvoiceRecord,
     summary="Create a matter invoice",
 )
-async def post_current_company_matter_invoice(
+def post_current_company_matter_invoice(
     matter_id: str,
     payload: InvoiceCreateRequest,
     context: InvoiceIssuer,
@@ -2748,7 +2749,7 @@ async def post_current_company_matter_invoice(
     "/{matter_id}/invoices/{invoice_id}/download",
     summary="Download a server-rendered matter invoice PDF",
 )
-async def download_current_company_matter_invoice_pdf(
+def download_current_company_matter_invoice_pdf(
     matter_id: str,
     invoice_id: str,
     context: InvoiceIssuer,
@@ -2775,7 +2776,7 @@ async def download_current_company_matter_invoice_pdf(
     response_model=InvoiceRecord,
     summary="Issue a draft matter invoice",
 )
-async def issue_current_company_matter_invoice_draft(
+def issue_current_company_matter_invoice_draft(
     matter_id: str,
     invoice_id: str,
     context: InvoiceIssuer,
@@ -2791,7 +2792,7 @@ async def issue_current_company_matter_invoice_draft(
     response_model=InvoiceRecord,
     summary="Void a draft matter invoice",
 )
-async def void_current_company_matter_invoice_draft(
+def void_current_company_matter_invoice_draft(
     matter_id: str,
     invoice_id: str,
     context: InvoiceVoider,
@@ -2901,7 +2902,7 @@ def post_current_company_matter_attachment(
     response_model=MatterAttachmentRecord,
     summary="Update document lifecycle metadata for a matter attachment",
 )
-async def patch_current_company_matter_attachment_metadata(
+def patch_current_company_matter_attachment_metadata(
     matter_id: str,
     attachment_id: str,
     payload: MatterAttachmentMetadataUpdateRequest,
@@ -2929,7 +2930,8 @@ async def retry_current_company_matter_attachment_processing(
     context: DocumentManager,
     session: DbSession,
 ) -> MatterAttachmentRecord:
-    attachment, job_id = request_matter_attachment_processing(
+    attachment, job_id = await run_in_threadpool(
+        request_matter_attachment_processing,
         session,
         context=context,
         matter_id=matter_id,
@@ -2957,7 +2959,8 @@ async def reindex_current_company_matter_attachment(
     context: DocumentManager,
     session: DbSession,
 ) -> MatterAttachmentRecord:
-    attachment, job_id = request_matter_attachment_processing(
+    attachment, job_id = await run_in_threadpool(
+        request_matter_attachment_processing,
         session,
         context=context,
         matter_id=matter_id,
@@ -2978,7 +2981,7 @@ async def reindex_current_company_matter_attachment(
     response_class=Response,
     summary="Download selected matter attachments as a ZIP archive",
 )
-async def download_current_company_matter_attachments_bulk(
+def download_current_company_matter_attachments_bulk(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -3005,7 +3008,7 @@ async def download_current_company_matter_attachments_bulk(
     response_class=FileResponse,
     summary="Download a matter attachment",
 )
-async def download_current_company_matter_attachment(
+def download_current_company_matter_attachment(
     matter_id: str,
     attachment_id: str,
     context: CurrentContext,
@@ -3057,7 +3060,7 @@ async def download_current_company_matter_attachment(
     response_model=MatterAttachmentPreviewResponse,
     summary="Preview a DOCX matter attachment",
 )
-async def preview_current_company_matter_attachment(
+def preview_current_company_matter_attachment(
     matter_id: str,
     attachment_id: str,
     context: CurrentContext,
@@ -3077,7 +3080,7 @@ async def preview_current_company_matter_attachment(
     summary="Generate a hearing pack for this hearing",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def post_current_company_matter_hearing_pack(
+def post_current_company_matter_hearing_pack(
     request: Request,
     matter_id: str,
     hearing_id: str,
@@ -3102,7 +3105,7 @@ async def post_current_company_matter_hearing_pack(
     response_model=HearingPackRecord,
     summary="Generate a hearing pack for the matter's next hearing",
 )
-async def post_current_company_matter_pack(
+def post_current_company_matter_pack(
     matter_id: str,
     payload: HearingPackGenerateRequest,
     context: HearingPackGenerator,
@@ -3123,7 +3126,7 @@ async def post_current_company_matter_pack(
     response_model=HearingPackRecord | None,
     summary="Fetch the latest generated pack for this hearing",
 )
-async def get_current_company_matter_hearing_pack(
+def get_current_company_matter_hearing_pack(
     matter_id: str,
     hearing_id: str,
     context: CurrentContext,
@@ -3145,7 +3148,7 @@ async def get_current_company_matter_hearing_pack(
     response_model=HearingPackRecord,
     summary="Mark a hearing pack as reviewed by the current user",
 )
-async def post_current_company_hearing_pack_review(
+def post_current_company_hearing_pack_review(
     matter_id: str,
     pack_id: str,
     context: HearingPackReviewer,
@@ -3171,7 +3174,7 @@ async def post_current_company_hearing_pack_review(
         "lawyer review before draft generation can use them."
     ),
 )
-async def post_current_company_matter_drafting_data_extract(
+def post_current_company_matter_drafting_data_extract(
     matter_id: str,
     context: DraftEditor,
     session: DbSession,
@@ -3184,7 +3187,7 @@ async def post_current_company_matter_drafting_data_extract(
     response_model=DraftingDataExtractionResponse,
     summary="List reviewed drafting data suggestions for a matter",
 )
-async def get_current_company_matter_drafting_data(
+def get_current_company_matter_drafting_data(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -3197,7 +3200,7 @@ async def get_current_company_matter_drafting_data(
     response_model=DraftingDataFieldRecord,
     summary="Confirm, override, or reject a drafting data suggestion",
 )
-async def patch_current_company_matter_drafting_data_field(
+def patch_current_company_matter_drafting_data_field(
     matter_id: str,
     field_id: str,
     payload: DraftingDataReviewRequest,
@@ -3218,7 +3221,7 @@ async def patch_current_company_matter_drafting_data_field(
     response_model=DraftRecord,
     summary="Create a new draft shell on a matter",
 )
-async def post_current_company_matter_draft(
+def post_current_company_matter_draft(
     matter_id: str,
     payload: DraftCreateRequest,
     context: DraftCreator,
@@ -3241,7 +3244,7 @@ async def post_current_company_matter_draft(
     response_model=DraftListResponse,
     summary="List drafts for this matter",
 )
-async def get_current_company_matter_drafts(
+def get_current_company_matter_drafts(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -3256,7 +3259,7 @@ async def get_current_company_matter_drafts(
     response_model=DraftRecord,
     summary="Get a specific draft with its version and review history",
 )
-async def get_current_company_matter_draft(
+def get_current_company_matter_draft(
     matter_id: str,
     draft_id: str,
     context: CurrentContext,
@@ -3276,7 +3279,7 @@ async def get_current_company_matter_draft(
         "does not silently carry over to changed text."
     ),
 )
-async def patch_current_company_matter_draft(
+def patch_current_company_matter_draft(
     matter_id: str,
     draft_id: str,
     payload: DraftEditRequest,
@@ -3310,7 +3313,7 @@ async def patch_current_company_matter_draft(
     ),
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def post_current_company_matter_draft_generate(
+def post_current_company_matter_draft_generate(
     request: Request,
     matter_id: str,
     draft_id: str,
@@ -3334,7 +3337,7 @@ async def post_current_company_matter_draft_generate(
     response_model=DraftRecord,
     summary="Submit a draft for partner review",
 )
-async def post_current_company_matter_draft_submit(
+def post_current_company_matter_draft_submit(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
@@ -3357,7 +3360,7 @@ async def post_current_company_matter_draft_submit(
     response_model=DraftRecord,
     summary="Reviewer requests changes on the draft",
 )
-async def post_current_company_matter_draft_request_changes(
+def post_current_company_matter_draft_request_changes(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
@@ -3380,7 +3383,7 @@ async def post_current_company_matter_draft_request_changes(
     response_model=DraftRecord,
     summary="Approve an in-review draft (fails closed without verified citations)",
 )
-async def post_current_company_matter_draft_approve(
+def post_current_company_matter_draft_approve(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
@@ -3403,7 +3406,7 @@ async def post_current_company_matter_draft_approve(
     response_model=DraftRecord,
     summary="Finalize an approved draft (terminal state)",
 )
-async def post_current_company_matter_draft_finalize(
+def post_current_company_matter_draft_finalize(
     matter_id: str,
     draft_id: str,
     payload: DraftReviewRequest,
@@ -3425,7 +3428,7 @@ async def post_current_company_matter_draft_finalize(
     "/{matter_id}/drafts/{draft_id}/export.docx",
     summary="Download the current (or a specific) draft version as DOCX",
 )
-async def get_current_company_matter_draft_docx(
+def get_current_company_matter_draft_docx(
     matter_id: str,
     draft_id: str,
     context: CurrentContext,
@@ -3450,7 +3453,7 @@ async def get_current_company_matter_draft_docx(
     "/{matter_id}/drafts/{draft_id}/export.pdf",
     summary="Download the current (or a specific) draft version as filing-grade PDF",
 )
-async def get_current_company_matter_draft_pdf(
+def get_current_company_matter_draft_pdf(
     matter_id: str,
     draft_id: str,
     context: CurrentContext,
@@ -3499,7 +3502,7 @@ async def get_current_company_matter_draft_pdf(
         "+ matter exhibits"
     ),
 )
-async def get_current_company_matter_draft_filing_bundle(
+def get_current_company_matter_draft_filing_bundle(
     matter_id: str,
     draft_id: str,
     context: CurrentContext,
@@ -3589,7 +3592,7 @@ class FilingChecklistResponse(BaseModel):
         "2026-05-01)."
     ),
 )
-async def get_current_company_matter_draft_filing_checklist(
+def get_current_company_matter_draft_filing_checklist(
     matter_id: str,
     draft_id: str,
     context: CurrentContext,
@@ -3661,7 +3664,7 @@ async def get_current_company_matter_draft_filing_checklist(
     response_model=MatterAccessPanelResponse,
     summary="List access grants + ethical walls on the matter (admin/owner)",
 )
-async def get_current_company_matter_access(
+def get_current_company_matter_access(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -3679,7 +3682,7 @@ async def get_current_company_matter_access(
     "/{matter_id}/access/restricted",
     summary="Toggle restricted_access on the matter (admin/owner)",
 )
-async def post_current_company_matter_restricted(
+def post_current_company_matter_restricted(
     matter_id: str,
     payload: MatterRestrictedAccessRequest,
     context: MatterAccessManager,
@@ -3699,7 +3702,7 @@ async def post_current_company_matter_restricted(
     response_model=MatterAccessGrantRecord,
     summary="Add a matter access grant (admin/owner)",
 )
-async def post_current_company_matter_grant(
+def post_current_company_matter_grant(
     matter_id: str,
     payload: MatterAccessGrantCreateRequest,
     context: MatterAccessManager,
@@ -3721,7 +3724,7 @@ async def post_current_company_matter_grant(
     status_code=204,
     summary="Remove a matter access grant (admin/owner)",
 )
-async def delete_current_company_matter_grant(
+def delete_current_company_matter_grant(
     matter_id: str,
     grant_id: str,
     context: MatterAccessManager,
@@ -3740,7 +3743,7 @@ async def delete_current_company_matter_grant(
     response_model=EthicalWallRecord,
     summary="Add an ethical wall (admin/owner)",
 )
-async def post_current_company_matter_wall(
+def post_current_company_matter_wall(
     matter_id: str,
     payload: EthicalWallCreateRequest,
     context: MatterAccessManager,
@@ -3761,7 +3764,7 @@ async def post_current_company_matter_wall(
     status_code=204,
     summary="Remove an ethical wall (admin/owner)",
 )
-async def delete_current_company_matter_wall(
+def delete_current_company_matter_wall(
     matter_id: str,
     wall_id: str,
     context: MatterAccessManager,

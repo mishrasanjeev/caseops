@@ -49,7 +49,7 @@ FeedbackAdmin = Annotated[SessionContext, Depends(require_capability("workspace:
     status_code=status.HTTP_201_CREATED,
     summary="Submit idempotent feedback for a current Product Guide target",
 )
-async def post_product_guide_feedback(
+def post_product_guide_feedback(
     payload: ProductGuideFeedbackCreateRequest,
     context: GuideFeedbackUser,
     session: DbSession,
@@ -65,7 +65,7 @@ async def post_product_guide_feedback(
     status_code=status.HTTP_201_CREATED,
     summary="Submit idempotent feedback for a private assistant turn",
 )
-async def post_workspace_assistant_feedback(
+def post_workspace_assistant_feedback(
     payload: WorkspaceAssistantFeedbackCreateRequest,
     context: AssistantFeedbackUser,
     session: DbSession,
@@ -80,7 +80,7 @@ async def post_workspace_assistant_feedback(
     response_model=AIOutcomeAnalyticsResponse,
     summary="Read privacy-bounded tenant AI outcome aggregates",
 )
-async def get_ai_outcomes(
+def get_ai_outcomes(
     context: FeedbackAdmin,
     session: DbSession,
     window_days: Annotated[int, Query(ge=1, le=90)] = 30,
@@ -97,7 +97,7 @@ async def get_ai_outcomes(
     response_model=AIFeedbackListResponse,
     summary="List the bounded workspace AI feedback review queue",
 )
-async def get_ai_feedback(
+def get_ai_feedback(
     context: FeedbackAdmin,
     session: DbSession,
     item_status: Annotated[AIFeedbackStatus | None, Query(alias="status")] = None,
@@ -125,7 +125,7 @@ async def get_ai_feedback(
     response_model=AIFeedbackRecord,
     summary="Review feedback with optimistic concurrency",
 )
-async def patch_ai_feedback(
+def patch_ai_feedback(
     feedback_id: str,
     payload: AIFeedbackReviewRequest,
     context: FeedbackAdmin,

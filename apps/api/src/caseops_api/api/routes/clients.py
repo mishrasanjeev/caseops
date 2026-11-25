@@ -50,7 +50,7 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
 
 @router.get("/", response_model=ClientListResponse, summary="List clients")
-async def get_current_company_clients(
+def get_current_company_clients(
     context: ClientViewer,
     session: DbSession,
 ) -> ClientListResponse:
@@ -58,7 +58,7 @@ async def get_current_company_clients(
 
 
 @router.post("/", response_model=ClientRecord, summary="Create a client")
-async def post_current_company_client(
+def post_current_company_client(
     payload: ClientCreateRequest,
     context: ClientCreator,
     session: DbSession,
@@ -71,7 +71,7 @@ async def post_current_company_client(
     response_model=ClientRecord,
     summary="Fetch a client profile",
 )
-async def get_current_company_client(
+def get_current_company_client(
     client_id: str,
     context: ClientViewer,
     session: DbSession,
@@ -84,7 +84,7 @@ async def get_current_company_client(
     response_model=ClientRecord,
     summary="Update a client",
 )
-async def patch_current_company_client(
+def patch_current_company_client(
     client_id: str,
     payload: ClientUpdateRequest,
     context: ClientEditor,
@@ -100,7 +100,7 @@ async def patch_current_company_client(
     response_model=ClientRecord,
     summary="Archive a client (soft-delete)",
 )
-async def archive_current_company_client(
+def archive_current_company_client(
     client_id: str,
     context: ClientArchiver,
     session: DbSession,
@@ -113,7 +113,7 @@ async def archive_current_company_client(
     response_model=ClientRecord,
     summary="Restore an archived client (BUG-025).",
 )
-async def unarchive_current_company_client(
+def unarchive_current_company_client(
     client_id: str,
     context: ClientArchiver,
     session: DbSession,
@@ -138,7 +138,7 @@ KycReviewer = Annotated[
     response_model=ClientRecord,
     summary="Submit a KYC pack for review (moves status to submitted).",
 )
-async def submit_current_company_client_kyc(
+def submit_current_company_client_kyc(
     client_id: str,
     payload: KycSubmitRequest,
     context: KycSubmitter,
@@ -154,7 +154,7 @@ async def submit_current_company_client_kyc(
     response_model=ClientRecord,
     summary="Approve a submitted KYC pack (staff only).",
 )
-async def verify_current_company_client_kyc(
+def verify_current_company_client_kyc(
     client_id: str,
     context: KycReviewer,
     session: DbSession,
@@ -167,7 +167,7 @@ async def verify_current_company_client_kyc(
     response_model=ClientRecord,
     summary="Reject a submitted KYC pack with a reason (staff only).",
 )
-async def reject_current_company_client_kyc(
+def reject_current_company_client_kyc(
     client_id: str,
     payload: KycRejectRequest,
     context: KycReviewer,
@@ -193,7 +193,7 @@ matter_scoped_router = APIRouter()
     response_model=MatterClientAssignmentRecord,
     summary="Link a client to a matter",
 )
-async def post_matter_client_assignment(
+def post_matter_client_assignment(
     matter_id: str,
     payload: MatterClientAssignRequest,
     context: ClientEditor,
@@ -209,7 +209,7 @@ async def post_matter_client_assignment(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Unlink a client from a matter",
 )
-async def delete_matter_client_assignment(
+def delete_matter_client_assignment(
     matter_id: str,
     client_id: str,
     context: ClientEditor,
@@ -226,7 +226,7 @@ async def delete_matter_client_assignment(
     response_model=MatterClientVerificationListResponse,
     summary="List client verification status for a matter",
 )
-async def get_matter_client_verification(
+def get_matter_client_verification(
     matter_id: str,
     context: ClientViewer,
     session: DbSession,
@@ -241,7 +241,7 @@ async def get_matter_client_verification(
     response_model=MatterClientVerificationRecord,
     summary="Update a matter client's verification workflow",
 )
-async def patch_matter_client_verification(
+def patch_matter_client_verification(
     matter_id: str,
     client_id: str,
     payload: ClientVerificationUpdateRequest,
