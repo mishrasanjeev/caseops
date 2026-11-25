@@ -200,15 +200,15 @@ test("row 2 Today and Next action open the exact task and deadline", async ({ pa
   // Each created item is retired on its own, even when a later step fails.
   const created: { kind: "task" | "deadline"; id: string }[] = [];
   try {
-    const taskForm = page.locator("form").nth(0);
-    await taskForm.getByLabel("Task").fill(taskTitle);
+    const taskForm = page.locator("form").filter({ has: page.getByLabel("Task", { exact: true }) });
+    await taskForm.getByLabel("Task", { exact: true }).fill(taskTitle);
     await taskForm.getByLabel("Due").fill(today);
     const createdTask = page.waitForResponse((r) => r.request().method() === "POST" && /\/tasks$/.test(new URL(r.url()).pathname));
     await taskForm.getByRole("button", { name: /Add/ }).click();
     const task = await json<{ id: string }>(await createdTask, "Create task through the Tasks page");
     created.push({ kind: "task", id: task.id });
-    const deadlineForm = page.locator("form").nth(1);
-    await deadlineForm.getByLabel("Deadline").fill(deadlineTitle);
+    const deadlineForm = page.locator("form").filter({ has: page.getByLabel("Deadline", { exact: true }) });
+    await deadlineForm.getByLabel("Deadline", { exact: true }).fill(deadlineTitle);
     await deadlineForm.getByLabel("Due").fill(today);
     const createdDeadline = page.waitForResponse((r) => r.request().method() === "POST" && /\/deadlines$/.test(new URL(r.url()).pathname));
     await deadlineForm.getByRole("button", { name: /Add/ }).click();
@@ -416,6 +416,12 @@ test("row 6 Suggested Counsel cards align at 80-150% zoom", async ({ page, reque
         rows.set(key, [...(rows.get(key) ?? []), box]);
       }
       const at = `${screen}px screen at ${Math.round(zoom * 100)}%`;
+      if (width >= 1024) {
+        // Root cause of row 6: the card sat in a one-third overview column.
+        const [card, overview] = await page.getByTestId("counsel-recommendations-card").evaluate((node) =>
+          [node.getBoundingClientRect().width, node.parentElement!.getBoundingClientRect().width]);
+        expect(card, `Suggested Counsel spans the overview, ${at}`).toBeGreaterThan(overview - 2);
+      }
       const widths = boxes.map((box) => box.width);
       expect(Math.max(...widths) - Math.min(...widths), `Equal card widths, ${at}`).toBeLessThanOrEqual(1);
       // Cards are top-aligned (not stretched), so equal heights here mean equal content.

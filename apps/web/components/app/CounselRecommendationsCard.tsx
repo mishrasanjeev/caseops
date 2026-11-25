@@ -91,8 +91,11 @@ export function CounselRecommendationsCard({
   matterId,
   loadEnabled = true,
   onLoadSettled,
+  className,
 }: {
   matterId: string;
+  /** Placement in the parent grid (the overview gives it a full row). */
+  className?: string;
   loadEnabled?: boolean;
   onLoadSettled?: () => void;
 }) {
@@ -117,7 +120,7 @@ export function CounselRecommendationsCard({
   }
 
   return (
-    <Card data-testid="counsel-recommendations-card">
+    <Card className={className} data-testid="counsel-recommendations-card">
       <CardHeader>
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--color-brand-500)]" aria-hidden />
