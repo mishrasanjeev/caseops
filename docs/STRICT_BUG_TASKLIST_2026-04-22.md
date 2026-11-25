@@ -26,6 +26,35 @@ plus the console route matrix and guard inventory, and
 A verdict is due after deployment, from a production invitation by a real
 invitee.
 
+## November24 — issue 611 Workbook 5 verdicts on main 609914f5a
+
+Recorded by the issue 611 reconciliation. Production serves 609914f5a.
+Exact-release prod-verify 45388561841 is bound to that SHA in all 22 result
+files. It passed all 13 groups (483 passed, 16 skipped outside Workbook 5,
+no failures).
+All four November 14 failures in 43554158329 are **Properly fixed**: Teams
+AI-TEAM-01, Communications BUG-003, original Contract controls and original
+Draft parity. Each passed on desktop and phone in 45388561841 and in four
+earlier exact-release dispatches. The team-member removal 504 is
+**Partially fixed**. Unused teams are bounded and the Teams routes are sync,
+but a team with any Matter, grant or wall still runs the per-docket
+tenant IP role scan while it holds identity locks. The later-login 504 is
+**Partially fixed**. Its inferred cause is the Teams `async def` route
+blocking the container's event loop after Cloud Run's 504, and that route is
+now sync. Other `async def` routes with synchronous DB work remain, tracked in
+the enterprise gap list.
+
+Report verdicts: BUG-001, 002, 003, 005, 006, 009, 013 and 014 are
+**Properly fixed**. BUG-008, ENH-017 and BUG-018 are **Partially fixed**.
+BUG-011 and BUG-019 are **Not fixed**. Both need enhancements that are not
+built: native redline authoring, and a permitted registry channel. BUG-004,
+007, 010, 012, 015, 016 and ENH-020 are **Inconclusive**. BUG-016 is
+implemented and passes in the App suite on desktop and phone, but it has no
+production spec. The per-row evidence, test files and the out-of-scope
+tracks are in [the triage](BUGS5_TRIAGE_2026-11-11.md#november-24-verdict-reconciliation-on-main-609914f5a-issue-611).
+No bounded code defect from Workbook 5 remains open on main. This entry
+changes no code.
+
 ## November18 — journal availability and Docker fixture filename failures
 
 ## November19 — deployed PR624, production Batch5 acceptance still open

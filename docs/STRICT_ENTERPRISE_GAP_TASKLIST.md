@@ -56,6 +56,30 @@ but it was not separately measured. The other per-docket callers in
 `matter_access.py` and `matters.py` are bounded by one Matter's dockets and
 were not changed.
 
+## November24 — Teams removal scale and event-loop class after issue 611
+
+**Partially implemented.** J14/M13/US-040, NFT-001, SEC-002/003/004.
+Recorded by the issue 611 reconciliation. The unused-team bound and the sync
+Teams routes from `1bc2ed101` are deployed in 609914f5a. AI-TEAM-01 passed on
+desktop and phone in exact-release prod-verify 45388561841. Open:
+
+- A team with any Matter, grant or wall still runs
+  `_operational_ip_role_fence_snapshot` over every active IP docket in the
+  tenant. It runs at least six role queries per docket, plus the Matter
+  role queries for linked dockets. It does this three times per mutation, and
+  two of those passes run while the actor's and the target's Membership and
+  User rows are locked. For a populated team in a tenant with about 10,000
+  dockets, that is at least 180,000 queries per removal. It has not
+  been measured, but it can exceed the 120 s request timeout. While it runs,
+  logins for those identities wait on the same rows and fail at the 5 s lock
+  timeout. Batching the role sources, including the JSON hearing attendee and
+  reminder lists, needs its own PostgreSQL-proven design.
+- The November 22 entry below still applies: other `async def` routes run
+  synchronous DB work on the event loop. A long request on one of them can
+  freeze its container after Cloud Run returns 504, so the next request sent to
+  that container hangs. That is the inferred cause of the November 14
+  later-login 504s.
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision

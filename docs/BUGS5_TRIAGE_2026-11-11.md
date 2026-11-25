@@ -1,5 +1,68 @@
 # Ram Workbook 5: Triage And Acceptance
 
+## November 24 verdict reconciliation on main 609914f5a (issue 611)
+
+Recorded by the issue 611 reconciliation. Production serves main
+`609914f5adf6202cb3c4947d8b7a378c229a9944`. Exact-release prod-verify
+[45388561841](https://github.com/mishrasanjeev/caseops/actions/runs/45388561841)
+was dispatched for that SHA. Its "Resolve exact production release" and
+"Record exact-release evidence" jobs passed. Every result file is bound to
+`release_sha` and `checkout_sha` 609914f5a. All 13 Playwright groups passed,
+with 483 passed results, 16 skipped results and no failures. None of the 16
+skips is in a Workbook 5 spec. Batch5 runs only in exact-release dispatches.
+It also passed in dispatches 44919885553 (1b6ba0f6c), 45049171912 (66f687380),
+45156575329 (101dea84c) and 45254312649 (e3e40fc38). Main CI 45373936726 on
+609914f5a passed the App browser suite: 784 passed results, 21 skipped results
+and no failures, including every Workbook 5 journey listed below.
+
+Each verdict applies to the bounded defect the row reports. Enhancements,
+legal-quality work, source-data completion and provider-dependent acceptance
+are listed in the last column. They are not counted as fixed. No production
+sign-in, production mutation or workflow dispatch was made for this
+reconciliation. The evidence comes from the retained run artifacts and the
+source on main.
+
+### November 14 production QA failures (run 43554158329 at 34ce599d)
+
+| Failure in 43554158329 | Verdict | Evidence on main | 45388561841 |
+| --- | --- | --- | --- |
+| Teams: `ram-2026-11-07-teams.spec.ts` AI-TEAM-01 desktop, timed out at 120 s | Properly fixed | `1bc2ed101` (PR #621) adds tenant-qualified dependency probes, so unused teams skip the tenant IP role scan, and makes all eight Teams routes sync `def`. PR #627 fixes the initial-list race. Tests: `apps/api/tests/test_teams_zero_dependency_fence.py`, `apps/api/tests/test_teams_http_responsiveness_20261114.py`, `apps/api/tests/test_teams_work_bound_20261114_postgres.py`, `apps/web/app/app/admin/teams/page.initial-list-race.test.tsx`. | `ram-2026-11-07-teams.spec.ts:20` passed on desktop and phone. The phone case was never run at 34ce. |
+| Communications: `ram-2026-11-11-bugs.spec.ts` BUG-003 desktop, timed out at 120 s | Properly fixed | The test started at 06:17:05, as the Teams test timed out (06:15:04 plus 120 s). This fits the later-login 504 below, not a Communications defect. Tests: `apps/api/tests/test_communications_email_20261111.py`, `apps/api/tests/test_email_templates.py`. | `ram-2026-11-11-bugs.spec.ts:62` passed on desktop and phone. |
+| Original Contract controls: `ram-2026-11-11-contracts.spec.ts` desktop | Properly fixed | PR #625: CDP discarded the streamed PDF body. The check now hashes a bounded clone of the same UI fetch. It still covers the original contract, read-only, through `tests/e2e/support/bugs5_contract_reported_20261111.ts`. | `ram-2026-11-11-contracts.spec.ts:24` passed on desktop and phone. |
+| Original Draft parity: `ram-2026-11-11-drafting.spec.ts` desktop | Properly fixed | PR #621 adds licensed Noto Sans styles for U+2011, which the original finalized draft needs. Unsupported glyphs are still refused. PR #625 admits the Matter header's marked teams-list GET. The test reads the retained original draft read-only through `tests/e2e/support/draft_pdf_production_20261111.ts`. Tests: `apps/api/tests/test_draft_pdf_parity_20261111.py`, `apps/api/tests/test_pdf_unicode_fidelity_20261104.py`. | `ram-2026-11-11-drafting.spec.ts:22` passed on desktop and phone. |
+| Server 504 at 120 s on team-member removal | Partially fixed | The removal journey above passes, and unused-team removal is bounded (10,000-docket work bound in `test_teams_work_bound_20261114_postgres.py`). Any team with a Matter, grant or wall still runs the full `_operational_ip_role_fence_snapshot` in `services/teams.py`. That is a per-docket role scan over every active IP docket, run three times, twice while the actor's and the target's Membership and User rows are locked. A populated team in a large tenant can still exceed the request timeout. | Not covered. AI-TEAM-01 uses an unused synthetic team. |
+| Server 504 at 120 s on later logins | Partially fixed | Inferred mechanism, consistent with the timings above: at 34ce the Teams routes were `async def` with synchronous DB work. After Cloud Run returned 504 for the removal, the container's event loop stayed blocked. The next request routed to it (concurrency 1) was a login, which hung. The Teams routes are now sync `def`. `test_teams_http_responsiveness_20261114.py` proves the same app stays responsive while a removal is blocked. Other `async def` routes still run synchronous DB work on the event loop and can cause the same failure. That is tracked in `STRICT_ENTERPRISE_GAP_TASKLIST.md` (November 22). | Every group signs in through the login path. All passed. No 504 was recorded. |
+
+### Workbook 5 reports
+
+| Report | Verdict | Evidence on main | 45388561841 | Not built here: tracked separately |
+| --- | --- | --- | --- | --- |
+| BUG-001 draft PDF preview and export parity | Properly fixed | `ram-2026-11-11-drafting.spec.ts:22` on the retained original draft. Tests: `test_draft_pdf_parity_20261111.py`, `test_court_format_profiles.py` (Delhi numeric preset, PR #631), `test_drafting_format_rendering_20261115.py`. | Passed on desktop and phone. | Lawyer review and filing acceptance of court formats, including the bail affidavit directions. |
+| BUG-002 statute picker layout | Properly fixed | `ram-2026-11-11-statutes.spec.ts:134`, `apps/api/tests/test_statute_dropdown_fixture_20261112.py`. | Passed on desktop and phone. | None. |
+| BUG-003 email placeholder leak and template editing | Properly fixed | `ram-2026-11-11-bugs.spec.ts:62` refuses the retained `{[...]}` syntax and the missing-value send. It also covers stale-preview 409, template edit and reload, and the case number, court and lawyer fields. Tests: `test_email_templates.py`, `test_communications_email_20261111.py`, `test_communication_email_preview_token_20261111.py`, `test_communications_template_shared_lock_20261111_postgres.py`. | Passed on desktop and phone. Send is refused under the no-paid marker. | Real inbox delivery is not verified (no-paid rule). The Matter email transport still holds the parent lock across SendGrid I/O. |
+| BUG-004 eCourts tracking for the reported CNR | Inconclusive | No code defect reproduced. Unavailability, depleted balance, ambiguous match and verified no-match are handled separately. | Not covered. The production tests only assert the no-paid refusal. | Exact CNR verification on an authorized, credit-bearing provider scope. |
+| BUG-005 contract metadata editor | Properly fixed | `ram-2026-11-11-contracts.spec.ts:24` (edit, two-tab stale 409, reload), `test_contract_metadata_b5_20261111.py`, `test_contract_metadata_b5_20261111_postgres.py`, `apps/web/app/app/contracts/[id]/page.test.tsx`. | Passed on desktop and phone. | None. |
+| BUG-006 view an indexed contract PDF | Properly fixed | Same spec: private PDF and DOCX viewer, navigation, zoom, original-byte hash. Original-contract controls are checked read-only. Test: `test_contract_attachment_bytes_b5_20261111.py`. | Passed on desktop and phone. | Issue 613: eight older download consumers outside `apiBlobRequest`. |
+| BUG-007 clause generation quality | Inconclusive | No faulty extraction reproduced. Extraction provenance (PR #631, `test_contract_extraction_provenance_migration_20261122.py`) keeps manual rows when extraction repeats. | Not covered as legal quality. | Legal drafting quality benchmark (model quality). |
+| BUG-008 structured obligations | Partially fixed | Manual entry with owner, priority, due date and reload is covered by `ram-2026-11-11-contracts.spec.ts:24` and `test_contracts.py`. Duplicate and owner-boundary fixes come from PR #631. No API exists to edit an existing obligation. | Manual entry passed on desktop and phone. | Editing, approval and task or calendar promotion of obligations (FT-052/054). |
+| BUG-009 manual term suggestions | Properly fixed | Same spec: add, edit dates and duration, accept, reject, reload. Tests: `test_contract_metadata_b5_20261111.py` (suggestion edit and stale review), `apps/web/app/app/contracts/[id]/page.test.tsx`. | Passed on desktop and phone. | Automated extraction quality. |
+| BUG-010 playbook replacement drafting | Inconclusive | Playbook CRUD and comparison exist. No broken comparison reproduced. | Not covered. | Legal review of replacement wording (model quality). |
+| BUG-011 native amendment and redline authoring | Not fixed | Reading uploaded tracked changes works, including table cells (`ram-2026-11-07-contracts.spec.ts:45`). In-app edits, per-change decisions and clean export are not built. | Tracked-change reading passed on desktop and phone. | Native redline authoring (enhancement). |
+| BUG-012 deadline rule options | Inconclusive | Empty states, the governance link and the disabled calculate action are intended. No missing eligible version is proven. | Not covered for the reporter's tenant. | Verify the tenant's configured jurisdiction and rule versions. |
+| BUG-013 assistant intent routing | Properly fixed | `ram-2026-11-11-bugs.spec.ts:357` (factual citation, legal abstention), `test_workspace_assistant_question_intent_20261112.py`. | Passed on desktop and phone. | Legal relevance and provider answer quality (model quality). |
+| BUG-014 research query alias and URL mode | Properly fixed | Same spec: query recovery, mode changes, Back and reload. | Passed on desktop and phone. | Structured research reports and a relevance benchmark. Open PR #652 is separate work. |
+| BUG-015 test coverage and independent review | Inconclusive | A process request, not a code defect. The suites, CI and exact-release prod-verify run on every release. | Ran in full on 609914f5a. | Ongoing. |
+| BUG-016 compact counsel and bench cards | Inconclusive | Implemented with the per-currency spend fix. `tests/e2e/matter-compact-cards.spec.ts:15` passed on desktop and phone in CI 45373936726. Also `BenchStrategyPanel.test.tsx` and `apps/web/app/app/matters/[id]/page.test.tsx`. | Not covered. No production spec exists, and one needs a populated counsel panel in a production tenant. | A production journey for the populated cards. |
+| ENH-017 district court directory | Partially fixed | Official district court link on the Court Directory (`apps/web/app/app/courts/page.test.tsx`). | Not covered. | A maintained district roster with identity, date and transfer history (directory coverage). |
+| BUG-018 statute text for the Motor Vehicles and Income-tax Acts | Partially fixed | Motor Vehicles Act, 1988: 259 identities (250 verified, eight retired, one quarantined), `test_official_statute_release.py`. | All seven BUG-018 Motor Vehicles batches passed in `ram-2026-09-07-statute-source-data.spec.ts`. | Income-tax Act, 1961 text and the 2025 successor scope (legal-source completion). |
+| BUG-019 IP India registry synchronization | Not fixed | Live synchronization is not built. The 10 November CGPDTM notice restricts commercial scraping. Official references are covered by `ram-2026-11-14-prod.spec.ts`. | References passed on desktop and phone for registry and patents. | A permitted registry channel and synchronization (registry sync). |
+| ENH-020 judge outcome prediction | Inconclusive | The page reports low samples honestly. No positive comparable sample exists. | Not covered. | Source-backed benchmark. Favorability scoring stays excluded by the PRD (model quality). |
+
+No row above is a bounded code defect still open on main. The remaining
+504 work is the populated-team fence and the wider `async def` event-loop
+class. Both are tracked hardening work, not a single-route patch, so this
+PR records them and does not change code.
+
 ## November 22 follow-up on the 17 open reports
 
 The follow-up starts at main `1b6ba0f6c7f5306c574f2602d784a9ccbb4fa84b`.
