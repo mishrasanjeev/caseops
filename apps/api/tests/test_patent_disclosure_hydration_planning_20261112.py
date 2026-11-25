@@ -2,6 +2,8 @@
 
 The retained first-page custom/generic plans charged 1,000,701 work and 59,900
 blocks. Recreate their 40-tenant/53-version statistics, not elapsed contention.
+Plans are measured with default and adverse joins, with the identity index built
+both before and after the 10,000-row cohort (the populated-migration layout).
 Authoring and source review do not substitute for retained execution proof.
 """
 
@@ -54,6 +56,9 @@ from tests.test_ip_patent_postgres import (
     _seed_patent_scale_source,
 )
 from tests.test_patent_plan_capture_20261031 import _freeze_patent_execution
+from tests.test_patent_version_identity_indexes_20261112 import (
+    _apply as _apply_identity_migration,
+)
 from tests.test_postgres_validation import _ip_race_context
 
 
@@ -151,11 +156,11 @@ def test_disclosure_hydration_sql_matches_the_exact_indexed_identity(monkeypatch
     )
 
 
-def _disclosure_statistics(catalog):
+def _disclosure_statistics(catalog, *, reltuples=53, identity_index=True, identity_analyzed=True):
     relation, = [
         row for row in catalog["relations"] if row["relname"] == "ip_patent_family_versions"
     ]
-    assert relation["reltuples"] == 53
+    assert relation["reltuples"] == reltuples
     assert relation["relpages"] > 0
     assert "autovacuum_enabled=false" in relation["reloptions"]
     for name in (
@@ -163,6 +168,15 @@ def _disclosure_statistics(catalog):
     ):
         index, = [row for row in catalog["indexes"] if row["index_name"] == name]
         assert index["indisvalid"] and index["indisready"] and index["indislive"]
+    identity_indexes = [
+        row for row in catalog["indexes"]
+        if row["index_name"] == "ix_patent_family_versions_identity_key"
+    ]
+    if identity_index:
+        index, = identity_indexes
+        assert index["indisvalid"] and index["indisready"] and index["indislive"]
+    else:
+        assert identity_indexes == []
     statistics = {
         row["attname"]: row for row in catalog["statistics"]
         if row["tablename"] == "ip_patent_family_versions"
@@ -174,18 +188,26 @@ def _disclosure_statistics(catalog):
     assert statistics["source_registry_snapshot_id"]["null_frac"] == 1
     for key in ("source_document_id", "source_document_version_id", "source_sha256"):
         assert statistics[key]["null_frac"] == pytest.approx(49 / 53, abs=1e-6)
-    identity, = [row for row in catalog["statistics"]
-                 if row["tablename"] == "ix_patent_family_versions_identity_key"]
+    identities = [row for row in catalog["statistics"]
+                  if row["tablename"] == "ix_patent_family_versions_identity_key"]
+    if not identity_analyzed:
+        # An index built after the last ANALYZE has no expression statistics.
+        assert identities == []
+        return statistics, None
+    identity, = identities
     assert identity["null_frac"] == 0 and identity["n_distinct"] == -1
     return statistics, identity
 
 
-def _train_retained_disclosure_statistics(engine, evidence):
+def _train_retained_disclosure_statistics(engine, evidence, *, index_after_cohort=False):
     with engine.begin() as connection:
         assert connection.scalar(select(func.count()).select_from(IpPatentFamilyVersion)) == 0
         connection.execute(text(
             "ALTER TABLE ip_patent_family_versions SET (autovacuum_enabled = false)"
         ))
+    if index_after_cohort:
+        # The released migration's own concurrent DROP; it is rebuilt after the import.
+        _apply_identity_migration(engine, "downgrade")
     for index in range(40):
         company_id, actor_id, family = _seed(engine)
         if index < 4:
@@ -222,7 +244,10 @@ def _train_retained_disclosure_statistics(engine, evidence):
         session.commit()
         catalog = _patent_catalog_snapshot(session)
         _retain_patent_evidence(evidence, kind="disclosure_training_catalog", catalog=catalog)
-        return _disclosure_statistics(catalog)
+        return _disclosure_statistics(
+            catalog, identity_index=not index_after_cohort,
+            identity_analyzed=not index_after_cohort,
+        )
 
 
 def _capture_retained_old_disclosure_shape(session, captured, *, company_id, evidence, complete):
@@ -289,18 +314,33 @@ def _capture_retained_old_disclosure_shape(session, captured, *, company_id, evi
 
 
 @pytest.mark.postgres
+@pytest.mark.parametrize("joins", ["default", "adverse"])
+@pytest.mark.parametrize("index_layout", ["index_before_cohort", "index_after_cohort"])
 def test_stale_53_version_statistics_bound_first_and_cursor_disclosure_work(
-    migration_pg_engine, request, tmp_path
+    migration_pg_engine, request, tmp_path, index_layout, joins
 ):
     engine = migration_pg_engine
     evidence = _patent_evidence_path(request, tmp_path)
-    trained = _train_retained_disclosure_statistics(engine, evidence)
+    after_cohort = index_layout == "index_after_cohort"
+    trained = _train_retained_disclosure_statistics(
+        engine, evidence, index_after_cohort=after_cohort
+    )
     company_id, actor_id, _ = _seed_patent_family_scale(engine, count=10_000, with_source=True)
+    if after_cohort:
+        # Production shape: the migration builds the index over an already-imported
+        # cohort. The build refreshes reltuples only; column statistics stay stale.
+        _apply_identity_migration(engine, "upgrade")
+    layout = (
+        {"reltuples": 10_055, "identity_analyzed": False} if after_cohort else {}
+    )
     with Session(engine) as session:
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         catalog = _patent_catalog_snapshot(session)
-        _retain_patent_evidence(evidence, kind="catalog_before_pages", catalog=catalog)
-        assert _disclosure_statistics(catalog) == trained
+        _retain_patent_evidence(
+            evidence, kind="catalog_before_pages", index_layout=index_layout, joins=joins,
+            catalog=catalog,
+        )
+        assert _disclosure_statistics(catalog, **layout) == trained
         assert session.scalar(select(func.count()).select_from(IpPatentFamilyVersion)) == 10_055
         assert session.scalar(select(func.count()).select_from(IpPatentFamilyVersion).where(
             IpPatentFamilyVersion.company_id == company_id
@@ -325,6 +365,9 @@ def test_stale_53_version_statistics_bound_first_and_cursor_disclosure_work(
             content_sha256=source_row.source_sha256,
         )
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
+        if joins == "adverse":
+            session.execute(text("SET LOCAL enable_hashjoin = off"))
+            session.execute(text("SET LOCAL enable_mergejoin = off"))
         plans = []
         disclosure_statements = []
         first_disclosure = None
@@ -410,7 +453,7 @@ def test_stale_53_version_statistics_bound_first_and_cursor_disclosure_work(
             )
         after = _patent_catalog_snapshot(session)
         _retain_patent_evidence(evidence, kind="catalog_after_pages", catalog=after)
-        assert _disclosure_statistics(after) == trained
+        assert _disclosure_statistics(after, **layout) == trained
         assert len(seen) == len(set(seen)) == 200
         assert Counter(kind for kind, _ in plans) == {
             "page": 6,

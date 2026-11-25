@@ -3,7 +3,9 @@
 Source authoring is not PostgreSQL coverage. The family failure's
 53-version/40-tenant statistics motivate this independent tuple-IN probe, not a
 LATERAL assertion or an application runtime change; this is not a proven
-application defect. Use disposable migrated PG.
+application defect. Use disposable migrated PG. Plans are measured with default
+and adverse joins, with the identity index built both before and after the
+10,000-row cohort (the populated-migration layout).
 """
 
 from __future__ import annotations
@@ -52,6 +54,9 @@ from tests.test_ip_patent_postgres import (
     _seed_patent_scale_source,
 )
 from tests.test_patent_plan_capture_20261031 import _freeze_patent_execution
+from tests.test_patent_version_identity_indexes_20261112 import (
+    _apply as _apply_identity_migration,
+)
 from tests.test_postgres_validation import _ip_race_context
 
 pytestmark = pytest.mark.postgres
@@ -166,10 +171,12 @@ def _application_catalog(session):
     return catalog
 
 
-def _assert_training_statistics(catalog):
+def _assert_training_statistics(
+    catalog, *, reltuples=53, identity_index=True, identity_analyzed=True
+):
     table = IpPatentApplicationVersion.__tablename__
     relation, = [row for row in catalog["relations"] if row["relname"] == table]
-    assert relation["reltuples"] == 53 and relation["relpages"] > 0
+    assert relation["reltuples"] == reltuples and relation["relpages"] > 0
     assert "autovacuum_enabled=false" in relation["reloptions"]
     statistics = {
         row["attname"]: row for row in catalog["statistics"] if row["tablename"] == table
@@ -183,15 +190,28 @@ def _assert_training_statistics(catalog):
         row["indisvalid"] and row["indisready"] and row["indislive"] for row in indexes
     )
     assert any("(company_id, application_id, version)" in row["definition"] for row in indexes)
-    identity, = [row for row in catalog["statistics"]
-                 if row["tablename"] == "ix_patent_application_versions_identity_key"]
+    identity_indexes = [
+        row for row in indexes
+        if row["index_name"] == "ix_patent_application_versions_identity_key"
+    ]
+    assert len(identity_indexes) == (1 if identity_index else 0)
+    identities = [row for row in catalog["statistics"]
+                  if row["tablename"] == "ix_patent_application_versions_identity_key"]
+    if not identity_analyzed:
+        # An index built after the last ANALYZE has no expression statistics.
+        assert identities == []
+        return statistics, None
+    identity, = identities
     assert identity["null_frac"] == 0 and identity["n_distinct"] == -1
     return statistics, identity
 
 
-def _train_application_statistics(engine, evidence):
+def _train_application_statistics(engine, evidence, *, index_after_cohort=False):
     with Session(engine) as session:
         assert session.scalar(select(func.count()).select_from(IpPatentApplicationVersion)) == 0
+    if index_after_cohort:
+        # The released migration's own concurrent DROP; it is rebuilt after the import.
+        _apply_identity_migration(engine, "downgrade")
     for index in range(40):
         company_id, actor_id, _, application = _seed_application(engine)
         if index < 13:
@@ -208,7 +228,10 @@ def _train_application_statistics(engine, evidence):
         session.commit()
         catalog = _application_catalog(session)
         _retain_patent_evidence(evidence, kind="application_training_catalog", catalog=catalog)
-        return _assert_training_statistics(catalog)
+        return _assert_training_statistics(
+            catalog, identity_index=not index_after_cohort,
+            identity_analyzed=not index_after_cohort,
+        )
 
 
 def _seed_application_scale(engine, application):
@@ -359,20 +382,33 @@ def _legacy_application_control(
     ]
 
 
+@pytest.mark.parametrize("joins", ["default", "adverse"])
+@pytest.mark.parametrize("index_layout", ["index_before_cohort", "index_after_cohort"])
 def test_stale_53_version_statistics_bound_application_list_and_detail_hydration(
-    unrefreshed_application_engine, request, tmp_path
+    unrefreshed_application_engine, request, tmp_path, index_layout, joins
 ):
     engine = unrefreshed_application_engine
     evidence = _patent_evidence_path(request, tmp_path)
-    trained = _train_application_statistics(engine, evidence)
+    after_cohort = index_layout == "index_after_cohort"
+    trained = _train_application_statistics(engine, evidence, index_after_cohort=after_cohort)
     company_id, actor_id, _, original = _seed_application(engine)
     allowed = _seed_application_scale(engine, original)
     corrected = _correct_application(engine, company_id, actor_id, original)
+    if after_cohort:
+        # Production shape: the migration builds the index over an already-imported
+        # cohort. The build refreshes reltuples only; column statistics stay stale.
+        _apply_identity_migration(engine, "upgrade")
+    layout = (
+        {"reltuples": 10_055, "identity_analyzed": False} if after_cohort else {}
+    )
     with Session(engine) as session:
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         catalog = _application_catalog(session)
-        _retain_patent_evidence(evidence, kind="application_catalog_before_reads", catalog=catalog)
-        assert _assert_training_statistics(catalog) == trained
+        _retain_patent_evidence(
+            evidence, kind="application_catalog_before_reads", index_layout=index_layout,
+            joins=joins, catalog=catalog,
+        )
+        assert _assert_training_statistics(catalog, **layout) == trained
         assert session.scalar(
             select(func.count()).select_from(IpPatentApplicationVersion)
         ) == 10_055
@@ -388,6 +424,9 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
         }
         assert len(versions) == 10_002
         session.execute(text("SET LOCAL statement_timeout = '5s'"))
+        if joins == "adverse":
+            session.execute(text("SET LOCAL enable_hashjoin = off"))
+            session.execute(text("SET LOCAL enable_mergejoin = off"))
         plans, old_plans, seen, cursor = [], [], [], None
         for page_number in range(2):
             stage = f"page_{page_number}"
@@ -447,7 +486,7 @@ def test_stale_53_version_statistics_bound_application_list_and_detail_hydration
             ))
         after = _application_catalog(session)
         _retain_patent_evidence(evidence, kind="application_catalog_after_reads", catalog=after)
-        assert _assert_training_statistics(after) == trained
+        assert _assert_training_statistics(after, **layout) == trained
         assert len(seen) == len(set(seen)) == 200 and len(plans) == len(old_plans) == 15
         # Match _assert_patent_disclosure_hydration_work: one version per admitted key,
         # with the same <50,000 total-work / <10,000 root-shared-block budgets.
