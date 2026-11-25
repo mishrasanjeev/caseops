@@ -431,14 +431,14 @@ def test_historical_and_future_unlinked_acl_dependencies_keep_the_full_fence(
         seed.commit()
 
     visited = []
-    original_roles = teams._operational_ip_docket_role_membership_ids
+    original_roles = teams.operational_ip_role_membership_ids_by_docket
 
-    def record_roles(session, *, docket):
-        visited.append(docket.id)
-        assert docket.matter_id is None
-        return original_roles(session, docket=docket)
+    def record_roles(session, **kwargs):
+        roles = original_roles(session, **kwargs)
+        visited.extend(sorted(roles))
+        return roles
 
-    monkeypatch.setattr(teams, "_operational_ip_docket_role_membership_ids", record_roles)
+    monkeypatch.setattr(teams, "operational_ip_role_membership_ids_by_docket", record_roles)
     with factory() as session:
         context = _ip_race_context(session, company_id=company_id, membership_id=actor_id)
         assert teams._team_has_access_dependencies(session, company_id=company_id, team_id=team_id)

@@ -29,9 +29,9 @@ class _SnapshotSession:
         self.probes.append(statement)
         return next(self.answers)
 
-    def scalars(self, statement):
+    def execute(self, statement):
         self.docket_queries.append(statement)
-        return iter(self.dockets)
+        return SimpleNamespace(all=lambda: list(self.dockets))
 
 
 @pytest.mark.parametrize(
@@ -69,7 +69,7 @@ def test_zero_dependency_snapshot_never_enumerates_dockets_or_roles(monkeypatch)
     def unexpected_roles(*args, **kwargs):
         pytest.fail("A zero-dependency team must not load any IP responsibility.")
 
-    monkeypatch.setattr(teams, "_operational_ip_docket_role_membership_ids", unexpected_roles)
+    monkeypatch.setattr(teams, "operational_ip_role_membership_ids_by_docket", unexpected_roles)
     assert teams._operational_ip_role_fence_snapshot(
         session, company_id="company", membership_scope={"member"}, team_id="team",
     ) == {}
@@ -83,11 +83,11 @@ def test_any_dependency_keeps_the_original_full_tenant_snapshot(monkeypatch, dep
                SimpleNamespace(id="unrelated", matter_id="other-matter")]
     visited = []
 
-    def roles(_session, *, docket):
-        visited.append(docket.id)
-        return {"member", "other-member"}
+    def roles(_session, *, company_id, dockets):
+        visited.append((company_id, dict(dockets)))
+        return {docket_id: {"member", "other-member"} for docket_id in dockets}
 
-    monkeypatch.setattr(teams, "_operational_ip_docket_role_membership_ids", roles)
+    monkeypatch.setattr(teams, "operational_ip_role_membership_ids_by_docket", roles)
     original = _SnapshotSession(dockets=dockets)
     expected = teams._operational_ip_role_fence_snapshot(
         original, company_id="company", membership_scope={"member"},
@@ -99,7 +99,11 @@ def test_any_dependency_keeps_the_original_full_tenant_snapshot(monkeypatch, dep
     )
     assert actual == expected
     assert set(actual) == {"related", "unrelated"}
-    assert visited == ["related", "unrelated", "related", "unrelated"]
+    # The scoped fence asks for the same tenant-wide role map as the original.
+    assert visited == [
+        ("company", {"related": None, "unrelated": "other-matter"}),
+        ("company", {"related": None, "unrelated": "other-matter"}),
+    ]
     assert str(scoped.docket_queries[0]) == str(original.docket_queries[0])
     assert scoped.docket_queries[0].compile().params == original.docket_queries[0].compile().params
 
@@ -115,7 +119,7 @@ def test_unscoped_snapshot_never_uses_the_team_dependency_shortcut(
         pytest.fail("Global scoping must keep its original all-linked fence.")
 
     monkeypatch.setattr(teams, "_team_has_access_dependencies", unexpected_probe)
-    monkeypatch.setattr(teams, "_operational_ip_docket_role_membership_ids", lambda *a, **k: set())
+    monkeypatch.setattr(teams, "operational_ip_role_membership_ids_by_docket", lambda *a, **k: {})
     result = teams._operational_ip_role_fence_snapshot(
         session, company_id="company", membership_scope=None,
         include_empty=include_empty, linked_only=linked_only,
@@ -129,15 +133,16 @@ def test_empty_membership_scope_with_a_dependency_still_uses_the_original_scan(m
     session = _SnapshotSession([False, True, False], [SimpleNamespace(id="docket", matter_id=None)])
     visited = []
 
-    def roles(_session, *, docket):
-        visited.append(docket.id)
-        return {"member"}
+    def roles(_session, *, company_id, dockets):
+        visited.append((company_id, dict(dockets)))
+        return {"docket": {"member"}}
 
-    monkeypatch.setattr(teams, "_operational_ip_docket_role_membership_ids", roles)
+    monkeypatch.setattr(teams, "operational_ip_role_membership_ids_by_docket", roles)
     assert teams._operational_ip_role_fence_snapshot(
         session, company_id="company", membership_scope=set(), team_id="team",
     ) == {}
-    assert visited == ["docket"]
+    assert visited == [("company", {"docket": None})]
+    assert len(session.docket_queries) == 1
 
 
 @pytest.mark.parametrize("changed_checkpoint", [2, 3], ids=["before-parents", "after-parents"])
@@ -147,7 +152,9 @@ def test_each_snapshot_checkpoint_rechecks_dependencies_and_rejects_new_roles(
     answers = [False] * (3 * (changed_checkpoint - 1)) + [False, True, False]
     session = _SnapshotSession(answers, [SimpleNamespace(id="docket", matter_id=None)])
     monkeypatch.setattr(
-        teams, "_operational_ip_docket_role_membership_ids", lambda *a, **k: {"member"},
+        teams,
+        "operational_ip_role_membership_ids_by_docket",
+        lambda *a, **k: {"docket": {"member"}},
     )
     kwargs = {"company_id": "company", "membership_scope": {"member"}, "team_id": "team"}
     expected = teams._operational_ip_role_fence_snapshot(session, **kwargs)

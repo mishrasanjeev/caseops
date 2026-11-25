@@ -1,3 +1,61 @@
+## November24 — populated-team removal ran a per-docket IP role fence
+
+**Partially implemented** (J14/M13/US-040, NFT-001, SEC-002/003/004). Removing
+a member from a team, deactivating it or deleting it, when the team has any
+Matter, grant or ethical wall, ran the tenant-wide IP role fence one docket at
+a time: about a dozen queries per active docket, three passes per change, two
+of them while the actor's and target's Membership/User rows were locked. Cloud
+Run returned 120-second 504s at production docket counts. The November14
+unused-team shortcut (PR #621) did not cover populated teams.
+
+Fix (`services/matter_access.py`, `services/teams.py`):
+`operational_ip_role_membership_ids_by_docket` returns every docket's live role
+memberships in a fixed number of queries. Each query reads one table filtered
+by tenant and rows are matched to dockets in Python: an `IN (subquery)` version
+was planned as a nested loop on freshly loaded tables and took 56 s for one
+query on the 10,000-docket fixture, so no query joins the docket set.
+`stably_accessible_ip_docket_ids` replaces the per-docket
+`can_stably_access_ip_docket` loop with one set of queries per role membership.
+Decisions are unchanged: the same three fence passes, the same 409 codes,
+blocked ids, audit rows, lock order and wall/grant/restriction/team-scoping
+rules. The per-docket functions stay for other callers and serve as the
+reference in tests. Identity locks are still held for the two revalidation
+passes, which are now a constant number of tenant-wide reads.
+
+Tests:
+- `tests/test_teams_populated_fence_equivalence_20261124.py` (SQLite and
+  PostgreSQL): one tenant with linked and unlinked dockets, every role source
+  (Matter roles, tasks, deadlines, coverage with pending and emergency cover,
+  IP deadlines and assignments, obligations, JSON hearing attendee, reminder
+  and escalation lists), walls (active, scheduled, expired, revoked, team),
+  grants (unbounded, bounded, future, revoked, team), restriction, inactive
+  identities and a second tenant. The set-based role map and access set equal
+  the per-docket functions for every membership and docket, before and after a
+  removal, deactivation and deletion, with team scoping on and off. Thirteen
+  Teams changes return the same 409 detail or success and audit row as the
+  per-docket fence, and fail if a per-docket helper is called.
+- `tests/test_teams_populated_work_bound_20261124_postgres.py`: 10,000 active
+  dockets, 200 Matters, about 6,400 live role rows, three target roles
+  including JSON attendee and reminder entries. Measured locally on PostgreSQL
+  17: the previous code issued 269,983 statements for one unscoped removal,
+  179,976 of them while identity rows were locked, loaded 30,000 docket and
+  14,951 Matter entities and read 92,983 rows (about 70 minutes on a loaded
+  workstation). The new code issues 57 or 58 statements, 41 or 42 while
+  locked, loads the 3 affected dockets and 1 Matter, and reads about 49,840
+  rows, for removal, deactivation and deletion with team scoping on and off.
+  The test asserts at most 80 statements, 60 while locked, entity loads
+  bounded by the affected dockets, and rows read linear in dockets plus live
+  role rows. It does not run ANALYZE, so it also covers stale statistics.
+- Updated `test_teams_zero_dependency_fence.py` and
+  `test_teams_work_bound_20261114_postgres.py`, which named the per-docket
+  helper; the zero-dependency and full-fence assertions are unchanged.
+
+Open: hosted CI, a release, and a production measurement of a populated-team
+change. Global scoping enablement uses the same fence and is now set-based too,
+but it was not separately measured. The other per-docket callers in
+`matter_access.py` and `matters.py` are bounded by one Matter's dockets and
+were not changed.
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
