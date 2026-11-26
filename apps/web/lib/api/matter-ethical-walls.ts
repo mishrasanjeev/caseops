@@ -46,9 +46,18 @@ export const MATTER_WALL_REASON_MAX = 2000;
 const wallsPath = (matterId: string) =>
   `/api/matters/${encodeURIComponent(matterId)}/access/walls`;
 
-export async function listMatterEthicalWalls(signal?: AbortSignal): Promise<MatterEthicalWallDirectory> {
+export async function listMatterEthicalWalls(
+  signal?: AbortSignal,
+  params?: { q?: string; matterId?: string },
+): Promise<MatterEthicalWallDirectory> {
+  // `q` and `matterId` narrow on the server: the unfiltered directory stops
+  // at the 500 most recent walls, so older walls are only reachable this way.
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.matterId) qs.set("matter_id", params.matterId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return matterEthicalWallDirectorySchema.parse(
-    await apiRequest("/api/matters/ethical-walls", { signal }),
+    await apiRequest(`/api/matters/ethical-walls${suffix}`, { signal }),
   );
 }
 

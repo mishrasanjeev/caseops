@@ -29,6 +29,8 @@ const PLATFORM_REPORT_ADMIN_PROD_SPECS = /platform-(?:report-admin|leads)-\d{4}-
 const BATCH3_CLIENT_SPEC = /ram-2026-10-22-bugs\.spec\.ts$/;
 const WORKSPACE_REQUIREMENTS_SPECS = /ram-2026-11-07-(?:contracts|teams)\.spec\.ts$/;
 const BATCH5_SPECS = /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/;
+// Nov 24 workbook: rows 1-3 run as the nova-legal tester, rows 4-6 as test-legal.
+const NOV24_SPECS = /ram-2026-11-24-bugs\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 const OFFICIAL_REFERENCE_PROD_SPEC = /ram-2026-11-14-prod\.spec\.ts$/;
@@ -73,6 +75,7 @@ export default defineConfig({
     BATCH4_SPECS,
     WORKSPACE_REQUIREMENTS_SPECS,
     BATCH5_SPECS,
+    NOV24_SPECS,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -91,6 +94,37 @@ export default defineConfig({
     video: "off",
   },
   projects: [
+    {
+      name: "nov24-prod-chromium",
+      testMatch: NOV24_SPECS,
+      grepInvert: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov24-prod-mobile",
+      testMatch: NOV24_SPECS,
+      grep: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
     {
       name: "batch5-prod-chromium",
       testMatch: [BATCH5_SPECS, WORKSPACE_REQUIREMENTS_SPECS],

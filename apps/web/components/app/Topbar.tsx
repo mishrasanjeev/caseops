@@ -121,46 +121,52 @@ export function Topbar() {
           type="search"
         />
       </form>
-      <div className="hidden md:flex md:flex-col md:items-end md:leading-tight">
-        <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
-          Workspace
-        </span>
-        <span className="text-sm font-semibold text-[var(--color-ink)]">
-          {company?.name ?? "—"}
-        </span>
-      </div>
+      {/* Nov 24 workbook row 1: the search form stops growing at max-w-md, so
+          without ml-auto this group sat after the search box instead of at the
+          header's right edge. Workspace label and firm name stay stacked with
+          the avatar beside them. */}
+      <div className="ml-auto flex min-w-0 items-center gap-3" data-testid="topbar-workspace">
+        <div className="hidden min-w-0 md:flex md:flex-col md:items-end md:leading-tight">
+          <span className="text-[11px] uppercase tracking-[0.14em] text-[var(--color-mute-2)]">
+            Workspace
+          </span>
+          <span className="max-w-[16rem] truncate text-sm font-semibold text-[var(--color-ink)]" title={company?.name ?? undefined} data-testid="topbar-workspace-name">
+            {company?.name ?? "—"}
+          </span>
+        </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Open user menu"
-          className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
-        >
-          <Avatar>
-            <AvatarFallback>{initialsFrom(user?.full_name ?? "?")}</AvatarFallback>
-          </Avatar>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel className="truncate">{user?.full_name ?? "Signed in"}</DropdownMenuLabel>
-          <DropdownMenuLabel className="-mt-1 truncate text-[10px] normal-case tracking-normal text-[var(--color-mute-2)]">
-            {user?.email}
-          </DropdownMenuLabel>
-          {/*
-            BUG-022 (Ram 2026-04-26): Profile and Workspace-settings
-            menu items were rendering as disabled placeholders. A
-            disabled menu row that does nothing on click is a worse
-            signal than no row at all — Ram (correctly) flagged them
-            as broken. Until the underlying /app/profile and
-            /app/admin/workspace routes ship, hide them entirely.
-            Per `feedback_fix_vs_mitigation`: no impossible actions
-            in the UI.
-          */}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleSignOut} data-testid="sign-out">
-            <LogOut className="h-4 w-4" aria-hidden />
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Open user menu"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
+          >
+            <Avatar>
+              <AvatarFallback>{initialsFrom(user?.full_name ?? "?")}</AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="truncate">{user?.full_name ?? "Signed in"}</DropdownMenuLabel>
+            <DropdownMenuLabel className="-mt-1 truncate text-[10px] normal-case tracking-normal text-[var(--color-mute-2)]">
+              {user?.email}
+            </DropdownMenuLabel>
+            {/*
+              BUG-022 (Ram 2026-04-26): Profile and Workspace-settings
+              menu items were rendering as disabled placeholders. A
+              disabled menu row that does nothing on click is a worse
+              signal than no row at all — Ram (correctly) flagged them
+              as broken. Until the underlying /app/profile and
+              /app/admin/workspace routes ship, hide them entirely.
+              Per `feedback_fix_vs_mitigation`: no impossible actions
+              in the UI.
+            */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} data-testid="sign-out">
+              <LogOut className="h-4 w-4" aria-hidden />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }

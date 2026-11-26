@@ -113,6 +113,7 @@ function MatterEthicalWallsWorkspace() {
     <div className="flex min-w-0 flex-col gap-8">
       <CreateWallForm
         walls={walls.data?.walls ?? []}
+        wallsTruncated={walls.data?.truncated ?? false}
         people={people.data?.users ?? []}
         peopleLoading={people.isPending}
         peopleError={people.isError ? people.error : null}
@@ -158,6 +159,7 @@ function WallsLoadError({ error, onRetry }: { error: unknown; onRetry: () => voi
 
 function CreateWallForm({
   walls,
+  wallsTruncated,
   people,
   peopleLoading,
   peopleError,
@@ -165,6 +167,7 @@ function CreateWallForm({
   onChanged,
 }: {
   walls: MatterEthicalWallDirectoryRow[];
+  wallsTruncated: boolean;
   people: CompanyUserRecord[];
   peopleLoading: boolean;
   peopleError: unknown;
@@ -184,9 +187,22 @@ function CreateWallForm({
   const [reviewing, setReviewing] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
 
+  // The directory holds only the 500 most recent walls. When it is cut short,
+  // read this Matter's own walls so a person already walled from it is never
+  // offered as selectable.
+  const matterWalls = useQuery({
+    queryKey: [...WALLS_QUERY_KEY, { matterId }],
+    queryFn: ({ signal }) => listMatterEthicalWalls(signal, { matterId }),
+    enabled: wallsTruncated && Boolean(matterId),
+  });
   const walledIds = useMemo(
-    () => new Set(walls.filter((row) => row.matter_id === matterId).map((row) => row.excluded_membership_id)),
-    [walls, matterId],
+    () =>
+      new Set(
+        [...walls, ...(matterWalls.data?.walls ?? [])]
+          .filter((row) => row.matter_id === matterId)
+          .map((row) => row.excluded_membership_id),
+      ),
+    [walls, matterWalls.data, matterId],
   );
   const candidates = useMemo(
     () =>
@@ -442,16 +458,27 @@ function ActiveWalls({
   onChanged: () => Promise<unknown>;
 }) {
   const [filter, setFilter] = useState("");
+  // When the directory is truncated a local filter cannot see older walls, so
+  // the user can search every wall on the server (one audited read per search).
+  const [serverNeedle, setServerNeedle] = useState("");
+  const trimmedFilter = filter.trim();
+  const serverSearch = useQuery({
+    queryKey: [...WALLS_QUERY_KEY, { q: serverNeedle }],
+    queryFn: ({ signal }) => listMatterEthicalWalls(signal, { q: serverNeedle }),
+    enabled: truncated && Boolean(serverNeedle),
+  });
+  const usingServer = truncated && Boolean(serverNeedle) && serverNeedle === trimmedFilter;
+  const source = usingServer ? (serverSearch.data?.walls ?? []) : rows;
   const groups = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     const byMatter = new Map<string, MatterEthicalWallDirectoryRow[]>();
-    for (const row of rows) {
+    for (const row of source) {
       const haystack = [row.matter_code, row.matter_title, row.excluded_full_name, row.excluded_email];
       if (needle && !haystack.some((value) => value.toLowerCase().includes(needle))) continue;
       byMatter.set(row.matter_id, [...(byMatter.get(row.matter_id) ?? []), row]);
     }
     return [...byMatter.values()].sort((a, b) => a[0].matter_code.localeCompare(b[0].matter_code));
-  }, [rows, filter]);
+  }, [source, filter]);
 
   if (rows.length === 0) {
     return (
@@ -477,8 +504,37 @@ function ActiveWalls({
           Matter&apos;s access panel to review them.
         </p>
       ) : null}
-      {groups.length === 0 ? (
-        <p className="text-sm text-[var(--color-mute)]">No wall matches this filter.</p>
+      {truncated && trimmedFilter && !usingServer ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-mute)]">
+          <span>This filter covers the 500 most recent walls only.</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setServerNeedle(trimmedFilter)}
+            data-testid="matter-walls-search-all"
+          >
+            Search all walls
+          </Button>
+        </div>
+      ) : null}
+      {usingServer && serverSearch.data?.truncated ? (
+        <p className="text-sm text-[var(--color-warning-700)]">
+          Showing the 500 most recent walls that match. Narrow the search to see older ones.
+        </p>
+      ) : null}
+      {usingServer && serverSearch.isPending ? (
+        <p className="text-sm text-[var(--color-mute)]">Searching all walls…</p>
+      ) : usingServer && serverSearch.isError ? (
+        <p role="alert" className="text-sm text-[var(--color-danger-500)]">
+          {apiErrorMessage(serverSearch.error, "Walls could not be searched.")}
+        </p>
+      ) : groups.length === 0 ? (
+        <p className="text-sm text-[var(--color-mute)]">
+          {truncated && !usingServer
+            ? "No wall in the 500 most recent matches this filter."
+            : "No wall matches this filter."}
+        </p>
       ) : null}
       {groups.map((group) => {
         const head = group[0];

@@ -481,6 +481,8 @@ export type MatterListParams = {
   has_stay?: boolean;
   min_claim_amount_minor?: number;
   max_claim_amount_minor?: number;
+  /** Ask the server for every matching Matter's count (`total_count`). */
+  include_total?: boolean;
 };
 
 export type MatterImportRowStatus =
@@ -584,6 +586,7 @@ export async function listMatters(params?: MatterListParams): Promise<MattersLis
   appendMatterListParam(qs, "has_stay", params?.has_stay);
   appendMatterListParam(qs, "min_claim_amount_minor", params?.min_claim_amount_minor);
   appendMatterListParam(qs, "max_claim_amount_minor", params?.max_claim_amount_minor);
+  if (params?.include_total) qs.set("include_total", "true");
   const path = qs.toString() ? `/api/matters/?${qs.toString()}` : "/api/matters/";
   const data = await apiRequest<unknown>(path);
   return mattersList.parse(data);
@@ -1713,11 +1716,13 @@ export async function deleteStrategyEntry(input: {
 }
 
 export async function listContracts(
-  params?: { limit?: number; cursor?: string | null },
+  params?: { limit?: number; cursor?: string | null; q?: string; include_total?: boolean },
 ): Promise<ContractsList> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.q) qs.set("q", params.q);
+  if (params?.include_total) qs.set("include_total", "true");
   const path = qs.toString() ? `/api/contracts/?${qs.toString()}` : "/api/contracts/";
   const data = await apiRequest<unknown>(path);
   return contractsList.parse(data);

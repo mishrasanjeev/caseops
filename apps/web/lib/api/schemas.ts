@@ -141,6 +141,7 @@ export const matter = z.object({
 export const mattersList = z.object({
   matters: z.array(matter),
   next_cursor: z.string().nullable().optional(),
+  total_count: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const matterDashboardSummary = z.object({
@@ -1833,6 +1834,7 @@ export const contractsList = z.object({
   company_id: z.string(),
   contracts: z.array(contract),
   next_cursor: z.string().nullable().optional(),
+  total_count: z.number().int().nonnegative().nullable().optional(),
 });
 
 // Hari-BUG-023 (2026-04-22): the values below MUST match

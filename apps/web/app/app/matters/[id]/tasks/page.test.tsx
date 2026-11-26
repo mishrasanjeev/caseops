@@ -34,8 +34,11 @@ vi.mock("@/lib/use-matter-workspace", () => ({
   useMatterWorkspace: useMatterWorkspaceMock,
 }));
 
+const navigation = vi.hoisted(() => ({ search: new URLSearchParams() }));
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "m-1" }),
+  useSearchParams: () => navigation.search,
 }));
 
 vi.mock("sonner", () => ({
@@ -284,5 +287,42 @@ describe("MatterTasksPage", () => {
     expect(screen.queryByPlaceholderText("File rejoinder")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Complete" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reopen" })).not.toBeInTheDocument();
+  });
+});
+
+// Nov 24 workbook row 2: Today and the cockpit "Next action" Open link name a
+// task or deadline; the Tasks page must open that exact item.
+describe("MatterTasksPage deep links", () => {
+  beforeEach(() => {
+    useMatterWorkspaceMock.mockReturnValue({ data: WORKSPACE });
+    listMatterTasksMock.mockResolvedValue(TASKS);
+    listMatterDeadlinesMock.mockResolvedValue(DEADLINES);
+  });
+
+  it("focuses and marks the task named by ?task=", async () => {
+    navigation.search = new URLSearchParams("task=task-2");
+    render(withClient(<MatterTasksPage />));
+    const row = await screen.findByTestId("matter-task-task-2");
+    await waitFor(() => expect(row).toHaveFocus());
+    expect(row).toHaveAttribute("aria-current", "true");
+    expect(screen.getByTestId("matter-task-task-1")).not.toHaveAttribute("aria-current");
+    expect(screen.queryByTestId("matter-tasks-focus-missing")).toBeNull();
+  });
+
+  it("focuses the deadline named by ?deadline=", async () => {
+    navigation.search = new URLSearchParams("deadline=deadline-1");
+    render(withClient(<MatterTasksPage />));
+    const row = await screen.findByTestId("matter-deadline-deadline-1");
+    await waitFor(() => expect(row).toHaveFocus());
+    expect(row).toHaveAttribute("aria-current", "true");
+  });
+
+  it("says so when the linked task no longer exists", async () => {
+    navigation.search = new URLSearchParams("task=task-removed");
+    render(withClient(<MatterTasksPage />));
+    expect(await screen.findByTestId("matter-tasks-focus-missing")).toHaveTextContent(
+      "The task you opened is no longer on this matter.",
+    );
+    navigation.search = new URLSearchParams();
   });
 });

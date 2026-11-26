@@ -23,6 +23,36 @@ import { cn } from "@/lib/cn";
 const PINNED_HEADER = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-[var(--color-bg)] @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
 const PINNED_CELL = "@min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-[1] bg-white @min-[40rem]:shadow-[-1px_0_0_var(--color-line)]";
 
+/**
+ * The server owns search and paging. Use this whenever `data` is one page of
+ * a larger server list: the client filter, pager and sorting below only ever
+ * see the rows they were given, so without it a search misses unloaded
+ * Matters and Next stops at the last loaded row (Nov 24 workbook rows 4-5).
+ */
+export type DataTableServerMode = {
+  search: string;
+  onSearchChange: (value: string) => void;
+  /** Zero-based index of the page whose rows are in `data`. */
+  pageIndex: number;
+  pageSize: number;
+  /** Every matching row on the server, or null when the server did not say. */
+  totalCount: number | null;
+  canPreviousPage: boolean;
+  canNextPage: boolean;
+  /** A search or page request is in flight. */
+  busy?: boolean;
+  /**
+   * The current page holds every matching row (one page, no next page), so
+   * sorting it in the browser orders the whole result. Otherwise headers do
+   * not sort: ordering one page would misstate the list.
+   */
+  allRowsLoaded?: boolean;
+  /** The server's limit for the search text. */
+  searchMaxLength?: number;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+};
+
 type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -33,7 +63,14 @@ type DataTableProps<TData, TValue> = {
   getRowId?: (row: TData, index: number) => string;
   /** Keep the last column (a row's actions) on screen while the others scroll sideways. */
   pinLastColumn?: boolean;
-};
+} & (
+  // Every caller must say which kind of rows it passes. The client search,
+  // pager and sorting are only truthful over the complete list; a page of a
+  // larger server list must use `server` (B4-ADJ-03 and Nov 24 rows 4-5 were
+  // this defect, fixed per screen while the table stayed unsafe by default).
+  | { server: DataTableServerMode; completeData?: never }
+  | { /** `data` is every row the reader may see, not one page or a capped read. */ completeData: true; server?: never }
+);
 
 export function DataTable<TData, TValue>({
   columns,
@@ -44,6 +81,7 @@ export function DataTable<TData, TValue>({
   onRowClick,
   getRowId,
   pinLastColumn = false,
+  server,
 }: DataTableProps<TData, TValue>) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -51,10 +89,14 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    state: { globalFilter, sorting },
+    state: { globalFilter: server ? "" : globalFilter, sorting },
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
     globalFilterFn: "includesString",
+    // Sorting one server page would present a partial order as the whole list.
+    enableSorting: !server || Boolean(server.allRowsLoaded),
+    manualFiltering: Boolean(server),
+    manualPagination: Boolean(server),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -63,14 +105,26 @@ export function DataTable<TData, TValue>({
     initialState: { pagination: { pageSize: initialPageSize } },
   });
 
-  const rowCount = table.getFilteredRowModel().rows.length;
-  const pageIndex = table.getState().pagination.pageIndex;
-  const pageSize = table.getState().pagination.pageSize;
+  const rowCount = server ? data.length : table.getFilteredRowModel().rows.length;
+  const pageIndex = server ? server.pageIndex : table.getState().pagination.pageIndex;
+  const pageSize = server ? server.pageSize : table.getState().pagination.pageSize;
   const pageFrom = rowCount === 0 ? 0 : pageIndex * pageSize + 1;
-  const pageTo = Math.min((pageIndex + 1) * pageSize, rowCount);
+  const pageTo = server ? pageIndex * pageSize + rowCount : Math.min((pageIndex + 1) * pageSize, rowCount);
+  const ofTotal = server
+    ? server.totalCount === null
+      ? ""
+      : ` of ${server.totalCount}`
+    : ` of ${rowCount}`;
+  const pageCount = server
+    ? server.totalCount === null
+      ? null
+      : Math.max(1, Math.ceil(server.totalCount / server.pageSize))
+    : Math.max(1, table.getPageCount());
+  const canPrevious = server ? server.canPreviousPage && !server.busy : table.getCanPreviousPage();
+  const canNext = server ? server.canNextPage && !server.busy : table.getCanNextPage();
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" aria-busy={server?.busy || undefined}>
       <div className="flex items-center gap-2">
         <div className="relative w-full max-w-xs">
           <Search
@@ -78,17 +132,27 @@ export function DataTable<TData, TValue>({
             className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-mute-2)]"
           />
           <Input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            value={server ? server.search : globalFilter}
+            onChange={(e) =>
+              server ? server.onSearchChange(e.target.value) : setGlobalFilter(e.target.value)
+            }
             placeholder={filterPlaceholder}
             className="pl-8"
-            aria-label="Filter rows"
+            aria-label={server ? "Search all rows" : "Filter rows"}
+            type={server ? "search" : undefined}
+            maxLength={server?.searchMaxLength}
           />
         </div>
-        <div className="ml-auto text-xs text-[var(--color-mute)]">
-          {rowCount === 0
-            ? "No results"
-            : `${pageFrom}-${pageTo} of ${rowCount}`}
+        <div
+          className="ml-auto text-xs text-[var(--color-mute)]"
+          role={server ? "status" : undefined}
+          data-testid="data-table-range"
+        >
+          {server?.busy
+            ? "Loading…"
+            : rowCount === 0
+              ? "No results"
+              : `${pageFrom}-${pageTo}${ofTotal}`}
         </div>
       </div>
 
@@ -109,7 +173,11 @@ export function DataTable<TData, TValue>({
                         pinLastColumn && index === group.headers.length - 1 && PINNED_HEADER,
                       )}
                     >
-                      {header.isPlaceholder ? null : (
+                      {header.isPlaceholder ? null : !canSort ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </span>
+                      ) : (
                         <button
                           type="button"
                           onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
@@ -194,16 +262,17 @@ export function DataTable<TData, TValue>({
       </div>
 
       <div className="flex items-center justify-between text-xs text-[var(--color-mute)]">
-        <span>
-          Page {pageIndex + 1} of {Math.max(1, table.getPageCount())}
+        <span data-testid="data-table-page">
+          Page {pageIndex + 1}
+          {pageCount === null ? "" : ` of ${pageCount}`}
         </span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             aria-label="Previous page"
             className="rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 disabled:opacity-50"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => (server ? server.onPreviousPage() : table.previousPage())}
+            disabled={!canPrevious}
           >
             Previous
           </button>
@@ -211,8 +280,8 @@ export function DataTable<TData, TValue>({
             type="button"
             aria-label="Next page"
             className="rounded-md border border-[var(--color-line)] bg-white px-2.5 py-1 disabled:opacity-50"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => (server ? server.onNextPage() : table.nextPage())}
+            disabled={!canNext}
           >
             Next
           </button>

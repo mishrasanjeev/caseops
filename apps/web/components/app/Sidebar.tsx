@@ -8,6 +8,7 @@ import {
   Briefcase,
   CalendarClock,
   CalendarDays,
+  ChevronDown,
   ChevronsRight,
   Contact,
   CreditCard,
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useId, useState } from "react";
 
 import { Logo } from "@/components/marketing/Logo";
 import {
@@ -119,6 +121,31 @@ const NAV_ITEMS: NavItem[] = PRODUCT_GUIDE_CATALOG.commands.map((command) => {
 // six plausible ones.
 const SECTION_LABEL = PRODUCT_GUIDE_CATALOG.navigation_groups;
 
+// Each group header expands and collapses its pages (Nov 24 workbook row 3).
+// Every group starts expanded so no destination disappears for anyone; the
+// groups a person collapses are remembered in this browser, and opening a page
+// inside a collapsed group expands that group again.
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = "caseops.sidebar.collapsed-groups";
+
+function readCollapsedGroups(): NavItem["section"][] {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) ?? "[]");
+    return Array.isArray(stored)
+      ? stored.filter((key): key is NavItem["section"] => typeof key === "string" && Object.hasOwn(SECTION_LABEL, key))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCollapsedGroups(groups: NavItem["section"][]) {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, JSON.stringify(groups));
+  } catch {
+    // Storage can be unavailable (private mode); the choice then lasts for the page.
+  }
+}
+
 // Ram-BUG-005 (2026-04-22): the inner nav body is split out so the
 // mobile hamburger trigger in Topbar can render the same content
 // inside a Radix Dialog without copy-pasting the menu items.
@@ -151,6 +178,33 @@ export function SidebarBody({
       items: visible.filter((n) => n.section === key),
     }))
     .filter((group) => group.items.length > 0);
+  const activeGroup = visible.find((item) => item.href === activeHref)?.section;
+
+  const [collapsed, setCollapsed] = useState<NavItem["section"][]>([]);
+  useEffect(() => {
+    setCollapsed(readCollapsedGroups());
+  }, []);
+  useEffect(() => {
+    if (!activeGroup) return;
+    setCollapsed((current) => {
+      if (!current.includes(activeGroup)) return current;
+      const next = current.filter((key) => key !== activeGroup);
+      writeCollapsedGroups(next);
+      return next;
+    });
+  }, [activeGroup]);
+  function toggleGroup(key: NavItem["section"]) {
+    setCollapsed((current) => {
+      const next = current.includes(key)
+        ? current.filter((value) => value !== key)
+        : [...current, key];
+      writeCollapsedGroups(next);
+      return next;
+    });
+  }
+  // Both the desktop sidebar and the phone drawer render this body; useId keeps
+  // their list ids distinct, stripped to characters a CSS selector accepts.
+  const idPrefix = `sidebar${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
     <>
@@ -158,24 +212,43 @@ export function SidebarBody({
         <Logo />
       </div>
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-6">
-        {grouped.map((group) => (
-          <div key={group.key} className="flex flex-col gap-1.5">
-            <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-mute-2)]">
-              {group.label}
+        {grouped.map((group) => {
+          const expanded = !collapsed.includes(group.key);
+          const listId = `${idPrefix}-nav-${group.key}`;
+          const holdsActive = group.key === activeGroup;
+          return (
+            <div key={group.key} className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-controls={listId}
+                onClick={() => toggleGroup(group.key)}
+                data-testid={`sidebar-group-${group.key}`}
+                className={cn(
+                  "flex min-h-8 items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.18em] hover:bg-[var(--color-bg-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]",
+                  holdsActive && !expanded ? "text-[var(--color-ink)]" : "text-[var(--color-mute-2)]",
+                )}
+              >
+                <span>{group.label}</span>
+                <ChevronDown
+                  aria-hidden
+                  className={cn("h-3.5 w-3.5 transition-transform", expanded ? "" : "-rotate-90")}
+                />
+              </button>
+              <ul id={listId} hidden={!expanded} className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <li key={item.href}>
+                    <NavLink
+                      item={item}
+                      active={item.href === activeHref}
+                      onNavigate={onNavigate}
+                    />
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="flex flex-col gap-0.5">
-              {group.items.map((item) => (
-                <li key={item.href}>
-                  <NavLink
-                    item={item}
-                    active={item.href === activeHref}
-                    onNavigate={onNavigate}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+          );
+        })}
         <div className="mt-auto rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-ink-2)]">
             <Sparkles className="h-3.5 w-3.5 text-[var(--color-brand-600)]" aria-hidden />

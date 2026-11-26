@@ -992,8 +992,10 @@ def list_contracts(
     context: SessionContext,
     limit: int | None = None,
     cursor: str | None = None,
+    q: str | None = None,
+    include_total: bool = False,
 ) -> ContractListResponse:
-    from sqlalchemy import and_, or_
+    from sqlalchemy import and_, func, or_
 
     from caseops_api.services.pagination import (
         clamp_limit,
@@ -1004,9 +1006,30 @@ def list_contracts(
     page_size = clamp_limit(limit)
     decoded = decode_cursor(cursor)
 
+    # Search runs on the server over every contract, so a contract on a page
+    # the browser has not loaded is still found (Nov 24 workbook adjacent path).
+    scope = [Contract.company_id == context.company.id]
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        scope.append(
+            or_(
+                Contract.title.ilike(pattern),
+                Contract.contract_code.ilike(pattern),
+                Contract.counterparty_name.ilike(pattern),
+                Contract.contract_type.ilike(pattern),
+                Contract.jurisdiction.ilike(pattern),
+                Contract.status.ilike(pattern),
+            )
+        )
+    total_count = (
+        session.scalar(select(func.count(Contract.id)).where(*scope)) or 0
+        if include_total
+        else None
+    )
     stmt = (
         select(Contract)
-        .where(Contract.company_id == context.company.id)
+        .where(*scope)
         .order_by(Contract.updated_at.desc(), Contract.id.desc())
     )
     if decoded is not None:
@@ -1031,6 +1054,7 @@ def list_contracts(
         company_id=context.company.id,
         contracts=[_contract_record(contract) for contract in rows],
         next_cursor=next_cursor,
+        total_count=total_count,
     )
 
 

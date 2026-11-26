@@ -22069,6 +22069,8 @@ export interface components {
             contracts: components["schemas"]["ContractRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** ContractMetadataUpdateRequest */
         ContractMetadataUpdateRequest: {
@@ -41786,6 +41788,8 @@ export interface components {
             matters: components["schemas"]["MatterRecord"][];
             /** Next Cursor */
             next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** MatterNextHearingHistoryRecord */
         MatterNextHearingHistoryRecord: {
@@ -60358,7 +60362,9 @@ export interface operations {
         parameters: {
             query?: {
                 cursor?: string | null;
+                include_total?: boolean;
                 limit?: number | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -73586,6 +73592,7 @@ export interface operations {
                 forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal" | "arbitration" | "advisory") | null;
                 has_stay?: boolean | null;
                 id?: string | null;
+                include_total?: boolean;
                 limit?: number | null;
                 max_claim_amount_minor?: number | null;
                 min_claim_amount_minor?: number | null;
@@ -78184,7 +78191,10 @@ export interface operations {
     };
     get_current_company_matter_ethical_walls_api_matters_ethical_walls_get: {
         parameters: {
-            query?: never;
+            query?: {
+                matter_id?: string | null;
+                q?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -78198,6 +78208,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterEthicalWallDirectoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

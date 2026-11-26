@@ -365,6 +365,7 @@ def current_company_matters(
     filters: Annotated[MatterListFilters, Depends()],
     limit: int | None = None,
     cursor: str | None = None,
+    include_total: bool = False,
 ) -> MatterListResponse:
     return list_matters(
         session,
@@ -372,6 +373,7 @@ def current_company_matters(
         limit=limit,
         cursor=cursor,
         filters=filters,
+        include_total=include_total,
     )
 
 
@@ -834,8 +836,12 @@ def check_matter_code_available(
 def get_current_company_matter_ethical_walls(
     context: MatterAccessManager,
     session: DbSession,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    matter_id: Annotated[str | None, Query(max_length=36)] = None,
 ) -> MatterEthicalWallDirectoryResponse:
-    return list_matter_ethical_wall_directory(session, context=context)
+    return list_matter_ethical_wall_directory(
+        session, context=context, q=q, matter_id=matter_id
+    )
 
 
 @router.post(

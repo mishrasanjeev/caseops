@@ -511,3 +511,26 @@ while the identical payload created fine by hand.
 - **Phrase every prevention rule as a user-visible invariant.** A rule that
   describes validator behaviour cannot be falsified by a workflow test. Write
   the sentence a tester would write, then name the test that proves it.
+
+### Why fixed bugs reopen: the November 25 analysis
+
+Four of the six rows in the Nov 24 workbook were the same failure in a new
+place or a reopen. The pattern, stated so each part can be checked:
+
+1. **We fixed the named instance, not the mechanism.** B4-ADJ-03 recorded
+   "Matter lists filtered on the client" and converted the four hubs it named.
+   The shared `DataTable` that every list used stayed unsafe by default, so
+   the main Matters page and Contracts kept the defect. Audit by mechanism,
+   make the safe path the only one that compiles, and list every caller.
+2. **The proof measured what we changed, not what the tester saw.** B5-016's
+   counsel fix proved overflow, keyboard and touch; the tester complained about
+   uneven size at 100% zoom, which nothing measured. Turn the tester's words
+   ("uneven", "misaligned", "at 80-150%") into geometric assertions.
+3. **Fixtures were too small to fail.** One- or two-row unit fixtures cannot
+   cross a page boundary, reveal a client-side filter or show unequal heights.
+   Size fixtures past the boundary the bug lives on.
+4. **Tests were not shown to fail first.** Every new regression must be run
+   against the pre-fix code and fail there before it counts as coverage.
+5. **"Open" was never followed.** A link whose target is the current URL looks
+   like a dead button. Click every primary action in the journey and assert
+   the destination and the focused item, not only that a link renders.

@@ -283,7 +283,7 @@ function DeadlinesCard({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <Link
-                  href={`/app/matters/${d.matter.id}`}
+                  href={`/app/matters/${d.matter.id}/tasks?deadline=${encodeURIComponent(d.id)}`}
                   className="font-medium text-[var(--color-ink)] hover:underline"
                 >
                   {d.matter.matter_code} — {d.title}
@@ -347,7 +347,7 @@ function TasksCard({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <Link
-                  href={`/app/matters/${t.matter.id}`}
+                  href={`/app/matters/${t.matter.id}/tasks?task=${encodeURIComponent(t.id)}`}
                   className={`font-medium hover:underline ${
                     t.overdue ? "text-red-900" : "text-[var(--color-ink)]"
                   }`}

@@ -600,6 +600,21 @@ class NextAction:
     due_on_iso: str | None = None
 
 
+def matter_task_href(matter_id: str, task_id: str) -> str:
+    """Deep link to one task on the Matter's Tasks page.
+
+    The cockpit "Next action" used to link a task or deadline to the Matter
+    overview, which is the page that renders the card, so "Open" went nowhere
+    (Nov 24 workbook row 2). The Tasks page scrolls to and highlights the item.
+    """
+    return f"/app/matters/{matter_id}/tasks?task={task_id}"
+
+
+def matter_deadline_href(matter_id: str, deadline_id: str) -> str:
+    """Deep link to one deadline on the Matter's Tasks page."""
+    return f"/app/matters/{matter_id}/tasks?deadline={deadline_id}"
+
+
 # Severity ordering. Lower number = higher priority.
 _SEVERITY_RANK = {"urgent": 0, "soon": 1, "normal": 2}
 
@@ -681,7 +696,7 @@ def build_matter_next_action(
                     label=t.title,
                     detail=f"Task overdue · due {t.due_on.isoformat() if t.due_on else 'unset'}",
                     severity="urgent",
-                    href=f"/app/matters/{matter_id}",
+                    href=matter_task_href(matter_id, t.id),
                     due_on_iso=t.due_on.isoformat() if t.due_on else None,
                 )
             )
@@ -702,7 +717,7 @@ def build_matter_next_action(
                 label=d.title,
                 detail=detail,
                 severity=severity,
-                href=f"/app/matters/{matter_id}",
+                href=matter_deadline_href(matter_id, d.id),
                 due_on_iso=d.due_on.isoformat(),
             )
         )
@@ -734,7 +749,7 @@ def build_matter_next_action(
                     label=t.title,
                     detail=f"Task due in {days_until}d",
                     severity=severity,
-                    href=f"/app/matters/{matter_id}",
+                    href=matter_task_href(matter_id, t.id),
                     due_on_iso=t.due_on.isoformat(),
                 )
             )

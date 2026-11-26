@@ -185,6 +185,8 @@ export default function OutsideCounselPage() {
       ) : (
         <DataTable
           data={profiles}
+          // /api/outside-counsel/workspace returns every profile (no limit).
+          completeData
           columns={columns}
           filterPlaceholder="Search counsel, contact, practice…"
           getRowId={(p) => p.id}

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { canMock, resolvedMock, roleMock } = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ vi.mock("@/lib/capabilities", () => ({
   useRole: () => roleMock(),
 }));
 
-import { APP_NAV, SidebarBody } from "@/components/app/Sidebar";
+import { APP_NAV, SIDEBAR_COLLAPSED_STORAGE_KEY, SidebarBody } from "@/components/app/Sidebar";
 
 describe("SidebarBody resolved capability navigation", () => {
   beforeEach(() => {
@@ -192,5 +192,73 @@ describe("SidebarBody resolved capability navigation", () => {
 
     expect(screen.queryByRole("link", { name: "Patent intake" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { current: "page" })).not.toBeInTheDocument();
+  });
+});
+
+// Nov 24 workbook row 3: every sidebar group expands and collapses its pages.
+describe("SidebarBody collapsible groups", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    roleMock.mockReturnValue("owner");
+    resolvedMock.mockReturnValue(null);
+    canMock.mockReturnValue(true);
+  });
+
+  it("gives every group a disclosure that hides and shows exactly its pages", () => {
+    render(<SidebarBody pathname="/app/matters" />);
+    const groups = new Map<string, string[]>();
+    for (const item of APP_NAV) groups.set(item.section, [...(groups.get(item.section) ?? []), item.label]);
+    for (const [key, labels] of groups) {
+      const toggle = screen.getByTestId(`sidebar-group-${key}`);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      const list = document.getElementById(toggle.getAttribute("aria-controls")!);
+      expect(list).not.toBeNull();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      for (const label of labels) {
+        expect(screen.queryByRole("link", { name: label })).toBeNull();
+      }
+      fireEvent.click(toggle);
+      for (const label of labels) {
+        expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("shows Home and Today under Overview", () => {
+    render(<SidebarBody pathname="/app" />);
+    const toggle = screen.getByTestId("sidebar-group-overview");
+    expect(toggle).toHaveTextContent("Overview");
+    const list = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect([...list.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
+      "/app",
+      "/app/today",
+    ]);
+  });
+
+  it("remembers collapsed groups and reopens the group of the page being opened", () => {
+    const first = render(<SidebarBody pathname="/app" />);
+    fireEvent.click(screen.getByTestId("sidebar-group-schedule"));
+    fireEvent.click(screen.getByTestId("sidebar-group-intel"));
+    expect(JSON.parse(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)!)).toEqual([
+      "schedule",
+      "intel",
+    ]);
+    first.unmount();
+
+    const second = render(<SidebarBody pathname="/app" />);
+    expect(screen.getByTestId("sidebar-group-schedule")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Hearings" })).toBeNull();
+    second.rerender(<SidebarBody pathname="/app/hearings" />);
+    expect(screen.getByTestId("sidebar-group-schedule")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Hearings" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("sidebar-group-intel")).toHaveAttribute("aria-expanded", "false");
+    expect(JSON.parse(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)!)).toEqual(["intel"]);
+  });
+
+  it("ignores unreadable or unknown stored groups", () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "not json");
+    render(<SidebarBody pathname="/app" />);
+    expect(screen.getByTestId("sidebar-group-casework")).toHaveAttribute("aria-expanded", "true");
   });
 });

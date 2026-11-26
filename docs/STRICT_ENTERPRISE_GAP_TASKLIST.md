@@ -1,3 +1,13 @@
+## November25 - DataTable data contract (EH-B4-02 progress)
+
+**Partially implemented.** The shared web `DataTable` filtered, paged and
+sorted only the rows it was given, so every caller that passed one server page
+showed a partial list as the whole (Matters and Contracts, Nov 24 workbook).
+Callers must now declare `completeData` or `server` (type-checked, with a
+`@ts-expect-error` test); Matters and Contracts use server search, paging and
+totals. EH-B4-02 stays open for non-DataTable list reads (watch workspace,
+`/app/ip` linked-docket picker) - no repository-wide guard for those yet.
+
 ## November24 — populated-team removal ran a per-docket IP role fence
 
 **Partially implemented** (J14/M13/US-040, NFT-001, SEC-002/003/004). Removing

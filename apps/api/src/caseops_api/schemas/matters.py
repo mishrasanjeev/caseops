@@ -485,6 +485,11 @@ class MatterListResponse(BaseModel):
     # calls. Keeping it opaque means we can change the encoding later
     # without breaking clients.
     next_cursor: str | None = None
+    # Every Matter that matches the same filters and access rules, across
+    # all pages. Present only when the caller asks with include_total=true,
+    # so a paged list can say "51-100 of 342" instead of presenting the
+    # loaded rows as the whole portfolio.
+    total_count: int | None = None
 
 
 class MatterDashboardSummaryResponse(BaseModel):

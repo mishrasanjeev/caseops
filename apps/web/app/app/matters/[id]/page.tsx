@@ -756,15 +756,22 @@ export default function MatterOverviewPage() {
 
       <MatterForumCard matter={data.matter} />
 
+      {/* Nov 24 workbook row 6: in a one-third column (335px at 1366px)
+          Suggested Counsel could only stack its cards. Bench strategy
+          takes the rest of the forum row, and counsel gets a full-width
+          row so its cards sit side by side. Load order is unchanged. */}
+      <div className="min-w-0 lg:col-span-2">
+        <BenchStrategyPanel
+          matterId={data.matter.id}
+          loadEnabled={supportStage >= 4}
+        />
+      </div>
+
       <CounselRecommendationsCard
+        className="lg:col-span-3"
         matterId={data.matter.id}
         loadEnabled={supportStage >= 3}
         onLoadSettled={() => advanceSupportSequence(data.matter.id, 4)}
-      />
-
-      <BenchStrategyPanel
-        matterId={data.matter.id}
-        loadEnabled={supportStage >= 4}
       />
 
       {/* BUG-011 (Hari 2026-04-22 reopen): hide the "Last court order"

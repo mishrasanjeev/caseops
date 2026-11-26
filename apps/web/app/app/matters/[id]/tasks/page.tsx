@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ClipboardList, Plus, RotateCcw, TimerReset } from "lucide-react";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -119,6 +119,10 @@ export default function MatterTasksPage() {
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "tasks"] }),
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "deadlines"] }),
       queryClient.invalidateQueries({ queryKey: ["matters", matterId, "workspace"] }),
+      // The cockpit Next action and Today list these items; refresh them so
+      // Back after Complete does not offer the finished item again.
+      queryClient.invalidateQueries({ queryKey: ["matter", matterId, "next-action"] }),
+      queryClient.invalidateQueries({ queryKey: ["today"] }),
     ]);
   }
 
@@ -188,8 +192,40 @@ export default function MatterTasksPage() {
   const tasks = tasksQuery.data?.tasks ?? [];
   const deadlines = deadlinesQuery.data?.deadlines ?? [];
 
+  // ?task=<id> / ?deadline=<id> come from Today and the cockpit "Next action"
+  // Open link: scroll to the item, focus it and mark it (Nov 24 workbook row 2).
+  const searchParams = useSearchParams();
+  const focusTaskId = searchParams.get("task");
+  const focusDeadlineId = focusTaskId ? null : searchParams.get("deadline");
+  const focusKind = focusTaskId ? "task" : focusDeadlineId ? "deadline" : null;
+  const focusItemId = focusTaskId ?? focusDeadlineId;
+  const focusLoaded = focusKind === "task" ? tasksQuery.isSuccess : focusKind === "deadline" ? deadlinesQuery.isSuccess : false;
+  const focusFound =
+    focusKind === "task"
+      ? tasks.some((task) => task.id === focusItemId)
+      : focusKind === "deadline"
+        ? deadlines.some((deadline) => deadline.id === focusItemId)
+        : false;
+  const focusElementId = focusKind && focusItemId ? `${focusKind}-${focusItemId}` : null;
+  useEffect(() => {
+    if (!focusElementId || !focusFound) return;
+    const element = document.getElementById(focusElementId);
+    if (!element) return;
+    element.scrollIntoView?.({ block: "center" });
+    element.focus({ preventScroll: true });
+  }, [focusElementId, focusFound]);
+
   return (
     <div className="grid gap-5 xl:grid-cols-2">
+      {focusKind && focusLoaded && !focusFound ? (
+        <p
+          role="status"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 xl:col-span-2"
+          data-testid="matter-tasks-focus-missing"
+        >
+          The {focusKind} you opened is no longer on this matter. It may have been removed.
+        </p>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Tasks</CardTitle>
@@ -285,6 +321,7 @@ export default function MatterTasksPage() {
                 <TaskRow
                   key={task.id}
                   task={task}
+                  focused={focusKind === "task" && task.id === focusItemId}
                   onToggle={() =>
                     updateTaskMutation.mutate({
                       id: task.id,
@@ -398,6 +435,7 @@ export default function MatterTasksPage() {
                 <DeadlineRow
                   key={deadline.id}
                   deadline={deadline}
+                  focused={focusKind === "deadline" && deadline.id === focusItemId}
                   onToggle={() =>
                     updateDeadlineMutation.mutate({
                       id: deadline.id,
@@ -436,15 +474,23 @@ function TaskRow({
   task,
   onToggle,
   busy,
+  focused,
 }: {
   task: MatterTaskRecord;
   onToggle: () => void;
   busy: boolean;
+  focused?: boolean;
 }) {
   const completed = task.status === "completed";
   const cancelled = task.status === "cancelled";
   return (
-    <li className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
+    <li
+      id={`task-${task.id}`}
+      tabIndex={focused ? -1 : undefined}
+      aria-current={focused ? "true" : undefined}
+      data-testid={`matter-task-${task.id}`}
+      className={focusedRowClass(focused)}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -479,15 +525,23 @@ function DeadlineRow({
   deadline,
   onToggle,
   busy,
+  focused,
 }: {
   deadline: MatterDeadlineRecord;
   onToggle: () => void;
   busy: boolean;
+  focused?: boolean;
 }) {
   const done = deadline.status === "done";
   const cancelled = deadline.status === "cancelled";
   return (
-    <li className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3">
+    <li
+      id={`deadline-${deadline.id}`}
+      tabIndex={focused ? -1 : undefined}
+      aria-current={focused ? "true" : undefined}
+      data-testid={`matter-deadline-${deadline.id}`}
+      className={focusedRowClass(focused)}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -517,4 +571,10 @@ function DeadlineRow({
       </div>
     </li>
   );
+}
+
+function focusedRowClass(focused: boolean | undefined): string {
+  return focused
+    ? "rounded-lg border-2 border-[var(--color-brand-500)] bg-[var(--color-bg)] p-3 outline-none scroll-mt-24"
+    : "rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-3";
 }

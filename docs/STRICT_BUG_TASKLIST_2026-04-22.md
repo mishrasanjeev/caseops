@@ -1,3 +1,34 @@
+## November 25 - workbook "Caseops Bugs (1)" (24 Nov, six rows)
+
+Triage (all six reproduce against `origin/main` a430c593c):
+
+- Row 1 header group not at the right edge - valid bug. The search form is
+  `flex-1 max-w-md`, so it stops growing and the workspace group sat after it.
+  Fix: the group is one `ml-auto` cluster (`components/app/Topbar.tsx`).
+- Row 2 Next action Open not clickable - valid bug. Task and deadline
+  next-actions linked to `/app/matters/{id}`, the page rendering the card, and
+  Today linked tasks/deadlines to the overview too. Fix: deep links to the
+  Tasks page item (`services/today_view.py`, `app/today/page.tsx`,
+  `matters/[id]/tasks/page.tsx`).
+- Row 3 expandable sidebar groups - enhancement (PRD J01 updated). Groups were
+  static labels.
+- Rows 4-5 Next needs Load more; search misses unloaded matters - valid bugs,
+  one root cause. `DataTable` paged (25) and filtered on the client over the
+  50-row server batches loaded so far. This is the B4-ADJ-03 class: that entry
+  fixed the four hub lists it named and never audited the shared table, so the
+  main Matters page kept the defect. Same defect found and fixed on Contracts
+  (API had no search parameter at all), the ethical-wall filter past 500 walls
+  and the "already walled" check, and the offboarding replacement picker
+  (built from the searched directory).
+- Row 6 Suggested Counsel uneven at 100% - valid bug, reopen of B5-016. The
+  11-22 fix used `sm:grid-cols-2 items-start` and proved overflow, keyboard
+  and touch, never equal size or alignment at the tester's zoom levels.
+
+Prevention: `DataTable` now refuses (at compile time) a caller that does not
+declare `completeData` or `server`; the regression set fails on the old code
+(6/6 failed against a430c593c's page and table). Verdicts below are recorded
+after production verification.
+
 ## November24 — issue #513 public lead failure observability
 
 **Partially fixed / Inconclusive; issue stays open.** Issue #513 exit criteria
