@@ -50,7 +50,9 @@ import {
   Select,
   SelectContent,
   SelectEmpty,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
@@ -71,6 +73,20 @@ const RELEVANCE_TONE: Record<Relevance, "brand" | "warning" | "neutral"> = {
   opposing: "warning",
   context: "neutral",
 };
+
+// Disabled rows stay listed so coverage is honest, but they follow every
+// attachable row under their own label instead of interleaving with it.
+const PENDING_GROUP_LABEL = "Verification pending — cannot be attached yet";
+const WITHDRAWN_GROUP_LABEL = "Omitted or withheld — cannot be attached";
+const GROUP_DIVIDER = "mt-1 border-t border-[var(--color-line)]";
+
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "Official source";
+  }
+}
 
 export default function MatterStatutesPage() {
   const params = useParams<{ id: string }>();
@@ -186,7 +202,7 @@ function RefRow({
             rel="noopener noreferrer"
             className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--color-brand-600)] hover:underline"
           >
-            indiacode.nic.in
+            {sourceHost(ref.section_url)}
             <ExternalLink className="h-3 w-3" aria-hidden />
           </a>
         ) : null}
@@ -241,11 +257,36 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
     (statute) => statute.section_count > 0,
   );
   const allStatutes = statutesQuery.data?.statutes ?? [];
+  const pendingStatutes = allStatutes.filter((statute) => statute.section_count === 0);
   const catalogReady = statutesQuery.isSuccess && statutesQuery.fetchStatus === "idle";
   const sectionsReady = sectionsQuery.isSuccess && sectionsQuery.fetchStatus === "idle";
   const sections = sectionsReady ? sectionsQuery.data.sections : [];
   const selectableSectionIds = new Set(sections.map((section) => section.id));
   const catalogSections = sectionsReady ? sectionsQuery.data.catalog_sections ?? sections : [];
+  const isWithdrawn = (sec: (typeof catalogSections)[number]) =>
+    "selection_state" in sec
+    && (sec.selection_state === "retired" || sec.selection_state === "quarantined");
+  const sectionGroups = [
+    {
+      key: "attachable",
+      label: null,
+      items: catalogSections.filter((sec) => selectableSectionIds.has(sec.id)),
+    },
+    {
+      key: "pending",
+      label: PENDING_GROUP_LABEL,
+      items: catalogSections.filter(
+        (sec) => !selectableSectionIds.has(sec.id) && !isWithdrawn(sec),
+      ),
+    },
+    {
+      key: "withdrawn",
+      label: WITHDRAWN_GROUP_LABEL,
+      items: catalogSections.filter(
+        (sec) => !selectableSectionIds.has(sec.id) && isWithdrawn(sec),
+      ),
+    },
+  ];
   const canAttach = catalogReady
     && selectableStatutes.some((statute) => statute.id === statuteId)
     && selectableSectionIds.has(sectionId);
@@ -327,18 +368,37 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 {allStatutes.length === 0 ? (
                   <SelectEmpty>No verified Acts available</SelectEmpty>
                 ) : null}
-                {allStatutes.map((s) => (
-                  <SelectItem
-                    key={s.id}
-                    value={s.id}
-                    data-value={s.id}
-                    disabled={s.section_count === 0}
-                  >
-                    {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
-                    {s.catalog_section_count ?? s.section_count} catalogued
-                    {s.section_count === 0 ? "; verification pending" : ""})
-                  </SelectItem>
-                ))}
+                {[
+                  { key: "attachable", label: null, items: selectableStatutes },
+                  { key: "pending", label: PENDING_GROUP_LABEL, items: pendingStatutes },
+                ].map((group) =>
+                  group.items.length === 0 ? null : (
+                    <SelectGroup
+                      key={group.key}
+                      data-testid={`matter-statute-act-group-${group.key}`}
+                    >
+                      {group.label ? (
+                        <SelectLabel
+                          className={selectableStatutes.length > 0 ? GROUP_DIVIDER : undefined}
+                        >
+                          {group.label}
+                        </SelectLabel>
+                      ) : null}
+                      {group.items.map((s) => (
+                        <SelectItem
+                          key={s.id}
+                          value={s.id}
+                          data-value={s.id}
+                          disabled={s.section_count === 0}
+                        >
+                          {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
+                          {s.catalog_section_count ?? s.section_count} catalogued
+                          {s.section_count === 0 ? "; verification pending" : ""})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ),
+                )}
               </SelectContent>
             </Select>
             {catalogReady ? (
@@ -348,9 +408,9 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
               >
                 {statutesQuery.data?.total_section_count ?? 0} verified of{" "}
                 {statutesQuery.data?.total_catalog_section_count ?? 0}{" "}
-                catalogued sections across {allStatutes.length} Acts. All Acts
-                are shown; entries awaiting complete source verification are
-                visible but disabled.
+                catalogued sections across {allStatutes.length} Acts. Attachable
+                Acts are listed first; Acts awaiting complete source
+                verification are grouped below and disabled.
               </span>
             ) : null}
             {statutesQuery.isPaused ? (
@@ -396,22 +456,44 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                     {sectionPlaceholder}
                   </SelectEmpty>
                 ) : null}
-                {catalogSections.map((sec) => (
-                  <SelectItem
-                    key={sec.id}
-                    value={sec.id}
-                    data-value={sec.id}
-                    disabled={!selectableSectionIds.has(sec.id)}
-                  >
-                    {sec.section_number}
-                    {sec.section_label ? ` — ${sec.section_label}` : ""}
-                    {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
-                      ? " (historical repealed-law edition)" : ""}
-                    {!selectableSectionIds.has(sec.id)
-                      ? " — verification pending; not attachable"
-                      : ""}
-                  </SelectItem>
-                ))}
+                {sectionGroups.map((group, index) =>
+                  group.items.length === 0 ? null : (
+                    <SelectGroup
+                      key={group.key}
+                      data-testid={`matter-statute-section-group-${group.key}`}
+                    >
+                      {group.label ? (
+                        <SelectLabel
+                          className={
+                            sectionGroups.slice(0, index).some((prior) => prior.items.length > 0)
+                              ? GROUP_DIVIDER
+                              : undefined
+                          }
+                        >
+                          {group.label}
+                        </SelectLabel>
+                      ) : null}
+                      {group.items.map((sec) => (
+                        <SelectItem
+                          key={sec.id}
+                          value={sec.id}
+                          data-value={sec.id}
+                          disabled={group.key !== "attachable"}
+                        >
+                          {sec.section_number}
+                          {sec.section_label ? ` — ${sec.section_label}` : ""}
+                          {sec.legal_status === "repealed" && group.key === "attachable"
+                            ? " (historical repealed-law edition)" : ""}
+                          {group.key === "pending"
+                            ? " — verification pending; not attachable"
+                            : group.key === "withdrawn"
+                              ? " — not attachable"
+                              : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ),
+                )}
               </SelectContent>
             </Select>
             {statuteId && sectionsReady ? (
