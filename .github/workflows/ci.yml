@@ -68,6 +68,50 @@ jobs:
       - name: Validate pinned Temporal fixture acquisition without network
         run: python -m unittest discover -s scripts/tests -p test_prepare_temporal_test_server.py -v
 
+      - name: Enforce offline AI safety release gate (IPLF-065)
+        run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
+
+      - name: Require optional traceparent security acceptance
+        working-directory: apps/api
+        env:
+          CASEOPS_REQUIRE_OBSERVABILITY_TESTS: "1"
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          CASEOPS_TEST_RESULT_JOURNAL: observability-security-results.jsonl
+        run: uv run python -m pytest --noconftest -o addopts= -p no:cacheprovider -p tests.retained_results tests/test_opentelemetry_traceparent_security_20261114.py -q --junitxml=observability-security-results.xml
+
+      - name: Retain optional traceparent security results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-security-results
+          path: |
+            apps/api/observability-security-results.jsonl
+            apps/api/observability-security-results.xml
+          if-no-files-found: error
+
+      - name: Ruff
+        working-directory: apps/api
+        run: uv run ruff check src tests
+
+  statute-evidence:
+    name: Official statute evidence
+    runs-on: ubuntu-latest
+    # Reproduces every pinned official edition from verified bytes, including
+    # the 1,117-page Income-tax Act release asset. It runs beside API ruff with
+    # its own budget and gates the required API (ruff + pytest) check.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
       # Official editions too large for the repository (the 179 MB Income-tax
       # Act, 1961) are pinned as release assets. They are cached by their
       # SHA-256, kept outside the checkout, and verified before any use.
@@ -122,36 +166,12 @@ jobs:
           PY
 
       - name: Reproduce every official statute provision from pinned PDF evidence
+        timeout-minutes: 15
         env:
           CASEOPS_STATUTE_EVIDENCE_DIR: ${{ runner.temp }}/statute-evidence
         run: |
           uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python -m unittest discover -s scripts/tests -p test_statute_bundle_compiler.py -v
           uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python scripts/build_verified_statute_bundle.py --check
-
-      - name: Enforce offline AI safety release gate (IPLF-065)
-        run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
-
-      - name: Require optional traceparent security acceptance
-        working-directory: apps/api
-        env:
-          CASEOPS_REQUIRE_OBSERVABILITY_TESTS: "1"
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
-          CASEOPS_TEST_RESULT_JOURNAL: observability-security-results.jsonl
-        run: uv run python -m pytest --noconftest -o addopts= -p no:cacheprovider -p tests.retained_results tests/test_opentelemetry_traceparent_security_20261114.py -q --junitxml=observability-security-results.xml
-
-      - name: Retain optional traceparent security results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: observability-security-results
-          path: |
-            apps/api/observability-security-results.jsonl
-            apps/api/observability-security-results.xml
-          if-no-files-found: error
-
-      - name: Ruff
-        working-directory: apps/api
-        run: uv run ruff check src tests
 
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
@@ -314,15 +334,16 @@ jobs:
   api:
     name: API (ruff + pytest)
     runs-on: ubuntu-latest
-    needs: [api-ruff, api-test-shards]
+    needs: [api-ruff, api-test-shards, statute-evidence]
     if: always() && !cancelled()
     timeout-minutes: 15
     steps:
       - name: Fail if API prerequisites failed
-        if: needs['api-ruff'].result != 'success' || needs['api-test-shards'].result != 'success'
+        if: needs['api-ruff'].result != 'success' || needs['api-test-shards'].result != 'success' || needs['statute-evidence'].result != 'success'
         run: |
           echo "API ruff result: ${{ needs['api-ruff'].result }}"
           echo "API pytest shard result: ${{ needs['api-test-shards'].result }}"
+          echo "Official statute evidence result: ${{ needs['statute-evidence'].result }}"
           exit 1
 
       - uses: actions/checkout@v4

@@ -248,7 +248,8 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
 
 
 @pytest.mark.parametrize("job", [
-    "api-ruff", "api-test-shards", "api", "postgres-validation-shards", "postgres-validation",
+    "api-ruff", "statute-evidence", "api-test-shards", "api", "postgres-validation-shards",
+    "postgres-validation",
 ])
 def test_every_ci_api_consumer_selects_the_supported_python_before_resolution(job):
     root = Path(__file__).resolve().parents[3]
