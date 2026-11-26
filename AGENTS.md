@@ -3367,6 +3367,11 @@ requirements when using the fallback.
   they prove retrieval, focus, verification, timing and UI, never the paid
   model's prose. An accuracy verdict on paid-model output also needs a run by a
   signed-in human on the deployed release, recorded with the exact question.
+- Triage starts by proving the whole report was read: count the source rows,
+  then confirm every ID is in the triage list. On Nov 26 the workbook dump
+  crashed on zero-width spaces in BUG-005, the traceback was buried below
+  BUG-004, and BUG-005 went untriaged until the summary step. A reader that
+  fails mid-file is a stop, never a partial input.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

@@ -561,3 +561,7 @@ measured the wrong thing:
     row.** It proves retrieval and focus; the paid model's prose needs a
     recorded signed-in human run on the deployed release before
     `Properly fixed`.
+11. **The report itself was read partially.** The first workbook dump crashed
+    on zero-width spaces inside BUG-005 and its traceback sat under BUG-004, so
+    one of five rows was never triaged. Count the rows and reconcile every ID
+    before triage; a reader error is a stop, not a shorter list.

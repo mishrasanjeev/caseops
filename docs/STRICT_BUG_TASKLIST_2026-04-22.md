@@ -7953,3 +7953,29 @@ matter facts steer retrieval; an unplaceable question abstains with
 `needs_detail` guidance; suggestions are deterministic, name only provisions
 with citable text, never repeat one that just had no sources, and never carry
 the matter title. The worker rechecks matter access before using matter facts.
+
+## November 26 - BUG-005 OCR & Translate: few languages, Translate To disabled, scanned pages unread (Ram, High)
+
+Missed in the first triage pass (the workbook dump crashed on this row; see
+the bug-fixing skill, item 11) and triaged on 27 Nov. Three claims:
+
+1. **Translate To disabled; scanned pages may stay unread.** Valid at report
+   time and operational: both providers answered `cost_not_verified` ("paused
+   until its pricing is verified") until the owner recorded the provider cost
+   profiles later on 26 Nov. Read live as Ram on 27 Nov (read-only readiness,
+   matter 40ca1c24, courtorder.pdf): OCR provider available, translation
+   available, English -> Hindi/Marathi and Hindi/Marathi -> English offered.
+   **Inconclusive** until a scanned document is run end to end as Ram on the
+   deployed release (paid; recorded with its result).
+2. **Source languages limited.** Valid enhancement, not a defect: the shipped
+   scope is English, Hindi and Marathi (PRD MOD-TS-002/003, US-066; "other
+   pairs" is an open PRD item). The dialog now states the supported set and the
+   translation pairs, built only from the server's readiness payload
+   (`supportedLanguagesSummary`, three regressions in
+   `OcrTranslateDialog.test.tsx`, shown failing on the old dialog). Adding
+   further Indian languages needs pinned fonts per script, provider language
+   verification, per-script digit normalisation and a paid live run per
+   language; owner chose (27 Nov) to ship it as the next PR. **Partially
+   fixed** until then.
+3. **Original must stay unchanged.** Already true (renditions are new files;
+   the dialog says so); no change.
