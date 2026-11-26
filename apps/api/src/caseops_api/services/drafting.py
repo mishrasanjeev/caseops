@@ -1701,6 +1701,33 @@ def generate_ip_draft_version(
     return draft
 
 
+def _attached_statute_refs(session: Session, matter_id: str) -> list[dict]:
+    """Attached provisions the prompt may quote: only the attachable ones."""
+    from caseops_api.db.models import MatterStatuteReference as _MSR
+    from caseops_api.db.models import Statute as _Statute
+    from caseops_api.db.models import StatuteSection as _StatuteSection
+    from caseops_api.services.statute_selection import selectable_statute_section_sql
+
+    rows = session.execute(
+        select(_MSR, _StatuteSection, _Statute)
+        .join(_StatuteSection, _StatuteSection.id == _MSR.section_id)
+        .join(_Statute, _Statute.id == _StatuteSection.statute_id)
+        .where(_MSR.matter_id == matter_id, selectable_statute_section_sql())
+        .order_by(_Statute.short_name, _StatuteSection.ordinal)
+    ).all()
+    return [
+        {
+            "statute_short_name": statute.short_name,
+            "section_number": section.section_number,
+            "section_label": section.section_label,
+            "section_text": section.section_text,
+            "section_url": section.section_url,
+            "relevance": ref.relevance,
+        }
+        for ref, section, statute in rows
+    ]
+
+
 def generate_draft_version(
     session: Session,
     *,
@@ -1782,34 +1809,7 @@ def generate_draft_version(
     # quoting. Wrapped so a stat-fetch failure NEVER blocks the draft.
     statute_refs: list[dict] = []
     try:
-        from caseops_api.db.models import MatterStatuteReference as _MSR
-        from caseops_api.db.models import Statute as _Statute
-        from caseops_api.db.models import StatuteSection as _StatuteSection
-
-        rows = session.execute(
-            select(_MSR, _StatuteSection, _Statute)
-            .join(_StatuteSection, _StatuteSection.id == _MSR.section_id)
-            .join(_Statute, _Statute.id == _StatuteSection.statute_id)
-            .where(
-                _MSR.matter_id == matter.id,
-                _StatuteSection.verification_status.in_({"verified_official", "verified_licensed"}),
-                _StatuteSection.source_sha256.is_not(None),
-                _StatuteSection.source_locator_type == "section_deep_link",
-                _StatuteSection.link_health_status == "available",
-            )
-            .order_by(_Statute.short_name, _StatuteSection.ordinal)
-        ).all()
-        statute_refs = [
-            {
-                "statute_short_name": statute.short_name,
-                "section_number": section.section_number,
-                "section_label": section.section_label,
-                "section_text": section.section_text,
-                "section_url": section.section_url,
-                "relevance": ref.relevance,
-            }
-            for ref, section, statute in rows
-        ]
+        statute_refs = _attached_statute_refs(session, matter.id)
     except Exception as exc:  # noqa: BLE001 — degrade to no statute block
         logger.warning(
             "Statute refs fetch failed for matter %s; draft proceeds "

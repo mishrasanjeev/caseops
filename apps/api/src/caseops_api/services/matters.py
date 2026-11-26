@@ -2010,6 +2010,10 @@ def create_matter(
             or MATTER_MUTATION_CAPABILITIES["create_matter" if commit else "import_matter"]
         ),
     )
+    if payload.client_id is not None:
+        # Linking the client is the same write as POST /matters/{id}/clients,
+        # so it needs the same capability.
+        require_locked_membership_capability(session, context.membership, "clients:edit")
     if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -2122,6 +2126,13 @@ def create_matter(
         forum_city=payload.forum_city,
         forum_consumer_level=payload.forum_consumer_level,
     )
+    linked_client = None
+    if payload.client_id is not None:
+        from caseops_api.services.clients import resolve_linkable_client
+
+        linked_client = resolve_linkable_client(
+            session, context=context, client_id=payload.client_id,
+        )
 
     matter = Matter(
         company_id=context.company.id,
@@ -2131,7 +2142,15 @@ def create_matter(
         title=payload.title.strip(),
         matter_code=payload.matter_code.strip(),
         matter_type=payload.matter_type.strip() if payload.matter_type else None,
-        client_name=payload.client_name.strip() if payload.client_name else None,
+        # A linked client's name replaces any typed name before anything reads
+        # the Matter (the case-tracking auto-link below uses it as a party).
+        client_name=(
+            linked_client.name
+            if linked_client is not None
+            else payload.client_name.strip()
+            if payload.client_name
+            else None
+        ),
         client_code=payload.client_code.strip() if payload.client_code else None,
         client_contact_number=(
             payload.client_contact_number.strip() if payload.client_contact_number else None
@@ -2232,6 +2251,20 @@ def create_matter(
             "case_tracking_auto_link": case_tracking_auto_link.metadata(),
         },
     )
+    if linked_client is not None:
+        from caseops_api.services.clients import link_client_to_matter
+
+        # The creation projection below already carries the synced name.
+        link_client_to_matter(
+            session,
+            context=context,
+            matter=matter,
+            client=linked_client,
+            role=None,
+            role_provided=False,
+            is_primary=True,
+            propagate_matter_change=False,
+        )
     from caseops_api.services.private_retrieval import (
         private_source_version,
         propagate_private_source_creation,

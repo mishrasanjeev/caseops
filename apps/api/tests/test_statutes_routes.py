@@ -194,13 +194,16 @@ def test_official_release_manifest_makes_article_14_selectable_and_traceable(
     )
     assert listed.status_code == 200, listed.text
     payload = listed.json()
-    assert [row["section_number"] for row in payload["sections"]] == ["Article 14"]
-    assert payload["verified_section_count"] == 1
-    assert payload["catalog_section_count"] == 11
-    assert len(payload["catalog_sections"]) == 11
+    # The pinned Constitution edition supersedes the former single-article row.
+    numbers = [row["section_number"] for row in payload["sections"]]
+    assert numbers.count("Article 14") == 1
+    assert payload["verified_section_count"] == 481
+    assert payload["catalog_section_count"] == 519
+    assert len(payload["catalog_sections"]) == 519
     catalog_by_number = {row["section_number"]: row for row in payload["catalog_sections"]}
     assert catalog_by_number["Article 14"]["selection_state"] == "verified_selectable"
-    assert catalog_by_number["Article 19"]["selection_state"] == "verification_pending"
+    assert catalog_by_number["Article 19"]["selection_state"] == "verified_selectable"
+    assert catalog_by_number["Article 31"]["selection_state"] == "retired"
 
     detail = client.get(
         "/api/statutes/constitution-india/sections/Article%2014",
@@ -210,12 +213,11 @@ def test_official_release_manifest_makes_article_14_selectable_and_traceable(
     section = detail.json()["section"]
     assert section["verification_status"] == "verified_official"
     assert section["source_sha256"] == (
-        "13161f8028e54fc6a7d49f89e189998c315b4c030803b678d8557576dea89f9e"
+        "b716f8c769302e5fbf9ff856ee3d4c521233a36abbf06ec3aec1ee0252461401"
     )
     assert section["section_text"] == (
-        "14. Equality before law.— The State shall not deny to any person "
-        "equality before the law or the equal protection of the laws within "
-        "the territory of India."
+        "14. Equality before law.— The State shall not deny to any person equality\n"
+        "before the law or the equal protection of the laws within the territory of India."
     )
     assert section["section_url"].endswith(".pdf#page=62")
     assert section["source_action"]["state"] == "available"

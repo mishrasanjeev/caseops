@@ -68,6 +68,10 @@ describe("assistant history and citation contracts", () => {
     "/app/matters",
     "/app/matters/12345678-1234-1234-1234-123456789abc",
     "/app/matters/matter-1?version=exact%2Fretained#source",
+    "/app/matters/12345678-1234-1234-1234-123456789abc/hearings",
+    "/app/matters/12345678-1234-1234-1234-123456789abc/tasks",
+    "/app/matters/12345678-1234-1234-1234-123456789abc/documents",
+    "/app/matters/12345678-1234-1234-1234-123456789abc/statutes",
     "/app/ip?docket=docket-1&view=overview",
     "/app/ip?docket=docket-1&view=proceedings",
     "/app/ip/documents",
@@ -88,6 +92,8 @@ describe("assistant history and citation contracts", () => {
     "/app/%2f%2fattacker.example", "/app/%5c%5cattacker.example",
     "/app/../admin", "/app/%2e%2e/admin", "/app/matters/../clients",
     "/native/sign-in", "/app/unknown-route", "/application", "/app/" + "x".repeat(2048),
+    "/app/matters/matter-1/billing", "/app/matters/matter-1/tasks/extra",
+    "/app/matters/matter-1/../../admin", "/app/clients/matter-1/tasks",
   ])("refuses malformed or out-of-contract destinations without fallback: %j", async (source_url) => {
     expect(() => safeAssistantCitationHref(source_url)).toThrow(
       "The citation destination is unavailable. Reopen the conversation and try again.",

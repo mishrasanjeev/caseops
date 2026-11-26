@@ -99,6 +99,7 @@ from caseops_api.services.llm import (
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.statute_selection import selectable_statute_section_sql
 from caseops_api.services.template_recommender import (
     TemplateRecommendation,
     recommend_templates,
@@ -390,12 +391,7 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
             .join(Statute, Statute.id == StatuteSection.statute_id)
             .where(
                 MatterStatuteReference.matter_id == matter.id,
-                StatuteSection.verification_status.in_(
-                    {"verified_official", "verified_licensed"}
-                ),
-                StatuteSection.source_sha256.is_not(None),
-                StatuteSection.source_locator_type == "section_deep_link",
-                StatuteSection.link_health_status == "available",
+                selectable_statute_section_sql(),
             )
             .order_by(MatterStatuteReference.created_at.desc())
             .limit(_MAX_STATUTE_REFS)

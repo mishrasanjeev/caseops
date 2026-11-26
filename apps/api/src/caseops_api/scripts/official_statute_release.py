@@ -36,6 +36,7 @@ EXPECTED_COUNTS = {
     "contract-1872": 269,
     "consumer-protection-2019": 107,
     "motor-vehicles-1988": 259,
+    "constitution-india": 519,
 }
 
 
@@ -49,6 +50,11 @@ def _official_document_url(url: str) -> bool:
     if parsed.scheme != "https" or "#" in url:
         return False
     authority = parsed.netloc.lower()
+    if authority == "www.legislative.gov.in":
+        # The Legislative Department publishes the Constitution of India.
+        return not parsed.query and (
+            re.fullmatch(r"/static/uploads/\d{4}/\d{2}/[0-9a-f]{32}\.pdf", parsed.path) is not None
+        )
     if authority == "indiacode.gov.in":
         return (
             not parsed.query
@@ -78,7 +84,7 @@ def _supplement_inventory(document: dict) -> dict[str, dict]:
     positions = {item["key"]: index for index, item in enumerate(entries)}
     children = {}
     for index, item in enumerate(entries):
-        if item["kind"] not in {"schedule", "order", "form", "appendix", "division"}:
+        if item["kind"] not in {"schedule", "order", "form", "appendix", "division", "preamble"}:
             raise ValueError("Unknown supplemental provision kind")
         last = item.get("span_through_key")
         if last is None:
@@ -114,8 +120,13 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
         supplement_keys = {item["key"] for item in document.get("supplements", [])}
         if not set(document.get("blocked_supplements", {})) <= supplement_keys:
             raise ValueError("Blocked supplement is outside the official inventory")
+        # A printed run of omitted identities ("379-391") is one arrangement
+        # entry but one provision row per identity.
+        range_rows = sum(
+            len(members) - 1 for members in document.get("identity_ranges", {}).values()
+        )
         if (
-            document["section_count"] + len(document.get("supplements", []))
+            document["section_count"] + range_rows + len(document.get("supplements", []))
             != EXPECTED_COUNTS[act_id]
         ):
             raise ValueError("Official numbered/supplement inventory count mismatch")
@@ -142,8 +153,9 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             raise ValueError("Official provision references an unknown document")
         key = act_id, source["section_number"]
         supplements = inventories[act_id]
+        prefix = document.get("provision_prefix", "Section")
         if key in sources or not (
-            re.fullmatch(r"Section \d+(?:-?[A-Z]+)?", key[1]) or key[1] in supplements
+            re.fullmatch(re.escape(prefix) + r" \d+(?:-?[A-Z]+)?", key[1]) or key[1] in supplements
         ):
             raise ValueError("Invalid or duplicate official provision identity")
         policy = source["source_policy"]
@@ -201,7 +213,7 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             or len(source["exact_source_version"]) > 160
         ):
             raise ValueError(f"Official provision provenance mismatch: {key}")
-        number = key[1].removeprefix("Section ")
+        number = key[1].removeprefix(f"{prefix} ")
         if key[1] in supplements:
             supplement = supplements[key[1]]
             if (

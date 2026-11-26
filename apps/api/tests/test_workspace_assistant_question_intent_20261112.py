@@ -323,3 +323,84 @@ def test_unsupported_legal_questions_abstain_before_model_and_offer_only_search(
     assert search["target_label"] is None
     assert search["requires_confirmation"] is False
     assert search["execution_available"] is False
+
+
+# Nov 25 nova-legal workbook row 3: the tester's Ask Workspace phrasings on a
+# family-law Matter. Record questions are not legal intent; a question about
+# the sections of a named Act is legal intent that gets the cited factual
+# hand-off instead of the generic refusal.
+TESTER_RECORD_QUESTIONS = (
+    "What is the current status of this matter?",
+    "What is the main legal issue in this matter?",
+    "What is the nature of the dispute?",
+    "What are the key facts of this matter?",
+    "Give me a chronological summary of this matter.",
+    "Who are the parties involved in this matter?",
+    "Are there any pending actions before the next hearing?",
+    "List all documents available in this matter.",
+)
+NAMED_STATUTE_QUESTIONS = (
+    "Explain the relevant sections of the Hindu Marriage Act, 1955",
+    "Explain the relevant sections of the Hindu Marriage Act",
+    "Which sections of the Hindu Marriage Act, 1955 apply here?",
+    "Summarise sections 13 and 13B of the Hindu Marriage Act.",
+    "Explain the provisions under the Code of Civil Procedure for this matter.",
+    "What does section 9 of the Family Courts Act say?",
+)
+
+
+@pytest.mark.parametrize("question", TESTER_RECORD_QUESTIONS)
+def test_tester_record_questions_are_not_legal_intent(question):
+    assert assistant._asks_for_legal_proposition(question) is False
+
+
+@pytest.mark.parametrize("question", TESTER_RECORD_QUESTIONS)
+def test_tester_record_questions_never_take_the_statute_handoff(question):
+    assert assistant._asks_about_named_statute_sections(question) is False
+
+
+@pytest.mark.parametrize("question", NAMED_STATUTE_QUESTIONS)
+def test_named_act_section_questions_are_legal_intent(question):
+    assert assistant._asks_for_legal_proposition(question) is True
+
+
+@pytest.mark.parametrize("question", NAMED_STATUTE_QUESTIONS)
+def test_named_act_section_questions_take_the_statute_handoff(question):
+    assert assistant._asks_about_named_statute_sections(question) is True
+
+
+@pytest.mark.parametrize("case_name", tuple(LEGAL_QUESTIONS))
+def test_unnamed_legal_questions_keep_the_generic_abstention_route(case_name):
+    assert assistant._asks_about_named_statute_sections(LEGAL_QUESTIONS[case_name]) is False
+
+
+def test_named_act_question_without_linked_sections_gets_cited_absence_and_handoff(
+    client: TestClient,
+    intent_case,
+):
+    case = intent_case
+    question = NAMED_STATUTE_QUESTIONS[0]
+    response = _ask(
+        client,
+        case.token,
+        assistant_session=case.conversation,
+        question=question,
+        no_paid_providers=True,
+    )
+    assert response.status_code == 200, response.text
+    turn = response.json()["assistant_turn"]
+    assert turn["status"] == "completed"
+    assert turn["content"] != ABSTENTION
+    assert "I cannot explain or interpret statutory provisions here." in turn["content"]
+    # Nothing is linked, whichever Act the question names.
+    assert f"No statute sections are linked to {case.matter['matter_code']}." in turn["content"]
+    assert turn["model"] is None
+    assert case.provider_builds == []
+    assert case.provider.calls == []
+    assert assistant_model_count(case.company_id) == case.model_count
+    assert [citation["source_type"] for citation in turn["citations"]] == ["matter_statutes"]
+    assert turn["citations"][0]["source_url"] == f"/app/matters/{case.matter['id']}/statutes"
+    assert [action["action_type"] for action in turn["proposed_actions"]] == ["search"]
+    assert turn["proposed_actions"][0]["href"] == (
+        f"/app/research?query={quote_plus(question)}&matter={case.matter['id']}"
+    )

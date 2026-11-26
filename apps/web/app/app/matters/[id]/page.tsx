@@ -15,8 +15,10 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
+import { ClientPicker } from "@/components/clients/ClientPicker";
 import { BenchStrategyPanel } from "@/components/matter/BenchStrategyPanel";
 import { ConflictCheckCard } from "@/components/matters/ConflictCheckCard";
+import { MatterClientsCard, useMatterClients } from "@/components/matters/MatterClientsCard";
 import { MatterLifecycleDialog } from "@/components/matters/MatterLifecycleDialog";
 import { MatterForumCard } from "@/components/matters/MatterForumCard";
 import { NextActionCard } from "@/components/matters/NextActionCard";
@@ -37,7 +39,7 @@ import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
-import { updateMatter } from "@/lib/api/endpoints";
+import { assignClientToMatter, updateMatter } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
@@ -71,6 +73,8 @@ type MatterEditDraft = {
   title: string;
   matterCode: string;
   clientName: string;
+  /** An existing client to link as primary on save; replaces clientName. */
+  linkClientId: string;
   opposingParty: string;
   caseNumber: string;
   temporaryECaseNumber: string;
@@ -113,6 +117,7 @@ function draftFromMatter(matter: Matter): MatterEditDraft {
     title: matter.title ?? "",
     matterCode: matter.matter_code ?? "",
     clientName: matter.client_name ?? "",
+    linkClientId: "",
     opposingParty: matter.opposing_party ?? "",
     caseNumber: matter.case_number ?? "",
     temporaryECaseNumber: matter.temporary_e_case_number ?? "",
@@ -163,7 +168,8 @@ function buildMatterUpdateInput(
 
   if (title !== matter.title) input.title = title;
   if (matterCode !== matter.matter_code) input.matter_code = matterCode;
-  if (clientName !== (matter.client_name ?? null))
+  // A linked client's name reaches client_name through the link itself.
+  if (!draft.linkClientId && clientName !== (matter.client_name ?? null))
     input.client_name = clientName;
   if (opposingParty !== (matter.opposing_party ?? null)) {
     input.opposing_party = opposingParty;
@@ -202,6 +208,11 @@ function hasMatterChanges(input: MatterUpdateInput): boolean {
     (key) => key !== "matterId" && key !== "expected_updated_at",
   );
 }
+
+type MatterSaveInput = { input: MatterUpdateInput; linkClientId: string };
+
+/** The matter details saved, then linking the chosen client failed. */
+class ClientLinkAfterSaveError extends Error {}
 
 function MatterDetail({
   label,
@@ -254,7 +265,11 @@ export default function MatterOverviewPage() {
   const queryClient = useQueryClient();
   const { data } = useMatterWorkspace(params.id);
   const canEditMatter = useCapability("matters:edit");
+  const canEditClients = useCapability("clients:edit");
   const canArchiveMatter = useCapability("matters:archive");
+  const matterClients = useMatterClients(params.id, Boolean(data));
+  const primaryClient =
+    matterClients.data?.clients.find((client) => client.is_primary) ?? null;
   const [isEditingMatter, setIsEditingMatter] = useState(false);
   const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
   const [matterEditBase, setMatterEditBase] = useState<Matter | null>(null);
@@ -281,21 +296,53 @@ export default function MatterOverviewPage() {
     string | null
   >(null);
   const matterMutation = useMutation({
-    mutationFn: (input: MatterUpdateInput) => updateMatter(input),
-    onSuccess: async () => {
+    mutationFn: async ({ input, linkClientId }: MatterSaveInput) => {
+      const savedDetails = hasMatterChanges(input);
+      if (savedDetails) await updateMatter(input);
+      if (!linkClientId) return;
+      try {
+        await assignClientToMatter({
+          matterId: input.matterId,
+          clientId: linkClientId,
+          isPrimary: true,
+        });
+      } catch (err) {
+        const reason = apiErrorMessage(err, "Request failed.");
+        throw new ClientLinkAfterSaveError(
+          savedDetails
+            ? `Matter details were saved, but the client was not linked: ${reason}`
+            : `The client was not linked: ${reason}`,
+        );
+      }
+    },
+    onSuccess: async (_result, { linkClientId }) => {
       setIsEditingMatter(false);
       setMatterDraft(null);
       setMatterEditBase(null);
       setMatterEditConcurrencyError(null);
-      toast.success("Matter updated.");
+      toast.success(linkClientId ? "Matter updated and client linked." : "Matter updated.");
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: ["matters", params.id, "workspace"],
         }),
         queryClient.invalidateQueries({ queryKey: ["matters"] }),
+        ...(linkClientId
+          ? [queryClient.invalidateQueries({ queryKey: ["clients"] })]
+          : []),
       ]);
     },
     onError: async (err) => {
+      if (err instanceof ClientLinkAfterSaveError) {
+        // Saved details moved the concurrency token; close the editor on the
+        // fresh record instead of inviting a stale retry.
+        setIsEditingMatter(false);
+        setMatterDraft(null);
+        setMatterEditBase(null);
+        setMatterEditConcurrencyError(null);
+        toast.error(err.message);
+        await queryClient.invalidateQueries({ queryKey: ["matters"] });
+        return;
+      }
       const message = apiErrorMessage(err, "Could not update the matter.");
       const isStaleWrite = isApiErrorShape(err) && err.status === 409;
       setMatterEditConcurrencyError(isStaleWrite ? message : null);
@@ -418,14 +465,17 @@ export default function MatterOverviewPage() {
                   matterEditBase,
                   matterDraft,
                 );
-                if (!hasMatterChanges(input)) {
+                if (!hasMatterChanges(input) && !matterDraft.linkClientId) {
                   setIsEditingMatter(false);
                   setMatterDraft(null);
                   setMatterEditBase(null);
                   toast.success("No matter changes to save.");
                   return;
                 }
-                matterMutation.mutate(input);
+                matterMutation.mutate({
+                  input,
+                  linkClientId: matterDraft.linkClientId,
+                });
               }}
               data-testid="matter-edit-form"
             >
@@ -522,18 +572,65 @@ export default function MatterOverviewPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <Label htmlFor="matter-edit-client">Client name</Label>
-                <Input
-                  id="matter-edit-client"
-                  className="mt-1.5"
-                  value={matterDraft.clientName}
-                  onChange={(event) =>
-                    updateMatterDraft({ clientName: event.target.value })
-                  }
-                  data-testid="matter-edit-client"
-                />
-              </div>
+              {primaryClient ? (
+                <div>
+                  <div className="text-sm font-medium text-[var(--color-ink)]">
+                    Client
+                  </div>
+                  <p
+                    className="mt-1.5 break-words text-sm text-[var(--color-ink-2)]"
+                    data-testid="matter-edit-client-linked"
+                  >
+                    {primaryClient.client_name} (linked primary client). Change it
+                    from the Clients card.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div>
+                    <Label htmlFor="matter-edit-client">Client name</Label>
+                    <Input
+                      id="matter-edit-client"
+                      className="mt-1.5"
+                      value={matterDraft.clientName}
+                      disabled={Boolean(matterDraft.linkClientId)}
+                      onChange={(event) =>
+                        updateMatterDraft({ clientName: event.target.value })
+                      }
+                      data-testid="matter-edit-client"
+                    />
+                  </div>
+                  {/* Offered only once the links are known: with no primary
+                      client loaded yet, a link saved as primary could replace
+                      one the user never saw. */}
+                  {canEditClients && matterClients.isSuccess ? (
+                    <ClientPicker
+                      id="matter-edit-client-link"
+                      label="Or link an existing client"
+                      emptyOptionLabel="Keep the typed client name"
+                      value={matterDraft.linkClientId}
+                      onChange={(clientId, client) =>
+                        updateMatterDraft({
+                          linkClientId: clientId,
+                          clientName: client
+                            ? client.name
+                            : (matterEditBase.client_name ?? ""),
+                        })
+                      }
+                    />
+                  ) : null}
+                  {matterDraft.linkClientId ? (
+                    <p
+                      className="break-words text-xs text-[var(--color-mute)]"
+                      data-testid="matter-edit-client-link-caption"
+                    >
+                      {matterEditBase.client_name
+                        ? `${matterDraft.clientName} becomes this matter's primary client and its name replaces the typed client name “${matterEditBase.client_name}”.`
+                        : `${matterDraft.clientName} becomes this matter's primary client and its name becomes the matter's client name.`}
+                    </p>
+                  ) : null}
+                </div>
+              )}
               <div>
                 <Label htmlFor="matter-edit-opposing">Opposing party</Label>
                 <Input
@@ -753,6 +850,8 @@ export default function MatterOverviewPage() {
         loadEnabled={supportStage >= 2}
         onLoadSettled={() => advanceSupportSequence(data.matter.id, 3)}
       />
+
+      <MatterClientsCard className="lg:col-span-3" matter={data.matter} />
 
       <MatterForumCard matter={data.matter} />
 

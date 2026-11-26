@@ -22,7 +22,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -75,6 +75,12 @@ from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     inspect_source_target_action,
 )
+from caseops_api.services.statute_selection import (
+    is_selectable_statute_section as _is_selectable_statute_section,
+)
+from caseops_api.services.statute_selection import (
+    selectable_statute_section_sql as _selectable_statute_section_sql,
+)
 from caseops_api.services.statute_source_governance import (
     check_statute_section_link,
     create_statute_source_conflict,
@@ -93,55 +99,6 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
 LegalUpdateUser = Annotated[SessionContext, Depends(require_capability("authorities:search"))]
 LegalUpdateAdmin = Annotated[SessionContext, Depends(require_capability("notifications:manage"))]
-
-
-def _selectable_statute_section_sql():
-    """One server-owned definition of an attachable statutory provision."""
-    return and_(
-        StatuteSection.is_active.is_(True),
-        StatuteSection.section_text != "",
-        or_(
-            StatuteSection.legal_status == "enacted",
-            and_(
-                StatuteSection.legal_status == "repealed",
-                StatuteSection.verification_status == "verified_official",
-                StatuteSection.source_policy_json["edition_scope"].as_string()
-                == "historical_repealed_law",
-            ),
-        ),
-        StatuteSection.verification_status.in_({"verified_official", "verified_licensed"}),
-        StatuteSection.source_sha256 != "",
-        StatuteSection.source_publisher != "",
-        StatuteSection.issuing_body != "",
-        StatuteSection.section_text_fetched_at.is_not(None),
-        StatuteSection.exact_source_version != "",
-        StatuteSection.source_locator_type == "section_deep_link",
-        StatuteSection.link_health_status == "available",
-    )
-
-
-def _is_selectable_statute_section(section: StatuteSection) -> bool:
-    return bool(
-        section.is_active
-        and (
-            section.legal_status == "enacted"
-            or (
-                section.legal_status == "repealed"
-                and section.verification_status == "verified_official"
-                and (section.source_policy_json or {}).get("edition_scope")
-                == "historical_repealed_law"
-            )
-        )
-        and section.section_text
-        and section.verification_status in {"verified_official", "verified_licensed"}
-        and section.source_sha256
-        and section.source_publisher
-        and section.issuing_body
-        and section.section_text_fetched_at
-        and section.exact_source_version
-        and section.source_locator_type == "section_deep_link"
-        and section.link_health_status == "available"
-    )
 
 
 class StatuteRecord(BaseModel):

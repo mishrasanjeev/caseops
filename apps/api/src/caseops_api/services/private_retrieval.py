@@ -2236,6 +2236,15 @@ def _saved_outputs_reached_by_event(
                 select(MatterAttachment.id).where(MatterAttachment.matter_id == event.target_id),
             )
         )
+        # Workspace Assistant Matter-record evidence is keyed by the Matter id.
+        from caseops_api.schemas.workspace_assistant import MATTER_RECORD_SOURCE_TYPES
+
+        reached.append(
+            and_(
+                PrivateSavedOutputAccess.source_type.in_(sorted(MATTER_RECORD_SOURCE_TYPES)),
+                PrivateSavedOutputAccess.source_id == event.target_id,
+            )
+        )
     elif event.target_type == "ip_docket":
         for source_type, model in _DOCKET_RECORD_SOURCE_MODELS:
             reached.append(

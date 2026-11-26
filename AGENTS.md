@@ -3297,6 +3297,34 @@ requirements when using the fallback.
 - One- or two-row fixtures cannot falsify paging, search, totals or uniform
   layout. Run every new regression against the pre-fix code and keep it only
   if it fails there; a test that passes on the broken build is not coverage.
+- A catalogue-backed picker can agree perfectly with its write validator and
+  still block the workflow. "Verified only" is correct; it is not complete.
+  When a tester reports options that cannot be clicked, measure in the
+  tester's tenant how much of the reported Act is attachable (Nov 25 row 1:
+  Constitution 1 of 11 catalogued, Income-tax 0 of 298) and fix the source
+  data from pinned official bytes; never loosen the validator. Group
+  unattachable entries apart so the list does not invite dead clicks, and
+  replace every reader's private copy of the predicate with the canonical one
+  (drafting and litigation strategy kept a looser copy that quoted a repealed
+  section).
+- An API with no UI caller is an unfinished feature, and its read paths have
+  never been exercised by real data. Before wiring UI to it, audit every read
+  of the relation for tenant and ethical-wall scoping: the client profile
+  listed linked Matters with no visibility filter, harmless only because
+  nothing could create a link yet (Nov 25 row 2).
+- An AI evidence gate is untestable while the offline model answers from any
+  source. Make the mock evidence-sensitive, enumerate the record kinds lawyers
+  ask about for the selected scope (parties, hearings, tasks and deadlines,
+  documents, linked statutes) and assert each reaches the prompt as a cited
+  source; a recorded absence ("Documents in this matter: 0") is evidence, a
+  generic refusal for it is a defect (Nov 25 row 3).
+- Test identities generated from data change when the data grows. Give each
+  newly admitted dataset its own named batches so earlier identities stay
+  byte-identical, and pin every new App journey in all inventories in the same
+  change: the vitest source inventory, `scripts/prod_playwright_evidence.py`
+  with its pytest mirror, and `test_batch5_release_wiring.py`. Prove the
+  checker against the real `--list` inventory, with the previous checker as
+  the failing control.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

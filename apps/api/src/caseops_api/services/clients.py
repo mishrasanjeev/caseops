@@ -11,7 +11,7 @@ from typing import Literal
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Client,
@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     ClientType,
     CompanyMembership,
     Matter,
+    MatterActivity,
     MatterAttachment,
     MatterClientAssignment,
 )
@@ -43,7 +44,7 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.identity import get_session_context
-from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -269,32 +270,51 @@ def _client_record(
     )
 
 
-def _matter_links_for(session: Session, client: Client) -> list[ClientMatterLink]:
-    """Expand ``client.assignments`` into user-facing matter summaries,
-    joining ``Matter`` for title/code/status."""
-    if not client.assignments:
-        return []
-    matter_ids = {a.matter_id for a in client.assignments}
-    matters = session.scalars(
-        select(Matter).where(Matter.id.in_(matter_ids))
-    ).all()
-    by_id = {m.id: m for m in matters}
-    out: list[ClientMatterLink] = []
-    for a in client.assignments:
-        m = by_id.get(a.matter_id)
-        if m is None:
-            continue
-        out.append(
+def _visible_matter_links(
+    session: Session, *, context: SessionContext, client_id: str | None = None,
+) -> dict[str, list[ClientMatterLink]]:
+    """Matter summaries per client, limited to Matters the reader can open.
+
+    A client profile lists the code, title and status of every linked
+    Matter, so it must use the same tenant and visibility predicate as the
+    Matter list: a Matter behind an ethical wall, a restricted Matter or
+    another team's Matter is neither listed nor counted. ``client_id`` limits
+    the read to one client; otherwise every client in the tenant is covered.
+    """
+    stmt = (
+        select(MatterClientAssignment, Matter)
+        .join(Matter, Matter.id == MatterClientAssignment.matter_id)
+        .join(Client, Client.id == MatterClientAssignment.client_id)
+        .where(
+            Client.company_id == context.company.id,
+            Matter.company_id == context.company.id,
+            visible_matters_filter(session, context=context),
+        )
+        .order_by(MatterClientAssignment.created_at, MatterClientAssignment.id)
+    )
+    if client_id is not None:
+        stmt = stmt.where(MatterClientAssignment.client_id == client_id)
+    out: dict[str, list[ClientMatterLink]] = {}
+    for assignment, matter in session.execute(stmt).all():
+        out.setdefault(assignment.client_id, []).append(
             ClientMatterLink(
-                matter_id=m.id,
-                matter_code=m.matter_code,
-                matter_title=m.title,
-                role=a.role,
-                is_primary=a.is_primary,
-                status=m.status,
+                matter_id=matter.id,
+                matter_code=matter.matter_code,
+                matter_title=matter.title,
+                role=assignment.role,
+                is_primary=assignment.is_primary,
+                status=matter.status,
             )
         )
     return out
+
+
+def _matter_links_for(
+    session: Session, client: Client, *, context: SessionContext,
+) -> list[ClientMatterLink]:
+    return _visible_matter_links(session, context=context, client_id=client.id).get(
+        client.id, [],
+    )
 
 
 def create_client(
@@ -384,14 +404,11 @@ def list_clients(
     stmt = (
         select(Client)
         .where(Client.company_id == context.company.id)
-        .options(selectinload(Client.assignments))
         .order_by(Client.is_active.desc(), func.lower(Client.name))
     )
     clients = list(session.scalars(stmt))
-    records = [
-        _client_record(c, matters=_matter_links_for(session, c))
-        for c in clients
-    ]
+    links = _visible_matter_links(session, context=context)
+    records = [_client_record(c, matters=links.get(c.id, [])) for c in clients]
     return ClientListResponse(clients=records, next_cursor=None)
 
 
@@ -401,7 +418,6 @@ def _get_client_model(
     client = session.scalar(
         select(Client)
         .where(Client.id == client_id, Client.company_id == context.company.id)
-        .options(selectinload(Client.assignments))
     )
     if client is None:
         raise HTTPException(
@@ -415,7 +431,7 @@ def get_client(
 ) -> ClientRecord:
     client = _get_client_model(session, context=context, client_id=client_id)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -502,7 +518,7 @@ def update_client(
     session.commit()
     session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -537,7 +553,7 @@ def archive_client(
     session.commit()
     session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -578,13 +594,248 @@ def unarchive_client(
         session.commit()
         session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
 # ---------------------------------------------------------------
 # Per-matter assignment
 # ---------------------------------------------------------------
+
+
+def _client_not_found() -> HTTPException:
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found.")
+
+
+def _load_visible_matter(
+    session: Session, *, context: SessionContext, matter_id: str,
+) -> Matter:
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.id == matter_id,
+            Matter.company_id == context.company.id,
+        )
+    )
+    if matter is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.",
+        )
+    assert_access(session, context=context, matter=matter)
+    return matter
+
+
+def resolve_linkable_client(
+    session: Session, *, context: SessionContext, client_id: str,
+) -> Client:
+    """The client a Matter link may name: in the caller's tenant and active.
+
+    Shared by the link route and Matter create so both accept and refuse
+    the same clients (404 outside the tenant, 409 when archived).
+    """
+    client = session.scalar(
+        select(Client).where(Client.id == client_id, Client.company_id == context.company.id)
+    )
+    if client is None:
+        raise _client_not_found()
+    if not client.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "matter_client_inactive",
+                "message": (
+                    f"{client.name} is archived. Restore the client before "
+                    "linking it to a matter."
+                ),
+            },
+        )
+    return client
+
+
+def _add_matter_activity(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    event_type: str,
+    title: str,
+    detail: str,
+) -> None:
+    session.add(
+        MatterActivity(
+            matter_id=matter.id,
+            actor_membership_id=context.membership.id,
+            event_type=event_type,
+            title=title,
+            detail=detail,
+        )
+    )
+
+
+def _propagate_matter_client_name_change(
+    session: Session, *, context: SessionContext, matter: Matter, previous_version: str,
+) -> None:
+    from caseops_api.services.private_retrieval import (
+        private_source_version,
+        propagate_private_source_change_if_indexed,
+    )
+
+    session.flush()
+    source_version = private_source_version(matter)
+    if source_version == previous_version:
+        return
+    propagate_private_source_change_if_indexed(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=f"matter-client-linked:{matter.id}:{source_version}",
+        event_type="source_changed",
+        target_type="matter",
+        target_id=matter.id,
+        target_version=source_version,
+        reason_code="matter_client_linked",
+    )
+
+
+def link_client_to_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter: Matter,
+    client: Client,
+    role: str | None,
+    role_provided: bool,
+    is_primary: bool | None,
+    propagate_matter_change: bool = True,
+) -> MatterClientAssignment:
+    """Create or update one Matter-client link inside the caller's transaction.
+
+    The caller has already resolved ``matter`` (tenant, visibility and
+    operational state) and ``client`` (:func:`resolve_linkable_client`).
+
+    - A Matter has at most one primary client. Making this client primary
+      demotes every other primary link, each demotion audited.
+    - The primary client's name is copied into ``Matter.client_name`` so the
+      Matter list, search, AI context, briefs and hearing matching (which all
+      read that column) name the linked client.
+    - A re-post of an existing pair changes only what differs, and audits it.
+    """
+    from caseops_api.services.private_retrieval import private_source_version
+
+    previous_version = private_source_version(matter)
+    role = (role.strip() or None) if isinstance(role, str) else None
+    links = list(
+        session.scalars(
+            select(MatterClientAssignment)
+            .where(MatterClientAssignment.matter_id == matter.id)
+            .order_by(MatterClientAssignment.created_at, MatterClientAssignment.id)
+        )
+    )
+    existing = next((link for link in links if link.client_id == client.id), None)
+    has_other_primary = any(
+        link.is_primary for link in links if link.client_id != client.id
+    )
+    changes: dict[str, dict[str, object]] = {}
+    if existing is None:
+        resolved_primary = is_primary if is_primary is not None else not has_other_primary
+        assignment = MatterClientAssignment(
+            matter_id=matter.id, client_id=client.id, role=role, is_primary=resolved_primary,
+        )
+        session.add(assignment)
+    else:
+        assignment = existing
+        resolved_primary = is_primary if is_primary is not None else existing.is_primary
+        resolved_role = role if role_provided else existing.role
+        if resolved_role != existing.role:
+            changes["role"] = {"before": existing.role, "after": resolved_role}
+            existing.role = resolved_role
+        if resolved_primary != existing.is_primary:
+            changes["is_primary"] = {"before": existing.is_primary, "after": resolved_primary}
+            existing.is_primary = resolved_primary
+
+    demoted: list[str] = []
+    if resolved_primary:
+        for link in links:
+            if link.client_id == client.id or not link.is_primary:
+                continue
+            link.is_primary = False
+            demoted.append(link.client_id)
+            record_from_context(
+                session,
+                context,
+                action="matter.client_assignment_updated",
+                target_type="matter",
+                target_id=matter.id,
+                matter_id=matter.id,
+                metadata={
+                    "client_id": link.client_id,
+                    "reason": "primary_reassigned",
+                    "changes": {"is_primary": {"before": True, "after": False}},
+                    "new_primary_client_id": client.id,
+                },
+            )
+
+    name_change = bool(resolved_primary and matter.client_name != client.name)
+    if name_change:
+        matter.client_name = client.name
+    session.flush()
+
+    if existing is None:
+        record_from_context(
+            session,
+            context,
+            action="matter.client_assigned",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={
+                "client_id": client.id,
+                "role": role,
+                "is_primary": resolved_primary,
+                "demoted_client_ids": demoted,
+                "primary_name_synced": name_change,
+            },
+        )
+        _add_matter_activity(
+            session,
+            context=context,
+            matter=matter,
+            event_type="client_linked",
+            title="Client linked",
+            detail=(
+                f"{client.name} linked as the primary client."
+                if resolved_primary
+                else f"{client.name} linked."
+            ),
+        )
+    elif changes or name_change:
+        record_from_context(
+            session,
+            context,
+            action="matter.client_assignment_updated",
+            target_type="matter",
+            target_id=matter.id,
+            matter_id=matter.id,
+            metadata={
+                "client_id": client.id,
+                "reason": "client_link_reposted",
+                "changes": changes,
+                "demoted_client_ids": demoted,
+                "primary_name_synced": name_change,
+            },
+        )
+    if name_change and propagate_matter_change:
+        _propagate_matter_client_name_change(
+            session, context=context, matter=matter, previous_version=previous_version,
+        )
+    return assignment
+
+
+def _assignment_record(
+    assignment: MatterClientAssignment, matter: Matter,
+) -> MatterClientAssignmentRecord:
+    record = MatterClientAssignmentRecord.model_validate(assignment)
+    record.matter_client_name = matter.client_name
+    return record
 
 
 def assign_client_to_matter(
@@ -597,60 +848,34 @@ def assign_client_to_matter(
     _lock_private_client_writer(
         session, context=context, client_id=payload.client_id, required_capability="clients:edit",
     )
-    matter = session.scalar(
-        select(Matter).where(
-            Matter.id == matter_id,
-            Matter.company_id == context.company.id,
+    matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    # A foreign or unknown client is a 404 before the Matter's lifecycle is
+    # consulted, as it was before archived clients were refused.
+    if session.scalar(
+        select(Client.id).where(
+            Client.id == payload.client_id, Client.company_id == context.company.id,
         )
-    )
-    if matter is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.",
-        )
-    assert_access(session, context=context, matter=matter)
-    client = _get_client_model(
-        session, context=context, client_id=payload.client_id,
-    )
-
-    existing = session.scalar(
-        select(MatterClientAssignment).where(
-            MatterClientAssignment.matter_id == matter.id,
-            MatterClientAssignment.client_id == client.id,
-        )
-    )
+    ) is None:
+        raise _client_not_found()
     matter = require_operational_matter(
         session,
         matter=matter,
         operation="assign a client to a matter",
     )
-    if existing is not None:
-        # Idempotent: update role / is_primary if the caller re-posts.
-        existing.role = payload.role
-        existing.is_primary = payload.is_primary
-        session.commit()
-        session.refresh(existing)
-        return MatterClientAssignmentRecord.model_validate(existing)
-
-    assignment = MatterClientAssignment(
-        matter_id=matter.id,
-        client_id=client.id,
-        role=payload.role,
-        is_primary=payload.is_primary,
-    )
-    session.add(assignment)
-    session.flush()
-    record_from_context(
+    client = resolve_linkable_client(session, context=context, client_id=payload.client_id)
+    assignment = link_client_to_matter(
         session,
-        context,
-        action="matter.client_assigned",
-        target_type="matter",
-        target_id=matter.id,
-        matter_id=matter.id,
-        metadata={"client_id": client.id, "role": payload.role},
+        context=context,
+        matter=matter,
+        client=client,
+        role=payload.role,
+        role_provided="role" in payload.model_fields_set,
+        is_primary=payload.is_primary,
     )
     session.commit()
     session.refresh(assignment)
-    return MatterClientAssignmentRecord.model_validate(assignment)
+    session.refresh(matter)
+    return _assignment_record(assignment, matter)
 
 
 def remove_client_from_matter(
@@ -660,24 +885,26 @@ def remove_client_from_matter(
     matter_id: str,
     client_id: str,
 ) -> None:
+    """Unlink one client. ``Matter.client_name`` is deliberately kept.
+
+    The name a primary link copied into the Matter stays until another
+    client is made primary or someone edits it: erasing it silently would
+    blank the client on the Matter list, search and briefs. The audit row
+    records that the name was retained.
+    """
     _lock_private_client_writer(
         session, context=context, client_id=client_id, required_capability="clients:edit",
     )
-    matter = session.scalar(
-        select(Matter).where(
-            Matter.id == matter_id,
-            Matter.company_id == context.company.id,
-        )
+    matter = _load_visible_matter(session, context=context, matter_id=matter_id)
+    client = session.scalar(
+        select(Client).where(Client.id == client_id, Client.company_id == context.company.id)
     )
-    if matter is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.",
-        )
-    assert_access(session, context=context, matter=matter)
+    if client is None:
+        raise _client_not_found()
     assignment = session.scalar(
         select(MatterClientAssignment).where(
-            MatterClientAssignment.matter_id == matter_id,
-            MatterClientAssignment.client_id == client_id,
+            MatterClientAssignment.matter_id == matter.id,
+            MatterClientAssignment.client_id == client.id,
         )
     )
     if assignment is None:
@@ -690,6 +917,8 @@ def remove_client_from_matter(
         matter=matter,
         operation="remove a client from a matter",
     )
+    was_primary = assignment.is_primary
+    role = assignment.role
     session.delete(assignment)
     record_from_context(
         session,
@@ -698,7 +927,25 @@ def remove_client_from_matter(
         target_type="matter",
         target_id=matter.id,
         matter_id=matter.id,
-        metadata={"client_id": client_id},
+        metadata={
+            "client_id": client.id,
+            "role": role,
+            "was_primary": was_primary,
+            # Names stay out of audit rows (DATA-GOV-11); record the fact.
+            "primary_name_retained": was_primary and matter.client_name is not None,
+        },
+    )
+    _add_matter_activity(
+        session,
+        context=context,
+        matter=matter,
+        event_type="client_unlinked",
+        title="Client unlinked",
+        detail=(
+            f"{client.name} unlinked. The matter keeps its client name."
+            if was_primary
+            else f"{client.name} unlinked."
+        ),
     )
     session.commit()
 
@@ -877,7 +1124,7 @@ def submit_client_kyc(
     session.commit()
     session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -936,7 +1183,7 @@ def verify_client_kyc(
     session.commit()
     session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -997,7 +1244,7 @@ def reject_client_kyc(
     session.commit()
     session.refresh(client)
     return _client_record(
-        client, matters=_matter_links_for(session, client),
+        client, matters=_matter_links_for(session, client, context=context),
     )
 
 
@@ -1009,8 +1256,13 @@ def _matter_client_verification_record(
         client_id=client.id,
         client_name=client.name,
         client_type=client.client_type,
+        client_is_active=client.is_active,
         role=assignment.role,
         is_primary=assignment.is_primary,
+        primary_contact_name=client.primary_contact_name,
+        primary_contact_email=client.primary_contact_email,
+        primary_contact_phone=client.primary_contact_phone,
+        city=client.city,
         status=_normalize_kyc_status(client.kyc_status),
         submitted_at=client.kyc_submitted_at,
         reviewed_at=client.kyc_verified_at,

@@ -2896,6 +2896,442 @@
           "text": "193. Punishment of 2[agents, canvassers and aggregators] without proper authority.—3[1]"
         }
       }
+    },
+    {
+      "statute_id": "constitution-india",
+      "file": "constitution-india.pdf",
+      "sha256": "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5",
+      "retrieved_at": "2026-09-08T05:07:03.6136620+00:00",
+      "source_url": "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf",
+      "act_url": "https://www.indiacode.nic.in/handle/123456789/15240",
+      "source_publisher": "Legislative Department, Ministry of Law and Justice",
+      "issuing_body": "Government of India",
+      "source_version": "Constitution of India, Second Diglot Edition 2024 (incl. 106th Amendment, 2023)",
+      "provision_prefix": "Article",
+      "toc_pages": [
+        6,
+        50
+      ],
+      "toc_page_step": 2,
+      "body_pages": [
+        52,
+        672
+      ],
+      "body_page_step": 2,
+      "section_count": 494,
+      "arrangement_spaced_suffix": true,
+      "complete_arrangement_labels": true,
+      "arrangement_continuation_indent": [
+        8,
+        50
+      ],
+      "arrangement_page_mapping": {
+        "stride": 2,
+        "offset": 52
+      },
+      "running_header": {
+        "below_y": 50,
+        "pattern": "\\d+ THE CONSTITUTION OF INDIA(?: \\[[^\\]]+\\])?"
+      },
+      "publisher_note_styles": [
+        {
+          "pages": [
+            52,
+            510
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ]
+        },
+        {
+          "pages": [
+            512,
+            512
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ],
+          "top_range": [
+            500,
+            700
+          ]
+        },
+        {
+          "pages": [
+            514,
+            522
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ]
+        },
+        {
+          "pages": [
+            524,
+            524
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ],
+          "top_range": [
+            500,
+            700
+          ]
+        },
+        {
+          "pages": [
+            526,
+            542
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ]
+        },
+        {
+          "pages": [
+            544,
+            544
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ],
+          "top_range": [
+            435,
+            445
+          ]
+        },
+        {
+          "pages": [
+            546,
+            672
+          ],
+          "width_range": [
+            400,
+            420
+          ],
+          "x0_range": [
+            70,
+            80
+          ]
+        }
+      ],
+      "identity_ranges": {
+        "379-391": [
+          "379",
+          "380",
+          "381",
+          "382",
+          "383",
+          "384",
+          "385",
+          "386",
+          "387",
+          "388",
+          "389",
+          "390",
+          "391"
+        ]
+      },
+      "supplements": [
+        {
+          "key": "preamble",
+          "kind": "preamble",
+          "section_number": "Preamble",
+          "label": "Preamble",
+          "heading": "PREAMBLE",
+          "page": 52,
+          "before_numbered": true
+        },
+        {
+          "key": "first-schedule",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "First Schedule",
+          "heading": "1[FIRST SCHEDULE",
+          "page": 512
+        },
+        {
+          "key": "second-schedule",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "Second Schedule",
+          "heading": "SECOND SCHEDULE",
+          "page": 526
+        },
+        {
+          "key": "third-schedule",
+          "kind": "schedule",
+          "section_number": "Third Schedule",
+          "label": "Forms of Oaths or Affirmations",
+          "heading": "THIRD SCHEDULE",
+          "page": 536
+        },
+        {
+          "key": "fourth-schedule",
+          "kind": "schedule",
+          "section_number": "Fourth Schedule",
+          "label": "Allocation of seats in the Council of States",
+          "heading": "1 [FOURTH SCHEDULE",
+          "page": 542
+        },
+        {
+          "key": "fifth-schedule",
+          "kind": "schedule",
+          "section_number": "Fifth Schedule",
+          "label": "Provisions as to the Administration and Control of Scheduled Areas and Scheduled Tribes",
+          "heading": "FIFTH SCHEDULE",
+          "page": 546
+        },
+        {
+          "key": "sixth-schedule",
+          "kind": "schedule",
+          "section_number": "Sixth Schedule",
+          "label": "Provisions as to the Administration of Tribal Areas in the States of Assam, Meghalaya, Tripura and Mizoram",
+          "heading": "SIXTH SCHEDULE",
+          "page": 552
+        },
+        {
+          "key": "seventh-schedule",
+          "kind": "schedule",
+          "section_number": "Seventh Schedule",
+          "label": "Seventh Schedule",
+          "heading": "SEVENTH SCHEDULE",
+          "page": 600
+        },
+        {
+          "key": "eighth-schedule",
+          "kind": "schedule",
+          "section_number": "Eighth Schedule",
+          "label": "Languages",
+          "heading": "EIGHTH SCHEDULE",
+          "page": 628
+        },
+        {
+          "key": "ninth-schedule",
+          "kind": "schedule",
+          "section_number": "Ninth Schedule",
+          "label": "Validation of certain Acts and Regulations",
+          "heading": "1[NINTH SCHEDULE",
+          "page": 630
+        },
+        {
+          "key": "tenth-schedule",
+          "kind": "schedule",
+          "section_number": "Tenth Schedule",
+          "label": "Provisions as to disqualification on ground of defection",
+          "heading": "1[TENTH SCHEDULE",
+          "page": 662
+        },
+        {
+          "key": "eleventh-schedule",
+          "kind": "schedule",
+          "section_number": "Eleventh Schedule",
+          "label": "Powers, authority and responsibilities of Panchayats",
+          "heading": "1[ELEVENTH SCHEDULE",
+          "page": 670
+        },
+        {
+          "key": "twelfth-schedule",
+          "kind": "schedule",
+          "section_number": "Twelfth Schedule",
+          "label": "Powers, authority and responsibilities of Municipalities, etc",
+          "heading": "1[TWELFTH SCHEDULE",
+          "page": 672
+        }
+      ],
+      "body_heading_evidence": {
+        "2A": {
+          "page": 54,
+          "text": "3 2A. [Sikkim to be associated with the Union.] Omitted by the Constitution"
+        },
+        "22": {
+          "page": 74,
+          "text": "222. Protection against arrest and detention in certain cases.—(1) No person"
+        },
+        "31": {
+          "page": 82,
+          "text": "231. [***]"
+        },
+        "31D": {
+          "page": 86,
+          "text": "431D. [Saving of laws in respect of anti-national activities.] Omitted by the"
+        },
+        "32A": {
+          "page": 88,
+          "text": "1[32A. Constitutional validity of State laws not to be considered in"
+        },
+        "33": {
+          "page": 88,
+          "text": "[33. Power of Parliament to modify the rights conferred by this Part in"
+        },
+        "103": {
+          "page": 138,
+          "text": "[103. Decision on questions as to disqualifications of members.—(1) If any"
+        },
+        "131A": {
+          "page": 166,
+          "text": "1[131A. Exclusive jurisdiction of the Supreme Court in regard to questions as to"
+        },
+        "224A": {
+          "page": 242,
+          "text": "8[224 A. Appointment of retired Judges at sittings of High Courts.—"
+        },
+        "226A": {
+          "page": 246,
+          "text": "3[226A. Constitutional Validity of Central laws not to be"
+        },
+        "228A": {
+          "page": 250,
+          "text": "[228A. Special provisions as to disposal of questions relating to constitutional"
+        },
+        "231": {
+          "page": 252,
+          "text": "231. Establishment of a common High Court for two or more States.—"
+        },
+        "243ZE": {
+          "page": 298,
+          "text": "*243ZE. Committee for Metropolitan planning.—(1) There shall be constituted"
+        },
+        "257A": {
+          "page": 326,
+          "text": "1257A. [Assistance to States by deployment of armed forces or other forces of"
+        },
+        "264": {
+          "page": 330,
+          "text": "1[264. lnterpretation.—ln this Part, “Finance Commission” means a Finance"
+        },
+        "308": {
+          "page": 370,
+          "text": "308. lnterpretation.—ln this Part, unless the context otherwise requires, the"
+        },
+        "332A": {
+          "page": 406,
+          "text": "*[332A. Reservation of seats for women in the Legislative Assemblies"
+        },
+        "334A": {
+          "page": 408,
+          "text": "*[334A. Reservation of seats for women take effect.—(1) Notwithstanding anything in"
+        },
+        "338": {
+          "page": 410,
+          "text": "338.1[National Commission for Scheduled Castes].— 2[(1) There shall be a"
+        },
+        "345": {
+          "page": 426,
+          "text": "345. Official language or languages of a State.—Subject to the provisions of"
+        },
+        "359A": {
+          "page": 448,
+          "text": "1359A. [Application of this Part to the State of Punjab. Omitted by the Constitution"
+        },
+        "367": {
+          "page": 466,
+          "text": "367. lnterpretation.—(1) Unless the context otherwise requires, the General"
+        },
+        "368": {
+          "page": 468,
+          "text": "368. 1[Power of Parliament to amend the Constitution and procedure"
+        },
+        "370": {
+          "page": 472,
+          "text": "2*[370. Temporary provisions with respect to the State of Jammu and"
+        },
+        "371J": {
+          "page": 498,
+          "text": "2[371-J. Special provisions with respect to the State of Karnataka.—(1)"
+        },
+        "372A": {
+          "page": 502,
+          "text": "2[372 A. Power of the President to adapt laws.—(1) For the purposes of"
+        },
+        "243-I": {
+          "page": 280,
+          "text": "243-I. Constitution of Finance Commission to review financial"
+        },
+        "379-391": {
+          "page": 508,
+          "text": "379—391.Omitted by the Constitution (Seventh Amendment) Act, 1956, s. 29"
+        }
+      },
+      "source_discrepancies": {
+        "2A": "Printed superscript footnote 3 precedes article 2A (\"3 2A.\").",
+        "22": "Printed superscript footnote 2 precedes article 22 (\"222.\").",
+        "31": "Printed superscript footnote 2 precedes article 31 (\"231.\").",
+        "31D": "Printed superscript footnote 4 precedes article 31D (\"431D.\").",
+        "132": "The publisher arrangement continues this label on a misaligned line (\"in certain cases.\") that is not joined; the body heading reads \"Appellate jurisdiction of Supreme Court in appeals from High Courts in certain cases\". The arrangement label and complete body are retained verbatim.",
+        "243-I": "The publisher arrangement prints \"Consititution\"; the body heading prints \"Constitution\". The arrangement label and complete body are retained verbatim.",
+        "257A": "Printed superscript footnote 1 precedes article 257A (\"1257A.\").",
+        "345": "The publisher arrangement prints \"Offical\"; the body heading prints \"Official\". The arrangement label and complete body are retained verbatim.",
+        "359A": "Printed superscript footnote 1 precedes article 359A (\"1359A.\").",
+        "371J": "The arrangement prints 371J; the body heading prints 371-J. The arrangement identity is retained."
+      },
+      "blocked_supplements": {
+        "first-schedule": "Retained transcription; two-column States and Union territories table layout reconciliation pending.",
+        "third-schedule": "Retained transcription; the stacked \"swear in the name of God / solemnly affirm\" alternatives in each form are displaced by line extraction, so the forms' reading order is not reconciled.",
+        "fourth-schedule": "Retained transcription; two-column seat allocation table with nested renumbering markers is not cell-reconciled."
+      },
+      "omission_evidence": {
+        "232": {
+          "page": 252,
+          "first_line": 4,
+          "end_line": 5,
+          "text": "2. Art. 232 omitted by the Constitution (Seventh Amendment) Act, 1956, s.16."
+        }
+      },
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            51
+          ],
+          "kind": "cover_preface_and_contents"
+        },
+        {
+          "pages": [
+            53,
+            673
+          ],
+          "step": 2,
+          "kind": "malayalam_translation"
+        },
+        {
+          "pages": [
+            674,
+            739
+          ],
+          "kind": "schedules_appendices_and_glossary"
+        }
+      ]
     }
   ]
 }

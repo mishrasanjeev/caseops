@@ -70,15 +70,16 @@ def test_new_and_retained_abstentions_never_disclose_unmanifested_controls(clien
         assert secret not in json.dumps(turn)
         assert private_href not in json.dumps(turn)
         assert all(action["target_id"] is None for action in turn["proposed_actions"])
-        search = next(
-            action for action in turn["proposed_actions"] if action["action_type"] == "search"
-        )
-        assert search["href"] == "/app/research?query=Open+this+file+and+prepare+a+task"
-        assert search["target_label"] is None
-        assert not search["requires_confirmation"]
+        for search in turn["proposed_actions"]:
+            assert search["action_type"] == "search"
+            assert search["href"] == "/app/research?query=Open+this+file+and+prepare+a+task"
+            assert search["target_label"] is None
+            assert not search["requires_confirmation"]
 
     assert_safe(fresh)
-    assert [action["action_type"] for action in fresh["proposed_actions"]] == ["search"]
+    # Nov 25 (nova-legal): a Matter-record question that lacks evidence is not
+    # a legal-research request, so a fresh abstention offers no research link.
+    assert fresh["proposed_actions"] == []
     with get_session_factory()() as db:
         row = db.get(AssistantTurn, fresh["id"])
         assert row is not None
@@ -122,7 +123,12 @@ def test_new_and_retained_abstentions_never_disclose_unmanifested_controls(clien
                     **target,
                 },
                 {
-                    **next(a for a in stored["proposed_actions"] if a["action_type"] == "search"),
+                    # A legacy retained abstention still carries a search link.
+                    "action_type": "search",
+                    "proposal_id": "legacy-search",
+                    "label": "Search verified legal sources",
+                    "href": "/app/research?query=Open+this+file+and+prepare+a+task",
+                    "requires_confirmation": False,
                     **target,
                 },
             ],
