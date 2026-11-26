@@ -19,6 +19,7 @@ type Provision = {
   source_status: string;
   legal_status: string;
   effective_from: string | null;
+  effective_to?: string | null;
   source_locator_type: string;
   source_retrieved_at: string;
   link_health_status: string;
@@ -80,13 +81,17 @@ const test = baseTest.extend<{}, { sourceApi: APIRequestContext }>({
 });
 
 // Keep the original source cases and add separately named batches for each Act
-// admitted later (Motor Vehicles for BUG-018, the Constitution for the Nov 25 workbook).
+// admitted later (Motor Vehicles for BUG-018, the Constitution and the
+// Income-tax Act, 1961 for the Nov 25 workbook).
 const motorAct = "motor-vehicles-1988";
 const constitution = "constitution-india";
+const incomeTax = "income-tax-1961";
+const laterActs = [motorAct, constitution, incomeTax];
 const sourceBatches = [
-  { label: "BUG-010 source records", provisions: rows.filter(row => row.statute_id !== motorAct && row.statute_id !== constitution) },
+  { label: "BUG-010 source records", provisions: rows.filter(row => !laterActs.includes(row.statute_id)) },
   { label: "BUG-018 Motor Vehicles source records", provisions: rows.filter(row => row.statute_id === motorAct) },
   { label: "Nov25 Constitution source records", provisions: rows.filter(row => row.statute_id === constitution) },
+  { label: "Nov25 Income-tax source records", provisions: rows.filter(row => row.statute_id === incomeTax) },
 ];
 for (const { label, provisions } of sourceBatches) {
   for (let offset = 0; offset < provisions.length; offset += 40) {
@@ -106,6 +111,9 @@ for (const { label, provisions } of sourceBatches) {
           expect(actual[field], `${expected.statute_id} ${expected.section_number}: ${field}`).toBe(expected[field]);
         }
         expect(Date.parse(actual.source_retrieved_at)).toBe(Date.parse(expected.source_retrieved_at));
+        // A retained repealed-law edition records the last day its Act was in force.
+        expect(actual.effective_to, `${expected.statute_id} ${expected.section_number}: effective_to`)
+          .toBe(expected.effective_to ?? null);
         expect(actual.section_number).toBe(expected.section_number);
         expect(actual.verification_status).toBe(expected.verification_status);
         expect(actual.source_sha256).toBe(expected.source_sha256);

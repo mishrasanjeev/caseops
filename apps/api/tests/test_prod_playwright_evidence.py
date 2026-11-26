@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 767, "app-mobile": 70}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 793, "app-mobile": 71}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,7 +3083,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 750, "app-mobile": 60}
+APP_COUNTS = {"app-chromium": 776, "app-mobile": 61}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3235,9 +3235,89 @@ APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", MOTOR_STATUTE_FILE, (
         MOTOR_STATUTE_FILE, "Nov25 Constitution source records 481-519 of 519",
     )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 1-40 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 41-80 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 81-120 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 121-160 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 161-200 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 201-240 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 241-280 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 281-320 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 321-360 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 361-400 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 401-440 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 441-480 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 481-520 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 521-560 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 561-600 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 601-640 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 641-680 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 681-720 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 721-760 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 761-800 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 801-840 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 841-880 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 881-920 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 921-960 of 965",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Income-tax source records 961-965 of 965",
+    )),
     ("app-chromium", NOV25_STATUTES_FILE, (
         NOV25_STATUTES_FILE,
         "row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog",
+    )),
+    ("app-chromium", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "row 1 Income-tax Act Section 80C is chosen and attached from the Add Reference "
+        "dialog",
     )),
     ("app-chromium", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE,
@@ -3255,6 +3335,11 @@ APP_REQUIRED_NATIVE_CASES = (
         NOV25_STATUTES_FILE,
         "[mobile] row 1 Constitution Article 21 is chosen and attached from the Add Reference "
         "dialog",
+    )),
+    ("app-mobile", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "[mobile] row 1 Income-tax Act Section 80C is chosen and attached from the Add "
+        "Reference dialog",
     )),
     ("app-mobile", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
@@ -3560,13 +3645,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all810_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all837_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 810
+    assert sum(APP_COUNTS.values()) == 837
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

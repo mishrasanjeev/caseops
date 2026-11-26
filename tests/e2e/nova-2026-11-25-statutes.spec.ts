@@ -5,11 +5,13 @@
  * The reported Acts were the Constitution of India (1 verified of 11
  * catalogued: only Article 14 could be attached) and the Income-tax Act, 1961
  * (0 verified). The fix compiles every Article of the official Constitution
- * edition into the release bundle; Acts without verified text stay visible but
- * are grouped apart and cannot be chosen.
+ * edition and the Income Tax Department edition of the 1961 Act (a retained
+ * repealed-law edition: the Income-tax Act, 2025 replaced it from 1 April
+ * 2026) into the release bundle. Entries that cannot be attached (quarantined
+ * tables, omitted sections) stay visible but are grouped apart and disabled.
  *
  * Each journey signs in as the reporting tester through the sign-in page,
- * creates its own matter through the UI, chooses the Act and the Article with
+ * creates its own matter through the UI, chooses the Act and the provision with
  * a real pointer (mouse on desktop, touch on a phone), attaches the reference,
  * checks it through the API oracle, then removes it and disposes the matter.
  * Locally the release statute seed (the same `_seed` the release job runs) is
@@ -37,6 +39,8 @@ const DESKTOP = { width: 1365, height: 900 };
 const PHONE = { width: 393, height: 851 };
 /** Articles the tester could not attach before the fix (pending in production on 26 Nov 2026). */
 const REPORTED_ARTICLES = ["Article 19", "Article 21", "Article 32", "Article 226", "Article 227"];
+/** Income-tax sections a tax practice cites; Section 139 holds an unreconciled table and stays withheld. */
+const INCOME_TAX_ATTACHABLE = ["Section 80C", "Section 148A", "Section 194-I", "Section 292A"];
 
 type Runtime = {
   web: URL;
@@ -102,14 +106,14 @@ async function runtimeFor(baseURL: string | undefined, request: APIRequestContex
 const isRequest = (method: string, pattern: RegExp) => (r: { url(): string; request(): { method(): string } }) =>
   r.request().method() === method && pattern.test(new URL(r.url()).pathname);
 
-async function createMatterThroughUi(page: Page, rt: Runtime): Promise<string> {
+async function createMatterThroughUi(page: Page, rt: Runtime, practiceArea = "Constitutional Law"): Promise<string> {
   const code = `N25S-${randomUUID().slice(0, 8).toUpperCase()}`;
   await page.goto(`${rt.web.origin}/app/matters`);
   await page.getByTestId("new-matter-trigger").first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Title").fill(stamp("Nov25 statute reference matter"));
   await dialog.getByLabel("Matter code").fill(code);
-  await dialog.getByLabel("Practice area").fill("Constitutional Law");
+  await dialog.getByLabel("Practice area").fill(practiceArea);
   const created = page.waitForResponse(isRequest("POST", /^\/api\/matters\/?$/));
   await dialog.getByRole("button", { name: "Create matter" }).click();
   const matter = await json<{ id: string; matter_code: string }>(await created, "Create matter through the Matters page");
@@ -159,13 +163,11 @@ async function attachArticle21(page: Page, rt: Runtime, matterId: string, phone:
   const [, verified, catalogued] = label.match(/\((\d+) verified of (\d+) catalogued\)/) ?? [];
   expect(Number(verified), "Constitution Articles with verified official text").toBeGreaterThanOrEqual(400);
   expect(Number(catalogued)).toBeGreaterThanOrEqual(Number(verified));
-  // The Income Tax Act has no verified provision text today, by design: it must be listed,
-  // only in the pending group, and disabled, never looking attachable.
+  // The Income-tax Act, 1961 now has verified edition text: listed once, attachable, enabled.
   const incomeTax = page.getByRole("option", { name: /^Income Tax Act — / });
   await expect(incomeTax, "The Income Tax Act is listed exactly once").toHaveCount(1);
-  await expect(page.getByTestId("matter-statute-act-group-pending").getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(1);
-  await expect(attachableActs.getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(0);
-  await expect(incomeTax).toHaveAttribute("data-disabled", /.*/);
+  await expect(attachableActs.getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(1);
+  await expect(incomeTax).not.toHaveAttribute("data-disabled", /.*/);
   await press(constitution, phone);
   await expect(dialog.getByTestId("matter-statute-act-select")).toContainText("The Constitution of India");
 
@@ -192,10 +194,58 @@ async function attachArticle21(page: Page, rt: Runtime, matterId: string, phone:
   return created;
 }
 
+async function attachIncomeTax80C(page: Page, rt: Runtime, matterId: string, phone: boolean) {
+  await page.goto(`${rt.web.origin}/app/matters/${matterId}/statutes`);
+  await press(page.getByTestId("matter-statute-add-trigger"), phone);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  await press(dialog.getByTestId("matter-statute-act-select"), phone);
+  await expect(page.getByRole("listbox")).toBeVisible();
+  const incomeTax = page.getByTestId("matter-statute-act-group-attachable")
+    .getByRole("option", { name: /^Income Tax Act — Income-tax Act, 1961 \(\d+ verified of \d+ catalogued\)$/ });
+  await expect(incomeTax, "The Income-tax Act is in the attachable group").toHaveCount(1);
+  await expect(incomeTax).not.toHaveAttribute("data-disabled", /.*/);
+  const [, verified, catalogued] = ((await incomeTax.textContent()) ?? "").match(/\((\d+) verified of (\d+) catalogued\)/) ?? [];
+  expect(Number(verified), "Income-tax sections with verified edition text").toBeGreaterThanOrEqual(800);
+  expect(Number(catalogued)).toBeGreaterThan(Number(verified));
+  await press(incomeTax, phone);
+  await expect(dialog.getByTestId("matter-statute-act-select")).toContainText("Income-tax Act, 1961");
+
+  await press(dialog.getByTestId("matter-statute-section-select"), phone);
+  await expect(page.getByRole("listbox")).toBeVisible();
+  const attachableSections = page.getByTestId("matter-statute-section-group-attachable");
+  // Every attachable section of this edition says it is the historical repealed-law text.
+  for (const number of INCOME_TAX_ATTACHABLE) {
+    const option = attachableSections.getByRole("option", {
+      name: new RegExp(`^${number} — .+ \\(historical repealed-law edition\\)$`),
+    });
+    await expect(option, `${number} must be attachable and labelled repealed`).toHaveCount(1);
+    await expect(option).not.toHaveAttribute("data-disabled", /.*/);
+  }
+  // Section 139 is listed but withheld: its due-date table is not reconciled.
+  const returns = page.getByRole("option", { name: /^Section 139 — Return of income/ });
+  await expect(returns).toHaveCount(1);
+  await expect(attachableSections.getByRole("option", { name: /^Section 139 — / })).toHaveCount(0);
+  await expect(returns).toHaveAttribute("data-disabled", /.*/);
+  await press(attachableSections.getByRole("option", { name: /^Section 80C — Deduction in respect of life insurance premia/ }), phone);
+  await expect(dialog.getByTestId("matter-statute-section-select")).toContainText("Section 80C");
+
+  const submit = dialog.getByTestId("matter-statute-add-submit");
+  await expect(submit).toBeEnabled();
+  const attached = page.waitForResponse(isRequest("POST", new RegExp(`^/api/matters/${matterId}/statute-references$`)));
+  await press(submit, phone);
+  const created = await json<StatuteRef>(await attached, "Attach Income-tax Section 80C through the dialog", 201);
+  expect([created.statute_id, created.section_number, created.relevance]).toEqual(["income-tax-1961", "Section 80C", "cited"]);
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId(`matter-statute-ref-${created.id}`)).toContainText("Section 80C");
+  return created;
+}
+
 async function removeReference(page: Page, matterId: string, ref: StatuteRef, phone: boolean) {
   const removed = page.waitForResponse(isRequest("DELETE",
     new RegExp(`^/api/matters/${matterId}/statute-references/${ref.id}$`)));
-  await press(page.getByRole("button", { name: /^Remove .*Article 21$/ }), phone);
+  await press(page.getByRole("button", { name: new RegExp(`^Remove .*${ref.section_number}$`) }), phone);
   expect((await removed).status(), "Remove the reference").toBe(204);
   await expect(page.getByTestId(`matter-statute-ref-${ref.id}`)).toHaveCount(0);
 }
@@ -212,6 +262,32 @@ for (const phone of [false, true]) {
       const ref = await attachArticle21(page, rt, matterId, phone);
       const stored = await references(request, rt, matterId);
       expect(stored.map((row) => [row.statute_id, row.section_number])).toEqual([["constitution-india", "Article 21"]]);
+      await removeReference(page, matterId, ref, phone);
+      expect(await references(request, rt, matterId)).toEqual([]);
+    } finally {
+      if (matterId) await disposeMatter(page, rt, matterId);
+    }
+  });
+
+  test(`${phone ? "[mobile] " : ""}row 1 Income-tax Act Section 80C is chosen and attached from the Add Reference dialog`, async ({ page, request, baseURL }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize(phone ? PHONE : DESKTOP);
+    const rt = await runtimeFor(baseURL, request);
+    await signIn(page, { web: rt.web }, rt.credentials);
+    let matterId: string | undefined;
+    try {
+      matterId = await createMatterThroughUi(page, rt, "Direct Tax");
+      const ref = await attachIncomeTax80C(page, rt, matterId, phone);
+      const stored = await references(request, rt, matterId);
+      expect(stored.map((row) => [row.statute_id, row.section_number])).toEqual([["income-tax-1961", "Section 80C"]]);
+      // Oracle: the attached provision is the edition's verified text and carries its repeal status.
+      const detail = await json<{ section: { verification_status: string; legal_status: string; effective_to: string | null; section_text: string } }>(
+        await request.get(`${rt.api.origin}/api/statutes/income-tax-1961/sections/${encodeURIComponent("Section 80C")}`,
+          { headers: rt.headers }),
+        "Income-tax Section 80C detail");
+      expect([detail.section.verification_status, detail.section.legal_status, detail.section.effective_to])
+        .toEqual(["verified_official", "repealed", "2026-03-31"]);
+      expect(detail.section.section_text).toMatch(/^80C\. \(1\) In computing the total income/);
       await removeReference(page, matterId, ref, phone);
       expect(await references(request, rt, matterId)).toEqual([]);
     } finally {
