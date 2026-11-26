@@ -360,7 +360,13 @@ def _list_numbers(text: str, match: re.Match[str], prefix: str) -> tuple[list[st
     closes_with_and = any(tail.group(1) not in {",", "/"} for tail in tails)
     if not plural and not closes_with_and:
         # "Article 14, 19 and 21" is a list; "Section 138, 15 days ..." is not.
-        tails = []
+        # A slash always is: "u/s 406/420 IPC", "Section 302/34 IPC".
+        kept: list[re.Match[str]] = []
+        for tail in tails:
+            if tail.group(1) == ",":
+                break
+            kept.append(tail)
+        tails = kept
     numbers = [f"{prefix} {match.group(1)}"] + [f"{prefix} {tail.group(2)}" for tail in tails]
     position = tails[-1].end() if tails else match.end()
     if prefix == "Section":
@@ -408,7 +414,7 @@ def _resolve_references(text: str) -> tuple[list[tuple[str, str]], list[str]]:
         ]
         if following:
             chosen = following[0]
-        elif preceding:
+        elif len({acts[position][2] for position in preceding}) == 1:
             chosen = preceding[-1]
         else:
             unbound.extend((match.start(), number) for number in numbers)

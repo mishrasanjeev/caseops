@@ -987,6 +987,15 @@ def test_the_worker_rechecks_matter_access_before_running(
         ("Section 138, 141 and 142 of NI Act",
          [("ni-act-1881", "Section 138"), ("ni-act-1881", "Section 141"),
           ("ni-act-1881", "Section 142")], []),
+        # Slash shorthand from FIRs and charge sheets (third review round).
+        ("Can an FIR u/s 406/420 IPC be quashed when the dispute is a breach of contract?",
+         [("ipc-1860", "Section 406"), ("ipc-1860", "Section 420")], []),
+        ("Section 302/34 IPC", [("ipc-1860", "Section 302"), ("ipc-1860", "Section 34")], []),
+        ("Section 138/141 NI Act",
+         [("ni-act-1881", "Section 138"), ("ni-act-1881", "Section 141")], []),
+        # Two Acts before the sections: guessing would quote CrPC s.138 text.
+        ("Under the NI Act and CrPC, what do Section 138 and Section 200 require?",
+         [], ["Section 138", "Section 200"]),
     ],
 )
 def test_a_section_never_borrows_an_act_another_section_claimed(
