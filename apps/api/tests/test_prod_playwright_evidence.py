@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 739, "app-mobile": 66}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 750, "app-mobile": 68}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3082,7 +3082,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 722, "app-mobile": 56}
+APP_COUNTS = {"app-chromium": 733, "app-mobile": 58}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3127,6 +3127,7 @@ def _app_reviewed_counts():
             + sum(owner == project for owner, _, _ in COMPACT_MATTER_CASES)
             + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
+NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -3151,6 +3152,45 @@ APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "public-content.spec.ts", (
         "public-content.spec.ts", "Public landing page and user guide",
         "mobile November 22 product claims show their limits",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1920px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1536px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1365px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1024px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 2 Today and Next action open the exact task and deadline",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 3 sidebar groups expand and collapse",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 4 Next reaches page four without Load more",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by title finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by code finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by client finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 6 Suggested Counsel cards align at 80-150% zoom",
+    )),
+    ("app-mobile", NOV24_FILE, (
+        NOV24_FILE, "[mobile] row 1 header avatar stays at the right edge on a phone",
+    )),
+    ("app-mobile", NOV24_FILE, (
+        NOV24_FILE, "[mobile] row 3 sidebar groups expand and collapse",
     )),
 )
 
@@ -3205,6 +3245,10 @@ def test_app_required_cases_keep_their_independent_literal_identities():
         pytest.param(APP_REQUIRED_NATIVE_CASES[3], id="ethical-walls-admin-mobile"),
         pytest.param(APP_REQUIRED_NATIVE_CASES[4], id="public-content-desktop-claims"),
         pytest.param(APP_REQUIRED_NATIVE_CASES[5], id="public-content-mobile-claims"),
+        *(
+            pytest.param(case, id=f"nov24-{case[0]}-{number}")
+            for number, case in enumerate(APP_REQUIRED_NATIVE_CASES[6:])
+        ),
     ],
 )
 def test_app_inventory_rejects_a_replaced_required_case_at_unchanged_counts(
@@ -3445,13 +3489,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all778_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all791_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 778
+    assert sum(APP_COUNTS.values()) == 791
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

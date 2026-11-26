@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 739, "app-mobile": 66}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 722, "app-mobile": 56}
+APP_PROJECT_COUNTS = {"app-chromium": 750, "app-mobile": 68}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 733, "app-mobile": 58}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -132,6 +132,8 @@ BATCH5_CASE_PROOF_SCOPES = {
          "and research mode navigation phone"): "assistant-research-no-paid-guard",
     },
 }
+# November 24 workbook journeys (rows 1-6), pinned by exact identity.
+NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -156,6 +158,45 @@ APP_REQUIRED_CASES = (
     ("app-chromium", "public-content.spec.ts", (
         "public-content.spec.ts", "Public landing page and user guide",
         "mobile November 22 product claims show their limits",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1920px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1536px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1365px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 1 header workspace group is at the right edge at 1024px",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 2 Today and Next action open the exact task and deadline",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 3 sidebar groups expand and collapse",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 4 Next reaches page four without Load more",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by title finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by code finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 5 search by client finds a matter on an unloaded page",
+    )),
+    ("app-chromium", NOV24_FILE, (
+        NOV24_FILE, "row 6 Suggested Counsel cards align at 80-150% zoom",
+    )),
+    ("app-mobile", NOV24_FILE, (
+        NOV24_FILE, "[mobile] row 1 header avatar stays at the right edge on a phone",
+    )),
+    ("app-mobile", NOV24_FILE, (
+        NOV24_FILE, "[mobile] row 3 sidebar groups expand and collapse",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete
