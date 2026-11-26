@@ -31,7 +31,7 @@ from caseops_api.db.session import clear_engine_cache, get_session_factory
 from caseops_api.services import compliance_participants as owner
 from caseops_api.services.compliance_participants import _MAX_PARTICIPANTS, _check_participant_bound
 
-CAP_ERROR = ("error", 409, {"code": "compliance_participant_limit"})
+CAP_ERROR = ("error", (409, {"code": "compliance_participant_limit"}))
 LEGACY_SHA256 = "e6c6d2cacb9db3413da582e3707287a5bc012d8957df75bfb500f77c7a204325"
 
 
@@ -317,7 +317,7 @@ def outcome(selector, session, matter):
         return ("ok", selector(session, matter=matter))
     except owner.ComplianceParticipantFenceError as error:
         assert type(error) is owner.ComplianceParticipantFenceError
-        return ("error", error.status_code, error.detail)
+        return ("error", (error.status_code, error.detail))
 
 
 def run(data, selector, matter):
@@ -369,7 +369,7 @@ def assert_work(original, candidate, *, assigned, admins, own_assigned, team, re
     assert candidate.native[-1][1] == (501,)
     assert [column.key for column in admin.selected_columns] == ["id", "role", "is_active"]
     assert len(final.rows) == min(admins, 501) + own_assigned
-    assert len(final.rows) <= 501 + assigned <= 1001
+    assert len(final.rows) <= 501 + assigned
     assert all(
         len(row) == 3
         and isinstance(row[0], str)

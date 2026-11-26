@@ -236,8 +236,10 @@ def test_fabricated_authority_markers_and_passages_are_never_shown(
         sections=[
             {"key": "applicable_law", "paragraphs": [
                 "Section 138 creates the offence [1].",
-                "Dashrath Rupsingh Rathod v. State of Maharashtra (2014) 9 SCC 129 fixes the "
-                "forum [2].",
+                (
+                    "Dashrath Rupsingh Rathod v. State of Maharashtra (2014) 9 SCC 129 fixes the "
+                    "forum [2]."
+                ),
                 "See https://example.invalid/fake for the rule [1].",
             ]},
             {"key": "ingredients", "paragraphs": ["The drawer must owe a debt [9]."]},

@@ -2648,12 +2648,12 @@ class UsbReverseOriginTests(unittest.TestCase):
                 (root / 'seed.json').write_text(json.dumps({}))
                 calls = []
                 class Client:
-                    def __init__(client): client.headers = dict(fixture_module.HEADERS); client.cookies = {'caseops_csrf': 'synthetic-csrf'}
-                    def __enter__(client): return client
-                    def __exit__(client, *_): pass
-                    def post(client, route, **kwargs):
+                    def __init__(self): self.headers = dict(fixture_module.HEADERS); self.cookies = {'caseops_csrf': 'synthetic-csrf'}
+                    def __enter__(self): return self
+                    def __exit__(self, *_): pass
+                    def post(self, route, **kwargs):
                         if route == '/api/auth/native/authorize':
-                            calls.append((dict(client.headers), kwargs['json'])); raise StopBeforeConsent()
+                            calls.append((dict(self.headers), kwargs['json'])); raise StopBeforeConsent()
                         return SimpleNamespace(status_code=200, content=b'{}', json=lambda: {})
                 with patch.object(fixture_module, 'ROOT', root), patch.object(fixture_module, 'client', side_effect=Client), patch.dict(sys.modules, {'caseops_api.services.security': security}), self.assertRaises(StopBeforeConsent):
                     fixture_module.auth_probe(argparse.Namespace())
@@ -2682,8 +2682,9 @@ class UsbReverseOriginTests(unittest.TestCase):
                     if Path(path) != helper or os.name != 'nt':
                         descriptor = actual_open(path, flags, *args, **kwargs)
                     else:
-                        import ctypes, msvcrt
-                        from ctypes import wintypes
+                        import ctypes
+                        import ctypes.wintypes as wintypes
+                        import msvcrt
                         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
                         create = kernel.CreateFileW
                         create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,

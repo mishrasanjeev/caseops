@@ -560,9 +560,12 @@ def test_all_actual_native_document_lifetimes_share_one_process_lock(monkeypatch
 
 
 def test_pdfium_lock_is_released_on_exception_for_another_thread():
-    with pytest.raises(ValueError, match="owned refusal"):
+    def refuse():
         with reader.pdfium_operation():
             raise ValueError("owned refusal")
+
+    with pytest.raises(ValueError, match="owned refusal"):
+        refuse()
 
     def enter():
         with reader.pdfium_operation():

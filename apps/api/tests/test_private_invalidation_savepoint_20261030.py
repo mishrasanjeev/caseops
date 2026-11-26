@@ -28,6 +28,10 @@ from tests.test_postgres_validation import (
 from tests.test_private_event_set_based_20261009_postgres import _projection
 
 
+def _raise(error):
+    raise error
+
+
 @pytest.mark.parametrize("flush_before_rollback", [False, True])
 @pytest.mark.parametrize(
     "storage",
@@ -115,7 +119,7 @@ def test_cached_invalidation_reverts_with_its_savepoint(
                     assert output.state == "locked" and output.locked_reason == "source_revoked"
                     if flush_before_rollback:
                         session.flush()
-                    raise RuntimeError("rollback the private mutation")
+                    _raise(RuntimeError("rollback the private mutation"))
             assert not cached.is_tombstoned and cached.content_text == original_text
             assert cached.embedding_json == projection["embedding_json"]
             assert output.state == "accessible" and output.locked_reason is None

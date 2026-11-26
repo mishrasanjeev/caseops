@@ -12,6 +12,10 @@ from tests.test_document_finalizer_overlap_20261009_postgres import (
 )
 
 
+def _discard_record(*_args, **_kwargs):
+    return None
+
+
 @pytest.mark.parametrize("capture", ["never-started", "completed", "body-failed"])
 def test_detached_stopped_observer_releases_native_cells_without_collecting(capture):
     callbacks = list(gc.callbacks)
@@ -110,5 +114,5 @@ def test_owned_flush_never_detaches_active_capture_or_workers(active):
     finally:
         timing.stop()
         timing.critical_pools = 0
-        audit.record = lambda *_args, **_kwargs: None
+        audit.record = _discard_record
         audit.flush_passive_evidence()

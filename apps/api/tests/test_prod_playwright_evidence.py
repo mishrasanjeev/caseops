@@ -898,15 +898,15 @@ def test_batch4_governance_state_reports_the_exact_switch(tmp_path, enabled):
 
 @pytest.mark.parametrize("content", [
     None, "not json", "[]",
-    '{"schema_version": 1, "enabled": "true", "rollout_expires_at": null, '
-    '"approved_by": null, "evidence": null}',
-    '{"schema_version": 1, "enabled": 1, "rollout_expires_at": null, '
-    '"approved_by": null, "evidence": null}',
-    '{"schema_version": 2, "enabled": true, "rollout_expires_at": null, '
-    '"approved_by": null, "evidence": null}',
+    ('{"schema_version": 1, "enabled": "true", "rollout_expires_at": null, '
+     '"approved_by": null, "evidence": null}'),
+    ('{"schema_version": 1, "enabled": 1, "rollout_expires_at": null, '
+     '"approved_by": null, "evidence": null}'),
+    ('{"schema_version": 2, "enabled": true, "rollout_expires_at": null, '
+     '"approved_by": null, "evidence": null}'),
     '{"schema_version": 1, "enabled": true}',
-    '{"schema_version": 1, "enabled": true, "rollout_expires_at": null, '
-    '"approved_by": null, "evidence": null, "override": true}',
+    ('{"schema_version": 1, "enabled": true, "rollout_expires_at": null, '
+     '"approved_by": null, "evidence": null, "override": true}'),
 ])
 def test_batch4_governance_state_fails_closed_on_missing_or_unreviewed_state(tmp_path, content):
     if content is not None:

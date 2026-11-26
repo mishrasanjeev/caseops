@@ -247,14 +247,14 @@ def _order_id_predicate(clause, compiled, parameters):
 
 def _select_leaves(expression):
     if isinstance(expression, Select):
-        return (expression,)
+        return [expression]
     if isinstance(expression, SelectStatementGrouping):
         return _select_leaves(expression.element)
     if isinstance(expression, CompoundSelect):
         branches = [_select_leaves(branch) for branch in expression.selects]
         if all(branches):
-            return tuple(leaf for branch in branches for leaf in branch)
-    return ()
+            return [leaf for branch in branches for leaf in branch]
+    return []
 
 
 @contextmanager
@@ -298,7 +298,7 @@ def _inventory(session, engine, tmp_path, record_property):
         receipt["rollbacks"] += 1
 
     def orm_select(state):
-        leaves = _select_leaves(state.statement) if state.is_select else ()
+        leaves = _select_leaves(state.statement) if state.is_select else []
         if leaves:
             row = append(
                 "orm",
