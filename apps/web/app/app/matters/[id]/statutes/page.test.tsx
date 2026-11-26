@@ -275,6 +275,116 @@ describe("MatterStatutesPage", () => {
     ).toHaveTextContent("1 verified of 2 catalogued sections");
   });
 
+  it("lists attachable Acts and sections first and groups disabled rows under a label", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({
+      statutes: [
+        { id: "income", short_name: "Income", long_name: "Pending first Act", section_count: 0, catalog_section_count: 9 },
+        { id: "constitution", short_name: "Constitution", long_name: "Verified second Act", section_count: 3, catalog_section_count: 6 },
+        { id: "other", short_name: "Other", long_name: "Pending third Act", section_count: 0, catalog_section_count: 4 },
+        { id: "bns", short_name: "BNS", long_name: "Verified fourth Act", section_count: 1, catalog_section_count: 1 },
+      ],
+      total_section_count: 4,
+      total_catalog_section_count: 20,
+    });
+    const verified = (id: string, number: string) => ({
+      id, section_number: number, section_label: "Verified", selection_state: "verified_selectable",
+    });
+    listStatuteSectionsMock.mockResolvedValue({
+      statute: {},
+      sections: [verified("a-14", "Article 14"), verified("a-19", "Article 19"), verified("a-21", "Article 21")],
+      catalog_sections: [
+        verified("a-14", "Article 14"),
+        { id: "a-15", section_number: "Article 15", section_label: "Pending", selection_state: "verification_pending" },
+        verified("a-19", "Article 19"),
+        { id: "a-31", section_number: "Article 31", section_label: "[Omitted.]", selection_state: "retired" },
+        verified("a-21", "Article 21"),
+        { id: "sch-1", section_number: "First Schedule", section_label: "First Schedule", selection_state: "quarantined" },
+      ],
+      verified_section_count: 3,
+      catalog_section_count: 6,
+    });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+
+    const acts = await openOptions("Act");
+    expect(within(acts).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      expect.stringContaining("Verified second Act"),
+      expect.stringContaining("Verified fourth Act"),
+      expect.stringContaining("Pending first Act"),
+      expect.stringContaining("Pending third Act"),
+    ]);
+    const pendingActs = within(acts).getByRole("group", {
+      name: "Verification pending — cannot be attached yet",
+    });
+    expect(within(pendingActs).getAllByRole("option")).toHaveLength(2);
+    for (const option of within(pendingActs).getAllByRole("option")) {
+      expect(option).toHaveAttribute("aria-disabled", "true");
+    }
+    expect(within(acts).getByRole("option", { name: /Verified fourth Act/ })).not.toHaveAttribute(
+      "aria-disabled", "true",
+    );
+    fireEvent.click(within(acts).getByRole("option", { name: /Verified second Act/ }));
+
+    const sections = await openOptions("Section");
+    expect(within(sections).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Article 14 — Verified",
+      "Article 19 — Verified",
+      "Article 21 — Verified",
+      "Article 15 — Pending — verification pending; not attachable",
+      "Article 31 — [Omitted.] — not attachable",
+      "First Schedule — First Schedule — not attachable",
+    ]);
+    const pending = within(sections).getByRole("group", {
+      name: "Verification pending — cannot be attached yet",
+    });
+    expect(within(pending).getByRole("option", { name: /Article 15/ })).toHaveAttribute(
+      "aria-disabled", "true",
+    );
+    const withdrawn = within(sections).getByRole("group", {
+      name: "Omitted or withheld — cannot be attached",
+    });
+    for (const option of within(withdrawn).getAllByRole("option")) {
+      expect(option).toHaveAttribute("aria-disabled", "true");
+    }
+    for (const number of ["Article 14", "Article 19", "Article 21"]) {
+      expect(within(sections).getByRole("option", { name: new RegExp(number) })).not.toHaveAttribute(
+        "aria-disabled", "true",
+      );
+    }
+    fireEvent.click(within(sections).getByRole("option", { name: /Article 31/ }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+    fireEvent.keyDown(sections, { key: "Escape" });
+    fireEvent.click(within(await openOptions("Section")).getByRole("option", { name: /Article 21/ }));
+    expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+  });
+
+  it("names the host that publishes an attached provision", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({
+      matter_id: "m-1",
+      references: [
+        {
+          id: "r-21",
+          matter_id: "m-1",
+          section_id: "a-21",
+          statute_id: "constitution-india",
+          statute_short_name: "Constitution",
+          section_number: "Article 21",
+          section_label: "Protection of life and personal liberty",
+          section_url: "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf#page=74",
+          relevance: "cited",
+          notes: null,
+          created_at: "2026-11-26T12:00:00Z",
+        },
+      ],
+    });
+    render(withClient(<MatterStatutesPage />));
+    const source = await screen.findByRole("link", { name: "www.legislative.gov.in" });
+    expect(source).toHaveAttribute("href", expect.stringContaining("#page=74"));
+    expect(screen.queryByText("indiacode.nic.in")).not.toBeInTheDocument();
+  });
+
   it("shows an honest empty state when no Act has a verified selectable section", async () => {
     listMatterStatuteReferencesMock.mockResolvedValue({
       matter_id: "m-1",

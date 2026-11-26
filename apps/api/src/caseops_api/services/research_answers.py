@@ -82,6 +82,7 @@ from caseops_api.services.source_actions import (
     inspect_source_target_action,
 )
 from caseops_api.services.statute_resolver import parse_section_string
+from caseops_api.services.statute_selection import is_selectable_statute_section
 
 logger = logging.getLogger(__name__)
 
@@ -296,9 +297,7 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
 
 
 def _is_citable_section(section: StatuteSection) -> bool:
-    from caseops_api.api.routes.statutes import _is_selectable_statute_section
-
-    return _is_selectable_statute_section(section)
+    return is_selectable_statute_section(section)
 
 
 def _statute_sections(

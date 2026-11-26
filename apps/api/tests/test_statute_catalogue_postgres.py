@@ -22,6 +22,10 @@ from tests.fixtures_postgres_client import (  # noqa: F401
     migrated_http_template,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_constitution_statute_attachment import (
+    constitution_articles_attach_after_seed,
+    constitution_withheld_entries_stay_unattachable,
+)
 from tests.test_official_statute_release import (
     test_complete_release_seed_details_history_and_idempotence as assert_release_seed,
 )
@@ -38,6 +42,14 @@ def test_empty_provenance_catalogue_write_parity_on_postgres(isolated_postgres_c
 
 def test_complete_release_inventory_and_idempotence_on_postgres(isolated_postgres_client):
     assert_release_seed(isolated_postgres_client)
+
+
+def test_constitution_articles_attach_on_postgres(isolated_postgres_client):
+    constitution_articles_attach_after_seed(isolated_postgres_client)
+
+
+def test_constitution_withheld_entries_reject_on_postgres(isolated_postgres_client):
+    constitution_withheld_entries_stay_unattachable(isolated_postgres_client)
 
 
 def test_real_schedule_and_historical_provisions_attach_and_reload_on_postgres(

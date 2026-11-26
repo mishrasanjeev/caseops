@@ -89,9 +89,14 @@ def test_seed_upgrades_only_manifested_official_provision(client: TestClient) ->
         assert article_14.section_text_source == "official_release_manifest"
         assert article_14.source_policy_json["official_pdf_page"] == 62
         assert article_14.section_url.endswith(".pdf#page=62")
+        # The whole pinned Constitution edition is admitted, not one article.
         assert article_19 is not None
-        assert article_19.verification_status == "unverified"
-        assert article_19.is_provisional is True
+        assert article_19.verification_status == "verified_official"
+        assert article_19.is_provisional is False
+        assert article_19.section_text.startswith(
+            "19. Protection of certain rights regarding freedom of speech, etc."
+        )
+        assert article_19.source_policy_json["official_pdf_page"] == 70
 
 
 def test_ft_s1_3_unique_constraint_on_section_per_statute(

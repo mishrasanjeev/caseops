@@ -85,6 +85,14 @@ def note_boundary(page, style: dict | None = None) -> float:
             if style else 65 < drawing["x0"] < 78
         )
         and drawing["top"] > 100
+        # Full-width table rules can share a page with the note rule; a page
+        # style may then bound where that page's note rule is printed.
+        and (
+            style.get("top_range", [0, page.height])[0]
+            < drawing["top"]
+            < style.get("top_range", [0, page.height])[1]
+            if style else True
+        )
     ]
     if len(rules) > 1:
         raise ValueError("Ambiguous publisher footnote boundary")
@@ -254,24 +262,41 @@ def _compile_document(spec: dict, document) -> list[dict]:
     toc = {}
     arrangement_pages = {}
     toc_pattern = (
-        re.compile(r"^\s*(\d+(?:\s?[A-Z]+)?)\.\s*(.+)")
+        re.compile(r"^\s*(\d+(?:\s?-?[A-Z]+)?)\.\s*(.+)")
         if spec.get("arrangement_spaced_suffix") else TOC
     )
+    # A publisher may print one arrangement entry for a run of omitted
+    # identities ("379-391. [Omitted.]"). Only explicitly declared runs are read.
+    identity_ranges = spec.get("identity_ranges", {})
+    for key, members in identity_ranges.items():
+        first, last = key.split("-")
+        if members != [str(value) for value in range(int(first), int(last) + 1)]:
+            raise ValueError(f"Identity range members differ from the printed range: {key}")
+    indent_min, indent_max = spec.get("arrangement_continuation_indent", [8, 35])
+    mapping = spec.get("arrangement_page_mapping")
+    printed_page = re.compile(r"^(.*?)\s*(\d+)$")
     for p in range(spec["toc_pages"][0], spec["toc_pages"][1] + 1, spec.get("toc_page_step", 1)):
         previous = None
         for line in page_lines(document.pages[p - 1]):
-            match = toc_pattern.match(line["text"])
+            match = (identity_ranges and re.match(r"^\s*(\d+-\d+)\.\s*(.+)", line["text"])) or (
+                toc_pattern.match(line["text"])
+            )
             if match:
                 number = match[1].replace(" ", "")
                 if number in toc:
                     raise ValueError(f"Duplicate arrangement identity: {number}")
+                if re.fullmatch(r"\d+-\d+", number) and number not in identity_ranges:
+                    raise ValueError(f"Undeclared arrangement identity range: {number}")
                 label = match[2]
-                if spec.get("arrangement_page_mapping"):
-                    label, printed = label.rsplit(" ", 1)
-                    if not printed.isdecimal():
-                        raise ValueError("Missing printed arrangement page")
-                    mapping = spec["arrangement_page_mapping"]
-                    arrangement_pages[number] = int(printed) * mapping["stride"] + mapping["offset"]
+                if mapping:
+                    # The printed page may be glued to the label or may close
+                    # the label's continuation line; both must resolve below.
+                    page_match = printed_page.match(label)
+                    if page_match:
+                        label = page_match[1]
+                        arrangement_pages[number] = (
+                            int(page_match[2]) * mapping["stride"] + mapping["offset"]
+                        )
                 toc[number] = label
                 previous = (number, line, line)
             elif previous is not None and spec.get("complete_arrangement_labels"):
@@ -282,15 +307,27 @@ def _compile_document(spec: dict, document) -> list[dict]:
                         and re.search(r"\.[\]\u201d\"']*$", prior["text"])
                     )
                     and 0 < line["y"] - prior["y"] < 18
-                    and 8 < line["x"] - origin["x"] < 35
+                    and indent_min < line["x"] - origin["x"] < indent_max
                     and abs(line["size"] - origin["size"]) < 0.2
                     and not line["text"].isupper()
                 ):
-                    toc[number] += " " + line["text"]
+                    text = line["text"]
+                    if mapping and number not in arrangement_pages:
+                        page_match = printed_page.match(text)
+                        if page_match:
+                            text = page_match[1]
+                            arrangement_pages[number] = (
+                                int(page_match[2]) * mapping["stride"] + mapping["offset"]
+                            )
+                    toc[number] += " " + text
                     previous = (number, origin, line)
                 else:
                     previous = None
         document.pages[p - 1].close()
+    if mapping and set(arrangement_pages) != set(toc):
+        raise ValueError("Missing printed arrangement page")
+    if not set(identity_ranges) <= set(toc):
+        raise ValueError("Declared identity range is outside the arrangement")
     if len(toc) != spec["section_count"]:
         raise ValueError(f"Incomplete arrangement: {spec['statute_id']}")
     pages = {}
@@ -447,9 +484,14 @@ def _compile_document(spec: dict, document) -> list[dict]:
             )
             for fragment in fragments
         )
-        if len(body) < 20 or len(body) > 200_000 or not fragments:
-            raise ValueError(f"Invalid complete provision text: {number}")
         omitted = bool(re.search(r"(?:\[|^)(?:Omitted|Repealed)\.?\]", toc[number], re.I))
+        # An omitted entry may print only its identity and an elision mark
+        # ("268A. 4 [*****]"); the omission itself stays in the publisher notes.
+        elision_only = omitted and re.fullmatch(
+            re.escape(number) + r"\.\s*(?:\d+\s*)?\[\s*(?:\*\s*)+\]\.?", body
+        )
+        if (len(body) < 20 and not elision_only) or len(body) > 200_000 or not fragments:
+            raise ValueError(f"Invalid complete provision text: {number}")
         block_reason = spec.get("blocked_sections", {}).get(number) or spec.get(
             "blocked_supplements", {}
         ).get(number)
@@ -547,6 +589,18 @@ def _compile_document(spec: dict, document) -> list[dict]:
             raise ValueError("Source version exceeds the persisted contract")
         if len(result[-1]["section_label"]) > 500:
             raise ValueError(f"Complete provision label exceeds the persisted contract: {number}")
+        if number in identity_ranges:
+            # Every omitted identity in the printed run keeps its own row, all
+            # bound to the one shared publisher entry and body.
+            if not omitted or block_reason:
+                raise ValueError(f"Identity range must be one omitted entry: {number}")
+            shared = result.pop()
+            for member in identity_ranges[number]:
+                row = dict(shared)
+                row["section_number"] = f"{spec.get('provision_prefix', 'Section')} {member}"
+                row["source_policy"] = {**policy, "arrangement_identity": number}
+                result.append(row)
+    prefix = spec.get("provision_prefix", "Section")
     for number, evidence in spec.get("omission_evidence", {}).items():
         if number not in toc:
             raise ValueError("Omission evidence is outside the arrangement")
@@ -556,7 +610,7 @@ def _compile_document(spec: dict, document) -> list[dict]:
             raise ValueError("Exact publisher omission evidence changed")
         row = dict(result[0])
         row.update(
-            section_number=f"Section {number}",
+            section_number=f"{prefix} {number}",
             section_label=toc[number].rstrip("."),
             section_text=text,
             source_sha256=digest(text.encode()),
@@ -594,9 +648,12 @@ def _compile_document(spec: dict, document) -> list[dict]:
     if spec.get("omission_evidence"):
         positions = {number: index for index, number in enumerate(toc)}
         numbers = {item["section_number"]: key for key, item in supplements.items()}
+        for key, members in identity_ranges.items():
+            numbers.update({f"{prefix} {member}": key for member in members})
+        # sort() is stable, so members of one printed range keep their order.
         result.sort(
             key=lambda row: positions[
-                numbers.get(row["section_number"], row["section_number"].removeprefix("Section "))
+                numbers.get(row["section_number"], row["section_number"].removeprefix(f"{prefix} "))
             ]
         )
     return result

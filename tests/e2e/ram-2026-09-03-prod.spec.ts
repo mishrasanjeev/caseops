@@ -282,8 +282,10 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
     const verified = sectionCatalog.sections.find(
       (row) => row.section_number === "Article 14",
     );
+    // The whole edition is admitted now; omitted and quarantined entries
+    // remain the catalogued-but-unattachable negative.
     const pending = sectionCatalog.catalog_sections.find(
-      (row) => row.selection_state === "verification_pending",
+      (row) => row.selection_state !== "verified_selectable",
     );
     expect(verified?.verification_status).toBe("verified_official");
     expect(pending).toBeTruthy();

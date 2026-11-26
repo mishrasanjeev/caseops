@@ -11,6 +11,23 @@ export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
 export const SelectGroup = SelectPrimitive.Group;
 
+/** Names a SelectGroup; it is announced with the group and is never an option. */
+export const SelectLabel = forwardRef<
+  ElementRef<typeof SelectPrimitive.Label>,
+  ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
+>(function SelectLabel({ className, ...props }, ref) {
+  return (
+    <SelectPrimitive.Label
+      ref={ref}
+      className={cn(
+        "px-2 pb-1 pt-2 text-xs font-semibold leading-4 text-[var(--color-mute)]",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
+
 export const SelectTrigger = forwardRef<
   ElementRef<typeof SelectPrimitive.Trigger>,
   ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>

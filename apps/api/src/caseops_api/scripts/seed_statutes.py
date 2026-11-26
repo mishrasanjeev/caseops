@@ -13,15 +13,12 @@ release manifest.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import re
 import sys
 from datetime import UTC, date, datetime
 from difflib import unified_diff
 from pathlib import Path
-from urllib.parse import urlparse
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -48,46 +45,6 @@ def _same_utc_instant(left: datetime | None, right: datetime | None) -> bool:
     return left.astimezone(UTC) == right.astimezone(UTC)
 
 SEED_PATH = Path(__file__).resolve().parent / "seed_data" / "statutes.json"
-VERIFIED_SOURCE_PATH = (
-    Path(__file__).resolve().parent / "seed_data" / "verified_statute_sources.json"
-)
-
-
-def _verified_release_sources() -> dict[tuple[str, str], dict[str, object]]:
-    if not VERIFIED_SOURCE_PATH.exists():
-        raise FileNotFoundError(f"verified source manifest missing: {VERIFIED_SOURCE_PATH}")
-    payload = json.loads(VERIFIED_SOURCE_PATH.read_text(encoding="utf-8"))
-    if not isinstance(payload, list) or not payload:
-        raise ValueError("verified source manifest must contain at least one provision")
-    sources: dict[tuple[str, str], dict[str, object]] = {}
-    for source in payload:
-        if not isinstance(source, dict):
-            raise ValueError("verified source manifest rows must be objects")
-        text = str(source.get("section_text") or "")
-        expected_hash = str(source.get("source_sha256") or "").lower()
-        actual_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        document_hash = str(source.get("source_document_sha256") or "").lower()
-        source_url = str(source.get("source_url") or "")
-        parsed = urlparse(source_url)
-        if expected_hash != actual_hash:
-            raise ValueError("verified source manifest text hash mismatch")
-        if not re.fullmatch(r"[0-9a-f]{64}", document_hash):
-            raise ValueError("verified source manifest document hash is invalid")
-        if (
-            parsed.scheme != "https"
-            or parsed.hostname != "www.legislative.gov.in"
-            or not re.fullmatch(r"page=[1-9][0-9]*", parsed.fragment)
-        ):
-            raise ValueError("verified source manifest must use an official PDF page link")
-        if source.get("source_locator_type") != "section_deep_link":
-            raise ValueError("verified source manifest requires a section deep link")
-        if source.get("link_health_status") != "available":
-            raise ValueError("verified source manifest requires a checked available link")
-        key = (str(source.get("statute_id") or ""), str(source.get("section_number") or ""))
-        if not all(key) or key in sources:
-            raise ValueError("verified source manifest contains an invalid or duplicate key")
-        sources[key] = source
-    return sources
 
 
 def _apply_verified_release_source(
@@ -247,9 +204,8 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
         raise ValueError(f"seed file empty / wrong shape: {SEED_PATH}")
 
     now = datetime.now(UTC)
-    verified_sources = _verified_release_sources()
     documents, official_sources = load_release_bundle()
-    verified_sources.update(official_sources)
+    verified_sources = dict(official_sources)
     for act in seeds:
         if act["id"] not in documents:
             continue
