@@ -261,13 +261,13 @@ const isNov24 = (row: Case) => row.file === nov24File;
 // matched by exact identity.
 const nov25ConstitutionPrefix = "Nov25 Constitution source records ";
 const nov25IncomeTaxPrefix = "Nov25 Income-tax source records ";
-const nov25IncomeTaxRanges = ["1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-280", "281-320", "321-360", "361-400", "401-440", "441-480", "481-520", "521-560", "561-600", "601-640", "641-680", "681-720", "721-760", "761-800", "801-840", "841-880", "881-920", "921-960", "961-965"];
+const nov25IncomeTaxRanges = ["1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-280", "281-320", "321-360", "361-400", "401-440", "441-480", "481-520", "521-560", "561-600", "601-640", "641-680", "681-720", "721-760", "761-800", "801-840", "841-880", "881-920", "921-960", "961-966"];
 const nov25Cases = [
   ...[
     "1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-280",
     "281-320", "321-360", "361-400", "401-440", "441-480", "481-519",
   ].map(range => ["app-chromium", motorStatuteFile, `${nov25ConstitutionPrefix}${range} of 519`] as const),
-  ...nov25IncomeTaxRanges.map(range => ["app-chromium", motorStatuteFile, `${nov25IncomeTaxPrefix}${range} of 965`] as const),
+  ...nov25IncomeTaxRanges.map(range => ["app-chromium", motorStatuteFile, `${nov25IncomeTaxPrefix}${range} of 966`] as const),
   ["app-chromium", "nova-2026-11-25-statutes.spec.ts", "row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog"],
   ["app-chromium", "nova-2026-11-25-statutes.spec.ts", "row 1 Income-tax Act Section 80C is chosen and attached from the Add Reference dialog"],
   ["app-chromium", "nova-2026-11-25-client-links.spec.ts", "row 2 links a client from the client page and from the matter overview"],

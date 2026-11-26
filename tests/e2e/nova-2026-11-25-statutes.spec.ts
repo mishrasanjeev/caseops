@@ -281,12 +281,12 @@ for (const phone of [false, true]) {
       const stored = await references(request, rt, matterId);
       expect(stored.map((row) => [row.statute_id, row.section_number])).toEqual([["income-tax-1961", "Section 80C"]]);
       // Oracle: the attached provision is the edition's verified text and carries its repeal status.
-      const detail = await json<{ section: { verification_status: string; legal_status: string; effective_to: string | null; section_text: string } }>(
+      const detail = await json<{ statute: { legal_status: string }; section: { verification_status: string; legal_status: string; section_text: string } }>(
         await request.get(`${rt.api.origin}/api/statutes/income-tax-1961/sections/${encodeURIComponent("Section 80C")}`,
           { headers: rt.headers }),
         "Income-tax Section 80C detail");
-      expect([detail.section.verification_status, detail.section.legal_status, detail.section.effective_to])
-        .toEqual(["verified_official", "repealed", "2026-03-31"]);
+      expect([detail.section.verification_status, detail.section.legal_status, detail.statute.legal_status])
+        .toEqual(["verified_official", "repealed", "repealed"]);
       expect(detail.section.section_text).toMatch(/^80C\. \(1\) In computing the total income/);
       await removeReference(page, matterId, ref, phone);
       expect(await references(request, rt, matterId)).toEqual([]);

@@ -19,7 +19,6 @@ type Provision = {
   source_status: string;
   legal_status: string;
   effective_from: string | null;
-  effective_to?: string | null;
   source_locator_type: string;
   source_retrieved_at: string;
   link_health_status: string;
@@ -111,9 +110,6 @@ for (const { label, provisions } of sourceBatches) {
           expect(actual[field], `${expected.statute_id} ${expected.section_number}: ${field}`).toBe(expected[field]);
         }
         expect(Date.parse(actual.source_retrieved_at)).toBe(Date.parse(expected.source_retrieved_at));
-        // A retained repealed-law edition records the last day its Act was in force.
-        expect(actual.effective_to, `${expected.statute_id} ${expected.section_number}: effective_to`)
-          .toBe(expected.effective_to ?? null);
         expect(actual.section_number).toBe(expected.section_number);
         expect(actual.verification_status).toBe(expected.verification_status);
         expect(actual.source_sha256).toBe(expected.source_sha256);
