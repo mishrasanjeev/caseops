@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 750, "app-mobile": 68}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 767, "app-mobile": 70}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,7 +3083,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 733, "app-mobile": 58}
+APP_COUNTS = {"app-chromium": 750, "app-mobile": 60}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3129,6 +3129,9 @@ def _app_reviewed_counts():
             + sum(pair[index] for pair in evidence.BATCH5_CASE_COUNTS.values())
             for index, (project, count) in enumerate(APP_COUNTS.items())}
 NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
+NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
+NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
+NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -3193,6 +3196,69 @@ APP_REQUIRED_NATIVE_CASES = (
     ("app-mobile", NOV24_FILE, (
         NOV24_FILE, "[mobile] row 3 sidebar groups expand and collapse",
     )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 1-40 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 41-80 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 81-120 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 121-160 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 161-200 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 201-240 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 241-280 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 281-320 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 321-360 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 361-400 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 401-440 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 441-480 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 481-519 of 519",
+    )),
+    ("app-chromium", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog",
+    )),
+    ("app-chromium", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE,
+        "row 2 links a client from the client page and from the matter overview",
+    )),
+    ("app-chromium", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE, "row 2 new matter links an existing client at creation",
+    )),
+    ("app-chromium", NOV25_ASSISTANT_FILE, (
+        NOV25_ASSISTANT_FILE,
+        "row 3 Ask Workspace answers parties, pending actions, documents and Act sections "
+        "from the cited Matter record",
+    )),
+    ("app-mobile", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "[mobile] row 1 Constitution Article 21 is chosen and attached from the Add Reference "
+        "dialog",
+    )),
+    ("app-mobile", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
+    )),
 )
 
 
@@ -3247,7 +3313,7 @@ def test_app_required_cases_keep_their_independent_literal_identities():
         pytest.param(APP_REQUIRED_NATIVE_CASES[4], id="public-content-desktop-claims"),
         pytest.param(APP_REQUIRED_NATIVE_CASES[5], id="public-content-mobile-claims"),
         *(
-            pytest.param(case, id=f"nov24-{case[0]}-{number}")
+            pytest.param(case, id=f"workbook-{case[1]}-{case[0]}-{number}")
             for number, case in enumerate(APP_REQUIRED_NATIVE_CASES[6:])
         ),
     ],
@@ -3276,7 +3342,11 @@ def test_app_inventory_requires_every_motor_vehicles_range_at_unchanged_counts(a
     canonical = evidence._json(
         app_envelopes.root / evidence.EVIDENCE / "ci-app-chromium" / "canonical-discovery.json"
     )
-    motor = [row for row in canonical["tests"] if row["file"] == MOTOR_STATUTE_FILE]
+    motor = [
+        row for row in canonical["tests"]
+        if row["file"] == MOTOR_STATUTE_FILE
+        and row["title_path"][-1].startswith(evidence.MOTOR_STATUTE_TITLE_PREFIX)
+    ]
     assert [row["title_path"][-1] for row in motor] == list(MOTOR_STATUTE_CASES)
     motor[-1]["title_path"] = list(motor[-2]["title_path"])
     assert Counter(row["project_name"] for row in canonical["tests"]) == _app_reviewed_counts()
@@ -3490,13 +3560,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all791_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all810_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 791
+    assert sum(APP_COUNTS.values()) == 810
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

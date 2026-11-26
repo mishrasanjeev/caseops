@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 750, "app-mobile": 68}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 733, "app-mobile": 58}
+APP_PROJECT_COUNTS = {"app-chromium": 767, "app-mobile": 70}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 750, "app-mobile": 60}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -134,6 +134,9 @@ BATCH5_CASE_PROOF_SCOPES = {
 }
 # November 24 workbook journeys (rows 1-6), pinned by exact identity.
 NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
+NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
+NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
+NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -197,6 +200,69 @@ APP_REQUIRED_CASES = (
     )),
     ("app-mobile", NOV24_FILE, (
         NOV24_FILE, "[mobile] row 3 sidebar groups expand and collapse",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 1-40 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 41-80 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 81-120 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 121-160 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 161-200 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 201-240 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 241-280 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 281-320 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 321-360 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 361-400 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 401-440 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 441-480 of 519",
+    )),
+    ("app-chromium", MOTOR_STATUTE_FILE, (
+        MOTOR_STATUTE_FILE, "Nov25 Constitution source records 481-519 of 519",
+    )),
+    ("app-chromium", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog",
+    )),
+    ("app-chromium", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE,
+        "row 2 links a client from the client page and from the matter overview",
+    )),
+    ("app-chromium", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE, "row 2 new matter links an existing client at creation",
+    )),
+    ("app-chromium", NOV25_ASSISTANT_FILE, (
+        NOV25_ASSISTANT_FILE,
+        "row 3 Ask Workspace answers parties, pending actions, documents and Act sections "
+        "from the cited Matter record",
+    )),
+    ("app-mobile", NOV25_STATUTES_FILE, (
+        NOV25_STATUTES_FILE,
+        "[mobile] row 1 Constitution Article 21 is chosen and attached from the Add Reference "
+        "dialog",
+    )),
+    ("app-mobile", NOV25_CLIENTS_FILE, (
+        NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete

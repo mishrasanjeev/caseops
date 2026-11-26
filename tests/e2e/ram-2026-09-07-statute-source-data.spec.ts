@@ -79,11 +79,14 @@ const test = baseTest.extend<{}, { sourceApi: APIRequestContext }>({
   }, { scope: "worker" }],
 });
 
-// Keep the original source cases and add separately named batches for Motor Vehicles.
+// Keep the original source cases and add separately named batches for each Act
+// admitted later (Motor Vehicles for BUG-018, the Constitution for the Nov 25 workbook).
 const motorAct = "motor-vehicles-1988";
+const constitution = "constitution-india";
 const sourceBatches = [
-  { label: "BUG-010 source records", provisions: rows.filter(row => row.statute_id !== motorAct) },
+  { label: "BUG-010 source records", provisions: rows.filter(row => row.statute_id !== motorAct && row.statute_id !== constitution) },
   { label: "BUG-018 Motor Vehicles source records", provisions: rows.filter(row => row.statute_id === motorAct) },
+  { label: "Nov25 Constitution source records", provisions: rows.filter(row => row.statute_id === constitution) },
 ];
 for (const { label, provisions } of sourceBatches) {
   for (let offset = 0; offset < provisions.length; offset += 40) {

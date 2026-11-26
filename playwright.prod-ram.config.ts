@@ -31,6 +31,8 @@ const WORKSPACE_REQUIREMENTS_SPECS = /ram-2026-11-07-(?:contracts|teams)\.spec\.
 const BATCH5_SPECS = /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\.ts$/;
 // Nov 24 workbook: rows 1-3 run as the nova-legal tester, rows 4-6 as test-legal.
 const NOV24_SPECS = /ram-2026-11-24-bugs\.spec\.ts$/;
+// Nov 25 workbook (2): rows 1-3 run as the nova-legal tester.
+const NOV25_SPECS = /nova-2026-11-25-(?:statutes|client-links|ask-workspace)\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 const OFFICIAL_REFERENCE_PROD_SPEC = /ram-2026-11-14-prod\.spec\.ts$/;
@@ -113,6 +115,37 @@ export default defineConfig({
     {
       name: "nov24-prod-mobile",
       testMatch: NOV24_SPECS,
+      grep: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "nov25-prod-chromium",
+      testMatch: NOV25_SPECS,
+      grepInvert: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov25-prod-mobile",
+      testMatch: NOV25_SPECS,
       grep: /\[mobile\]/,
       fullyParallel: false,
       retries: 0,
