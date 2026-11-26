@@ -90,6 +90,20 @@ function visibleCodes(): string[] {
     .map((cell) => cell.textContent ?? "");
 }
 
+// The page waits SEARCH_DEBOUNCE_MS (300ms) before it asks the server. Wait
+// for that request on its own budget, so the default wait that follows covers
+// only the server answer and render (CI under coverage measured 1.3s for both).
+const SEARCH_DEBOUNCE_MS = 300;
+async function searchFor(value: string) {
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
+    target: { value },
+  });
+  await waitFor(
+    () => expect(listMattersMock).toHaveBeenLastCalledWith(expect.objectContaining({ q: value })),
+    { timeout: SEARCH_DEBOUNCE_MS + 1000 },
+  );
+}
+
 describe("Matters list pages and searches on the server", () => {
   beforeEach(() => {
     listMattersMock.mockReset();
@@ -148,9 +162,7 @@ describe("Matters list pages and searches on the server", () => {
     await screen.findByText("MAT-001");
     expect(screen.queryByText(code)).toBeNull();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
-      target: { value: needle },
-    });
+    await searchFor(needle);
 
     await screen.findByText(code);
     expect(listMattersMock).toHaveBeenLastCalledWith(
@@ -164,8 +176,7 @@ describe("Matters list pages and searches on the server", () => {
   it("keeps the search box and says so when nothing matches", async () => {
     renderPage();
     await screen.findByText("MAT-001");
-    const box = screen.getByRole("searchbox", { name: "Search all rows" });
-    fireEvent.change(box, { target: { value: "no such matter" } });
+    await searchFor("no such matter");
     await screen.findByText("No matters match this search or these filters.");
     expect(screen.getByRole("searchbox", { name: "Search all rows" })).toHaveValue(
       "no such matter",
@@ -180,9 +191,7 @@ describe("Matters list pages and searches on the server", () => {
     await screen.findByText("MAT-001");
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
     await screen.findByText("MAT-051");
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
-      target: { value: "Client 00" },
-    });
+    await searchFor("Client 00");
     // The previous page stays visible while the search loads; wait for the result.
     await waitFor(() =>
       expect(screen.getByTestId("data-table-range")).toHaveTextContent("1-9 of 9"),
@@ -201,9 +210,7 @@ describe("Matters list pages and searches on the server", () => {
     expect(screen.queryByRole("button", { name: "Code" })).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Code" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
-      target: { value: "Client 00" },
-    });
+    await searchFor("Client 00");
     await waitFor(() =>
       expect(screen.getByTestId("data-table-range")).toHaveTextContent("1-9 of 9"),
     );
@@ -219,9 +226,7 @@ describe("Matters list pages and searches on the server", () => {
     );
     renderPage();
     await screen.findByText("MAT-001");
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
-      target: { value: "boom" },
-    });
+    await searchFor("boom");
     const reset = await screen.findByRole("button", { name: /reset filters/i });
     expect(screen.getByLabelText("Search")).toHaveValue("boom");
     fireEvent.click(reset);

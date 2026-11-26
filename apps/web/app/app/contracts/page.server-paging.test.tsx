@@ -56,6 +56,20 @@ function renderPage() {
   );
 }
 
+// The page waits SEARCH_DEBOUNCE_MS (300ms) before it asks the server. Wait
+// for that request on its own budget, so the default wait that follows covers
+// only the server answer and render (CI under coverage measured 1.3s for both).
+const SEARCH_DEBOUNCE_MS = 300;
+async function searchFor(value: string) {
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
+    target: { value },
+  });
+  await waitFor(
+    () => expect(listContractsMock).toHaveBeenLastCalledWith(expect.objectContaining({ q: value })),
+    { timeout: SEARCH_DEBOUNCE_MS + 1000 },
+  );
+}
+
 describe("Contracts list pages and searches on the server", () => {
   beforeEach(() => {
     listContractsMock.mockReset();
@@ -76,9 +90,7 @@ describe("Contracts list pages and searches on the server", () => {
   it("search finds a contract that is not loaded yet", async () => {
     renderPage();
     await screen.findByText("CON-001");
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search all rows" }), {
-      target: { value: "Vendor 070" },
-    });
+    await searchFor("Vendor 070");
     await screen.findByText("CON-070");
     expect(listContractsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ q: "Vendor 070", cursor: null, include_total: true }),
