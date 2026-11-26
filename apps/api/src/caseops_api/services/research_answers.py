@@ -1639,14 +1639,25 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
 
     started = time.perf_counter()
     timings: dict[str, int] = {}
-    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
+    query, matter_id = answer.query, answer.context_matter_id
+    # Retrieval reads, then embeds the question and reranks candidates on the
+    # CPU. Inside a transaction that idle time counts against the server's
+    # idle-in-transaction timeout (60 s in production), which killed the
+    # connection mid-retrieval on 2026-11-26 (prod-verify 45856740774). End the
+    # claim's read transaction first: autocommit is only applied to a fresh
+    # connection, and is silently ignored on one already in a transaction.
+    session.commit()
+    session.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+    matter = session.get(Matter, matter_id) if matter_id else None
     try:
-        focus = _resolve_focus(session, answer.query, matter)
-        sources, focus = _build_sources(session, answer.query, focus=focus, matter=matter)
+        focus = _resolve_focus(session, query, matter)
+        sources, focus = _build_sources(session, query, focus=focus, matter=matter)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")
         return
+    # Return the autocommit connection before anything below writes.
+    session.commit()
     timings["retrieval_ms"] = int((time.perf_counter() - started) * 1000)
     manifest = _manifest(sources)
     if not sources:

@@ -7939,6 +7939,17 @@ compare-and-set; duplicate submissions never cross the no-paid boundary.
 Docker acceptance then caught the new worker rejecting the Cloud Run string
 "1" for its admission protocol (every scheduled run would have crashed);
 fixed and regressed in `test_ai_jobs_20261126.py`.
+Retrieval also held a transaction open while it embedded and reranked, so
+PostgreSQL's 60 s idle-in-transaction limit could kill the connection
+(prod-verify 45856740774 on e492d6472; PR #675 fixes it on main). In the worker
+path the claim's reads have already opened a transaction, where SQLAlchemy
+ignores an autocommit request with only a warning (checked on pg17); `_run`
+commits, then reads on an autocommit connection, then commits before any
+write. `test_research_answer_idle_transaction_20261126_postgres.py` (from #675)
+fails on the branch before the port with the production `internal_error` and
+passes after it. Adjacent, not changed: drafting, strategy, recommendations,
+authorities and matters also rerank inside request transactions; no timeout
+has been observed there (request CPU is not throttled).
 
 ## November 26 - BUG-004 "Explain about this matter/case" dead-ends (Ram, High)
 
