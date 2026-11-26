@@ -66,8 +66,25 @@ Triage (all six reproduce against `origin/main` a430c593c):
 
 Prevention: `DataTable` now refuses (at compile time) a caller that does not
 declare `completeData` or `server`; the regression set fails on the old code
-(6/6 failed against a430c593c's page and table). Verdicts below are recorded
-after production verification.
+(6/6 failed against a430c593c's page and table).
+
+Verdicts (production release 1ed725ce2, API caseops-api-00536-pc4, web
+caseops-web-00512-2dq; `tests/e2e/ram-2026-11-24-bugs.spec.ts` via
+`playwright.prod-ram.config.ts` projects `nov24-prod-chromium` and
+`nov24-prod-mobile`, 13 passed on 2026-11-26 08:25 UTC, rows 1-3 signed in as
+the nova-legal tester and rows 4-6 as the test-legal tester):
+
+- Row 1: Properly fixed (row 1 at 1920/1536/1365/1024 px and `[mobile] row 1`).
+- Row 2: Properly fixed (row 2 Today and Next action open the exact task and
+  deadline).
+- Row 3: Properly fixed (row 3 sidebar groups, desktop and `[mobile]`).
+- Row 4: Properly fixed (row 4 Next reaches page four without Load more).
+- Row 5: Properly fixed (row 5 search by title, code and client).
+- Row 6: Properly fixed (row 6 Suggested Counsel cards align at 80-150% zoom).
+
+Adjacent defect found by the exact-release prod-verify (run 45772687035): the
+row 3 sidebar markup broke `ram-2026-08-16-prod.spec.ts` (heading-parent
+lookup now lands on the group toggle button). Test-only; fixed in PR #667.
 
 ## November24 — issue #513 public lead failure observability
 
