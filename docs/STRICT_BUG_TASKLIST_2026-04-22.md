@@ -1,3 +1,42 @@
+## November24 — issue #513 public lead failure observability
+
+**Partially fixed / Inconclusive; issue stays open.** Issue #513 exit criteria
+were rechecked on main609914f5a. Unified durable, idempotent admission across
+all seven public forms, worker-owned retryable notification and MFA-manager
+readback were already implemented. One adjacent defect was reproduced: the
+reminders worker logged only `retry_pending` (as a bare event name whose
+reference was dropped by the worker's plain log format), while timeouts, 5xx,
+rejections, expired claims and attempt-limit results wrote no log at all.
+Each undelivered outcome now logs the lead reference, recorded status and fixed
+code only, after the conditional write succeeds. RED on unchanged main: the new
+module failed8/9 on SQLite (only the accepted case passed). The new
+SQLite/PostgreSQL module also gives the Leads manager readback its first native
+PostgreSQL coverage.
+
+Adjacent defect, fixed in the same PR: alembic `fileConfig` disables every
+already-imported logger for the rest of a native test session, so caplog
+absence checks for PII and secrets passed without observing anything. The new
+`live_logs` fixture in `apps/api/tests/conftest.py` re-enables them for one test
+and keeps a migration during that test from disabling them again. It now guards
+11 tests in 8 modules (lead admission/notification, issue 513, Gemini decoder,
+corpus money stop x2, portfolio export callback/dispatch, IP upload failure,
+tracestate). Proof with temporary PII log injections, SQLite: original tests
+passed 29 of 30 cases while the sentinel was being logged (vacuous; the IP
+upload case was already live because its route logger is created after the
+migration); with `live_logs` 34 of 41 cases failed on the injected sentinel,
+covering every other repaired test in at least one case, and two more failed
+on the missing opentelemetry extra. The tracestate test could not run
+locally (opentelemetry extra absent from the borrowed venv), so its liveness is
+unproven here. Without injection the repaired tests pass on SQLite and
+PostgreSQL (50 passed; the same two tracestate cases fail on the missing
+extra). No product PII leak surfaced. Not changed: the LLM fallback and
+private-retrieval tests already re-enable their loggers; the PostgreSQL
+attachment/notice/IP upload admission tests assert log presence, so they
+cannot pass vacuously; capsys-based stderr checks were not assessed.
+Browser proof of a failed alert, Docker/CI and exact-production acceptance,
+and the owner sender/retention/consent/attribution decisions remain open.
+See `docs/public-leads-admin-2026-10-21.md`.
+
 ## November 24 — report console invitation completion returns 401
 
 **Inconclusive (deployed 2026-11-25 in `bce18d1d2`; real invitee retry
@@ -35,6 +74,35 @@ were clean, and the guarded cadence resume passed. A production probe of
 returns 401 `console_link_invalid`, so the route is deployed. The verdict
 stays Inconclusive until the reporting invitee completes setup with the
 current CaseOps password on the new form.
+
+## November24 — issue 611 Workbook 5 verdicts on main 609914f5a
+
+Recorded by the issue 611 reconciliation. Production serves 609914f5a.
+Exact-release prod-verify 45388561841 is bound to that SHA in all 22 result
+files. It passed all 13 groups (483 passed, 16 skipped outside Workbook 5,
+no failures).
+All four November 14 failures in 43554158329 are **Properly fixed**: Teams
+AI-TEAM-01, Communications BUG-003, original Contract controls and original
+Draft parity. Each passed on desktop and phone in 45388561841 and in four
+earlier exact-release dispatches. The team-member removal 504 is
+**Partially fixed**. Unused teams are bounded and the Teams routes are sync,
+but a team with any Matter, grant or wall still runs the per-docket
+tenant IP role scan while it holds identity locks. The later-login 504 is
+**Partially fixed**. Its inferred cause is the Teams `async def` route
+blocking the container's event loop after Cloud Run's 504, and that route is
+now sync. Other `async def` routes with synchronous DB work remain, tracked in
+the enterprise gap list.
+
+Report verdicts: BUG-001, 002, 003, 005, 006, 009, 013 and 014 are
+**Properly fixed**. BUG-008, ENH-017 and BUG-018 are **Partially fixed**.
+BUG-011 and BUG-019 are **Not fixed**. Both need enhancements that are not
+built: native redline authoring, and a permitted registry channel. BUG-004,
+007, 010, 012, 015, 016 and ENH-020 are **Inconclusive**. BUG-016 is
+implemented and passes in the App suite on desktop and phone, but it has no
+production spec. The per-row evidence, test files and the out-of-scope
+tracks are in [the triage](BUGS5_TRIAGE_2026-11-11.md#november-24-verdict-reconciliation-on-main-609914f5a-issue-611).
+No bounded code defect from Workbook 5 remains open on main. This entry
+changes no code.
 
 ## November18 — journal availability and Docker fixture filename failures
 
@@ -7671,7 +7739,18 @@ The canonical native authorization POST cannot inherit generic 401 refresh
 and bearer retry. Complete UI/client79 and real built-browser14 cases pass;
 current native harness647 passes with two declared Windows-only skips. The old
 production flow reproduces the exact typed403 and succeeds after its extra
-manual connection step. The new flow is not yet deployed; actual native and
-production acceptance remain pending. Existing Android version 3 went live November
-17; Managed publishing now holds future updates. Historical private-only status
+manual connection step. PR642 is now merged at6cdbe791, and the web login update
+is serving100% traffic in revision `caseops-web-login-6cdbe791`. An actual
+production browser journey with the owned disposable QA account passed login,
+one MFA step-up, automatic native authorization and the ready Open CaseOps
+control without another Connect. It did not open the callback or exchange a
+native token and is not reporting-user or complete native acceptance. Its
+retained `production-native-mfa-hotfix-20261122-01/proof-01.json` SHA256 is
+`791d71f81caeb5db991ba612a56e67dff2c4c67a98320b11ee46f6f95600a62d`;
+worker and actual parent exited0. The API was unchanged. Full3268-case Linux
+web coverage, Windows web and all8 canonical main Security jobs passed; the
+remaining canonical main CI matrix is not yet certified. Actual native
+acceptance remains pending. Existing Android version 3 went live November
+17; fresh signed-in Play Console confirms100% production rollout and no
+unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).

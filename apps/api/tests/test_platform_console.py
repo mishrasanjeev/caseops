@@ -80,6 +80,10 @@ def _csrf(client):
 
 @pytest.fixture
 def report_console(client, monkeypatch):
+    return provision_report_console(client, monkeypatch)
+
+
+def provision_report_console(client, monkeypatch):
     monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", "owner@asterlegal.in")
     monkeypatch.setenv("CASEOPS_CONSOLE_TEST_MAIL_URL", "http://127.0.0.1:8129/messages")
     get_settings.cache_clear()

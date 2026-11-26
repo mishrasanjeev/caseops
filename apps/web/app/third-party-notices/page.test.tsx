@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, fourteen named components and eighteen full notices", () => {
+  it("renders one heading, seventeen named components and twenty-three full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(14);
-    expect(article.querySelectorAll("details")).toHaveLength(18);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(17);
+    expect(article.querySelectorAll("details")).toHaveLength(23);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -77,6 +77,9 @@ describe("third-party license notices", () => {
       ["uharfbuzz", "0.57.0"],
       ["picomatch", "4.0.7-caseops.1"],
       ["@npmcli/arborist", "9.9.3"],
+      ["vite", "8.2.6"],
+      ["rolldown", "1.2.19"],
+      ["undici", "7.30.2"],
     ]);
     const apiVersions: Record<string, string> = {
       "liberation-fonts": "2.1.5", NotoSansDevanagari: "2.002", NotoSans: "2.008", uharfbuzz: "0.57.0",

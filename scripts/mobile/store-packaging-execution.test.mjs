@@ -44,7 +44,7 @@ function fixture(t, { androidOnly = false, reservationDirectory } = {}) {
   const iosNames = ['node', 'python', 'git', 'ruby', 'curl', 'pod', 'xcodebuild', 'codesign', 'security', 'xcrun'];
   const names = [...iosNames, 'java', 'keytool', 'jarsigner', 'bundletool', 'aapt2'];
   const allTools = Object.fromEntries(names.map(name => { const ref = save(name + '-tool', 'SYNTHETIC_TOOL'); fs.chmodSync(ref.path, 0o700);
-    return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.15.0', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
+    return [name, { ...ref, sizeBytes: 14, version: ({ node: '24.22.3', python: '3.13.17', ruby: '4.0.9', curl: '8.7.1', pod: '1.17.0' })[name] || 'fixture-pinned', ownerUid: process.getuid?.() || 0 }]; }));
   const hostRef = save('synthetic-ios-host-policy.json', { syntheticContractOnly: true });
   const runtimeRef = save('runtime-public.txt', 'PUBLIC_RUNTIME');
   const generatedValue = platform => (platform === 'ios' ? [['Podfile', 'PUBLIC SYNTHETIC PODFILE']]
@@ -189,7 +189,10 @@ test('qualification never accepts a fabricated native pass or an iOS request', a
 test('the same approved build batch serves both platforms but each platform can dispatch only once', async t => {
   const f = fixture(t), a = f.make('ios'); const first = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }); assert.equal(first.observed, true);
   const b = f.make('android'); const second = await executeStorePackaging(b.ref(), { root: f.root, adapter: f.adapter }); assert.equal(second.observed, true, JSON.stringify(second.originalFailure));
-  assert.equal(fs.readdirSync(f.reservations).length, 5);
+  assert.equal(fs.readdirSync(f.reservations).length, 6);
+  const batches = fs.readdirSync(f.reservations).filter(name => name.startsWith('batch-'));
+  assert.equal(batches.length, 2);
+  assert.deepEqual(batches.map(name => JSON.parse(fs.readFileSync(path.join(f.reservations,name))).records.map(row => row.platform)).sort(), [['android'],['ios']]);
   // A fresh public native projection can never reset the retained number/claim
   // ledger. Only this synthetic generated project is removed to reach that fence.
   fs.rmSync(path.join(f.root, 'apps/mobile/ios'), { recursive: true });
@@ -268,12 +271,44 @@ test('source tree mismatch and stale source gate evidence cannot cross the signi
   await assert.rejects(executeStorePackaging(b.ref(), { root: f.root, adapter: f.adapter }), /STORE_CURRENT_SOURCE_GATES_REQUIRED/); assert.equal(f.reads().signingReads, 0);
 });
 test('independently supplied current store history must match identities and both next counters', async t => {
-  const f = fixture(t), a = f.make(); a.q.storeHistory = f.save('nonmonotonic-history.json', { ...f.historyValue, androidVersionCode: 1 });
-  await assert.rejects(executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }), /STORE_FRESH_MONOTONIC_HISTORY_REQUIRED/); assert.equal(f.reads().signingReads, 0);
+  for (const platform of ['ios','android']) {
+    const current = platform === 'ios' ? 'iosBuildNumber' : 'androidVersionCode';
+    const other = platform === 'ios' ? 'androidVersionCode' : 'iosBuildNumber';
+    for (const patch of [{[current]:null}, {[current]:platform==='ios'?'1':1}, {[current]:platform==='ios'?'2':2},
+      {[current]:platform==='ios'?'-1':-1}, {[current]:false}, {[current]:platform==='ios'?0:'0'},
+      {[other]:false}, {observedAt:'2000-01-01T00:00:00Z'}, {observedAt:'2999-01-01T00:00:00Z'}]) {
+      const f = fixture(t), a = f.make(platform);
+      a.q.storeHistory = f.save('denied-history.json',{...f.historyValue,...patch});
+      await assert.rejects(executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter}),/STORE_FRESH_MONOTONIC_HISTORY_REQUIRED/);
+      assert.equal(f.reads().signingReads,0);assert.equal(f.calls.length,0);assert.deepEqual(fs.readdirSync(f.reservations),[]);
+    }
+    const wrong = fixture(t), denied = wrong.make(platform);
+    denied.q.storeHistory = wrong.save('wrong-identity-history.json',{...wrong.historyValue,identities:{...wrong.historyValue.identities,androidPackageName:'org.different.app'}});
+    await assert.rejects(executeStorePackaging(denied.ref(),{root:wrong.root,adapter:wrong.adapter}),/STORE_HISTORY_IDENTITY_MISMATCH/);
+    assert.equal(wrong.reads().signingReads,0);assert.equal(wrong.calls.length,0);
+    const f = fixture(t), a = f.make(platform);
+    a.q.storeHistory = f.save('unused-unknown-history.json',{...f.historyValue,[other]:null});
+    const result = await executeStorePackaging(a.ref(),{root:f.root,adapter:f.adapter});
+    assert.equal(result.observed,true,JSON.stringify(result.originalFailure));
+    const files=fs.readdirSync(f.reservations),records=files.filter(name=>!name.startsWith('batch-')&&name.endsWith('.json'));
+    assert.equal(records.length,1);assert.ok(records[0].includes('-'+platform+'-'));
+    assert.equal(files.some(name=>name.includes('-'+(platform==='ios'?'android':'ios')+'-')),false);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.reservations,records[0]))),{requestSha256:JSON.parse(fs.readFileSync(result.reservation.path)).batch,platform,value:'1'});
+  }
 });
 test('actual public tool files are descriptor-hashed and changed size or owner declarations refuse', t => {
   const f = fixture(t), a = f.make(); const value = JSON.parse(fs.readFileSync(a.q.tools.path));
-  admitTools(value, 'ios'); fs.appendFileSync(value.entries.pod.path, 'changed'); assert.throws(() => admitTools(value, 'ios'));
+  for (const platform of ['ios', 'android']) {
+    const current = platform === 'ios' ? value : JSON.parse(fs.readFileSync(f.make('android').q.tools.path));
+    admitTools(current, platform);
+    for (const version of ['24.15.0', '22.23.5']) {
+      const rejected = structuredClone(current); rejected.entries.node.version = version;
+      assert.throws(() => admitTools(rejected, platform), /STORE_NODE_VERSION_REQUIRED/);
+    }
+  }
+  assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
+  assert.deepEqual(fs.readdirSync(f.reservations), []);
+  fs.appendFileSync(value.entries.pod.path, 'changed'); assert.throws(() => admitTools(value, 'ios'));
   const bad = structuredClone(value); bad.entries.node.ownerUid = (process.getuid?.() || 0) + 10000;
   assert.throws(() => admitTools(bad, 'ios'), /STORE_TOOL_IDENTITY_REQUIRED/);
 });
@@ -330,6 +365,14 @@ test('a partial joint reservation remains unchanged and never permits signing or
   fs.writeFileSync(path.join(f.reservations, name), '{"partial":true}', { mode: 0o600 });
   const result = await executeStorePackaging(a.ref(), { root: f.root, adapter: f.adapter }); assert.equal(result.originalFailure.code, 'STORE_PARTIAL_RESERVATION_REFUSED');
   assert.deepEqual(fs.readdirSync(f.reservations), [name]); assert.equal(f.reads().signingReads, 0); assert.equal(f.calls.length, 0);
+  const legacy=fixture(t),b=legacy.make();
+  const batch=digest(JSON.stringify({sourceSha:legacy.source.sourceSha,tree:legacy.source.tree,build:b.recipe.storeBuild,links:b.recipe.nativeLinks}));
+  const legacyName='batch-'+batch+'.json', bytes=Buffer.from(JSON.stringify({kind:'caseops-store-number-batch',batch,records:[]}));
+  fs.writeFileSync(path.join(legacy.reservations,legacyName),bytes,{mode:0o600});
+  const refused=await executeStorePackaging(b.ref(),{root:legacy.root,adapter:legacy.adapter});
+  assert.equal(refused.originalFailure.code,'STORE_LEGACY_BATCH_SCOPE_REFUSED');
+  assert.deepEqual(fs.readdirSync(legacy.reservations),[legacyName]);assert.deepEqual(fs.readFileSync(path.join(legacy.reservations,legacyName)),bytes);
+  assert.equal(legacy.reads().signingReads,0);assert.equal(legacy.calls.length,0);
 });
 test('privacy descriptor drift refuses before any signing or command dispatch', async t => {
   const f = fixture(t), a = f.make(); const value = JSON.parse(fs.readFileSync(a.q.privacyPolicy.path));

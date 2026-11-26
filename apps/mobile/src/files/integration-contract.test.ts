@@ -9,7 +9,7 @@ test("MOB-22 source contract: real upload remains multipart file and response re
   const upload = routes.slice(
     routes.indexOf("def post_current_company_matter_attachment("),
     routes.indexOf(
-      "async def patch_current_company_matter_attachment_metadata(",
+      "def patch_current_company_matter_attachment_metadata(",
     ),
   );
   assert.match(upload, /file: Annotated\[UploadFile, File\(\.\.\.\)\]/);

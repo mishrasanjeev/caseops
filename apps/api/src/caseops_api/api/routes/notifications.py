@@ -22,7 +22,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, s
 from fastapi.responses import PlainTextResponse
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from sqlalchemy import desc, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -538,6 +539,11 @@ async def sendgrid_events(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Expected a JSON array of events.",
         )
+    matched = await run_in_threadpool(_apply_sendgrid_events, session, events)
+    return WebhookAckResponse(accepted=len(events), matched=matched)
+
+
+def _apply_sendgrid_events(session: Session, events: list) -> int:
     matched = 0
     for ev in events:
         if not isinstance(ev, dict):
@@ -555,7 +561,7 @@ async def sendgrid_events(
         if hit_reminder or hit_communication or hit_intent:
             matched += 1
     session.commit()
-    return WebhookAckResponse(accepted=len(events), matched=matched)
+    return matched
 
 
 # ---------------------------------------------------------------
@@ -568,7 +574,7 @@ async def sendgrid_events(
     response_model=HearingReminderListResponse,
     summary="List hearing reminders for this workspace",
 )
-async def list_admin_notifications(
+def list_admin_notifications(
     context: AdminContext,
     session: DbSession,
     status_filter: Annotated[
@@ -634,7 +640,7 @@ async def list_admin_notifications(
     response_model=NotificationTestResponse,
     summary="Create and deliver a safe self-service in-app test notification.",
 )
-async def test_current_user_notification(
+def test_current_user_notification(
     context: PreferenceContext,
     session: DbSession,
 ) -> NotificationTestResponse:
@@ -680,7 +686,7 @@ async def test_current_user_notification(
     response_model=EmailSuppressionRecord,
     summary="Recover a suppression while preserving its provider evidence.",
 )
-async def recover_admin_suppression(
+def recover_admin_suppression(
     suppression_id: str,
     payload: SuppressionRecoveryRequest,
     context: AdminContext,
@@ -760,7 +766,7 @@ async def recover_admin_suppression(
     response_model=NotificationRecoveryPreview,
     summary="Preview a notification recovery without dispatching it.",
 )
-async def preview_notification_recovery(
+def preview_notification_recovery(
     intent_id: str,
     context: AdminContext,
     session: DbSession,
@@ -796,7 +802,7 @@ async def preview_notification_recovery(
     response_model=NotificationTestResponse,
     summary="Create a versioned recovery intent after preview.",
 )
-async def recover_notification_intent(
+def recover_notification_intent(
     intent_id: str,
     payload: NotificationRecoveryRequest,
     context: AdminContext,
@@ -1228,7 +1234,7 @@ async def recover_notification_intent(
     response_model=NotificationPreferenceResponse,
     summary="Read tenant and current-user notification preferences.",
 )
-async def get_admin_notification_preferences(
+def get_admin_notification_preferences(
     context: AdminContext,
     session: DbSession,
 ) -> NotificationPreferenceResponse:
@@ -1240,7 +1246,7 @@ async def get_admin_notification_preferences(
     response_model=NotificationPreferenceResponse,
     summary="Update tenant-level notification defaults and policy.",
 )
-async def patch_admin_notification_preferences(
+def patch_admin_notification_preferences(
     context: AdminContext,
     session: DbSession,
     payload: NotificationPreferenceUpdateRequest,
@@ -1257,7 +1263,7 @@ async def patch_admin_notification_preferences(
     response_model=NotificationPreferenceResponse,
     summary="Read current user's notification preferences.",
 )
-async def get_notification_preferences(
+def get_notification_preferences(
     context: PreferenceContext,
     session: DbSession,
 ) -> NotificationPreferenceResponse:
@@ -1269,7 +1275,7 @@ async def get_notification_preferences(
     response_model=NotificationPreferenceResponse,
     summary="Update current user's notification opt-in/opt-out preferences.",
 )
-async def patch_notification_preferences(
+def patch_notification_preferences(
     context: PreferenceContext,
     session: DbSession,
     payload: NotificationPreferenceUpdateRequest,
@@ -1286,7 +1292,7 @@ async def patch_notification_preferences(
     response_model=PhoneChannelAdminResponse,
     summary="SMS and WhatsApp readiness, workspace enablement and opted-in members.",
 )
-async def get_admin_phone_channels(
+def get_admin_phone_channels(
     context: AdminContext,
     session: DbSession,
 ) -> PhoneChannelAdminResponse:
@@ -1298,7 +1304,7 @@ async def get_admin_phone_channels(
     response_model=PhoneContactStatusResponse,
     summary="Read the current user's mobile number, verification and consent state.",
 )
-async def get_phone_contact(
+def get_phone_contact(
     context: PreferenceContext,
     session: DbSession,
 ) -> PhoneContactStatusResponse:
@@ -1310,7 +1316,7 @@ async def get_phone_contact(
     response_model=PhoneContactStatusResponse,
     summary="Send a one-time code to verify the current user's mobile number.",
 )
-async def start_phone_contact_verification(
+def start_phone_contact_verification(
     context: PreferenceContext,
     session: DbSession,
     payload: PhoneVerificationStartRequest,
@@ -1323,7 +1329,7 @@ async def start_phone_contact_verification(
     response_model=PhoneContactStatusResponse,
     summary="Confirm the one-time code and mark the mobile number verified.",
 )
-async def confirm_phone_contact_verification(
+def confirm_phone_contact_verification(
     context: PreferenceContext,
     session: DbSession,
     payload: PhoneVerificationConfirmRequest,
@@ -1336,7 +1342,7 @@ async def confirm_phone_contact_verification(
     response_model=PhoneContactStatusResponse,
     summary="Opt in to, or out of, SMS or WhatsApp reminders.",
 )
-async def set_phone_contact_consent(
+def set_phone_contact_consent(
     context: PreferenceContext,
     session: DbSession,
     payload: PhoneConsentRequest,
@@ -1349,7 +1355,7 @@ async def set_phone_contact_consent(
     response_model=PhoneContactStatusResponse,
     summary="Remove the current user's mobile number and stop phone reminders.",
 )
-async def delete_phone_contact(
+def delete_phone_contact(
     context: PreferenceContext,
     session: DbSession,
 ) -> PhoneContactStatusResponse:
@@ -1426,8 +1432,8 @@ async def whatsapp_webhook(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Expected a JSON object."
         )
-    counts = apply_whatsapp_webhook(session, payload=payload)
-    session.commit()
+    counts = await run_in_threadpool(apply_whatsapp_webhook, session, payload=payload)
+    await run_in_threadpool(session.commit)
     return WebhookAckResponse(
         accepted=counts["opt_outs"] + counts["statuses"],
         matched=counts["opt_outs"] + counts["statuses"],
@@ -1439,7 +1445,7 @@ async def whatsapp_webhook(
     response_model=NotificationRuleListResponse,
     summary="List tenant-scoped notification rules.",
 )
-async def list_rules(
+def list_rules(
     context: AdminContext,
     session: DbSession,
 ) -> NotificationRuleListResponse:
@@ -1451,7 +1457,7 @@ async def list_rules(
     response_model=NotificationRuleRecord,
     summary="Create a tenant-scoped notification rule.",
 )
-async def create_rule(
+def create_rule(
     context: AdminContext,
     session: DbSession,
     payload: NotificationRuleCreateRequest,
@@ -1464,7 +1470,7 @@ async def create_rule(
     response_model=NotificationRuleRecord,
     summary="Update a tenant-scoped notification rule.",
 )
-async def patch_rule(
+def patch_rule(
     context: AdminContext,
     session: DbSession,
     rule_id: str,
@@ -1483,7 +1489,7 @@ async def patch_rule(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a tenant-scoped notification rule.",
 )
-async def delete_rule(
+def delete_rule(
     context: AdminContext,
     session: DbSession,
     rule_id: str,

@@ -3,10 +3,10 @@
   "private": true,
   "dependencies": {
     "appium": "3.9.0",
-    "appium-uiautomator2-driver": "file:vendor/appium-uiautomator2-driver-8.7.3-caseops.1.tgz",
-    "appium-xcuitest-driver": "file:vendor/appium-xcuitest-driver-12.22.2-caseops.1.tgz",
-    "glob": "file:vendor/glob-14.0.2-caseops.1.tgz",
-    "minimatch": "11.0.1",
+    "appium-uiautomator2-driver": "file:vendor/appium-uiautomator2-driver-8.7.3-caseops.3.tgz",
+    "appium-xcuitest-driver": "file:vendor/appium-xcuitest-driver-12.22.2-caseops.3.tgz",
+    "glob": "file:vendor/glob-14.0.6-caseops.2.tgz",
+    "minimatch": "11.0.8",
     "webdriverio": "10.1.0"
   },
   "overrides": {

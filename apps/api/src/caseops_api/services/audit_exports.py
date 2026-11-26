@@ -33,6 +33,7 @@ from typing import Literal
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
@@ -82,6 +83,32 @@ _IP_RECORD_AUDIT_TARGET_TYPES = {
     "ip_title_interest",
     "trademark_application",
 }
+
+
+def visible_ip_audit_events_filter(
+    session: Session, *, context: SessionContext
+) -> ColumnElement[bool]:
+    """The one IP ethical-wall filter for every tenant audit read.
+
+    A row tied to an IP docket is visible only when the caller can see that
+    docket under the shared record-access policy. A record-scoped IP row with
+    no docket correlation is omitted, fail-closed (see above).
+    """
+    visible_docket_ids = select(IpDocketRecord.id).where(
+        IpDocketRecord.company_id == context.company.id,
+        general_ip_disclosure_filter(),
+        visible_ip_dockets_filter(session, context=context),
+    )
+    return or_(
+        and_(
+            AuditEvent.ip_docket_id.is_(None),
+            AuditEvent.target_type.not_in(_IP_RECORD_AUDIT_TARGET_TYPES),
+        ),
+        and_(
+            AuditEvent.ip_docket_id.is_not(None),
+            AuditEvent.ip_docket_id.in_(visible_docket_ids),
+        ),
+    )
 
 
 _CSV_COLUMNS = [
@@ -328,27 +355,11 @@ def run_export_job(job_id: str) -> None:
                 user=user,
                 membership=membership,
             )
-            visible_docket_ids = select(IpDocketRecord.id).where(
-                IpDocketRecord.company_id == company.id,
-                general_ip_disclosure_filter(),
-                visible_ip_dockets_filter(session, context=context),
-            )
             stmt = (
                 select(AuditEvent)
                 .where(
                     AuditEvent.company_id == job.company_id,
-                    or_(
-                        and_(
-                            AuditEvent.ip_docket_id.is_(None),
-                            AuditEvent.target_type.not_in(
-                                _IP_RECORD_AUDIT_TARGET_TYPES
-                            ),
-                        ),
-                        and_(
-                            AuditEvent.ip_docket_id.is_not(None),
-                            AuditEvent.ip_docket_id.in_(visible_docket_ids),
-                        ),
-                    ),
+                    visible_ip_audit_events_filter(session, context=context),
                 )
                 .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
             )
@@ -403,4 +414,5 @@ __all__ = [
     "list_export_jobs",
     "read_export_bytes",
     "run_export_job",
+    "visible_ip_audit_events_filter",
 ]

@@ -551,6 +551,7 @@ class BootstrapTests(unittest.TestCase):
             "tests/e2e/drafting-formats20261115.spec.ts",
             "tests/fixtures/statutes/structured-schedule-api.json",
             "tests/fixtures/node-default-tls-probe.cjs",
+            "tests/fixtures/undici-loopback-redirect-probe.cjs",
             "tests/fixtures/node-local-tls-certificates.cjs",
             "tests/fixtures/contract-preview-probe.ts",
         })

@@ -175,7 +175,7 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
     response_model=RecommendationListResponse,
     summary="List recommendations generated for a matter",
 )
-async def list_recommendations(
+def list_recommendations(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -192,7 +192,7 @@ async def list_recommendations(
     response_model=MatterStrategyEntryListResponse,
     summary="List lawyer-owned strategy entries for a matter",
 )
-async def list_matter_strategy_entries(
+def list_matter_strategy_entries(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -205,7 +205,7 @@ async def list_matter_strategy_entries(
     response_model=MatterStrategyEntryRecord,
     summary="Create a lawyer-owned strategy entry for a matter",
 )
-async def create_matter_strategy_entry(
+def create_matter_strategy_entry(
     matter_id: str,
     payload: MatterStrategyEntryCreateRequest,
     context: StrategyWriter,
@@ -224,7 +224,7 @@ async def create_matter_strategy_entry(
     response_model=MatterStrategyEntryRecord,
     summary="Update a lawyer-owned strategy entry for a matter",
 )
-async def update_matter_strategy_entry(
+def update_matter_strategy_entry(
     matter_id: str,
     entry_id: str,
     payload: MatterStrategyEntryUpdateRequest,
@@ -245,7 +245,7 @@ async def update_matter_strategy_entry(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a lawyer-owned strategy entry for a matter",
 )
-async def delete_matter_strategy_entry(
+def delete_matter_strategy_entry(
     matter_id: str,
     entry_id: str,
     context: StrategyWriter,
@@ -280,7 +280,9 @@ async def create_recommendation(
     # ``junior partner``) gains ``recommendations:generate`` but NOT
     # ``strategy:generate``, the request still fails here.
     if payload.type == "litigation_strategy":
-        _require_capability_inline(session, context, "strategy:generate")
+        await run_in_threadpool(
+            _require_capability_inline, session, context, "strategy:generate",
+        )
 
     # Retrieval, strict-schema model generation, verification, and persistence
     # are synchronous. Running them directly in this async handler pins the
@@ -306,7 +308,7 @@ async def create_recommendation(
     response_model=RecommendationRecord,
     summary="Record an accept/reject/edit decision on a recommendation",
 )
-async def create_decision(
+def create_decision(
     recommendation_id: str,
     payload: RecommendationDecisionRequest,
     context: RecommendationDecider,

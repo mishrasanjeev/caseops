@@ -467,7 +467,7 @@ $tests = [ordered]@{
     'entry points retain official pins and exclude package execution' = {
         $setup = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'setup-android.ps1'))
         Assert-Offline ($setup.Contains('90ae805d20434428bffcb699c290860f19bb5f66a67e6b330067e3de801fb04a')) 'Command-tools pin changed'
-        Assert-Offline ($setup.Contains('f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e')) 'JDK pin changed'
+        Assert-Offline ($setup.Contains('bbebea1469996b276683c9299c227b294f85c847039c82633218186a4ad4fbf2')) 'JDK pin changed'
         Assert-Offline ($setup -notmatch '--licenses|--install|&\s*\(') 'Setup executes package/runtime commands'
         foreach ($file in @('setup-android.ps1', 'use-android-env.ps1', 'probe-native.ps1', 'android-tooling.ps1')) {
             $parseErrors = $null

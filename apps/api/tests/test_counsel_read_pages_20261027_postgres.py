@@ -569,9 +569,15 @@ def test_canonical_membership_update_finishes_before_spend_audit_fk_tail(
     entries = {"spend": [], "membership": []}
 
     def entry(connection):
+        # Since the event-loop offload, both routes run synchronously in
+        # worker threads; independence is proven by thread and backend.
+        try:
+            loop = id(get_running_loop())
+        except RuntimeError:
+            loop = None
         return {
             "thread": get_ident(),
-            "eventLoop": id(get_running_loop()),
+            "eventLoop": loop,
             "backendPid": connection.connection.driver_connection.info.backend_pid,
         }
 
@@ -625,7 +631,7 @@ def test_canonical_membership_update_finishes_before_spend_audit_fk_tail(
         event.remove(engine, "after_cursor_execute", pause_source_tail)
         release.set()
     assert len(entries["spend"]) == len(entries["membership"]) == 1
-    for key in ("thread", "eventLoop", "backendPid"):
+    for key in ("thread", "backendPid"):
         assert entries["spend"][0][key] != entries["membership"][0][key]
     (tmp_path / "canonical-independent-worker-entries.json").write_text(
         json.dumps(entries, indent=2) + "\n"

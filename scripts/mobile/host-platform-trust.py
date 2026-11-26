@@ -24,10 +24,10 @@ DENIED = "86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b"
 PYTHON = Path(
     "/Users/sanjeevkumar/.cache/caseops-mobile/release-tooling/python/cpython-3.13.17-macos-aarch64-none/bin/python3.13"
 )
-JDK_BASE = Path("/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks")
+JDK_BASE = Path("/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed")
 JDKS = {
-    "java21": JDK_BASE / "jdk-21.0.12.1+1/Contents/Home",
-    "java17": JDK_BASE / "jdk-17.0.20.1+1/Contents/Home",
+    "java21": JDK_BASE / "jdk-21.0.13.1+2/Contents/Home",
+    "java17": JDK_BASE / "jdk-17.0.21.1+2/Contents/Home",
 }
 JAVA_SOURCE = (
     Path(__file__).resolve().parent
@@ -44,11 +44,11 @@ TOOL_PINS = {
     ),
     "java21": (
         70432,
-        "9be1d0a740ff6502df1a762145e62860f5de4b7e17658d9cb9498da3acf9d16c",
+        "8261edc44ac1643e7aba9f0df5155b6d81f7977cc8a0374bb7630d838d2a3910",
     ),
     "java17": (
         70464,
-        "af8b122943345320b179c75c3404d56a981017739746b75f9caf583632f0bea0",
+        "5713ed335b3828ef9294ce4a091acad7ee24af1db2622587b6f5ff0a9bd98bb3",
     ),
 }
 CONTRACTS = {
@@ -58,11 +58,12 @@ CONTRACTS = {
         127,
         "5586a264fb968421dff2007baadeabe23c53309897693c8a93e63964982ec285",
     ),
+    # Qualified patched Temurin17/21 vendor stores already exclude DENIED.
     "java": (
-        118,
-        "dd829eff9efb6ceb6de8f403f34bb4758707952e55e0da800cc8f6be768771cc",
         117,
-        "a5c7424bd0772d7a8f310ecd14d83293a188de3145f3a850a82483c6338441e2",
+        "cef81225c6ee4493b78527f09fc422ee50d5160feb4d8b8c0b334b4ef5c0180f",
+        117,
+        "cef81225c6ee4493b78527f09fc422ee50d5160feb4d8b8c0b334b4ef5c0180f",
     ),
     "apiCertifi": (
         120,
@@ -628,7 +629,7 @@ def prepare_policy(output, api_certifi, audit_certifi, *, environment=None):
             )
         value["originalPublicStore"] = source_ref
         need(
-            value["inputCount"] in (118, 117)
+            value["inputCount"] == CONTRACTS["java"][0]
             and value["outputCount"] == 117
             and value["outputSetSha256"] == CONTRACTS["java"][3]
             and value["aliasesPreserved"] is True

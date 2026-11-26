@@ -4,9 +4,10 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
+from starlette.datastructures import Headers
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -519,16 +520,16 @@ def _load_attempt_with_company(
     )
 
 
-async def handle_pine_labs_webhook(
+def handle_pine_labs_webhook(
     session: Session,
     *,
-    request: Request,
+    raw_body: bytes,
+    headers: Headers,
 ) -> PaymentWebhookAckResponse:
-    raw_body = await request.body()
     settings = get_settings()
-    signature = request.headers.get(settings.pine_labs_webhook_signature_header)
-    webhook_id = request.headers.get(settings.pine_labs_webhook_id_header)
-    webhook_timestamp_raw = request.headers.get(settings.pine_labs_webhook_timestamp_header)
+    signature = headers.get(settings.pine_labs_webhook_signature_header)
+    webhook_id = headers.get(settings.pine_labs_webhook_id_header)
+    webhook_timestamp_raw = headers.get(settings.pine_labs_webhook_timestamp_header)
     plural_verified = False
     if signature and webhook_id and webhook_timestamp_raw:
         try:
@@ -581,8 +582,8 @@ async def handle_pine_labs_webhook(
             )
     else:
         legacy_signature = (
-            request.headers.get("X-PineLabs-Signature")
-            or request.headers.get("x-pinelabs-signature")
+            headers.get("X-PineLabs-Signature")
+            or headers.get("x-pinelabs-signature")
             or signature
         )
         try:

@@ -19,7 +19,7 @@ router = APIRouter()
     summary="Create a company and owner",
 )
 @limiter.limit(bootstrap_rate_limit)
-async def bootstrap_company(
+def bootstrap_company(
     request: Request,
     response: Response,
     payload: BootstrapCompanyRequest,

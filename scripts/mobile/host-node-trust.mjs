@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const HOST_NODE_TRUST_ENV = Object.freeze({ file: 'CASEOPS_HOST_NODE_TRUST_POLICY_FILE', sha256: 'CASEOPS_HOST_NODE_TRUST_POLICY_SHA256' });
 export const DENIED_HOST_CA = '86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b';
 export const HOST_NODE_ROOTS = Object.freeze({
+  '24.22.3': Object.freeze({ inputCount: 118, inputSetSha256: '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb', outputCount: 118, outputSetSha256: '077fe6a7639d6ef14a8fe2661e92b064f7701b8df283e1445f38a66a47b07acb' }),
   '22.23.5': Object.freeze({ inputCount: 116, inputSetSha256: 'f5c557f94fddcecbd61b66da4634ca2537f1b153cccf581170b4b25e29b084cb', outputCount: 116, outputSetSha256: 'f5c557f94fddcecbd61b66da4634ca2537f1b153cccf581170b4b25e29b084cb' }),
   '22.23.4': Object.freeze({ inputCount: 116, inputSetSha256: 'f5c557f94fddcecbd61b66da4634ca2537f1b153cccf581170b4b25e29b084cb', outputCount: 116, outputSetSha256: 'f5c557f94fddcecbd61b66da4634ca2537f1b153cccf581170b4b25e29b084cb' }),
   '24.15.0': Object.freeze({ inputCount: 145, inputSetSha256: '198226aedca48a2d2d256da63ffb5836367954a983de81a6a3482b0a3e34ec50', outputCount: 144, outputSetSha256: '22fcf2da4698a68fd7afcdaa3ec278b38628829ed5ff408b5b99b763102951b2' }),

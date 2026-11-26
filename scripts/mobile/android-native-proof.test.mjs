@@ -57,8 +57,8 @@ function fixture(t) {
     `Verifies\nVerified using v1 scheme (JAR signing): false\nVerified using v2 scheme (APK Signature Scheme v2): true\nNumber of signers: 1\nSigner #1 certificate SHA-256 digest: ${'3'.repeat(64)}\n`,
     { schemaVersion: 1, abis: ['arm64-v8a'], nativeLibraryCount: 4, elfClass: 64, elfMachine: 183 },
     { schemaVersion: 1, files: inputs },
-    'OpenJDK Runtime Environment Temurin-21.0.12.1+1 (synthetic unit fixture)\n',
-    'OpenJDK Runtime Environment Temurin-17.0.20.1+1 (synthetic unit fixture)\n',
+    'OpenJDK Runtime Environment Temurin-21.0.13.1+2 (synthetic unit fixture)\n',
+    'OpenJDK Runtime Environment Temurin-17.0.21.1+2 (synthetic unit fixture)\n',
   ];
   const actualHash = hash('synthetic APK identity; no native execution is claimed by this test');
   const proof = { schemaVersion: 1, kind: 'android-local-arm64-signature-proof', appId: APP,
@@ -213,7 +213,7 @@ test('generated build inputs cannot point outside their exact inventory or diffe
 });
 
 test('rehashed JDK reports must retain the two exact pinned versions', (t) => {
-  for (const [name, content] of [['java21.log', 'Temurin-21.0.1+1\n'], ['java17.log', 'Temurin-17.0.20.1+1\nTemurin-21.0.12.1+1\n']]) {
+  for (const [name, content] of [['java21.log', 'Temurin-21.0.1+1\n'], ['java17.log', 'Temurin-17.0.21.1+2\nTemurin-21.0.13.1+2\n']]) {
     const f = fixture(t); f.report(name, content); assert.throws(() => f.check(), /ANDROID_NATIVE_JDK_VERSION_MISMATCH/);
   }
 });

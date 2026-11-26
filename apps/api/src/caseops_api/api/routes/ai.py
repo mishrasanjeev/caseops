@@ -97,7 +97,7 @@ def _contract_authenticator(request: Request):
     summary="Generate a matter summary or hearing preparation brief",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def generate_current_company_matter_brief(
+def generate_current_company_matter_brief(
     request: Request,
     matter_id: str,
     payload: MatterBriefGenerateRequest,
@@ -118,7 +118,7 @@ async def generate_current_company_matter_brief(
     summary="Generate a structured matter document review from uploaded files",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def generate_current_company_matter_document_review(
+def generate_current_company_matter_document_review(
     request: Request,
     matter_id: str,
     payload: MatterDocumentReviewGenerateRequest,
@@ -139,7 +139,7 @@ async def generate_current_company_matter_document_review(
     summary="Search uploaded matter documents for relevant snippets",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def search_current_company_matter_documents(
+def search_current_company_matter_documents(
     request: Request,
     matter_id: str,
     payload: MatterDocumentSearchRequest,
@@ -160,7 +160,7 @@ async def search_current_company_matter_documents(
     summary="Ask a source-grounded question over uploaded matter file chunks",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def ask_current_company_matter_file_question(
+def ask_current_company_matter_file_question(
     request: Request,
     matter_id: str,
     payload: MatterFileQARequest,
@@ -181,7 +181,7 @@ async def ask_current_company_matter_file_question(
     summary="List saved Matter File Q&A history for a matter",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def list_current_company_matter_file_qa_history(
+def list_current_company_matter_file_qa_history(
     request: Request,
     matter_id: str,
     context: AIGenerator,
@@ -200,7 +200,7 @@ async def list_current_company_matter_file_qa_history(
     summary="Export a saved Matter File Q&A answer to a matter note",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def export_current_company_matter_file_qa_note(
+def export_current_company_matter_file_qa_note(
     request: Request,
     matter_id: str,
     entry_id: str,
@@ -221,7 +221,7 @@ async def export_current_company_matter_file_qa_note(
     summary="Generate a contract intake review from workspace data and uploaded documents",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def generate_current_company_contract_review(
+def generate_current_company_contract_review(
     request: Request,
     contract_id: str,
     payload: ContractReviewGenerateRequest,
@@ -329,7 +329,7 @@ def extract_current_company_contract_obligations(
     summary="Install the default Indian-commercial playbook onto this contract",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def install_default_playbook(
+def install_default_playbook(
     request: Request,
     contract_id: str,
     context: ContractRuleManager,

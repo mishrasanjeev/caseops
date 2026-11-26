@@ -16,6 +16,7 @@ const app = fileURLToPath(new URL('../../apps/mobile/', import.meta.url));
 const repo = path.resolve(app, '../..');
 const require = createRequire(path.join(app, 'package.json'));
 const plugin = require(path.join(app, 'plugins/with-local-acceptance.cjs'));
+const kotlinOverlay = require(path.join(app, 'plugins/kotlin-declaration-overlay.cjs'));
 const linkPolicy = require(path.join(repo, 'apps/web/lib/native-link-policy.cjs'));
 const { readNativeLinkConfig } = require(path.join(repo, 'apps/web/lib/native-link-config.cjs'));
 const { compileModsAsync, XML } = require('@expo/config-plugins');
@@ -118,7 +119,7 @@ test('mobile dependency closure installs and audits actual Linux and Windows gra
   assert.equal(job.defaults.run['working-directory'], 'apps/mobile');
   assert.equal(job.defaults.run.shell, 'pwsh');
   assert.deepEqual(job.env, { CASEOPS_MOBILE_DEPENDENCY_SCOPE: 'mobile-only', NPM_CONFIG_UPDATE_NOTIFIER: 'false' });
-  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.15.0');
+  assert.equal(job.steps.find(step => step.uses === 'actions/setup-node@v4').with['node-version'], '24.22.3');
   const commands = job.steps.filter(step => step.run).map(step => step.run);
   const protection = job.steps.find(step => step.name === 'Protect the exact pinned public npm archive on Windows');
   assert.ok(protection && typeof protection.run === 'string');
@@ -191,13 +192,42 @@ test('mobile CI selects every tooling module and audits before either platform e
     'scripts/mobile/build-android-local-acceptance.test.mjs',
     'scripts/mobile/android-native-proof.test.mjs', 'scripts/mobile/prepare-android-local-run.test.mjs',
     'scripts/mobile/android-files-privacy.test.mjs', 'scripts/mobile/run-android-files.test.mjs',
-    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/picomatch-security.test.mjs', 'scripts/mobile/picomatch-installed.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
+    'scripts/mobile/store-packaging.test.mjs', 'scripts/mobile/store-artifact-postflight.test.mjs', 'scripts/mobile/store-packaging-execution.test.mjs', 'scripts/mobile/forge-security.test.mjs', 'scripts/mobile/deepmerge-security.test.mjs', 'scripts/mobile/deepmerge-installed.test.mjs', 'scripts/mobile/npm-tooling.test.mjs', 'scripts/mobile/picomatch-security.test.mjs', 'scripts/mobile/picomatch-installed.test.mjs', 'scripts/mobile/vite-security.test.mjs', 'scripts/mobile/privacy-policy.test.mjs',
     'scripts/mobile/prepare-source-exports.test.mjs', 'apps/mobile/e2e/v1-workflows.test.mjs',
     'scripts/mobile/v1-workflows-credentials.test.mjs', 'apps/mobile/e2e/queue-privacy.test.mjs', 'scripts/mobile/client-extensions.test.mjs', 'scripts/mobile/android-qa-observer.test.mjs', 'scripts/mobile/android-qa-observer-build.test.mjs',
     'scripts/mobile/android-https-qualification.test.mjs', 'scripts/mobile/android-qualification-promotion.test.mjs', 'scripts/mobile/android-https-subject.test.mjs', 'scripts/mobile/ios-https-qualification.test.mjs'];
   const discovered = ['scripts/mobile', 'apps/mobile/e2e'].flatMap(directory => readdirSync(path.join(repo, directory))
     .filter(file => file.endsWith('.test.mjs')).map(file => `${directory}/${file}`));
   assert.deepEqual(discovered.sort(), [...expected].sort(), 'COMPLETE_TOOLING_FILE_INVENTORY_REQUIRED');
+  // Count actual top-level Node cases, including each literal parameter row;
+  // a count of test(...) call sites misses the 46 source-observer cases.
+  const ts = require('typescript');
+  const toolingTree = ts.createSourceFile('tooling.test.mjs', readFileSync(path.join(repo, 'scripts/mobile/tooling.test.mjs'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  assert.equal(toolingTree.parseDiagnostics.length, 0);
+  const toolingTitles = []; let literalCases = 0, parameterCases = 0;
+  function toolingCase(node) {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'test') {
+      const title = node.arguments[0];
+      if (ts.isStringLiteral(title)) { literalCases++; toolingTitles.push(title.text); }
+      else {
+        assert.ok(ts.isTemplateExpression(title) && title.templateSpans.length === 1, 'LITERAL_TOOLING_CASE_TITLE_REQUIRED');
+        let loop = node.parent;
+        while (loop && !ts.isForOfStatement(loop)) loop = loop.parent;
+        assert.ok(loop && ts.isArrayLiteralExpression(loop.expression), 'FINITE_TOOLING_PARAMETER_ROWS_REQUIRED');
+        const binding = loop.initializer.declarations[0].name;
+        assert.ok(ts.isArrayBindingPattern(binding) && binding.elements[0].name.text === title.templateSpans[0].expression.text);
+        for (const row of loop.expression.elements) {
+          assert.ok(ts.isArrayLiteralExpression(row) && ts.isStringLiteral(row.elements[0]));
+          toolingTitles.push(title.head.text + row.elements[0].text + title.templateSpans[0].literal.text); parameterCases++;
+        }
+      }
+    }
+    ts.forEachChild(node, toolingCase);
+  }
+  toolingCase(toolingTree);
+  assert.deepEqual({literalCases, parameterCases, total:toolingTitles.length}, {literalCases:431, parameterCases:46, total:477});
+  assert.equal(new Set(toolingTitles).size, 477, 'UNIQUE_COMPLETE_TOOLING_CASE_INVENTORY_REQUIRED');
   const harness = steps.find(step => step.name === 'Verify the native evidence harness');
   assert.equal(harness.run, `node --test ${expected.join(' ')}`);
   const fixturePreparation = steps.find(step => step.name === 'Verify isolated fixture preparation and gateway');
@@ -267,6 +297,7 @@ const rootWebMobileSourceTriggers = [
   '.dockerignore', '.gcloudignore', 'docs/security/js-license-compliance-review-2026-10-12.md',
   'license-policy/reviewed-packages.json', 'license-policy/upstream/**',
   'tests/e2e/ram-2026-11-11-bugs.spec.ts', 'tests/fixtures/node-default-tls-probe.cjs',
+  'tests/fixtures/undici-loopback-redirect-probe.cjs',
   'tests/fixtures/node-local-tls-certificates.cjs',
   'tests/e2e/ram-2026-10-22-drafting.prod.spec.ts',
   'tests/e2e/drafting-formats20261115.spec.ts',
@@ -387,7 +418,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(rootInstall < typecheck && mobileInstall < typecheck);
   assert.ok(rootInstall < browserInstall && browserInstall < tests);
   const nodeSetup = steps.find(step => step.uses === 'actions/setup-node@v4');
-  assert.equal(nodeSetup.with['node-version'], '24.15.0', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
+  assert.equal(nodeSetup.with['node-version'], '24.22.3', 'NATIVE_WRAPPER_RUNTIME_MUST_MATCH_SOURCE_CI');
   assert.deepEqual(nodeSetup.with['cache-dependency-path'].trim().split(/\s+/).sort(),
     ['apps/mobile/package-lock.json', 'package-lock.json']);
   for (const event of ['push', 'pull_request']) {
@@ -427,7 +458,7 @@ test('mobile source CI installs the renderer browser and both locked dependency 
   assert.ok(!protection.run.includes('[IO.File]::SetAccessControl'));
   assert.ok(protection.run.includes('$acl.SetAccessRuleProtection($true, $false)'));
   assert.ok(protection.run.includes("@($identity.User.Value, 'S-1-5-18', 'S-1-5-32-544')"));
-  assert.ok(protection.run.includes("'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b'"));
+  assert.ok(protection.run.includes("'3b5af1e81a20ae19f3759a281ad2074564b0cca5392100c9c0043b4ac97c45cc'"));
   assert.equal(protection.run.match(/\$hash\.ComputeHash\(\$stream\)/g)?.length, 2);
   assert.ok(protection.run.includes('finally { $hash.Dispose(); $stream.Dispose() }'));
 });
@@ -1188,9 +1219,13 @@ test('overlay creation, replacement and cleanup never touch main, release or uno
 
 test('actual Expo Android mod compiler applies the plugin and removes QA output on default replay', async (t) => {
   const { env, dir } = fixture(t);
+  seedKotlinOverlay(dir);
   const gradle = path.join(dir, 'android/app/build.gradle');
   mkdirSync(path.dirname(gradle), { recursive: true });
   writeFileSync(gradle, "apply plugin: 'com.android.application'\n");
+  const wrapper = path.join(dir, 'android/gradle/wrapper/gradle-wrapper.properties');
+  mkdirSync(path.dirname(wrapper), { recursive: true });
+  writeFileSync(wrapper, 'distributionUrl=https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip\n');
   const main=path.join(dir,'android/app/src/main/java/ai/caseops/mobile/dev/MainApplication.kt');
   mkdirSync(path.dirname(main),{recursive:true});
   writeFileSync(main,'package ai.caseops.mobile.dev\nclass MainApplication : Application(), ReactApplication {\n}\n');
@@ -1198,11 +1233,252 @@ test('actual Expo Android mod compiler applies the plugin and removes QA output 
     projectRoot: dir, platforms: ['android'],
   }));
   await run(env);
+  assertKotlinOverlay(dir);
   assert.match(readFileSync(gradle, 'utf8'), /localAcceptance/);
   assert.ok(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')));
+  const pinnedWrapper = readFileSync(wrapper, 'utf8');
+  assert.match(pinnedWrapper, /gradle-9\.9\.2-bin\.zip/);
+  assert.match(pinnedWrapper, /distributionSha256Sum=971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b/);
   await run({});
+  assertKotlinOverlay(dir);
+  assert.equal(readFileSync(wrapper, 'utf8'), pinnedWrapper);
   assert.equal(readFileSync(gradle, 'utf8'), "apply plugin: 'com.android.application'\n");
   assert.equal(existsSync(path.join(dir, 'android/app/src/localAcceptance/res/raw/caseops_local_acceptance_ca.pem')), false);
+});
+
+function seedKotlinOverlay(dir) {
+  const manifest = JSON.parse(readFileSync(new URL('./fixtures/android-kotlin-declarations/manifest.json', import.meta.url)));
+  const put = (relative, bytes) => {
+    const target = path.join(dir, relative);
+    mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, bytes);
+  };
+  put('package-lock.json', JSON.stringify({ lockfileVersion: 3, packages: Object.fromEntries(
+    Object.entries(manifest.packages).map(([name, row]) => ['node_modules/' + name, row])) }));
+  for (const [name, row] of Object.entries(manifest.packages))
+    put('node_modules/' + name + '/package.json', JSON.stringify({ name, version: row.version }));
+  for (const row of manifest.targets)
+    put('node_modules/' + row.package + '/' + row.relative,
+      readFileSync(new URL('./fixtures/android-kotlin-declarations/' + row.fixture, import.meta.url)));
+  return manifest;
+}
+function assertKotlinOverlay(dir) {
+  for (const row of kotlinOverlay.policy.targets)
+    assert.equal(digest(readFileSync(path.join(dir, 'node_modules', row.package, row.relative))), row.afterSha256);
+}
+function overlayFixture(t) {
+  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'caseops-kotlin-overlay-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const manifest = seedKotlinOverlay(dir);
+  return { dir, manifest, files: manifest.targets.map(row => path.join(dir, 'node_modules', row.package, row.relative)) };
+}
+function assertNoOverlayTemps(dir) {
+  for (const row of kotlinOverlay.policy.targets)
+    assert.deepEqual(readdirSync(path.dirname(path.join(dir, 'node_modules', row.package, row.relative)))
+      .filter(name => name.startsWith('.caseops-kotlin-')), []);
+}
+test('KOTLIN-OVERLAY-01 exact supplier declarations project once and remain idempotent', (t) => {
+  const { dir, manifest, files } = overlayFixture(t);
+  assert.deepEqual(kotlinOverlay.policy, manifest);
+  const untouched = path.join(dir, 'node_modules/expo-modules-core/runtime-and-notices.txt');
+  writeFileSync(untouched, 'UNCHANGED_RUNTIME_AND_NOTICES');
+  const result = kotlinOverlay.applyKotlinDeclarations(dir);
+  assert.equal(result.changed, 5); assert.equal(result.records.length, 5);
+  assert.equal(result.kotlinVersion, '2.4.20'); assertKotlinOverlay(dir);
+  for (let i = 0; i < files.length; i++) {
+    const source = readFileSync(new URL('./fixtures/android-kotlin-declarations/' + manifest.targets[i].fixture, import.meta.url), 'utf8');
+    assert.equal(readFileSync(files[i], 'utf8'), source.replace(manifest.targets[i].from, manifest.targets[i].to));
+  }
+  const frames = files.map(file => lstatSync(file, { bigint: true }).ino);
+  assert.equal(kotlinOverlay.applyKotlinDeclarations(dir).changed, 0);
+  assert.deepEqual(files.map(file => lstatSync(file, { bigint: true }).ino), frames);
+  assert.equal(readFileSync(untouched, 'utf8'), 'UNCHANGED_RUNTIME_AND_NOTICES'); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-02 unknown final input rejects before any vendor replacement', (t) => {
+  const { dir, files } = overlayFixture(t);
+  appendFileSync(files.at(-1), '\n// unknown supplier change\n');
+  const before = files.map(file => readFileSync(file));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_UNKNOWN_PREIMAGE/);
+  assert.deepEqual(files.map(file => readFileSync(file)), before); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-03 wrong locked integrity or installed version rejects before writes', (t) => {
+  const { dir, files } = overlayFixture(t), lockPath = path.join(dir, 'package-lock.json');
+  const initial = readFileSync(lockPath), lock = JSON.parse(initial);
+  lock.packages['node_modules/expo-modules-core'].integrity = 'sha512-UNKNOWN';
+  writeFileSync(lockPath, JSON.stringify(lock));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_PINNED_LOCK/);
+  writeFileSync(lockPath, initial);
+  writeFileSync(path.join(dir, 'node_modules/expo-modules-core/package.json'), JSON.stringify({ name: 'expo-modules-core', version: '999.0.0' }));
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_PINNED_PACKAGE/);
+  for (let i = 0; i < files.length; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-04 symbolic and multiply linked supplier files are rejected', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), retained = target + '.original';
+  renameSync(target, retained); symlinkSync(retained, target);
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir));
+  fs.unlinkSync(target); fs.linkSync(retained, target);
+  assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_OWNED_REGULAR/); assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-05 replacing a pathname after descriptor read cannot supply output bytes', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), retained = target + '.original';
+  const originalOpen = fs.openSync, originalRead = fs.readFileSync; let selected, replaced = false;
+  fs.openSync = function (file, ...args) { const fd = originalOpen(file, ...args); if (file === target) selected = fd; return fd; };
+  fs.readFileSync = function (file, ...args) {
+    const bytes = originalRead(file, ...args);
+    if (file === selected && !replaced) { replaced = true; renameSync(target, retained); writeFileSync(target, 'UNREVIEWED_REPLACEMENT'); }
+    return bytes;
+  };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(PATH|DESCRIPTOR)_CHANGED/); }
+  finally { fs.openSync = originalOpen; fs.readFileSync = originalRead; }
+  assert.equal(replaced, true);
+  for (let i = 0; i < files.length - 1; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-06 a changed held input during private staging refuses all replacements', (t) => {
+  const { dir, files } = overlayFixture(t), target = files.at(-1), originalWrite = fs.writeSync; let changed = false;
+  fs.writeSync = function (...args) {
+    if (!changed) { changed = true; appendFileSync(target, '\nUNEXPECTED_CHANGE\n'); }
+    return originalWrite(...args);
+  };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(PATH|DESCRIPTOR)_CHANGED/); }
+  finally { fs.writeSync = originalWrite; }
+  assert.equal(changed, true);
+  for (let i = 0; i < files.length - 1; i++) assert.equal(digest(readFileSync(files[i])), kotlinOverlay.policy.targets[i].beforeSha256);
+  assertNoOverlayTemps(dir);
+});
+test('KOTLIN-OVERLAY-07 original staging errors retain identity and close every descriptor', (t) => {
+  const { dir } = overlayFixture(t), sentinel = new Error('ORIGINAL_PRIVATE_STAGE_FAILURE');
+  const originalWrite = fs.writeSync, originalOpen = fs.openSync, descriptors = [];
+  fs.openSync = function (...args) { const fd = originalOpen(...args); descriptors.push(fd); return fd; };
+  fs.writeSync = () => { throw sentinel; };
+  try { assert.throws(() => kotlinOverlay.applyKotlinDeclarations(dir), error => error === sentinel); }
+  finally { fs.writeSync = originalWrite; fs.openSync = originalOpen; }
+  assert.ok(descriptors.length >= 11);
+  for (const fd of descriptors) assert.throws(() => fstatSync(fd), { code: 'EBADF' }); assertNoOverlayTemps(dir);
+});
+
+test('KOTLIN-OVERLAY-08 real Gradle regression projects retain catalog and Expo DSL requests', (t) => {
+  const { dir, manifest, files } = overlayFixture(t);
+  const { projectFiles } = require(path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations/project-files.cjs'));
+  const before = projectFiles(files.map(file => readFileSync(file)));
+  assert.match(before.get('gradle/libs.versions.toml'), /kotlin = "2\.2\.0"/);
+  for (const name of ['expo-autolinking', 'expo-core', 'expo-launcher'])
+    assert.match(before.get(name + '/build.gradle.kts'), /version "2\.2\.21"/);
+  assert.match(before.get('serialization-child/build.gradle.kts'), /serialization"\) version "1\.9\.24"/);
+  kotlinOverlay.applyKotlinDeclarations(dir);
+  const after = projectFiles(files.map(file => readFileSync(file)));
+  assert.match(after.get('gradle/libs.versions.toml'), /kotlin = "2\.4\.20"/);
+  for (const name of ['expo-autolinking', 'expo-core', 'expo-launcher', 'serialization-child'])
+    assert.match(after.get(name + '/build.gradle.kts'), /version "2\.4\.20"/);
+  assert.equal(after.size, 9);
+  assert.throws(() => projectFiles(manifest.targets.map(() => Buffer.from('UNKNOWN'))), /NATIVE_KOTLIN_FIXTURE_UNKNOWN_SUPPLIER/);
+});
+
+test('KOTLIN-OVERLAY-09 Windows named dev0 keeps full descriptor and nonzero device checks', (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const helperPath = require.resolve(path.join(app, 'plugins/kotlin-declaration-overlay.cjs'));
+  const priorModule = require.cache[helperPath];
+  const originalLstat = fs.lstatSync, originalFstat = fs.fstatSync, originalOpen = fs.openSync;
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    delete require.cache[helperPath];
+    const windowsHelper = require(helperPath);
+    for (const scenario of ['named-zero', 'named-nonzero-drift', 'fd-dev-drift']) {
+      const { dir, files } = overlayFixture(t), selected = files.at(-1);
+      let selectedFd, observations = 0;
+      fs.openSync = function (file, ...args) {
+        const fd = originalOpen(file, ...args); if (file === selected) selectedFd = fd; return fd;
+      };
+      fs.lstatSync = function (file, ...args) {
+        const value = originalLstat(file, ...args);
+        return file === selected ? new Proxy(value, { get(target, key) {
+          return key === 'dev' ? scenario === 'named-nonzero-drift' ? value.dev + 1n : 0n : Reflect.get(target, key);
+        } }) : value;
+      };
+      fs.fstatSync = function (fd, ...args) {
+        const value = originalFstat(fd, ...args);
+        return fd === selectedFd && ++observations > 1 && scenario === 'fd-dev-drift'
+          ? new Proxy(value, { get: (target, key) => key === 'dev' ? value.dev + 1n : Reflect.get(target, key) }) : value;
+      };
+      try {
+        if (scenario === 'named-zero') {
+          assert.equal(windowsHelper.applyKotlinDeclarations(dir).changed, 5);
+          assertKotlinOverlay(dir);
+        } else assert.throws(() => windowsHelper.applyKotlinDeclarations(dir), /KOTLIN_OVERLAY_(NAMED|PATH|DESCRIPTOR)/, scenario);
+      } finally { fs.lstatSync = originalLstat; fs.fstatSync = originalFstat; fs.openSync = originalOpen; }
+      assertNoOverlayTemps(dir);
+    }
+  } finally {
+    fs.lstatSync = originalLstat; fs.fstatSync = originalFstat; fs.openSync = originalOpen;
+    Object.defineProperty(process, 'platform', platform);
+    require.cache[helperPath] = priorModule;
+  }
+});
+
+test('KOTLIN-OVERLAY-10 every copied supplier declaration retains its exact attribution and bytes', () => {
+  const directory = path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations');
+  const provenance = JSON.parse(readFileSync(path.join(directory, 'supplier-provenance.json')));
+  assert.equal(provenance.reactNativeCatalogOriginalCopyrightAndMitHeaderRetained, false);
+  assert.equal(provenance.supplierNotices.length, 4);
+  for (const target of kotlinOverlay.policy.targets) {
+    const matches = provenance.supplierNotices.filter(row => row.package === target.package && row.appliesTo.includes(target.fixture));
+    assert.equal(matches.length, 1, target.fixture);
+    const notice = matches[0], bytes = readFileSync(path.join(directory, notice.fixture));
+    assert.equal(digest(bytes), notice.sha256); assert.equal(bytes.length, notice.sizeBytes);
+    assert.match(bytes.toString('utf8'), /Permission is hereby granted/);
+    assert.equal(digest(readFileSync(path.join(directory, target.fixture))), target.beforeSha256);
+  }
+  const rn = provenance.supplierNotices.find(row => row.package === '@react-native/gradle-plugin');
+  assert.equal(rn.officialGitHead, '5c35c82cf7dd322bf94d47501508c3de975c077b');
+  assert.equal(rn.sha256, 'da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93');
+  assert.match(readFileSync(path.join(directory, rn.fixture), 'utf8'), /Meta Platforms/);
+  const names = readdirSync(directory).sort().map(name => 'scripts/mobile/fixtures/android-kotlin-declarations/' + name);
+  const attrs = execFileSync('git', ['check-attr', 'text', '--', ...names], { cwd: repo, encoding: 'utf8', timeout: 5000 });
+  assert.equal(attrs, names.map(name => name + ': text: unset\n').join(''));
+});
+
+test('KOTLIN-OVERLAY-11 declared Kotlin matches both published compiler plugins without changing their runtimes', (t) => {
+  const directory = path.join(repo, 'scripts/mobile/fixtures/android-kotlin-declarations');
+  const compatibility = JSON.parse(readFileSync(path.join(directory, 'compiler-compatibility.json')));
+  assert.equal(compatibility.kotlinVersion, kotlinOverlay.policy.kotlinVersion);
+  assert.equal(compatibility.kotlinVersion, '2.4.20');
+  assert.equal(compatibility.supersededProjectPin, '2.4.21');
+  assert.equal(compatibility.security.firstFixed, '2.4.20-Beta1');
+  assert.equal(compatibility.security.maintainerFix, 'bf51df665b458fda7c3eaf436c4d88dc119d7ec6');
+  const { dir } = overlayFixture(t);
+  kotlinOverlay.applyKotlinDeclarations(dir);
+  const supplier = readFileSync(path.join(dir, 'node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts'), 'utf8');
+  const published = compatibility.compilerPlugins.map(row => {
+    const bytes = readFileSync(path.join(directory, row.metadata.fixture));
+    assert.equal(digest(bytes), row.metadata.sha256); assert.equal(bytes.length, row.metadata.sizeBytes);
+    assert.equal(row.metadata.url, `https://repo.maven.apache.org/maven2/${row.group.replaceAll('.', '/')}/${row.module}/maven-metadata.xml`);
+    const xml = bytes.toString('utf8');
+    assert.doesNotMatch(xml, /<!DOCTYPE|<!ENTITY/i);
+    assert.ok(xml.includes(`<groupId>${row.group}</groupId>`));
+    assert.ok(xml.includes(`<artifactId>${row.module}</artifactId>`));
+    const versions = [...xml.matchAll(/<version>([^<]+)<\/version>/g)].map(match => match[1]);
+    assert.equal(new Set(versions).size, versions.length);
+    // These declarations feed the actual KotlinCompilerPluginSupportPlugin
+    // providers' ${base}-${project.getKotlinPluginVersion()} coordinates.
+    const declaration = `implementation("${row.group}:${row.declaredGradlePlugin}:${row.pluginVersion}")`;
+    assert.equal(supplier.split(declaration).length - 1, 1);
+    return { ...row, versions };
+  });
+  const derive = kotlin => published.map(row => {
+    const version = `${row.pluginVersion}-${kotlin}`;
+    assert.ok(row.versions.includes(version), 'KOTLIN_COMPILER_PLUGIN_VERSION_UNPUBLISHED');
+    return `${row.group}:${row.module}:${version}`;
+  });
+  assert.deepEqual(derive(kotlinOverlay.policy.kotlinVersion), [
+    'io.github.expo.pika:pika-compiler:1.1.0-2.4.20',
+    'io.github.expo:expo-modules-v2-compiler-plugin:0.2.6-2.4.20'
+  ]);
+  // Reproduce the failed candidate's exact missing coordinate derivation.
+  assert.throws(() => derive('2.4.21'), /KOTLIN_COMPILER_PLUGIN_VERSION_UNPUBLISHED/);
+  for (const row of published)
+    assert.equal(row.versions.includes(`${row.pluginVersion}-2.4.21`), false);
+  assert.equal(readFileSync(path.join(directory, '5-original.txt'), 'utf8').includes('pika-gradle:1.1.0'), true);
+  assert.equal(readFileSync(path.join(directory, '5-original.txt'), 'utf8').includes('expo-modules-v2-gradle-plugin:0.2.6'), true);
 });
 
 test('installed RN and Expo use non-debug dev=false bundling and release launcher stubs', () => {
@@ -1342,4 +1618,53 @@ test('cross-platform profile guards reject prebuilding the wrong native platform
       modRequest: { projectRoot: dir, platformProjectRoot: path.join(dir, 'android'), platform: 'android', modName: 'dangerous' } }),
     /IOS_ACCEPTANCE_CANNOT_PREBUILD_ANDROID/);
   });
+});
+
+const REVIEWED_OLD_GRADLE_URL = String.raw`https\://services.gradle.org/distributions/gradle-9.4.1-bin.zip`;
+const REVIEWED_NEW_GRADLE_URL = String.raw`https\://services.gradle.org/distributions/gradle-9.9.2-bin.zip`;
+const REVIEWED_OLD_GRADLE_SHA = '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
+const REVIEWED_NEW_GRADLE_SHA = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b';
+function wrapperFixture(t) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'caseops-reviewed-gradle-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'gradle/wrapper/gradle-wrapper.properties');
+  mkdirSync(path.dirname(file), { recursive: true });
+  return { root, file };
+}
+test('reviewed Gradle wrapper transition preserves unrelated properties and is idempotent', t => {
+  const { root, file } = wrapperFixture(t);
+  for (const checksum of ['', `distributionSha256Sum=${REVIEWED_OLD_GRADLE_SHA}\n`]) {
+    const unrelated = '# public template\nnetworkTimeout=10000\nvalidateDistributionUrl=true\n';
+    writeFileSync(file, `${unrelated}distributionUrl=${REVIEWED_OLD_GRADLE_URL}\n${checksum}`);
+    plugin.pinGradleWrapper(root);
+    const expected = `${unrelated}distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\n`;
+    assert.equal(readFileSync(file, 'utf8'), expected);
+    plugin.pinGradleWrapper(root);
+    assert.equal(readFileSync(file, 'utf8'), expected);
+  }
+});
+test('reviewed Gradle wrapper rejects unknown source and ambiguous or incorrect checksums before mutation', t => {
+  const { root, file } = wrapperFixture(t);
+  for (const input of [
+    'distributionUrl=https://unreviewed.invalid/gradle.zip\n',
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\n distributionUrl=https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionUrl:https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistribution\\Url=https://unreviewed.invalid/gradle.zip\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionUrl=${REVIEWED_OLD_GRADLE_URL}\n`,
+    `distributionUrl=${REVIEWED_OLD_GRADLE_URL}\ndistributionSha256Sum=${'0'.repeat(64)}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_OLD_GRADLE_SHA}\n`,
+    `distributionUrl=${REVIEWED_NEW_GRADLE_URL}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\ndistributionSha256Sum=${REVIEWED_NEW_GRADLE_SHA}\n`,
+  ]) {
+    writeFileSync(file, input);
+    assert.throws(() => plugin.pinGradleWrapper(root));
+    assert.equal(readFileSync(file, 'utf8'), input);
+  }
+});
+test('reviewed Gradle wrapper rejects missing and oversized input without changing other files', t => {
+  const { root, file } = wrapperFixture(t);
+  assert.throws(() => plugin.pinGradleWrapper(root), { code: 'ENOENT' });
+  writeFileSync(file, 'x'.repeat(32769));
+  assert.throws(() => plugin.pinGradleWrapper(root), /GRADLE_WRAPPER_OWNED_REGULAR_INPUT/);
+  assert.equal(readFileSync(file, 'utf8'), 'x'.repeat(32769));
 });

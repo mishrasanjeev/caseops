@@ -102,6 +102,23 @@ def _save(row: BillingEnrollment, state: dict) -> None:
     row.status_timestamps_json = {**(row.status_timestamps_json or {}), "demo_admission": state}
 
 
+def _log_undelivered(enrollment_id: str, status: str, error_code: str) -> None:
+    # The reference, durable state and fixed code only: never contact fields,
+    # notes or provider response text. The worker's plain log format drops
+    # ``extra``, so the message itself carries the operator-facing fields.
+    logger.warning(
+        "Public lead alert not delivered: lead=%s status=%s error=%s",
+        enrollment_id,
+        status,
+        error_code,
+        extra={
+            "enrollment_id": enrollment_id,
+            "notification_status": status,
+            "error_code": error_code,
+        },
+    )
+
+
 def admit_demo(
     session: Session, payload: DemoRequest, *, automated: bool = False
 ) -> DemoRequestResponse:
@@ -270,6 +287,7 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             state.pop("lease_until", None)
             _save(row, state)
             session.commit()
+            _log_undelivered(enrollment_id, "outcome_unknown", "claim_expired")
             return
         try:
             adapter = _local_notification_adapter()
@@ -279,6 +297,7 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             )
             _save(row, state)
             session.commit()
+            _log_undelivered(enrollment_id, "exhausted", "test_transport_not_admitted")
             return
         if (state.get("automated_request") or paid_providers_blocked_for_request()) and not adapter:
             state.update(
@@ -286,6 +305,7 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             )
             _save(row, state)
             session.commit()
+            _log_undelivered(enrollment_id, "exhausted", "automated_request_blocked")
             return
         if not _notification_enabled():
             state.update(
@@ -301,6 +321,7 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             state.pop("lease_until", None)
             _save(row, state)
             session.commit()
+            _log_undelivered(enrollment_id, "exhausted", "attempt_limit")
             return
         previous_status, previous_attempts = state["notification_status"], state["attempts"]
         state.update(
@@ -386,11 +407,7 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             ).isoformat()
             if state["attempts"] >= MAX_ATTEMPTS:
                 state["notification_status"] = "exhausted"
-            logger.warning(
-                "demo_notification_deferred",
-                extra={"enrollment_id": enrollment_id, "error_code": error},
-            )
-        session.execute(
+        finalized = session.execute(
             update(BillingEnrollment)
             .where(
                 BillingEnrollment.id == enrollment_id,
@@ -424,7 +441,12 @@ def deliver_demo_notification(enrollment_id: str) -> None:
             ),
             execution_options={"synchronize_session": False},
         )
+        recorded = finalized.rowcount == 1
         session.commit()
+    # Log only a result this worker actually recorded; a refused stale finalizer
+    # leaves the recovering path to record and log its own outcome.
+    if error and recorded:
+        _log_undelivered(enrollment_id, state["notification_status"], error)
 
 
 def drain_demo_notifications(*, limit: int = 25) -> dict[str, int]:

@@ -123,6 +123,7 @@ def observe_transactions(adapter, session):
 
 @pytest.mark.parametrize("name", ["voyage", "gemini"])
 @pytest.mark.parametrize("deny_at", [1, 2])
+@pytest.mark.usefixtures("live_logs")
 def test_title_money_denial_stops_submission_and_preserves_unprocessed_metadata(
     corpus_session, money_boundary, name, deny_at, caplog
 ):
@@ -229,6 +230,7 @@ def install_pdf_parser(monkeypatch, directory):
 
 @pytest.mark.parametrize("name", ["voyage", "gemini"])
 @pytest.mark.parametrize("deny_at", [1, 2])
+@pytest.mark.usefixtures("live_logs")
 def test_ingest_money_denial_preserves_pdf_and_stops_later_files(
     corpus_session, money_boundary, monkeypatch, tmp_path, name, deny_at, caplog
 ):

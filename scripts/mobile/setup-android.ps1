@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $tools 'bin/sdkmanager.bat'))) {
 }
 
 if (-not (Test-Path -LiteralPath $jdkRoot)) {
-    $archive = Get-VerifiedArchive 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip' 'temurin21-21.0.12.1_1.zip' 'f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e' $downloads
+    $archive = Get-VerifiedArchive 'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13.1%2B2/OpenJDK21U-jdk_x64_windows_hotspot_21.0.13.1_2.zip' 'temurin21-21.0.13.1_2.zip' 'bbebea1469996b276683c9299c227b294f85c847039c82633218186a4ad4fbf2' $downloads
     Install-AndroidJdk $archive $jdkRoot | Out-Null
 }
 $jdk = Get-AndroidJdk $jdkRoot

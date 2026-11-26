@@ -36,7 +36,7 @@ ConflictResolver = Annotated[
     response_model=ConflictCheckRecord,
     summary="Run a fresh conflict-of-interest scan on a matter",
 )
-async def post_matter_conflict_check(
+def post_matter_conflict_check(
     matter_id: str,
     payload: ConflictCheckRunRequest,
     context: ConflictRunner,
@@ -52,7 +52,7 @@ async def post_matter_conflict_check(
     response_model=ConflictCheckListResponse,
     summary="List conflict checks recorded against a matter",
 )
-async def get_matter_conflict_checks(
+def get_matter_conflict_checks(
     matter_id: str,
     context: ConflictRunner,
     session: DbSession,
@@ -68,7 +68,7 @@ async def get_matter_conflict_checks(
     response_model=ConflictCheckRecord,
     summary="Resolve a pending conflict check (cleared / conflicted / waived)",
 )
-async def patch_conflict_check(
+def patch_conflict_check(
     check_id: str,
     payload: ConflictCheckResolveRequest,
     context: ConflictResolver,

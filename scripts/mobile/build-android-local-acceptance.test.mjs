@@ -86,7 +86,7 @@ function fixture(t, extra = {}) {
     'apps/web/lib/native-link-config.cjs', 'apps/web/lib/native-link-config.d.cts',
     'scripts/mobile/prepare-viewer-assets.mjs', 'apps/mobile/src/viewer/renderer-runtime.ts',
     ...['LICENSES.txt', 'manifest.json', 'pdfjs-assets.ts', 'renderer-runtime-source.ts'].map(name => `apps/mobile/src/viewer/generated/${name}`),
-    'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/plugins/store-build.cjs',
+    'apps/mobile/package.json', 'apps/mobile/app.config.ts', 'apps/mobile/plugins/with-local-acceptance.cjs', 'apps/mobile/plugins/kotlin-declaration-overlay.cjs', 'apps/mobile/plugins/store-build.cjs',
     'apps/mobile/plugins/privacy-policy.cjs', 'apps/mobile/plugins/with-privacy-policy.cjs', 'apps/mobile/plugins/qa-observer.cjs', 'apps/mobile/e2e/support.mjs'];
   for (const name of files) { const destination = path.join(checkout, name); mkdirSync(path.dirname(destination), { recursive: true }); copyFileSync(path.join(repo, name), destination); }
   // Trace actual source capture in the temporary contract fixture, so an order
@@ -106,7 +106,7 @@ function fixture(t, extra = {}) {
 fs.appendFileSync(process.env.CASEOPS_TEST_TRACE,'expo:'+JSON.stringify(process.argv.slice(2))+'\\n');
 const root=path.join(process.cwd(),'android');fs.mkdirSync(path.join(root,'gradle/wrapper'),{recursive:true});fs.mkdirSync(path.join(root,'app'),{recursive:true});
 for(const file of ['build.gradle','settings.gradle','gradle.properties','app/build.gradle'])fs.writeFileSync(path.join(root,file),'// synthetic offline native input\\n');
-fs.writeFileSync(path.join(root,'gradle/wrapper/gradle-wrapper.properties'),'distributionUrl=https\\\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip\\n');
+fs.writeFileSync(path.join(root,'gradle/wrapper/gradle-wrapper.properties'),'distributionUrl=https\\\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip\\n');
 fs.copyFileSync(process.env.CASEOPS_TEST_GRADLE,path.join(root,'gradlew'));fs.chmodSync(path.join(root,'gradlew'),0o700);
 `);
   file('tools/uname', '#!/bin/bash\nif [[ "$1" = -s ]]; then echo "${CASEOPS_TEST_OS:-Darwin}"; else echo arm64; fi\n', true);
@@ -120,7 +120,7 @@ if [[ "$1" = */scripts/mobile/prepare-viewer-assets.mjs ]]; then
 fi
 exec "$CASEOPS_TEST_NODE_REAL" "$@"
 `, true);
-  for (const [name, version] of [['jdk21', '21.0.12.1+1'], ['jdk17', '17.0.20.1+1']])
+  for (const [name, version] of [['jdk21', '21.0.13.1+2'], ['jdk17', '17.0.21.1+2']])
     file(`${name}/bin/java`, `#!/bin/bash\necho 'OpenJDK Runtime Environment Temurin-${version} (synthetic version fixture)' >&2\n`, true);
   for (const [name, version] of [['platforms/android-37.0', '2'], ['build-tools/36.0.0', '36.0.0'], ['build-tools/37.0.0', '37.0.0'], ['ndk/27.1.12297006', '27.1.12297006'], ['cmake/3.30.5', '3.30.5']])
     file(`sdk/${name}/source.properties`, `Pkg.Revision=${version}\n`);
@@ -189,7 +189,7 @@ test('actual shell orchestration binds portable source/CA receipt, ARM64 ELF and
   const trace = readFileSync(f.trace, 'utf8'); assert.match(trace, /prebuild.*--platform.*android.*--no-install/);
   assert.match(trace, /assembleLocalAcceptance.*reactNativeArchitectures=arm64-v8a/); assert.match(trace, /android.builder.sdkDownload=false/);
   assert.match(trace, /org.gradle.java.installations.auto-download=false/); assert.doesNotMatch(trace, /adb|emulator|--licenses|sdkmanager|expo.*start/);
-  assert.match(readFileSync(path.join(output, 'gradle-wrapper-gradle-wrapper.properties'), 'utf8'), /distributionSha256Sum=2ab2958f/);
+  assert.match(readFileSync(path.join(output, 'gradle-wrapper-gradle-wrapper.properties'), 'utf8'), /distributionSha256Sum=971fcd71/);
 });
 
 test('actual preflight order verifies generated public renderer bytes before source snapshots, prebuild and Gradle', t => {
@@ -290,7 +290,7 @@ function androidRoleInput(t) {
 }
 const androidNodeRecipe = () => ({ NODE_OPTIONS: '--use-openssl-ca --import=data:text/javascript;base64,REVIEWED', SSL_CERT_FILE: '/owned/node144/roots.pem', SSL_CERT_DIR: '/owned/node144/empty', CASEOPS_HOST_NODE_TRUST_POLICY_FILE: '/owned/node144/policy.json', CASEOPS_HOST_NODE_TRUST_POLICY_SHA256: 'a'.repeat(64) });
 test('Android Gradle role keeps exact canonical argv and rejects alternate toolchain homes', () => {
-  assert.deepEqual(androidGradleArguments(), ['./gradlew', ':app:assembleLocalAcceptance', '-PreactNativeArchitectures=arm64-v8a', '-Pandroid.compileSdkVersion=37', '-Pandroid.buildToolsVersion=37.0.0', '-Pandroid.ndkVersion=27.1.12297006', '-Pandroid.cmakeVersion=3.30.5', '-Pandroid.builder.sdkDownload=false', '-Dorg.gradle.java.installations.paths=/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home,/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home', '-Dorg.gradle.java.installations.auto-download=false', '--no-daemon', '--max-workers=2', '--console=plain']);
+  assert.deepEqual(androidGradleArguments(), ['./gradlew', ':app:assembleLocalAcceptance', '-PreactNativeArchitectures=arm64-v8a', '-Pandroid.compileSdkVersion=37', '-Pandroid.buildToolsVersion=37.0.0', '-Pandroid.ndkVersion=27.1.12297006', '-Pandroid.cmakeVersion=3.30.5', '-Pandroid.builder.sdkDownload=false', '-Dorg.gradle.java.installations.paths=/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-17.0.21.1+2/Contents/Home,/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-21.0.13.1+2/Contents/Home', '-Dorg.gradle.java.installations.auto-download=false', '--no-daemon', '--max-workers=2', '--console=plain']);
   assert.throws(() => androidGradleArguments('/unadmitted/JDK21'), /ANDROID_HOST_JAVA21/);
 });
 test('Android Java-neutral environment removes only the fully matched Node recipe before JDK admission', () => {
@@ -434,18 +434,18 @@ function actualAndroidWorkerFacts(t) {
 test('actual Android Node shim rebinds Node144 for Workers and process.execPath forks while removing Java fields', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
   const result = actualAndroidWorkerFacts(t);
-  const expected = { count: 144, java: null, expected: 144, verified: true };
+  const expected = { count: 118, java: null, expected: 118, verified: true };
   assert.deepEqual({ count: result.count, java: result.java, expected: result.expected, verified: result.verified, worker: result.worker, fork: result.fork }, { ...expected, worker: expected, fork: expected });
 });
 test('actual Android file Worker retains the effective Node144 default with empty execArgv', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
   const result = actualAndroidWorkerFacts(t);
-  const expected = { count: 144, java: null, expected: 144, verified: true };
+  const expected = { count: 118, java: null, expected: 118, verified: true };
   assert.deepEqual(result.fileEmpty, expected);
 });
 test('actual Android CJS file Worker retains the effective Node144 default with eval false', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
-  assert.deepEqual(actualAndroidWorkerFacts(t).cjsFile, { count: 144, java: null, expected: 144, verified: true });
+  assert.deepEqual(actualAndroidWorkerFacts(t).cjsFile, { count: 118, java: null, expected: 118, verified: true });
 });
 test('actual Android CJS eval Worker with empty execArgv refuses the required effective Node144 default', t => {
   if (typeof process.getuid !== 'function') { assert.throws(() => readAndroidHostInput({ path: '/unread', sha256: 'a'.repeat(64), sizeBytes: 1 }), /ANDROID_HOST_REFERENCE/); return; }
@@ -582,8 +582,8 @@ test('Android Java temporary binding rejects a replaced leaf inode and a replace
 test('Android Gradle execution preserves all user arguments and appends only the bound Kotlin JVM vector', t => {
   const f = androidJavaHomeBinding(t);
   if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
-  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home',
-    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home' };
+  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-21.0.13.1+2/Contents/Home',
+    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-17.0.21.1+2/Contents/Home' };
   const args = androidGradleArguments(), before = [...args], actual = androidGradleExecutionArguments(args, f.binding, env);
   assert.deepEqual(args, before); assert.equal(actual.length, 14); assert.deepEqual(actual.slice(0, 13), before);
   assert.equal(actual[13], '-Pkotlin.daemon.jvmargs=' + f.binding.javaOptions);
@@ -592,8 +592,8 @@ test('Android Gradle execution preserves all user arguments and appends only the
 test('Android Gradle execution rejects extra user JVM options and changed runtime options before projection', t => {
   const f = androidJavaHomeBinding(t);
   if (typeof process.getuid !== 'function') { assert.throws(() => bindAndroidJavaHome(f.environment, f.binding)); return; }
-  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-21.0.12.1+1/Contents/Home',
-    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/android-mac-setup/jdks/jdk-17.0.20.1+1/Contents/Home' };
+  const env = { ...bindAndroidJavaHome(f.environment, f.binding), JAVA_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-21.0.13.1+2/Contents/Home',
+    CASEOPS_ANDROID_JDK17_HOME: '/Users/sanjeevkumar/.cache/caseops-mobile/native-release-20261111-ZzEIol4V/official-temurin-jdk-refresh-20261123-01/installed/jdk-17.0.21.1+2/Contents/Home' };
   for (const extra of ['-Pkotlin.daemon.jvmargs=-Dforeign=true', '-Pkotlin.compiler.execution.strategy=in-process', '--init-script=/foreign']) {
     assert.throws(() => androidGradleExecutionArguments([...androidGradleArguments(), extra], f.binding, env), /ANDROID_HOST_CANONICAL_GRADLE_ARGV/);
   }

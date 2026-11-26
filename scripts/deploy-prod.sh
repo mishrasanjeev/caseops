@@ -422,6 +422,7 @@ DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   ".github/workflows/security.yml" \
   "tests/fixtures/statutes/structured-schedule-api.json" \
   "tests/fixtures/node-default-tls-probe.cjs" \
+  "tests/fixtures/undici-loopback-redirect-probe.cjs" \
   "tests/fixtures/node-local-tls-certificates.cjs" \
   "tests/fixtures/contract-preview-probe.ts" \
   "tests/e2e/support/prod-failure-diagnostics.ts" \

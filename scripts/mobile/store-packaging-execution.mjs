@@ -89,7 +89,7 @@ export function admitTools(value, platform, { contractOnly = false, deadline, qu
       if (role !== 'bundletool') assert.ok(Number(actual.metadata.mode) & 0o111, 'STORE_TOOL_EXECUTABLE_REQUIRED');
     }
   }
-  assert.equal(value.entries.node.version, '24.15.0', 'STORE_NODE_VERSION_REQUIRED');
+  assert.equal(value.entries.node.version, '24.22.3', 'STORE_NODE_VERSION_REQUIRED');
   assert.equal(value.entries.python.version, '3.13.17', 'STORE_PYTHON_VERSION_REQUIRED');
   if (platform === 'ios') {
     objectKeys(value.iosHostPolicy, ['path', 'sha256', 'sizeBytes'], 'STORE_IOS_HOST_POLICY_REQUIRED');
@@ -124,17 +124,19 @@ function reserveBatch(directory, build, batch, platform, deadline) {
   const privateDirectory = (file, options) => rawPrivateDirectory(file, { ...options, deadline });
   const writePrivate = (file, bytes) => rawWritePrivate(file, bytes, { deadline });
   privateDirectory(directory);
-  const records = storeNumberReservations(build);
+  const records = storeNumberReservations(build, platform);
   assert.ok(records.some(record => record.platform === platform), 'STORE_RESERVATION_PLATFORM_REQUIRED');
   const paths = records.map(({ platform, appId, value }) =>
     path.join(directory, digest(JSON.stringify([platform, appId])) + '-' + platform + '-' + value + '.json'));
-  const batchPath = path.join(directory, 'batch-' + batch + '.json');
+  const batchPath = path.join(directory, 'batch-' + batch + '-' + platform + '.json');
+  // A legacy multi-platform batch cannot authorize a newly scoped subset.
+  assert.equal(fs.existsSync(path.join(directory, 'batch-' + batch + '.json')), false, 'STORE_LEGACY_BATCH_SCOPE_REFUSED');
   if (paths.some(p => fs.existsSync(p)) || fs.existsSync(batchPath)) {
     assert.ok(paths.every(p => fs.existsSync(p)) && fs.existsSync(batchPath), 'STORE_PARTIAL_RESERVATION_REFUSED');
     const receipt = jsonInput({ path: batchPath, sha256: readInput(batchPath, { privateFile: true }).sha256 }, { privateFile: true }).value;
     assert.deepEqual(receipt, { kind: 'caseops-store-number-batch', batch, records }, 'STORE_RESERVATION_BATCH_MISMATCH');
   } else {
-    reserveBuildNumbers(directory, build, batch);
+    reserveBuildNumbers(directory, build, batch, platform);
     writePrivate(batchPath, Buffer.from(JSON.stringify({ kind: 'caseops-store-number-batch', batch, records }) + '\n'));
   }
   for (let i = 0; i < records.length; i++) {
@@ -193,7 +195,7 @@ async function executePackaging(requestRef, { root = ROOT, adapter, purpose } = 
   assert.ok(contractOnly || (qualification
     ? process.env.CASEOPS_ANDROID_QUALIFICATION_BUILD_GO === 'EXPLICIT_NON_SUBMITTABLE_ANDROID_QUALIFICATION'
     : process.env.CASEOPS_LOCAL_STORE_BUILD_GO === 'EXPLICIT_REVIEWED_LOCAL_STORE_BUILD'), 'STORE_BUILD_NOT_ARMED');
-  assert.ok(contractOnly || (process.platform === 'darwin' && process.versions.node === '24.15.0'), 'STORE_ACCEPTED_HOST_REQUIRED');
+  assert.ok(contractOnly || (process.platform === 'darwin' && process.versions.node === '24.22.3'), 'STORE_ACCEPTED_HOST_REQUIRED');
   const q = jsonInput(reference(requestRef)).value;
   objectKeys(q, ['schemaVersion', 'kind', 'readyForLocalBuild', 'syntheticDataOnly', 'platform', 'recipe', 'sourceTree', 'gates', 'tools',
     'storeHistory', 'reservationDirectory', 'outputDirectory', 'architecture', 'signingSecrets', 'privacyPolicy'], 'STORE_EXECUTION_REQUEST_REQUIRED');
@@ -260,9 +262,15 @@ async function executePackaging(requestRef, { root = ROOT, adapter, purpose } = 
   objectKeys(history, ['kind', 'identities', 'observedAt', 'iosBuildNumber', 'androidVersionCode', 'evidence'], 'STORE_HISTORY_REQUIRED');
   assert.equal(history.kind, 'caseops-reviewed-actual-store-history', 'STORE_ACTUAL_HISTORY_REQUIRED');
   assert.deepEqual(history.identities, buildInput.value.identities, 'STORE_HISTORY_IDENTITY_MISMATCH');
+  const knownIosMaximum = typeof history.iosBuildNumber === 'string' && /^(0|[1-9][0-9]{0,3})$/.test(history.iosBuildNumber);
+  const knownAndroidMaximum = Number.isSafeInteger(history.androidVersionCode)
+    && history.androidVersionCode >= 0 && history.androidVersionCode <= 2100000000;
   assert.ok(Date.parse(history.observedAt) <= Date.now() && Date.now() - Date.parse(history.observedAt) <= 86400000
-    && Number(history.iosBuildNumber) < Number(settings.iosBuildNumber)
-    && Number.isSafeInteger(history.androidVersionCode) && history.androidVersionCode < settings.androidVersionCode, 'STORE_FRESH_MONOTONIC_HISTORY_REQUIRED');
+    && (q.platform === 'ios'
+      ? knownIosMaximum && Number(history.iosBuildNumber) < Number(settings.iosBuildNumber)
+        && (history.androidVersionCode === null || knownAndroidMaximum)
+      : knownAndroidMaximum && history.androidVersionCode < settings.androidVersionCode
+        && (history.iosBuildNumber === null || knownIosMaximum)), 'STORE_FRESH_MONOTONIC_HISTORY_REQUIRED');
   assert.ok(Array.isArray(history.evidence) && history.evidence.length > 0 && history.evidence.length <= LIMITS.publicReferences, 'STORE_HISTORY_EVIDENCE_REQUIRED');
   for (const ref of history.evidence) { checkDeadline(admissionDeadline); jsonInput(reference(ref)); }
   if (!contractOnly && q.platform === 'android') {
