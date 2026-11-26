@@ -2010,6 +2010,10 @@ def create_matter(
             or MATTER_MUTATION_CAPABILITIES["create_matter" if commit else "import_matter"]
         ),
     )
+    if payload.client_id is not None:
+        # Linking the client is the same write as POST /matters/{id}/clients,
+        # so it needs the same capability.
+        require_locked_membership_capability(session, context.membership, "clients:edit")
     if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -2122,6 +2126,13 @@ def create_matter(
         forum_city=payload.forum_city,
         forum_consumer_level=payload.forum_consumer_level,
     )
+    linked_client = None
+    if payload.client_id is not None:
+        from caseops_api.services.clients import resolve_linkable_client
+
+        linked_client = resolve_linkable_client(
+            session, context=context, client_id=payload.client_id,
+        )
 
     matter = Matter(
         company_id=context.company.id,
@@ -2232,6 +2243,20 @@ def create_matter(
             "case_tracking_auto_link": case_tracking_auto_link.metadata(),
         },
     )
+    if linked_client is not None:
+        from caseops_api.services.clients import link_client_to_matter
+
+        # The creation projection below already carries the synced name.
+        link_client_to_matter(
+            session,
+            context=context,
+            matter=matter,
+            client=linked_client,
+            role=None,
+            role_provided=False,
+            is_primary=True,
+            propagate_matter_change=False,
+        )
     from caseops_api.services.private_retrieval import (
         private_source_version,
         propagate_private_source_creation,
