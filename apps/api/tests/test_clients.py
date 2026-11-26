@@ -1170,12 +1170,18 @@ def test_matter_client_verification_respects_restricted_wall_and_team_access(
         json={"name": "Verification Team", "slug": "verification-team"},
     )
     assert team.status_code == 201, team.text
+    # Linking the primary client wrote its name to the Matter, so the edit
+    # must carry the Matter's current concurrency token.
+    current_team_matter = client.get(
+        f"/api/matters/{team_matter['id']}", headers=auth_headers(owner_token),
+    )
+    assert current_team_matter.status_code == 200, current_team_matter.text
     assign_team = client.patch(
         f"/api/matters/{team_matter['id']}",
         headers=auth_headers(owner_token),
         json={
             "team_id": team.json()["id"],
-            "expected_updated_at": team_matter["updated_at"],
+            "expected_updated_at": current_team_matter.json()["updated_at"],
         },
     )
     assert assign_team.status_code == 200, assign_team.text

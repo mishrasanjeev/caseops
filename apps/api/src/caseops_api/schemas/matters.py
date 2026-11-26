@@ -150,6 +150,10 @@ class MatterCreateRequest(BaseModel):
     )
     matter_type: str | None = Field(default=None, max_length=120)
     client_name: str | None = Field(default=None, min_length=2, max_length=255)
+    # An existing client to link as the Matter's primary client, validated
+    # exactly as POST /api/matters/{id}/clients validates it. Its name
+    # replaces ``client_name``.
+    client_id: str | None = Field(default=None, min_length=1, max_length=36)
     client_code: str | None = Field(default=None, max_length=80)
     client_contact_number: str | None = Field(default=None, max_length=40)
     client_email: EmailStr | None = None

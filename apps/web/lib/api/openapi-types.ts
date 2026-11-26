@@ -40496,6 +40496,8 @@ export interface components {
             id: string;
             /** Is Primary */
             is_primary: boolean;
+            /** Matter Client Name */
+            matter_client_name?: string | null;
             /** Matter Id */
             matter_id: string;
             /** Role */
@@ -40505,11 +40507,8 @@ export interface components {
         MatterClientAssignRequest: {
             /** Client Id */
             client_id: string;
-            /**
-             * Is Primary
-             * @default true
-             */
-            is_primary: boolean;
+            /** Is Primary */
+            is_primary?: boolean | null;
             /** Role */
             role?: string | null;
         };
@@ -40524,6 +40523,11 @@ export interface components {
         MatterClientVerificationRecord: {
             /** Client Id */
             client_id: string;
+            /**
+             * Client Is Active
+             * @default true
+             */
+            client_is_active: boolean;
             /** Client Name */
             client_name: string;
             /**
@@ -40892,6 +40896,8 @@ export interface components {
             client_contact_number?: string | null;
             /** Client Email */
             client_email?: string | null;
+            /** Client Id */
+            client_id?: string | null;
             /** Client Name */
             client_name?: string | null;
             /** Cnr Number */

@@ -6,6 +6,8 @@ import {
   ArrowLeft,
   Archive,
   CheckCircle2,
+  Link2,
+  Loader2,
   ShieldCheck,
   Upload,
   XCircle,
@@ -15,22 +17,28 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
 import { ClientContactEditor } from "@/components/clients/ClientContactEditor";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   archiveClient,
+  assignClientToMatter,
   fetchClient,
   rejectClientKyc,
   submitClientKyc,
   unarchiveClient,
+  unassignClientFromMatter,
   verifyClientKyc,
+  type ClientMatterLink,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 
@@ -319,47 +327,12 @@ export default function ClientProfilePage() {
         onReject={(reason) => kycRejectMutation.mutate(reason)}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle as="h2" className="text-base">
-            Matters linked to this client
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {c.matters.length === 0 ? (
-            <EmptyState
-              icon={Archive}
-              title="No matters yet"
-              description="Open a matter and link this client from its overview page to populate this list."
-            />
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {c.matters.map((m) => (
-                <li key={m.matter_id}>
-                  <Link
-                    href={`/app/matters/${m.matter_id}`}
-                    className="flex items-center justify-between rounded-md border border-[var(--color-line)] bg-white px-3 py-2 hover:border-[var(--color-ink-3)]"
-                  >
-                    <div>
-                      <div className="font-mono text-xs text-[var(--color-mute)]">
-                        {m.matter_code}
-                      </div>
-                      <div className="text-sm font-medium text-[var(--color-ink)]">
-                        {m.matter_title}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-[var(--color-mute)]">
-                      {m.role ? <Badge tone="neutral">{m.role}</Badge> : null}
-                      {m.is_primary ? <Badge tone="brand">primary</Badge> : null}
-                      <span className="capitalize">{m.status}</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <ClientMattersCard
+        clientId={c.id}
+        clientName={c.name}
+        clientIsActive={c.is_active}
+        matters={c.matters}
+      />
 
       {c.internal_notes ? (
         <Card>
@@ -669,6 +642,253 @@ function KycPanel({
             </div>
           </form>
         ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// nova-legal 2026-11-25: a client is linked to Matters from here as well as
+// from the Matter overview. The picker lists only Matters the user can open
+// (the wall-scoped Matter list) and disables the ones the link API refuses.
+function ClientMattersCard({
+  clientId,
+  clientName,
+  clientIsActive,
+  matters,
+}: {
+  clientId: string;
+  clientName: string;
+  clientIsActive: boolean;
+  matters: ClientMatterLink[];
+}) {
+  const queryClient = useQueryClient();
+  const canEdit = useCapability("clients:edit");
+  const [linking, setLinking] = useState(false);
+  const [matterId, setMatterId] = useState("");
+  const [role, setRole] = useState("");
+  const [makePrimary, setMakePrimary] = useState(false);
+  const [confirmUnlink, setConfirmUnlink] = useState<string | null>(null);
+  const linkedIds = new Set(matters.map((m) => m.matter_id));
+  const blockedReason = !canEdit
+    ? "Your role can view these matters but cannot link or unlink them."
+    : !clientIsActive
+      ? "This client is archived. Restore it to link it to matters."
+      : null;
+
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["clients"] }),
+      queryClient.invalidateQueries({ queryKey: ["matters"] }),
+    ]);
+  };
+  const resetForm = () => {
+    setLinking(false);
+    setMatterId("");
+    setRole("");
+    setMakePrimary(false);
+  };
+  const linkMutation = useMutation({
+    mutationFn: () =>
+      assignClientToMatter({
+        matterId,
+        clientId,
+        role: role.trim() || null,
+        // Unchecked leaves the choice to the API: primary only when the
+        // Matter has no primary client yet.
+        isPrimary: makePrimary ? true : undefined,
+      }),
+    onSuccess: async () => {
+      toast.success("Matter linked to this client.");
+      resetForm();
+      await refresh();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Could not link the matter.")),
+  });
+  const unlinkMutation = useMutation({
+    mutationFn: (targetMatterId: string) =>
+      unassignClientFromMatter({ matterId: targetMatterId, clientId }),
+    onSuccess: async () => {
+      toast.success("Matter unlinked from this client.");
+      setConfirmUnlink(null);
+      await refresh();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Could not unlink the matter.")),
+  });
+
+  return (
+    <Card data-testid="client-matters-card">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+        <CardTitle as="h2" className="text-base">
+          Matters linked to this client
+        </CardTitle>
+        <div className="flex min-w-0 flex-col items-end gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={linking ? "ghost" : "outline"}
+            disabled={Boolean(blockedReason)}
+            aria-describedby={blockedReason ? "client-matters-blocked" : undefined}
+            onClick={() => (linking ? resetForm() : setLinking(true))}
+            data-testid="client-link-matter-open"
+          >
+            <Link2 className="h-4 w-4" aria-hidden />
+            {linking ? "Cancel" : "Link to matter"}
+          </Button>
+          {blockedReason ? (
+            <p id="client-matters-blocked" className="max-w-xs text-right text-xs text-[var(--color-mute)]">
+              {blockedReason}
+            </p>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {linking && !blockedReason ? (
+          <form
+            className="grid gap-3 rounded-md border border-[var(--color-line)] p-3 md:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (matterId) linkMutation.mutate();
+            }}
+            data-testid="client-link-matter-form"
+          >
+            <MatterPicker
+              className="md:col-span-2"
+              id="client-link-matter-picker"
+              label="Matter to link"
+              searchLabel="Search matters"
+              value={matterId}
+              onChange={(next) => setMatterId(next)}
+              disabledReason={(matter) =>
+                linkedIds.has(matter.id)
+                  ? "already linked to this client"
+                  : OPERATIONAL_MATTER_STATUSES.has(matter.status)
+                    ? null
+                    : "disposed matters take no new client links"
+              }
+            />
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <Label htmlFor="client-link-matter-role">Role on the matter (optional)</Label>
+              <Input
+                id="client-link-matter-role"
+                value={role}
+                maxLength={60}
+                placeholder="Petitioner, respondent, guarantor…"
+                onChange={(event) => setRole(event.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm text-[var(--color-ink)]">
+              <input
+                type="checkbox"
+                checked={makePrimary}
+                onChange={(event) => setMakePrimary(event.target.checked)}
+                data-testid="client-link-matter-primary"
+              />
+              Make {clientName} the matter&apos;s primary client
+            </label>
+            <div className="flex justify-end gap-2 md:col-span-2">
+              <Button type="button" variant="outline" size="sm" onClick={resetForm}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!matterId || linkMutation.isPending}
+                data-testid="client-link-matter-submit"
+              >
+                {linkMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Link matter
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {matters.length === 0 ? (
+          <EmptyState
+            icon={Archive}
+            title="No matters linked yet"
+            description={
+              blockedReason
+                ? "Matters you can open appear here once this client is linked to them."
+                : "Use Link to matter, or link this client from a matter's Clients card. Only matters you can open are listed."
+            }
+          />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {matters.map((m) => {
+              const operational = OPERATIONAL_MATTER_STATUSES.has(m.status);
+              const unlinkBlocked = !canEdit
+                ? "Your role cannot unlink matters."
+                : operational
+                  ? null
+                  : "Disposed matters keep their client links.";
+              return (
+                <li
+                  key={m.matter_id}
+                  className="flex flex-col gap-2 rounded-md border border-[var(--color-line)] bg-white px-3 py-2"
+                  data-testid="client-matter-row"
+                >
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <Link
+                      href={`/app/matters/${m.matter_id}`}
+                      className="min-w-0 break-words hover:underline"
+                    >
+                      <div className="font-mono text-xs text-[var(--color-mute)]">
+                        {m.matter_code}
+                      </div>
+                      <div className="text-sm font-medium text-[var(--color-ink)]">
+                        {m.matter_title}
+                      </div>
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
+                      {m.role ? <Badge tone="neutral">{m.role}</Badge> : null}
+                      {m.is_primary ? <Badge tone="brand">primary</Badge> : null}
+                      <span className="capitalize">{m.status.replace(/_/g, " ")}</span>
+                      {confirmUnlink === m.matter_id ? null : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={Boolean(unlinkBlocked)}
+                          title={unlinkBlocked ?? undefined}
+                          aria-label={`Unlink ${m.matter_code}`}
+                          onClick={() => setConfirmUnlink(m.matter_id)}
+                        >
+                          Unlink
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {confirmUnlink === m.matter_id ? (
+                    <div
+                      role="alert"
+                      className="flex flex-col gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-sm"
+                    >
+                      <p className="text-[var(--color-ink)]">
+                        Unlink {m.matter_code} from {clientName}?
+                        {m.is_primary
+                          ? " The matter keeps this client's name as its client name until another primary client is linked or the name is edited."
+                          : ""}
+                      </p>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setConfirmUnlink(null)}>
+                          Keep linked
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={unlinkMutation.isPending}
+                          onClick={() => unlinkMutation.mutate(m.matter_id)}
+                        >
+                          Unlink matter
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </CardContent>
     </Card>
   );

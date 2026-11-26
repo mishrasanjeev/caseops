@@ -149,9 +149,12 @@ class ClientListResponse(BaseModel):
 
 
 class MatterClientAssignRequest(BaseModel):
-    client_id: str
+    client_id: str = Field(min_length=1, max_length=36)
     role: str | None = Field(default=None, max_length=60)
-    is_primary: bool = True
+    # ``None`` means "primary only when the Matter has no primary client yet"
+    # for a new link, and "keep the current flag" for an existing link. True
+    # makes this client the Matter's only primary client.
+    is_primary: bool | None = None
 
 
 class MatterClientAssignmentRecord(BaseModel):
@@ -163,6 +166,9 @@ class MatterClientAssignmentRecord(BaseModel):
     role: str | None
     is_primary: bool
     created_at: datetime
+    # ``Matter.client_name`` after the write. A primary link copies the
+    # client's name into it; unlinking keeps the last name.
+    matter_client_name: str | None = None
 
 
 class ClientVerificationUpdateRequest(BaseModel):
@@ -175,6 +181,7 @@ class MatterClientVerificationRecord(BaseModel):
     client_id: str
     client_name: str
     client_type: ClientTypeLiteral
+    client_is_active: bool = True
     role: str | None = None
     is_primary: bool = False
     status: ClientVerificationStatusLiteral
