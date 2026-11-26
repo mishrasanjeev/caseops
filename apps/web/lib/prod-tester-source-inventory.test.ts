@@ -275,6 +275,14 @@ const nov25Keys = new Set(nov25Cases.map(([project, file, title]) => JSON.string
 const nov25Files = new Set<string>(nov25Cases.map(([, file]) => file).filter(file => file !== motorStatuteFile));
 const isNov25 = (row: Case) => nov25Files.has(row.file)
   || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25ConstitutionPrefix)));
+// November 26 workbook BUG-001: research answer layout geometry, matched by exact identity.
+const nov26LayoutFile = "research-answer-layout-2026-11-26.spec.ts";
+const nov26Cases = [
+  ["app-chromium", "BUG-001 research answer column is centred with shared edges and even spacing at 1280-1920px and 80-150% zoom"],
+  ["app-mobile", "[mobile] BUG-001 research answer fills a 375px phone with shared edges, a stacked timeline and no sideways scroll"],
+] as const;
+const nov26Keys = new Set(nov26Cases.map(([project, title]) => JSON.stringify([project, [nov26LayoutFile, title]])));
+const isNov26 = (row: Case) => row.file === nov26LayoutFile;
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -394,6 +402,7 @@ describe("complete independent App CI project inventory", () => {
   let nov22: Case[];
   let nov24: Case[];
   let nov25: Case[];
+  let nov26: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
@@ -406,8 +415,9 @@ describe("complete independent App CI project inventory", () => {
     nov22 = all.filter(isNov22);
     nov24 = all.filter(isNov24);
     nov25 = all.filter(isNov25);
+    nov26 = all.filter(isNov26);
     canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
-      && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row));
+      && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row) && !isNov26(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -442,7 +452,7 @@ describe("complete independent App CI project inventory", () => {
       expectAppSelection(native, canonicalAppProject(all, project));
       const selected = native.filter(
         row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
-          && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row),
+          && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row) && !isNov26(row),
       );
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
@@ -492,10 +502,10 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(compactMatter.map(row => row.id)).size).toBe(2);
     expect(compactMatter.every(row => row.retries === 0 && row.repeat === 0
       && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
-    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22, ...nov24, ...nov25];
+    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22, ...nov24, ...nov25, ...nov26];
     expect(new Set(reviewed.map(row => row.id))).toEqual(new Set(all.map(row => row.id)));
     expect(new Set(all.map(row => row.id)).size).toBe(all.length);
-    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 767, "app-mobile": 70 });
+    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 768, "app-mobile": 71 });
   });
 
   it("requires every exact Nov22 release identity outside the unchanged prior cohorts", () => {
@@ -521,6 +531,14 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(nov25.map(row => row.id)).size).toBe(nov25Cases.length);
     expect(nov25.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
     expect(counts(nov25.map(row => row.project))).toEqual({ "app-chromium": 17, "app-mobile": 2 });
+  });
+
+  it("requires every exact Nov26 research answer layout identity outside the prior cohorts", () => {
+    expect(nov26.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov26Keys].sort());
+    expect(new Set(nov26.map(row => row.id)).size).toBe(nov26Cases.length);
+    expect(nov26.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts(nov26.map(row => row.project))).toEqual({ "app-chromium": 1, "app-mobile": 1 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

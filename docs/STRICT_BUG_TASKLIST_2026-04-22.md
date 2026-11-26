@@ -1,3 +1,29 @@
+## November 26 - BUG-001 research answer layout (Ram, Medium)
+
+Report: /app/research/answers/<id> shows the content on the left with
+excessive space on the right, and spacing between headings, paragraphs and
+sections is inconsistent. Valid bug, reproduced in code: the app shell `<main>`
+has no width cap and each answer block set its own (`max-w-prose` = 65ch of
+16px, 14px or 12px text, `max-w-3xl` on the timeline, none on authority cards
+and actions), with mixed `mt-*` margins. The same view nested cards inside the
+question card on /app/research.
+
+Fix (J05/M04): one shared `components/ui/ReadingColumn.tsx` (centred, 70ch of
+the 16px body face) holds the page header, document and actions; no block sets
+its own width; spacing is gap-8 between parts, gap-4 between blocks, gap-2
+inside a block; part headings 20px, numbered sub-sections 16px, authority
+titles 14px. On /app/research the answer renders below the question card. The
+pending state (BUG-003 frontend) shows the step, an mm:ss counter from
+`created_at` and "usually take one to two minutes". Sweep: the Matter File Q&A
+answer had the same mismatched caps (fixed); other inventory items were
+acceptable or uncapped-line issues (not changed).
+
+Tests: vitest layout/pending contracts (7 failed on the old code) and
+`tests/e2e/research-answer-layout-2026-11-26.spec.ts` (geometry at
+1280/1440/1920, 1440 at 80-150% zoom, 375 phone), registered in the App and
+research-answer production configs. Verdict: Inconclusive until that spec
+passes on the deployed release as the test-legal tester.
+
 ## November 26 - workbook "Caseops Bugs (2)" (25 Nov, three rows, nova-legal)
 
 Triage (all three reproduce on production release 1ed725ce2 and on main):
