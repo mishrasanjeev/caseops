@@ -649,3 +649,24 @@ def test_a_judgment_whose_title_is_a_page_header_is_named_from_its_record(
         manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
     assert unnamed in {item["id"] for item in manifest}
 
+
+
+@pytest.mark.parametrize(
+    ("title", "named"),
+    [
+        ("HON\u2019BLE SRI JUSTICE B. CHANDRA KUMAR", False),
+        ("Court No. - 25", False),
+        ("https://hcservices.ecourts.gov.in/hcservices/", False),
+        ("AT HYDERABAD", False),
+        ("Yogendra Pratap Singh v. Savitri Pandey & Anr.", True),
+    ],
+)
+def test_judgment_identity_rejects_headers_seen_in_production(title: str, named: bool) -> None:
+    document = AuthorityDocument(
+        title=title, court_name="Telangana High Court", case_reference="CRL.P. 1/2020",
+        decision_date=date(2020, 1, 2), parties_json=None,
+    )
+    shown, is_named = service._judgment_identity(document)
+    assert is_named is named
+    if not named:
+        assert shown == "Case name not recorded: CRL.P. 1/2020, Telangana High Court, 2020-01-02"

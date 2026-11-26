@@ -19,7 +19,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import { json, prepareTester, stamp, type TesterRuntime } from "./support/ram-bugs4";
 import { OFF_ISSUE_JUDGMENT_TITLE, seedLocalResearchSources } from "./support/research-local-sources";
@@ -40,6 +40,29 @@ type Record_ = {
   id: string; status: string; error_code: string | null; message: string | null;
   answer: { question_focus: string[] } | null; sources: Source[]; suggestions: string[];
 };
+
+/** Statute sources lead with Section 138 NI Act and never leave the NI Act. */
+function expectSection138Sources(record: Record_) {
+  const statutes = record.sources.filter((source) => source.kind === "statute_section");
+  expect(statutes[0]?.title, "the provision asked about is the first statutory source")
+    .toMatch(/^Section 138, Negotiable Instruments Act/);
+  for (const source of statutes) {
+    expect(source.title, "statutory sources stay in the Act the question is about")
+      .toContain("Negotiable Instruments Act");
+  }
+  expect(record.sources[0]?.kind, "a statutory source leads").toBe("statute_section");
+}
+
+/** No authority card is a page header, file name, court room or URL. */
+async function expectIdentifiableAuthorities(answer: Locator) {
+  const titles = await answer.getByTestId("research-authority-card").locator("h4").allTextContents();
+  expect(titles.length).toBeGreaterThan(0);
+  for (const title of titles) {
+    expect(title).not.toMatch(/Code of Criminal Procedure|Nagarik Suraksha Sanhita/);
+    expect(title, "an authority a lawyer can identify")
+      .not.toMatch(/^AT [A-Z]+$|\.docx?$|^https?:|^Court No\.?\s*-|^HON.?BLE/i);
+  }
+}
 
 async function readRecord(rt: TesterRuntime, page: Page, id: string): Promise<Record_> {
   return json<Record_>(await page.request.get(`${rt.api.origin}/api/research/answers/${id}`,
@@ -84,22 +107,31 @@ for (const phone of [false, true]) {
     await expect(page.getByTestId("research-question-focus")).toContainText(FOCUS_138);
     const record = await readRecord(rt, page, first.id);
     expect(record.answer?.question_focus).toContain(FOCUS_138);
-    const statutes = record.sources.filter((source) => source.kind === "statute_section");
-    expect(statutes.length).toBeGreaterThan(0);
-    for (const source of statutes) {
-      expect(source.title, "statutory sources stay in the Act the question is about")
-        .toContain("Negotiable Instruments Act");
-    }
-    const cardTitles = await answer.getByTestId("research-authority-card").locator("h4").allTextContents();
-    for (const title of cardTitles) {
-      expect(title).not.toMatch(/Code of Criminal Procedure|Nagarik Suraksha Sanhita/);
-    }
+    expectSection138Sources(record);
+    await expectIdentifiableAuthorities(answer);
     // Loopback seeds the off-issue Section 482 / 420 judgment beside the
     // Section 138 authority; it matches the question's words but must never be listed.
     if (rt.local) expect(record.sources.map((source) => source.title)).not.toContain(OFF_ISSUE_JUDGMENT_TITLE);
     await expect(page.getByTestId("research-short-answer")).not.toContainText(/Section\s+482|Section\s+528/);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(1);
+
+    if (!phone) {
+      // Ram's own a26e66ed: "explain the section 138?" names no Act. It led with
+      // Section 482 CrPC and listed Section 482 applications.
+      await page.goto(`${rt.web.origin}/app/research?tab=answer`);
+      await page.getByLabel("Legal question").fill(`explain the section 138? (${stamp("B6")})`);
+      const bare = page.waitForResponse((r) => r.request().method() === "POST"
+        && new URL(r.url()).pathname === "/api/research/answers");
+      await page.getByRole("button", { name: "Get research answer" }).click();
+      const bareId = (await json<{ id: string }>(await bare, "Queue the bare section question", 202)).id;
+      const bareAnswer = page.getByTestId("research-answer");
+      await expect(bareAnswer).toBeVisible({ timeout: ANSWER_BOUND_MS });
+      await expect(page.getByTestId("research-question-focus")).toContainText(FOCUS_138);
+      const bareRecord = await readRecord(rt, page, bareId);
+      expectSection138Sources(bareRecord);
+      await expectIdentifiableAuthorities(bareAnswer);
+    }
   });
 }
 

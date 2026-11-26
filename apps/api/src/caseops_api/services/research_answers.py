@@ -420,6 +420,11 @@ def _retrieval_query(query: str, focus: _Focus, matter: Matter | None) -> str:
     return " ".join(part for part in parts if part)
 
 
+# A bench line ("HON'BLE SRI JUSTICE B. CHANDRA KUMAR", "CORAM: ...") names the
+# judge, not the case, though it passes the corpus proper-noun test.
+_JUDGE_HEADER_RE = re.compile(r"^(?:HON.?BLE|THE\s+HONOU?RABLE|HONOU?RABLE|CORAM|BEFORE)\b", re.I)
+
+
 def _judgment_identity(document: AuthorityDocument) -> tuple[str, bool]:
     """A title a lawyer can recognise, and whether the record names the case.
 
@@ -429,7 +434,7 @@ def _judgment_identity(document: AuthorityDocument) -> tuple[str, bool]:
     that, the case number, court and date identify it, marked as unnamed.
     """
     title = _collapse(document.title or "")
-    if title_is_case_name(title)[0]:
+    if title_is_case_name(title)[0] and not _JUDGE_HEADER_RE.match(title):
         return title, True
     try:
         parties = json.loads(document.parties_json or "{}")
