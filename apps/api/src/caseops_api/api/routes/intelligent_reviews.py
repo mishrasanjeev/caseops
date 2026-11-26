@@ -15,6 +15,7 @@ from caseops_api.schemas.intelligent_reviews import (
     IntelligentReviewRecord,
     IntelligentReviewSelectionRequest,
 )
+from caseops_api.services.document_dispatch import dispatch_ai_job
 from caseops_api.services.intelligent_reviews import (
     enqueue_intelligent_review,
     finalize_intelligent_review,
@@ -51,11 +52,15 @@ def create_intelligent_review(
     review = enqueue_intelligent_review(session, context=context, payload=payload)
     review_id = review.id
     record = serialize_intelligent_review(session, review=review)
-    # Starlette runs BackgroundTasks before FastAPI closes yielded request
-    # dependencies. End the serialization read transaction before a model call
-    # that can legitimately outlive PostgreSQL's idle-transaction boundary.
-    session.rollback()
-    background_tasks.add_task(run_intelligent_review_job, review_id)
+    # The dispatch boundary ends the serialization read transaction before any
+    # model call, then wakes the independent AI job in production. A failed
+    # wake leaves the committed review queued for the per-minute scheduler.
+    dispatch_ai_job(
+        session=session,
+        background_tasks=background_tasks,
+        job_id=review_id,
+        runner=run_intelligent_review_job,
+    )
     return record
 
 

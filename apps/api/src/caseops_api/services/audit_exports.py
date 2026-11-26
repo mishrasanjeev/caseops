@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -304,31 +304,37 @@ class _BytesIterStream(io.RawIOBase):
         return self._bytes_written
 
 
-def run_export_job(job_id: str) -> None:
+def run_export_job(job_id: str) -> bool:
     """Worker body. Opens its own session so the caller can schedule
-    this as a FastAPI BackgroundTask, from a worker CLI, or from a
-    Temporal activity.
+    this as a local BackgroundTask or from the independent AI job.
+
+    The compare-and-set claim is atomic on every dialect; False means another
+    executor owns the job or it is no longer runnable.
     """
     Session = get_session_factory()
     with Session() as session:
+        claimed = session.execute(
+            update(AuditExportJob)
+            .where(
+                AuditExportJob.id == job_id,
+                AuditExportJob.status.in_(
+                    (AuditExportJobStatus.PENDING, AuditExportJobStatus.FAILED)
+                ),
+            )
+            .values(
+                status=AuditExportJobStatus.RUNNING,
+                started_at=datetime.now(UTC),
+                error=None,
+            )
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        session.commit()
+        if claimed != 1:
+            logger.info("audit export job %s is not runnable; skipping run", job_id)
+            return False
         job = session.get(AuditExportJob, job_id)
         if job is None:
-            logger.warning("audit export job %s vanished before run", job_id)
-            return
-        if job.status not in {
-            AuditExportJobStatus.PENDING,
-            AuditExportJobStatus.FAILED,
-        }:
-            logger.info(
-                "audit export job %s is in status %s; skipping run",
-                job.id,
-                job.status,
-            )
-            return
-        job.status = AuditExportJobStatus.RUNNING
-        job.started_at = datetime.now(UTC)
-        job.error = None
-        session.commit()
+            return True
 
         try:
             membership = (
@@ -405,6 +411,7 @@ def run_export_job(job_id: str) -> None:
             job.error = redact_provider_error(exc)
             job.completed_at = datetime.now(UTC)
             session.commit()
+    return True
 
 
 __all__ = [

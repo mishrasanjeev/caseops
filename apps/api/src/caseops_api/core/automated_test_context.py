@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 NO_PAID_PROVIDERS_HEADER = "X-CaseOps-Automated-Test"
@@ -50,6 +52,27 @@ def provider_replay_requested() -> bool:
     return _provider_replay_requested.get() and paid_providers_blocked_for_request()
 
 
+@contextmanager
+def restored_no_paid_marker(persisted: bool) -> Iterator[None]:
+    """Re-enter a queued job's persisted no-paid marker outside its request.
+
+    A worker has no request headers. The marker captured when the row was
+    queued is restored before any embedding or model call; an already-blocked
+    context stays blocked. Replay permission is request-local and never
+    queued, so it is cleared.
+    """
+
+    marker = set_automated_test_request(
+        NO_PAID_PROVIDERS_VALUE if persisted or paid_providers_blocked_for_request() else None
+    )
+    replay = set_provider_replay_request(None)
+    try:
+        yield
+    finally:
+        reset_provider_replay_request(replay)
+        reset_automated_test_request(marker)
+
+
 __all__ = [
     "NO_PAID_PROVIDERS_HEADER",
     "NO_PAID_PROVIDERS_VALUE",
@@ -59,6 +82,7 @@ __all__ = [
     "provider_replay_requested",
     "reset_automated_test_request",
     "reset_provider_replay_request",
+    "restored_no_paid_marker",
     "set_automated_test_request",
     "set_provider_replay_request",
 ]

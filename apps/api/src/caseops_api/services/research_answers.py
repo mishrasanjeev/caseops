@@ -29,15 +29,20 @@ from urllib.parse import quote
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from caseops_api.core.automated_test_context import (
+    paid_providers_blocked_for_request,
+    restored_no_paid_marker,
+)
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     AuditActorType,
     AuditResult,
     AuthorityDocument,
     AuthorityDocumentChunk,
+    CompanyMembership,
     Matter,
     ModelRun,
     ResearchAnswer,
@@ -938,21 +943,55 @@ def _matter_in_company(session: Session, *, context: SessionContext, matter_id: 
     return matter
 
 
+def _normalised_query(query: str) -> str:
+    return " ".join(query.split()).casefold()
+
+
 def create_research_answer(
     session: Session, *, context: SessionContext, payload: ResearchAnswerCreateRequest
-) -> ResearchAnswer:
+) -> tuple[ResearchAnswer, bool]:
+    """Queue an answer, or return the requester's identical one still in flight.
+
+    The second element is False when an existing queued or running answer was
+    returned; the caller must not dispatch it again.
+    """
     matter = (
         _matter_in_company(session, context=context, matter_id=payload.context_matter_id)
         if payload.context_matter_id
         else None
     )
+    # Serialise this requester's submissions so a double submit cannot race
+    # past the duplicate check. NO KEY UPDATE leaves foreign-key readers free.
+    session.execute(
+        select(CompanyMembership.id)
+        .where(CompanyMembership.id == context.membership.id)
+        .with_for_update(key_share=True)
+    )
     now = datetime.now(UTC)
+    in_flight = session.scalars(
+        select(ResearchAnswer)
+        .where(
+            ResearchAnswer.company_id == context.company.id,
+            ResearchAnswer.created_by_membership_id == context.membership.id,
+            ResearchAnswer.status.in_(("queued", "running")),
+            ResearchAnswer.created_at > now - STALE_AFTER,
+            ResearchAnswer.context_matter_id.is_(None)
+            if matter is None
+            else ResearchAnswer.context_matter_id == matter.id,
+        )
+        .order_by(ResearchAnswer.created_at.desc())
+    )
+    query_key = _normalised_query(payload.query)
+    for existing in in_flight:
+        if _normalised_query(existing.query) == query_key:
+            return existing, False
     answer = ResearchAnswer(
         company_id=context.company.id,
         created_by_membership_id=context.membership.id,
         context_matter_id=matter.id if matter else None,
         query=payload.query,
         status="queued",
+        no_paid_providers=paid_providers_blocked_for_request(),
         analysis_version=ANALYSIS_VERSION,
         created_at=now,
         updated_at=now,
@@ -970,25 +1009,41 @@ def create_research_answer(
     )
     session.commit()
     session.refresh(answer)
-    return answer
+    return answer, True
 
 
-def run_research_answer_job(answer_id: str) -> None:
+def run_research_answer_job(answer_id: str) -> bool:
+    """Run one queued answer; False when another executor owns or settled it."""
     with get_session_factory()() as session:
-        answer = session.get(ResearchAnswer, answer_id)
-        if answer is None or answer.status != "queued":
-            return
-        answer.status = "running"
-        answer.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        # Compare-and-set is the claim on every dialect: exactly one executor
+        # moves a fresh queued row to running. A stale row is left to settle.
+        claimed = session.execute(
+            update(ResearchAnswer)
+            .where(
+                ResearchAnswer.id == answer_id,
+                ResearchAnswer.status == "queued",
+                ResearchAnswer.created_at > now - STALE_AFTER,
+            )
+            .values(status="running", updated_at=now)
+            .execution_options(synchronize_session=False)
+        ).rowcount
         session.commit()
-        try:
-            _run(session, answer)
-        except Exception:  # noqa: BLE001 - a background job must end in a terminal state.
-            logger.exception("research answer job failed")
-            session.rollback()
-            answer = session.get(ResearchAnswer, answer_id)
-            if answer is not None and answer.status in {"queued", "running"}:
-                _finish(session, answer, state="failed", error_code="internal_error")
+        if claimed != 1:
+            return False
+        answer = session.get(ResearchAnswer, answer_id)
+        if answer is None:
+            return True
+        with restored_no_paid_marker(answer.no_paid_providers):
+            try:
+                _run(session, answer)
+            except Exception:  # noqa: BLE001 - a background job must end in a terminal state.
+                logger.exception("research answer job failed")
+                session.rollback()
+                answer = session.get(ResearchAnswer, answer_id)
+                if answer is not None and answer.status in {"queued", "running"}:
+                    _finish(session, answer, state="failed", error_code="internal_error")
+        return True
 
 
 def _run(session: Session, answer: ResearchAnswer) -> None:
