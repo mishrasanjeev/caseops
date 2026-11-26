@@ -112,7 +112,10 @@ const isDelete = (pattern: RegExp) => (r: { url(): string; request(): { method()
 /** New client dialog on /app/clients. */
 async function createClientThroughUi(page: Page, rt: Runtime, name: string): Promise<string> {
   await page.goto(`${rt.web.origin}/app/clients`);
-  await page.getByTestId("new-client-open").click();
+  // A tenant with no clients also shows the same trigger in its empty state (CI app-mobile,
+  // 26 Nov 2026), so use the page header action, which is present in both states.
+  await page.locator("header").filter({ has: page.getByRole("heading", { name: "Clients & engagements" }) })
+    .getByTestId("new-client-open").click();
   const dialog = page.getByRole("dialog");
   await dialog.getByTestId("new-client-name").fill(name);
   const created = page.waitForResponse(isPost(/^\/api\/clients\/?$/));

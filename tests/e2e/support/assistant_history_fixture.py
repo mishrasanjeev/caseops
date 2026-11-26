@@ -73,6 +73,7 @@ def main() -> None:
     )
     from caseops_api.db.session import get_session_factory
     from caseops_api.schemas.matters import normalize_matter_code
+    from caseops_api.schemas.workspace_assistant import MATTER_RECORD_SOURCE_TYPES
     from caseops_api.services.session_context import SessionContext
     from caseops_api.services.workspace_assistant import (
         _persist_turn_pair, _resource_version, _sources_for_scopes, list_assistant_turns,
@@ -127,8 +128,15 @@ def main() -> None:
                     and scopes[0].resource_version == _resource_version(matter))
             sources = _sources_for_scopes(session, context=context, scope_rows=scopes,
                                           question="What is this matter's recorded status?")
-            require(len(sources) == 1 and sources[0].source_type == "matter" and sources[0].source_id == matter.id
-                    and sources[0].source_version == _resource_version(matter))
+            # A Matter scope yields the Matter itself plus one source per record kind
+            # (parties, hearings, tasks, documents, statutes; Nov 25 workbook row 3).
+            by_type = {source.source_type: source for source in sources}
+            require(len(sources) == 1 + len(MATTER_RECORD_SOURCE_TYPES)
+                    and set(by_type) == {"matter", *MATTER_RECORD_SOURCE_TYPES}
+                    and all(source.source_id == matter.id for source in sources)
+                    and by_type["matter"].source_version == _resource_version(matter))
+            # Each synthetic answer states only the Matter's status, so it cites only the Matter.
+            sources = [by_type["matter"]]
             stage = "persist"
             for index in range(26 if history else 1):
                 question = f"Synthetic local fixture question {index + 1}: what is the recorded Matter status?"
