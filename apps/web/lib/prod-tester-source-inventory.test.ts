@@ -272,7 +272,7 @@ const nov25Cases = [
   ["app-mobile", "nova-2026-11-25-client-links.spec.ts", "[mobile] row 2 links a client from the matter overview on a phone"],
 ] as const;
 const nov25Keys = new Set(nov25Cases.map(([project, file, title]) => JSON.stringify([project, [file, title]])));
-const nov25Files = new Set(nov25Cases.map(([, file]) => file).filter(file => file !== motorStatuteFile));
+const nov25Files = new Set<string>(nov25Cases.map(([, file]) => file).filter(file => file !== motorStatuteFile));
 const isNov25 = (row: Case) => nov25Files.has(row.file)
   || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25ConstitutionPrefix)));
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
