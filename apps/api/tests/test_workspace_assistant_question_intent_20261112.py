@@ -392,7 +392,8 @@ def test_named_act_question_without_linked_sections_gets_cited_absence_and_hando
     assert turn["status"] == "completed"
     assert turn["content"] != ABSTENTION
     assert "I cannot explain or interpret statutory provisions here." in turn["content"]
-    assert "Linked sections: none recorded." in turn["content"]
+    # Nothing is linked, whichever Act the question names.
+    assert f"No statute sections are linked to {case.matter['matter_code']}." in turn["content"]
     assert turn["model"] is None
     assert case.provider_builds == []
     assert case.provider.calls == []

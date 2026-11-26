@@ -50,6 +50,7 @@ type AssistantTurn = {
   render_status: string;
   citations: Citation[];
   proposed_actions: Action[];
+  suggested_searches: string[];
   model: { provider: string } | null;
 };
 type AssistantSession = { id: string; title: string; version: number; scopes: { scope_type: string; scope_id: string }[] };
@@ -245,13 +246,17 @@ test("row 3 Ask Workspace answers parties, pending actions, documents and Act se
 
     const documents = await ask("List all documents available in this matter.");
     expect(kinds(documents.turn)).toContain("matter_documents");
-    expect(documents.turn.content).toContain("Documents in this matter: 0");
+    // A model answer quotes the recorded count; if the model abstains, the record answer states it.
+    const statesNoDocuments = documents.turn.content.includes("Documents in this matter: 0")
+      || documents.turn.content.includes(`No documents are listed on ${matter.code}.`);
+    expect(statesNoDocuments, "The answer states the recorded absence of documents").toBe(true);
+    expect(documents.turn.suggested_searches).toEqual([]);
 
     const statutes = await ask(HMA_QUESTION);
     expect(statutes.turn.model, "A statute question is never sent to a model").toBeNull();
     expect(kinds(statutes.turn)).toEqual(["matter_statutes"]);
     expect(statutes.turn.content).toContain("I cannot explain or interpret statutory provisions here.");
-    expect(statutes.turn.content).toContain("Linked sections: none recorded.");
+    expect(statutes.turn.content).toContain(`No section of the Hindu Marriage Act, 1955 is linked to ${matter.code}.`);
     const handoff = statutes.turn.proposed_actions.filter((action) => action.action_type === "search");
     expect(handoff).toHaveLength(1);
     const destination = new URL(handoff[0].href!, rt.web.origin);

@@ -1112,6 +1112,53 @@ def _matter_record_source(
     )
 
 
+def _linked_statute_rows(
+    session: Session,
+    *,
+    matter_ids: list[str],
+) -> dict[str, list[tuple[MatterStatuteReference, StatuteSection, Statute]]]:
+    """Statute sections linked to already-visible Matters, in display order."""
+
+    rows: dict[str, list[tuple[MatterStatuteReference, StatuteSection, Statute]]] = (
+        defaultdict(list)
+    )
+    if not matter_ids:
+        return rows
+    for reference, section, statute in session.execute(
+        select(MatterStatuteReference, StatuteSection, Statute)
+        .join(StatuteSection, StatuteSection.id == MatterStatuteReference.section_id)
+        .join(Statute, Statute.id == StatuteSection.statute_id)
+        .where(MatterStatuteReference.matter_id.in_(matter_ids))
+        .order_by(
+            Statute.short_name.asc(),
+            StatuteSection.ordinal.asc(),
+            StatuteSection.section_number.asc(),
+            MatterStatuteReference.id.asc(),
+        )
+    ).all():
+        rows[reference.matter_id].append((reference, section, statute))
+    return rows
+
+
+def _linked_statute_item(
+    reference: MatterStatuteReference,
+    section: StatuteSection,
+    statute: Statute,
+) -> str:
+    from caseops_api.api.routes.statutes import _is_selectable_statute_section
+
+    return (
+        f"{statute.long_name or statute.short_name} {section.section_number}"
+        + (f" {_quoted(section.section_label, limit=80)}" if section.section_label else "")
+        + f" (relevance {_quoted(reference.relevance, limit=32)}; "
+        + (
+            "verified section text available)"
+            if _is_selectable_statute_section(section)
+            else "verified section text not available)"
+        )
+    )
+
+
 def _matter_record_sources(
     session: Session,
     *,
@@ -1125,8 +1172,6 @@ def _matter_record_sources(
     restricted, inactive or other-tenant Matters never yield a source. Record
     text entered by users is quoted data; document text is never included.
     """
-
-    from caseops_api.api.routes.statutes import _is_selectable_statute_section
 
     if not matter_ids:
         return []
@@ -1154,15 +1199,17 @@ def _matter_record_sources(
         .where(
             MatterClientAssignment.matter_id.in_(visible_ids),
             Client.company_id == company_id,
-            Client.is_active.is_(True),
         )
         .order_by(MatterClientAssignment.is_primary.desc(), Client.name.asc(), Client.id.asc())
     ).all():
+        # Archived clients stay linked and are listed on the Matter's Clients
+        # card with an Archived badge; the assistant sees the same links.
         detail = ", ".join(
             value
             for value in (
                 f"role {_quoted(assignment.role)}" if assignment.role else "",
                 "primary" if assignment.is_primary else "",
+                "" if client.is_active else "archived client record",
             )
             if value
         )
@@ -1246,22 +1293,7 @@ def _matter_record_sources(
             continue
         compliance[item.matter_id].append(item)
 
-    statutes: dict[str, list[tuple[MatterStatuteReference, StatuteSection, Statute]]] = (
-        defaultdict(list)
-    )
-    for reference, section, statute in session.execute(
-        select(MatterStatuteReference, StatuteSection, Statute)
-        .join(StatuteSection, StatuteSection.id == MatterStatuteReference.section_id)
-        .join(Statute, Statute.id == StatuteSection.statute_id)
-        .where(MatterStatuteReference.matter_id.in_(visible_ids))
-        .order_by(
-            Statute.short_name.asc(),
-            StatuteSection.ordinal.asc(),
-            StatuteSection.section_number.asc(),
-            MatterStatuteReference.id.asc(),
-        )
-    ).all():
-        statutes[reference.matter_id].append((reference, section, statute))
+    statutes = _linked_statute_rows(session, matter_ids=visible_ids)
 
     membership_ids = {
         membership_id
@@ -1464,16 +1496,7 @@ def _matter_record_sources(
                     + _bounded_items(
                         "Linked sections",
                         [
-                            f"{statute.long_name or statute.short_name} "
-                            f"{section.section_number}"
-                            + (f" {_quoted(section.section_label, limit=80)}"
-                               if section.section_label else "")
-                            + f" (relevance {_quoted(reference.relevance, limit=32)}; "
-                            + (
-                                "verified section text available)"
-                                if _is_selectable_statute_section(section)
-                                else "verified section text not available)"
-                            )
+                            _linked_statute_item(reference, section, statute)
                             for reference, section, statute in statute_rows
                         ],
                         total=len(statute_rows),
@@ -1948,18 +1971,284 @@ def _asks_about_named_statute_sections(question: str) -> bool:
     return re.search(_NAMED_STATUTE_SECTIONS, normalized) is not None
 
 
-def _statute_handoff_answer(sources: list[_SourceCandidate]) -> str:
-    """A factual, cited record of linked sections; never an interpretation."""
+def _catalogue_name(value: str) -> str:
+    import re
 
+    folded = value.casefold().replace("&", " and ")
+    normalized = " ".join(re.sub(r"[^a-z0-9]+", " ", folded).split())
+    return normalized.removeprefix("the ")
+
+
+def _act_display_name(statute: Statute) -> str:
+    name = (statute.long_name or statute.short_name).strip()
+    return name[4:] if name.casefold().startswith("the ") else name
+
+
+def _named_catalogue_acts(session: Session, question: str) -> list[Statute]:
+    """The catalogue Acts a question names, by short or long name and year.
+
+    A long name matches with or without its year, but a different year after
+    it ("Hindu Marriage Act, 1956") is a different Act. Overlapping matches
+    keep the longest name, so "BNSS" never also resolves "BNS".
+    """
+
+    import re
+
+    text = _catalogue_name(question)
+    matches: list[tuple[int, int, Statute]] = []
+    for statute in session.scalars(select(Statute)).all():
+        names = {_catalogue_name(statute.short_name)}
+        if statute.long_name:
+            long_name = _catalogue_name(statute.long_name)
+            names.update({long_name, re.sub(r" \d{4}$", "", long_name)})
+        for name in filter(None, names):
+            for found in re.finditer(rf"(?<![a-z0-9]){re.escape(name)}(?![a-z0-9])", text):
+                year = re.match(r" (\d{4})(?![0-9])", text[found.end() :])
+                if year and statute.enacted_year and int(year.group(1)) != statute.enacted_year:
+                    continue
+                end = found.end() + (len(year.group(0)) if year else 0)
+                matches.append((found.start(), end, statute))
+    chosen: list[tuple[int, int, Statute]] = []
+    for start, end, statute in sorted(matches, key=lambda row: (row[0] - row[1], row[0])):
+        if all(end <= kept[0] or start >= kept[1] for kept in chosen):
+            chosen.append((start, end, statute))
+    acts: dict[str, Statute] = {}
+    for _start, _end, statute in sorted(chosen, key=lambda row: row[0]):
+        acts.setdefault(statute.id, statute)
+    return list(acts.values())
+
+
+def _act_counts(statute_ids: list[str], by_act: dict[str, list[str]], acts: dict) -> str:
+    return "; ".join(
+        f"{_act_display_name(acts[statute_id])} ({len(by_act[statute_id])} section"
+        f"{'' if len(by_act[statute_id]) == 1 else 's'})"
+        for statute_id in statute_ids
+    )
+
+
+def _statute_handoff_answer(
+    session: Session,
+    *,
+    context: SessionContext,
+    question: str,
+    sources: list[_SourceCandidate],
+) -> tuple[str, str]:
+    """A factual, cited record of linked sections; never an interpretation.
+
+    Lists the linked sections of the Act the question names, says plainly
+    when none of them is linked, and names other linked Acts on a separate
+    line. Every listed section is text of the cited source. Returns the
+    answer and its confidence: a listing of the named Act's sections is
+    ``medium`` (it does not answer the legal question); nothing to list for
+    that Act is ``low``.
+    """
+
+    named = _named_catalogue_acts(session, question)
+    matter_ids = [source.source_id for source in sources]
+    codes = dict(
+        session.execute(
+            select(Matter.id, Matter.matter_code).where(
+                Matter.company_id == context.company.id, Matter.id.in_(matter_ids)
+            )
+        ).all()
+    )
+    linked = _linked_statute_rows(session, matter_ids=matter_ids)
     lines = [
         "I cannot explain or interpret statutory provisions here. This is what "
         "the matter record holds:"
     ]
-    lines.extend(source.text for source in sources)
-    lines.append(
-        "Open verified Research to read the section text with citations."
-    )
-    return " ".join(lines)[:4000]
+    listed = False
+    for source in sources:
+        code = codes.get(source.source_id, "this matter")
+        by_act: dict[str, list[str]] = {}
+        acts: dict[str, Statute] = {}
+        for reference, section, statute in linked.get(source.source_id, []):
+            item = _linked_statute_item(reference, section, statute)
+            if item not in source.text:
+                continue
+            by_act.setdefault(statute.id, []).append(item)
+            acts[statute.id] = statute
+
+        if named:
+            for statute in named:
+                items = by_act.get(statute.id, [])
+                if items:
+                    listed = True
+                    lines.append(
+                        f"Sections of the {_act_display_name(statute)} linked to {code} "
+                        f"({len(items)}): " + "; ".join(items) + "."
+                    )
+                else:
+                    lines.append(
+                        f"No section of the {_act_display_name(statute)} is linked to {code}."
+                    )
+            named_ids = {statute.id for statute in named}
+            others = [statute_id for statute_id in by_act if statute_id not in named_ids]
+            if others:
+                lines.append(
+                    f"Other Acts with sections linked to {code}: "
+                    f"{_act_counts(others, by_act, acts)}."
+                )
+        else:
+            lines.append(
+                "The Act named in the question does not match one Act in the statute "
+                f"catalogue, so no section linked to {code} is listed for it."
+            )
+            lines.append(
+                f"Acts with sections linked to {code}: {_act_counts(list(by_act), by_act, acts)}."
+                if by_act
+                else f"No statute sections are linked to {code}."
+            )
+    lines.append("Open verified Research to read the section text with citations.")
+    return " ".join(lines)[:4000], "medium" if listed else "low"
+
+
+# --- Matter-record answers when the model abstains (Nov 25 row 3 review).
+# Kinds of Matter record a question asks about, in answer order.
+_RECORD_QUESTION_KINDS = (
+    (
+        "matter_parties",
+        r"\b(?:part(?:y|ies)|opposing|opponents?|respondents?|petitioners?|appellants?|"
+        r"plaintiffs?|defendants?|clients?|counsel|advocates?)\b",
+    ),
+    (
+        "matter_tasks",
+        r"\b(?:pending|tasks?|deadlines?|to-?dos?|actions?|compliance|outstanding|due)\b",
+    ),
+    ("matter_hearings", r"\b(?:hearings?|listed|listing|adjourn\w*|schedul\w*)\b"),
+    (
+        "matter_documents",
+        r"\b(?:documents?|files|uploads?|uploaded|attachments?|papers|pleadings?)\b",
+    ),
+    ("matter_statutes", r"\b(?:statutes?|sections?|acts|provisions?)\b"),
+)
+# Fixed template sentences that state an absence, per source type, phrased
+# for the reader. Matched only against whole sentences outside quoted data.
+_RECORD_ABSENCE_PHRASES = {
+    "matter_parties": {
+        "Client on the matter record: not recorded.": "No client name is recorded on {code}.",
+        "Linked client records: none recorded.": "No client record is linked to {code}.",
+        "Opposing party: not recorded.": "No opposing party is recorded on {code}.",
+        "Opposing counsel: not recorded.": "No opposing counsel is recorded on {code}.",
+    },
+    "matter_hearings": {
+        "Next hearing date on the matter record: not recorded.": (
+            "No next hearing date is recorded on {code}."
+        ),
+        "Scheduled hearings: none recorded.": "No scheduled hearings are recorded on {code}.",
+    },
+    "matter_tasks": {
+        "Open tasks: none recorded.": "No open tasks are recorded on {code}.",
+        "Open deadlines: none recorded.": "No open deadlines are recorded on {code}.",
+        "Pending compliance items: none recorded.": (
+            "No pending compliance items are recorded on {code}."
+        ),
+    },
+    "matter_documents": {"Documents in this matter: 0.": "No documents are listed on {code}."},
+    "matter_statutes": {
+        "Linked sections: none recorded.": "No statute sections are linked to {code}.",
+    },
+}
+# Template sentences that only introduce a source.
+_RECORD_PREAMBLES = (
+    "Parties and court record for matter ",
+    "Hearings for matter ",
+    "Pending work for matter ",
+    "Document list for matter ",
+    "Only names and processing details are listed",
+    "Statute sections linked to matter ",
+)
+_PARTY_LABELS = (
+    "Client on the matter record:",
+    "Linked client records",
+    "Opposing party:",
+    "Opposing counsel:",
+)
+
+
+# A request to do something is not a question about what is recorded.
+_WRITE_REQUEST = (
+    r"\b(?:prepare|draft|write|create|add|update|change|assign|remind|delete|remove)\b"
+)
+
+
+def _record_question_kinds(question: str) -> list[str]:
+    import re
+
+    normalized = " ".join(question.casefold().split())
+    if re.search(_WRITE_REQUEST, normalized):
+        return []
+    return [kind for kind, pattern in _RECORD_QUESTION_KINDS if re.search(pattern, normalized)]
+
+
+def _record_sentences(text: str) -> list[str]:
+    """Split source text into sentences, never inside quoted record data."""
+
+    import re
+
+    quoted: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        quoted.append(match.group(0))
+        return f"\x00{len(quoted) - 1}\x00"
+
+    masked = re.sub(r'"(?:[^"\\]|\\.)*"', hold, text)
+    return [
+        re.sub(r"\x00(\d+)\x00", lambda found: quoted[int(found.group(1))], sentence)
+        for sentence in re.split(r"(?<=\.)\s+", masked.strip())
+        if sentence
+    ]
+
+
+def _record_answer(
+    question: str,
+    sources: list[_SourceCandidate],
+) -> tuple[str, list[_SourceCandidate]] | None:
+    """Answer a Matter-record question from the record sources' own text.
+
+    Used only when the model abstained on a non-legal question. Absence lines
+    are restated plainly; every other statement is a verbatim sentence of a
+    cited source. Returns None when the question asks about no record kind.
+    """
+
+    kinds = _record_question_kinds(question)
+    if not kinds:
+        return None
+    matter_order = {
+        matter_id: index
+        for index, matter_id in enumerate(dict.fromkeys(source.source_id for source in sources))
+    }
+    chosen = sorted(
+        (source for source in sources if source.source_type in kinds),
+        key=lambda source: (matter_order[source.source_id], kinds.index(source.source_type)),
+    )[:MAX_CITATIONS_PER_TURN]
+    if not chosen:
+        return None
+    several = len({source.source_id for source in chosen}) > 1
+    parts: list[str] = []
+    for source in chosen:
+        code = source.label.rsplit(" · ", 1)[0]
+        phrases = _RECORD_ABSENCE_PHRASES[source.source_type]
+        statements: list[str] = []
+        for sentence in _record_sentences(source.text):
+            if sentence.startswith(_RECORD_PREAMBLES):
+                continue
+            if source.source_type == "matter_parties" and not sentence.startswith(_PARTY_LABELS):
+                continue
+            phrase = phrases.get(sentence)
+            statements.append(phrase.format(code=code) if phrase else sentence)
+        no_tasks = f"No open tasks are recorded on {code}."
+        no_deadlines = f"No open deadlines are recorded on {code}."
+        if no_tasks in statements and no_deadlines in statements:
+            statements[statements.index(no_tasks)] = (
+                f"No open tasks or deadlines are recorded on {code}."
+            )
+            statements.remove(no_deadlines)
+        if statements:
+            parts.append((f"{source.label}: " if several else "") + " ".join(statements))
+    if not parts:
+        return None
+    return " ".join(parts)[:4000], chosen
 
 
 def _asks_for_legal_proposition(question: str) -> bool:
@@ -2597,10 +2886,13 @@ def ask_workspace_assistant(
         # BUG-013 policy holds: no model call and no interpretation of law.
         # The reply is the cited matter record of linked sections plus the
         # verified Research hand-off.
+        handoff, handoff_confidence = _statute_handoff_answer(
+            session, context=context, question=question, sources=statute_sources
+        )
         parsed = _AssistantLLMResponse(
             status="answered",
-            answer=_statute_handoff_answer(statute_sources),
-            confidence="high",
+            answer=handoff,
+            confidence=handoff_confidence,
             used_source_ids=[candidate.key for candidate in statute_sources],
             suggested_searches=[],
         )
@@ -2828,8 +3120,29 @@ def ask_workspace_assistant(
         cited.append(source)
         if len(cited) >= MAX_CITATIONS_PER_TURN:
             break
-    answered = parsed.status == "answered" and bool(cited)
+    model_answered = parsed.status == "answered" and bool(cited)
+    answered = model_answered
     answer = parsed.answer if answered else ABSTENTION_ANSWER
+    confidence = parsed.confidence if answered else "insufficient"
+    record_answer = (
+        _record_answer(
+            question,
+            [
+                source
+                for source in provider_sources_current
+                if source.source_type in MATTER_RECORD_SOURCE_TYPES
+            ],
+        )
+        if completion is not None and not answered and not legal
+        else None
+    )
+    if record_answer is not None:
+        # The model abstained on a question about the Matter record. The record
+        # sources state what is and is not recorded, so answer with that, cited,
+        # instead of a generic refusal and a legal-research suggestion.
+        answer, cited = record_answer
+        answered = True
+        confidence = "medium"
     suggested = [] if answered else [ABSTENTION_SUGGESTION]
     research_matters = {
         source.source_id for source in cited if source.source_type == "matter_statutes"
@@ -2866,7 +3179,7 @@ def ask_workspace_assistant(
             prompt_tokens=completion.prompt_tokens,
             completion_tokens=completion.completion_tokens,
             latency_ms=completion.latency_ms,
-            status="ok" if answered else "abstained",
+            status="ok" if model_answered else "abstained",
         )
         session.add(model_run)
         session.flush()
@@ -2877,7 +3190,7 @@ def ask_workspace_assistant(
         question=question,
         answer=answer,
         answer_status="completed" if answered else "abstained",
-        confidence=parsed.confidence if answered else "insufficient",
+        confidence=confidence,
         sources=cited if answered else [],
         # Matter-record sources share their Matter's version, so an uncited
         # one adds no access fence beyond the Matter source already saved.
