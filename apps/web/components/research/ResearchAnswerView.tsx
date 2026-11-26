@@ -224,6 +224,12 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
         {" · Question: "}
         <span className="text-[var(--color-ink-2)]">{record.query}</span>
       </div>
+      {(answer.question_focus ?? []).length ? (
+        <p className="text-sm text-[var(--color-ink-2)]" data-testid="research-question-focus">
+          <span className="font-medium text-[var(--color-ink)]">Researched as: </span>
+          {(answer.question_focus ?? []).join("; ")}
+        </p>
+      ) : null}
 
       <section className="flex flex-col gap-4" aria-labelledby={`${record.id}-short`} data-testid="research-short-answer">
         <PartHeading id={`${record.id}-short`}>Short answer</PartHeading>
@@ -240,6 +246,16 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
             </p>
             <ul className="list-disc space-y-0.5 pl-5">
               {answer.missing_facts.map((fact, index) => <li key={index}>{fact}</li>)}
+            </ul>
+          </div>
+        ) : null}
+        {(answer.coverage_gaps ?? []).length ? (
+          <div className="flex flex-col gap-1 text-sm" data-testid="research-coverage-gaps">
+            <p className="font-medium text-[var(--color-mute-2)]">
+              Not covered, because the retrieved sources do not address it
+            </p>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {(answer.coverage_gaps ?? []).map((gap, index) => <li key={index}>{gap}</li>)}
             </ul>
           </div>
         ) : null}
@@ -330,12 +346,18 @@ export function researchAnswerToText(record: ResearchAnswerRecord): string {
   const answer = record.answer;
   if (!answer) return "";
   const sources = new Map(record.sources.map((source) => [source.number, source]));
-  const lines: string[] = [`Research question: ${record.query}`, `Law checked as of ${answer.law_checked_as_of}`, ""];
+  const lines: string[] = [`Research question: ${record.query}`, `Law checked as of ${answer.law_checked_as_of}`];
+  if (answer.question_focus?.length) lines.push(`Researched as: ${answer.question_focus.join("; ")}`);
+  lines.push("");
   lines.push("A. SHORT ANSWER", answer.short_answer.text);
   answer.key_points.forEach((point) => lines.push(`- ${point.text}`));
   if (answer.missing_facts.length) {
     lines.push("", "Facts needed:");
     answer.missing_facts.forEach((fact) => lines.push(`- ${fact}`));
+  }
+  if (answer.coverage_gaps?.length) {
+    lines.push("", "Not covered by the retrieved sources:");
+    (answer.coverage_gaps ?? []).forEach((gap) => lines.push(`- ${gap}`));
   }
   if (answer.assumptions.length) {
     lines.push("", "Assumptions:");

@@ -73,7 +73,9 @@ function answered(overrides: Partial<ResearchAnswerRecord> = {}): ResearchAnswer
         { source: 2, disposition: "supporting", proposition: "Notice timing.", relevance: "Same facts.", passage: "held the notice must be issued within thirty days", passage_verified: true, paragraph: "14", cited_inline: true },
       ],
       matter_facts: [],
-      verification: { removed_citation_markers: 1, unverified_passages: 0, uncited_paragraphs: 1, removed_unverified_mentions: 1, notes: ["1 passage(s) were withheld because they named a case that is not in the verified source set."] },
+      question_focus: [],
+      coverage_gaps: [],
+      verification: { removed_citation_markers: 1, unverified_passages: 0, uncited_paragraphs: 1, removed_unverified_mentions: 1, unlinked_authorities: 0, notes: ["1 passage(s) were withheld because they named a case that is not in the verified source set."] },
       law_checked_as_of: "2026-11-24",
       sources_retrieved_from: "2026-11-01T00:00:00Z",
       sources_retrieved_to: "2026-11-01T00:00:00Z",
@@ -83,6 +85,7 @@ function answered(overrides: Partial<ResearchAnswerRecord> = {}): ResearchAnswer
       { number: 1, kind: "statute_section", id: "sec-138", title: "Section 138, Negotiable Instruments Act, 1881", citation: "NI Act, Section 138", court: null, bench: null, decision_date: null, weight: "Statutory provision (verified text)", source_action: { ...action, target_type: "statute_section", target_id: "sec-138" }, in_app_href: "/app/statutes/ni-act-1881/sections/Section%20138", treatment_signal: null, retrieved_at: null },
       { number: 2, kind: "judgment", id: "doc-1", title: "Cheque dishonour <notice> limitation", citation: "2026:DHC:1380", court: "High Court of Delhi", bench: "Justice A. Rao", decision_date: "2026-05-01", weight: "Binding within High Court of Delhi's jurisdiction; persuasive elsewhere", source_action: action, in_app_href: null, treatment_signal: { worst_treatment: "distinguished", adverse_count: 2 }, retrieved_at: "2026-11-01T00:00:00Z" },
     ],
+    suggestions: [],
     ...overrides,
   };
 }
@@ -313,5 +316,47 @@ describe("ResearchAnswerStatus pending state", () => {
     render(<ResearchAnswerStatus record={answered({ status: "queued", answer: null, sources: [], created_at: "2026-11-24T10:00:00.123456" })} />);
     expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("00:41");
     expect(screen.getByTestId("research-answer-step")).toHaveTextContent("Queued");
+  });
+});
+
+describe("Nov 26 focus, coverage and abstention guidance", () => {
+  it("shows what the question was researched as and what the sources did not cover", () => {
+    const record = answered();
+    record.answer!.question_focus = ["Section 138, Negotiable Instruments Act, 1881"];
+    record.answer!.coverage_gaps = ["Territorial jurisdiction is not addressed by the retrieved sources."];
+    render(<ResearchAnswerView record={record} />);
+    expect(screen.getByTestId("research-question-focus")).toHaveTextContent(
+      "Researched as: Section 138, Negotiable Instruments Act, 1881",
+    );
+    expect(screen.getByTestId("research-coverage-gaps")).toHaveTextContent("Territorial jurisdiction");
+    const text = researchAnswerToText(record);
+    expect(text).toContain("Researched as: Section 138, Negotiable Instruments Act, 1881");
+    expect(text).toContain("Not covered by the retrieved sources:");
+  });
+
+  it("turns an abstention into usable next questions that fill the question box", () => {
+    const onUse = vi.fn();
+    const suggestion = "What are the essential ingredients, time limits and procedure under Section 9, Arbitration and Conciliation Act, 1996?";
+    const record = answered({
+      status: "abstained", error_code: "needs_detail", answer: null, sources: [],
+      message: "CaseOps could not tell which law this question is about. Name the Act and section.",
+      suggestions: [suggestion],
+    });
+    render(<ResearchAnswerStatus record={record} onUseSuggestion={onUse} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Name the Act and section");
+    fireEvent.click(screen.getByRole("button", { name: /Section 9, Arbitration/ }));
+    expect(onUse).toHaveBeenCalledWith(suggestion);
+  });
+
+  it("links suggestions back to Research with the matter on the permanent page", () => {
+    const record = answered({
+      status: "abstained", error_code: "no_sources", answer: null, sources: [],
+      context_matter: { id: "m-1", title: "Supplier cheque complaint" },
+      message: "No verified source.", suggestions: ["How does Section 9 apply?"],
+    });
+    render(<ResearchAnswerStatus record={record} onPermalinkPage />);
+    expect(screen.getByRole("link", { name: "How does Section 9 apply?" })).toHaveAttribute(
+      "href", "/app/research?tab=answer&q=How%20does%20Section%209%20apply%3F&matter=m-1",
+    );
   });
 });

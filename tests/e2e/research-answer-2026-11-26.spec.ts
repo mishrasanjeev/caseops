@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 
 import { json, prepareTester, stamp, type TesterRuntime } from "./support/ram-bugs4";
+import { OFF_ISSUE_JUDGMENT_TITLE, seedLocalResearchSources } from "./support/research-local-sources";
 import { disposeMatter } from "./support/retire-records";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
@@ -49,6 +50,7 @@ for (const phone of [false, true]) {
   test(`${phone ? "[mobile] " : ""}BUG-002/003 an unnamed-Act cheque question is researched on Section 138 only, once, inside the promised time`, async ({ page, request, baseURL }) => {
     test.setTimeout(420_000);
     const rt = await prepareTester(page, request, baseURL, { width: phone ? 390 : 1440, height: 900 });
+    if (rt.local) await seedLocalResearchSources();
     await page.goto(`${rt.web.origin}/app/research?tab=answer`);
     const question = `${UNNAMED_ACT_QUESTION} (${stamp("B6")})`;
 
@@ -62,7 +64,8 @@ for (const phone of [false, true]) {
     // BUG-003: a visible, honest pending state; no second submission possible.
     const pending = page.getByTestId("research-answer-pending");
     await expect(pending).toBeVisible();
-    await expect(pending).toContainText(/Elapsed \d+:\d{2}/);
+    await expect(page.getByTestId("research-answer-elapsed")).toHaveText(/^\d{2}:\d{2}$/);
+    await expect(page.getByTestId("research-answer-expectation")).toContainText("one to two minutes");
     await expect(page.getByRole("button", { name: /Researching/ })).toBeDisabled();
     const repeat = await json<{ id: string }>(await request.post(`${rt.api.origin}/api/research/answers`, {
       headers: rt.headers, data: { query: question },
@@ -87,9 +90,13 @@ for (const phone of [false, true]) {
       expect(source.title, "statutory sources stay in the Act the question is about")
         .toContain("Negotiable Instruments Act");
     }
-    for (const title of await answer.getByTestId("research-authority-card").getByRole("heading", { level: 4 }).allTextContents()) {
+    const cardTitles = await answer.getByTestId("research-authority-card").locator("h4").allTextContents();
+    for (const title of cardTitles) {
       expect(title).not.toMatch(/Code of Criminal Procedure|Nagarik Suraksha Sanhita/);
     }
+    // Loopback seeds the off-issue Section 482 / 420 judgment beside the
+    // Section 138 authority; it matches the question's words but must never be listed.
+    if (rt.local) expect(record.sources.map((source) => source.title)).not.toContain(OFF_ISSUE_JUDGMENT_TITLE);
     await expect(page.getByTestId("research-short-answer")).not.toContainText(/Section\s+482|Section\s+528/);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, "no horizontal page scroll").toBeLessThanOrEqual(1);
@@ -99,6 +106,7 @@ for (const phone of [false, true]) {
 test("BUG-004 a vague question asks for detail without a matter and is researched from the matter record", async ({ page, request, baseURL }) => {
   test.setTimeout(480_000);
   const rt = await prepareTester(page, request, baseURL, { width: 1440, height: 900 });
+  if (rt.local) await seedLocalResearchSources();
   const nonce = randomUUID().slice(0, 8).toUpperCase();
 
   // Without a matter: guidance, not "no indexed statute section or judgment".

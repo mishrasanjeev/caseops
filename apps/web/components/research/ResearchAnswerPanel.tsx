@@ -142,10 +142,13 @@ const USUAL_SECONDS = 120;
 export function ResearchAnswerStatus({
   record,
   onPermalinkPage = false,
+  onUseSuggestion,
 }: {
   record: ResearchAnswerRecord;
   /** On the answer's own page a link to it would point at the current URL. */
   onPermalinkPage?: boolean;
+  /** Puts a suggested question in the question box; without it, suggestions link to Research. */
+  onUseSuggestion?: (question: string) => void;
 }) {
   const pending = researchAnswerPending(record);
   // Counted from the record's own creation time, so leaving the page and
@@ -160,7 +163,7 @@ export function ResearchAnswerStatus({
               ? "Queued. Waiting to start the research run."
               : "Retrieving statutes and judgments, then drafting and verifying citations."}
           </span>
-          <span className="font-mono tabular-nums" data-testid="research-answer-elapsed">
+          <span className="font-mono tabular-nums" data-testid="research-answer-elapsed" aria-label={`Elapsed ${formatElapsed(elapsed)}`}>
             {formatElapsed(elapsed)}
           </span>
         </p>
@@ -185,9 +188,40 @@ export function ResearchAnswerStatus({
   }
   if (record.status === "abstained" || record.status === "failed") {
     return (
-      <p role="alert" className="text-sm text-[var(--color-warn-700)]" data-testid="research-answer-unavailable">
-        {record.message ?? "No answer was produced."}
-      </p>
+      <div className="flex flex-col gap-2 text-sm" data-testid="research-answer-unavailable">
+        <p role="alert" className="text-[var(--color-warn-700)]">
+          {record.message ?? "No answer was produced."}
+        </p>
+        {(record.suggestions ?? []).length ? (
+          <div className="flex flex-col gap-1" data-testid="research-answer-suggestions">
+            <p className="font-medium text-[var(--color-ink-2)]">Questions CaseOps can research instead</p>
+            <ul className="flex flex-col gap-1">
+              {(record.suggestions ?? []).map((suggestion) => (
+                <li key={suggestion}>
+                  {onUseSuggestion ? (
+                    <button
+                      type="button"
+                      className="text-left underline underline-offset-2"
+                      onClick={() => onUseSuggestion(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ) : (
+                    <Link
+                      className="underline underline-offset-2"
+                      href={`/app/research?tab=answer&q=${encodeURIComponent(suggestion)}${
+                        record.context_matter ? `&matter=${encodeURIComponent(record.context_matter.id)}` : ""
+                      }`}
+                    >
+                      {suggestion}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     );
   }
   return null;
@@ -269,7 +303,15 @@ export function ResearchAnswerPanel({
           {answer.isError ? (
             <p role="alert" className="text-sm text-[var(--color-danger-500)]">{apiErrorMessage(answer.error, "The research answer could not be loaded.")}</p>
           ) : null}
-          {record ? <ResearchAnswerStatus record={record} /> : null}
+          {record ? (
+            <ResearchAnswerStatus
+              record={record}
+              onUseSuggestion={canGenerate ? (suggestion) => {
+                setQuestion(suggestion);
+                document.getElementById("research-question")?.focus();
+              } : undefined}
+            />
+          ) : null}
           {recent.data?.items.length ? (
             <details className="text-sm">
               <summary className="cursor-pointer text-[var(--color-ink-2)]">

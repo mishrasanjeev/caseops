@@ -16,14 +16,10 @@
  * Section 138 sources into the fresh e2e database first, because retrieval
  * needs an indexed statute and judgment to answer at all.
  */
-import fs from "node:fs";
-import path from "node:path";
-
 import { expect, test, type Page } from "@playwright/test";
 
-import { e2eEnv, repoRoot } from "./support/env";
-import { runLocalPythonFixture } from "./support/local-python-fixture";
 import { prepareTester, type TesterRuntime } from "./support/ram-bugs4";
+import { seedLocalResearchSources } from "./support/research-local-sources";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 
@@ -42,91 +38,9 @@ const DESKTOP_WIDTHS: { label: string; width: number }[] = [
   })),
 ];
 
-/** Local only: the Section 138 statute and one judgment, as the backend tests seed them. */
-async function seedLocalSection138Sources() {
-  const python = process.env.CASEOPS_E2E_PYTHON?.trim() || path.join(repoRoot, "apps/api/.venv",
-    process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  expect(fs.existsSync(python), "The local API interpreter is required to seed retrieval sources.").toBe(true);
-  const script = String.raw`
-import datetime, json
-from datetime import date
-from sqlalchemy import select
-from caseops_api.db.models import (
-    AuthorityDocument, AuthorityDocumentChunk, AuthorityDocumentType, MatterForumLevel, Statute, StatuteSection,
-)
-from caseops_api.db.session import get_session_factory
-
-SECTION_TEXT = (
-    "Where any cheque drawn by a person on an account maintained by him with a banker for payment of any "
-    "amount of money to another person from out of that account for the discharge, in whole or in part, of "
-    "any debt or other liability, is returned by the bank unpaid, either because of the amount of money "
-    "standing to the credit of that account is insufficient to honour the cheque, such person shall be "
-    "deemed to have committed an offence."
-)
-JUDGMENT_TEXT = (
-    "1. This appeal concerns a complaint under the Negotiable Instruments Act.\n\n"
-    "14. A cheque was dishonoured for insufficient funds. The demand notice was served after thirty five "
-    "days. The court analysed Section 138 and Section 142 of the Negotiable Instruments Act and held the "
-    "notice must be issued within thirty days of information."
-)
-with get_session_factory()() as session:
-    statute = session.get(Statute, "ni-act-1881")
-    if statute is None:
-        statute = Statute(id="ni-act-1881", short_name="NI Act", long_name="Negotiable Instruments Act, 1881",
-                          enacted_year=1881)
-        session.add(statute)
-        session.flush()
-    section = session.scalar(select(StatuteSection).where(
-        StatuteSection.statute_id == "ni-act-1881", StatuteSection.section_number == "Section 138"))
-    if section is None:
-        section = StatuteSection(statute_id="ni-act-1881", section_number="Section 138", ordinal=138)
-        session.add(section)
-    section.section_label = "Dishonour of cheque for insufficiency of funds"
-    section.section_text = SECTION_TEXT
-    section.section_text_source = "official_source"
-    section.section_text_fetched_at = datetime.datetime.now(datetime.UTC)
-    section.verification_status = "verified_official"
-    section.source_sha256 = "b" * 64
-    section.source_publisher = "India Code"
-    section.issuing_body = "Legislative Department"
-    section.source_status = "official"
-    section.legal_status = "enacted"
-    section.exact_source_version = "consolidated-2026-11-01"
-    section.source_locator_type = "section_deep_link"
-    section.link_health_status = "available"
-    section.section_url = "https://www.indiacode.nic.in/show-data?actid=ni&orderno=138"
-    section.is_active = True
-    key = "e2e-research-layout-cheque-138"
-    if session.scalar(select(AuthorityDocument).where(AuthorityDocument.canonical_key == key)) is None:
-        document = AuthorityDocument(
-            source="e2e_research_layout_source", adapter_name="caseops-e2e-research-layout-v1",
-            court_name="High Court of Delhi", forum_level=MatterForumLevel.HIGH_COURT,
-            document_type=AuthorityDocumentType.JUDGMENT,
-            title="Cheque dishonour demand notice limitation under Section 138",
-            case_reference="CRL.A. 138/2026", bench_name="Justice A. Rao", neutral_citation="2026:DHC:1380",
-            decision_date=date(2026, 5, 1), canonical_key=key,
-            source_reference="https://official.example.test/cheque-138.pdf",
-            summary="Section 138 cheque dishonour, insufficient funds and demand notice timing.",
-            document_text=JUDGMENT_TEXT,
-            sections_cited_json=json.dumps(["Section 138 NI Act", "Section 142 NI Act"]),
-            extracted_char_count=len(JUDGMENT_TEXT),
-            retrieved_at=datetime.datetime(2026, 11, 1, tzinfo=datetime.UTC),
-        )
-        document.chunks = [AuthorityDocumentChunk(chunk_index=0, content=JUDGMENT_TEXT.split("\n\n")[1],
-                                                  token_count=60)]
-        session.add(document)
-    session.commit()
-`;
-  const result = await runLocalPythonFixture(python, ["-c", script], {
-    cwd: repoRoot, encoding: "utf8", timeout: 60_000,
-    env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps/api/src") },
-  });
-  expect(result.status, `Local Section 138 source seed failed: ${result.stderr.slice(-400)}`).toBe(0);
-}
-
 /** Ask the benchmark question through the UI and open the answer's permanent page. */
 async function answerThroughTheUi(page: Page, runtime: TesterRuntime, phone = false): Promise<string> {
-  if (runtime.local) await seedLocalSection138Sources();
+  if (runtime.local) await seedLocalResearchSources();
   await page.goto(`${runtime.web.origin}/app/research?tab=answer`);
   await expect(page.getByTestId("research-tool-answer")).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Legal question").fill(QUESTION);
