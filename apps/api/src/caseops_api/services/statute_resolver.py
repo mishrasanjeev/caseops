@@ -189,10 +189,18 @@ _ACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
 ]
 
+# The marker must start a word: "Acts 1955" or "cases 12" is not "s 1955".
 _SECTION_RE = re.compile(
-    r"(?:Section|Sec\.?|S\.?)\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)",
+    r"\b(?:Sections?|Secs?\.?|Ss?\.?)\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)",
     re.IGNORECASE,
 )
+# An enactment year ("Hindu Marriage Act, 1955", "Act of 1955") is part of the
+# Act's name and never a section number.
+_ACT_YEAR_RE = re.compile(
+    r"\b(Act|Code|Sanhita|Adhiniyam)\b\s*,?\s*(?:of\s+)?(?:1[6-9][0-9]{2}|20[0-9]{2})\b",
+    re.IGNORECASE,
+)
+_YEAR_LIKE_RE = re.compile(r"^(?:1[6-9][0-9]{2}|20[0-9]{2})$")
 _SECTION_SYMBOL_RE = re.compile(r"§\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)")
 _ARTICLE_RE = re.compile(
     r"(?:Article|Art\.?)\s*([0-9]+[A-Za-z]*)", re.IGNORECASE,
@@ -249,17 +257,19 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
     if statute_id == "constitution-india":
         return None
 
+    without_year = _ACT_YEAR_RE.sub(r"\1", cleaned)
     for pattern in (_SECTION_RE, _SECTION_SYMBOL_RE):
-        m = pattern.search(cleaned)
+        m = pattern.search(without_year)
         if m:
             return statute_id, f"Section {m.group(1)}"
 
     # Last-ditch: a bare number when an Act is unambiguous (e.g.
-    # "BNSS 483" with no Section/Sec/§ prefix). Cap at 4 digits to
-    # avoid catching years.
-    m = _BARE_NUMBER_RE.search(cleaned)
-    if m:
-        return statute_id, f"Section {m.group(1)}"
+    # "BNSS 483" with no Section/Sec/§ prefix). A year-like four-digit
+    # number is an enactment year (the Act's own or a citation's), never a
+    # section number.
+    for m in _BARE_NUMBER_RE.finditer(without_year):
+        if not _YEAR_LIKE_RE.match(m.group(1)):
+            return statute_id, f"Section {m.group(1)}"
     return None
 
 

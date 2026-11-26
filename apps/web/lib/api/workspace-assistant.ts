@@ -266,7 +266,8 @@ export function safeAssistantCitationHref(candidate: unknown): string {
     throw new Error("The citation destination is unavailable. Reopen the conversation and try again.");
   }
   const path = new URL(candidate, "https://caseops.invalid").pathname;
-  if (!/^\/app(?:\/(?:clients|matters(?:\/[A-Za-z0-9_-]{1,36})?|ip(?:\/documents)?))?$/.test(path)) {
+  // Matter-record evidence opens the Matter tab that holds it.
+  if (!/^\/app(?:\/(?:clients|matters(?:\/[A-Za-z0-9_-]{1,36}(?:\/(?:hearings|tasks|documents|statutes))?)?|ip(?:\/documents)?))?$/.test(path)) {
     throw new Error("The citation destination is unavailable. Reopen the conversation and try again.");
   }
   return candidate;
