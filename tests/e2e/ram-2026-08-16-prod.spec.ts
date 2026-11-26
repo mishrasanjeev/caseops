@@ -608,10 +608,18 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
         await trigger.click();
         await expect(drawer).toBeVisible();
       }
-      const groupHeading = drawer.getByText(action.group, { exact: true });
-      await groupHeading.scrollIntoViewIfNeeded();
-      await expect(groupHeading).toBeVisible();
-      const group = groupHeading.locator("..");
+      // Each group header is a disclosure button (Nov 24 workbook row 3), so
+      // the group is the element that holds that button and its link list.
+      const groupToggle = drawer
+        .locator("nav")
+        .getByRole("button", { name: action.group, exact: true });
+      await groupToggle.scrollIntoViewIfNeeded();
+      await expect(groupToggle).toBeVisible();
+      if ((await groupToggle.getAttribute("aria-expanded")) === "false") {
+        await groupToggle.click();
+      }
+      await expect(groupToggle).toHaveAttribute("aria-expanded", "true");
+      const group = groupToggle.locator("..");
       const link = group.getByRole("link", {
         name: action.label,
         exact: true,
