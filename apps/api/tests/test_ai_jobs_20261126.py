@@ -522,3 +522,23 @@ def test_worker_console_entry_and_import_boundary():
     tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
     imports = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert imports == {"__future__", "caseops_api.core.settings", "caseops_api.services.ai_jobs"}
+
+
+def test_the_cloud_job_environment_strings_start_the_worker(monkeypatch, capsys):
+    """Cloud Run passes CASEOPS_AI_JOB_WORKER_ADMISSION_PROTOCOL_VERSION as "1".
+
+    The Docker offline-startup gate caught the AI job worker crashing at
+    Settings() on that string while the document and court sync workers
+    accepted it; every unit test above passed integers.
+    """
+    from caseops_api.core.settings import get_settings
+    from caseops_api.workers import ai_jobs as module
+
+    monkeypatch.setenv("CASEOPS_AI_JOB_WORKER_ADMISSION_PROTOCOL_VERSION", "1")
+    monkeypatch.setenv("CASEOPS_AI_JOB_WORKER_ADMISSION_ENABLED", "false")
+    get_settings.cache_clear()
+    try:
+        assert module.main(["--once", "--skip-migrations"]) == 0
+    finally:
+        get_settings.cache_clear()
+    assert "admission_protocol=1 admission=disabled" in capsys.readouterr().out

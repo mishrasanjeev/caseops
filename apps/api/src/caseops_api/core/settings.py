@@ -678,6 +678,7 @@ class Settings(BaseSettings):
     @field_validator(
         "document_worker_admission_protocol_version",
         "court_sync_worker_admission_protocol_version",
+        "ai_job_worker_admission_protocol_version",
         mode="before",
     )
     @classmethod
