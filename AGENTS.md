@@ -3325,6 +3325,12 @@ requirements when using the fallback.
   with its pytest mirror, and `test_batch5_release_wiring.py`. Prove the
   checker against the real `--list` inventory, with the previous checker as
   the failing control.
+- An official source too large to commit (the 179 MB Income-tax Act, 1961
+  edition) is still pinned evidence: publish the unmodified bytes as a release
+  asset, record size and SHA-256 in the source manifest, have CI download,
+  verify before any use and cache by digest, and keep the cache outside the
+  checkout and Docker context. The compiler must refuse a missing or unverified
+  file rather than skip the Act; never fall back to a repository copy.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

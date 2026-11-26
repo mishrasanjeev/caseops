@@ -38,6 +38,23 @@ Verdicts (recorded after production verification): rows 1-3 Inconclusive until
 `nov25-prod-*` passes on the deployed release and row 3 is repeated with the
 real model on the reporting tester's MAT-003.
 
+Nov 26 row 1 follow-up (Income-tax Act, 1961): the owner chose the Income Tax
+Department consolidation "as amended by Finance Act, 2026" (India Code holds
+only the OCR-garbled as-enacted Gazette) and pinned it as release asset
+`statute-evidence-income-tax-1961-fa2026` (sha256 73d264fd...). It is compiled
+as a retained repealed-law edition (Income-tax Act, 2025 from 2026-04-01; end
+date 2026-03-31): 823 sections attachable of 965 identities, 130 retired, 12
+quarantined with reasons (multi-column tables in sections 40, 40A, 80-ID,
+115BAC, 115VG, 115WJ, 139, 206C, 211 and the Thirteenth and Fourteenth
+Schedules; 282B prints only "[***]"). Section 139 therefore stays withheld; the
+row 1 journey attaches Section 80C on desktop and phone. Section 186 is not in
+the edition and remains a placeholder. Adjacent, not changed here: drafting,
+strategy and research prompts quote any attachable repealed edition (IPC, CrPC,
+IEA and now this Act) without its repeal status, and the attached-reference row
+and Act option do not show it either; only the Section option and the section
+page do. Verdict: Inconclusive until `nov25-prod-*` passes on a deployed release
+carrying this bundle.
+
 ## November 25 - workbook "Caseops Bugs (1)" (24 Nov, six rows)
 
 Triage (all six reproduce against `origin/main` a430c593c):
