@@ -3512,12 +3512,14 @@ test('CI workflows scope the nine trust outputs to Node commands and retain exac
       }
     }
   }
-  // Two explicitly fenced scheduling proofs supplement the unchanged 208
-  // commands and 20 setups; every command still owns all nine trust outputs.
+  // Two explicitly fenced scheduling proofs supplement the 215 commands and
+  // 20 setups; every command still owns all nine trust outputs. The research
+  // answer acceptance adds one command to the shared prod-verify step list
+  // that seven jobs reuse.
   assert.deepEqual(nativePhaseCommands.sort(), ['ci.yml:web', 'ci.yml:web-windows']);
   assert.equal(setupCount, 20);
-  assert.equal(commandCount - nativePhaseCommands.length, 208);
-  assert.equal(commandCount, 210);
+  assert.equal(commandCount - nativePhaseCommands.length, 215);
+  assert.equal(commandCount, 217);
   const action = ciTrustYaml.load(readFileSync(new URL('../../.github/actions/node-trust/action.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(action.outputs).sort(), [...ciTrustKeys].sort());
   for (const key of ciTrustKeys) assert.equal(action.outputs[key].value, '${{ steps.prepare.outputs.' + key + ' }}');

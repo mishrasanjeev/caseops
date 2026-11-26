@@ -449,3 +449,26 @@ def test_a_run_interrupted_by_an_instance_restart_settles_on_read(
     settled = client.get(url, headers=auth_headers(token)).json()
     assert (settled["status"], settled["error_code"]) == ("failed", "timed_out")
     assert "did not finish" in settled["message"]
+
+
+@pytest.mark.parametrize("marked", [True, False])
+def test_the_background_answer_job_inherits_the_no_paid_marker(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, marked: bool
+) -> None:
+    # Production verification runs this journey with the no-paid marker and no
+    # AI budget guard: the job that runs after the response must still refuse
+    # paid embedding and model calls, and human traffic must stay unaffected.
+    from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+
+    observed: list[bool] = []
+    monkeypatch.setattr(
+        "caseops_api.api.routes.research_answers.run_research_answer_job",
+        lambda _id: observed.append(paid_providers_blocked_for_request()),
+    )
+    token = bootstrap_company(client)["access_token"]
+    headers = auth_headers(token)
+    if marked:
+        headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
+    response = client.post("/api/research/answers", headers=headers, json={"query": QUERY})
+    assert response.status_code == 202, response.text
+    assert observed == [marked]

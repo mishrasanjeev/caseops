@@ -2691,6 +2691,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "ip-renewal",
         "ip-cost",
         "notice",
+        "research-answer",
         "patent",
         "statute-sources",
         "public-pages",

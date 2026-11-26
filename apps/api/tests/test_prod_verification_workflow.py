@@ -2240,3 +2240,96 @@ def test_app_aggregate_native_guard_rejects_every_non_successful_matrix(tmp_path
         timeout=10,
     )
     assert (child.returncode == 0) is (result == "success")
+
+
+RESEARCH_ANSWER_INTRODUCED = "dc78a26088f403100382a98da929dd5c0417afaf"
+
+
+def test_research_answer_acceptance_runs_as_the_test_legal_tester_after_notice() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(
+        encoding="utf-8",
+    ))
+    names = [step.get("name") for step in workflow["jobs"]["prod-playwright-shards"]["steps"]]
+    check = names.index("Check release-owned research answer acceptance")
+    assert names.index("Run prod-Playwright suite (notice module)") < check
+    assert names[check + 1] == "Run research answer acceptance (Section 138 benchmark)"
+    step = _shard_step("Run research answer acceptance (Section 138 benchmark)")
+    assert "matrix.suite == 'supporting'" in step["if"]
+    assert "steps.research-answer-prerequisites.outputs.configured == 'true'" in step["if"]
+    assert step["env"]["CASEOPS_RAM_PROD_SLUG"] == "test-legal"
+    assert step["env"]["CASEOPS_RAM_PROD_EMAIL"] == "ram@testfirm.com"
+    assert step["env"]["CASEOPS_RAM_PROD_PASSWORD"] == (
+        "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}"
+    )
+    assert step["env"]["CASEOPS_EXPECTED_RELEASE_SHA"] == (
+        "${{ needs.resolve-release.outputs.release_sha }}"
+    )
+    assert 'test -n "${CASEOPS_RAM_PROD_PASSWORD:-}"' in step["run"]
+    assert (
+        'bash "$RUNNER_TEMP/caseops-prod-playwright" research-answer '
+        "--config=playwright.research-answer-prod.config.ts --reporter=list "
+        "--output=test-results/research-answer"
+    ) in step["run"]
+    config = (REPO_ROOT / "playwright.research-answer-prod.config.ts").read_text(encoding="utf-8")
+    assert r"/research-answer-2026-11-24\.spec\.ts$/" in config
+    assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+
+
+def test_research_answer_anchor_is_the_commit_that_introduced_the_journey() -> None:
+    if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+        pytest.skip("Shallow or absent Git history; the anchor needs the full repository history.")
+    for name in (
+        "playwright.research-answer-prod.config.ts",
+        "tests/e2e/research-answer-2026-11-24.spec.ts",
+    ):
+        assert _git("cat-file", "-e", f"{RESEARCH_ANSWER_INTRODUCED}:{name}").returncode == 0
+        assert _git("cat-file", "-e", f"{RESEARCH_ANSWER_INTRODUCED}^:{name}").returncode != 0
+    assert _git("merge-base", "--is-ancestor", RESEARCH_ANSWER_INTRODUCED, "HEAD").returncode == 0
+
+
+@pytest.mark.parametrize("files,descendant,code,configured,message", [
+    (True, 0, 0, "configured=true", ""),
+    (False, 1, 0, "configured=false", "::notice::Serving release predates"),
+    (False, 0, 1, None, "::error::Newer serving release is missing the research answer"),
+])
+def test_research_answer_check_owes_the_journey_to_every_release_that_carries_it(
+    tmp_path, files, descendant, code, configured, message,
+):
+    root = tmp_path / "checkout"
+    (root / "tests/e2e").mkdir(parents=True)
+    if files:
+        (root / "playwright.research-answer-prod.config.ts").touch()
+        (root / "tests/e2e/research-answer-2026-11-24.spec.ts").touch()
+    outputs = tmp_path / "github-output"
+    shim = (
+        'git() { [[ "$*" == "merge-base --is-ancestor ' + RESEARCH_ANSWER_INTRODUCED
+        + ' HEAD" ]] || return 97; return ' + str(descendant) + "; }\n"
+    )
+    script = _shard_step("Check release-owned research answer acceptance")["run"]
+    result = subprocess.run(
+        [_git_bash(), "-c", shim + script], cwd=root,
+        env={**os.environ, "GITHUB_OUTPUT": outputs.as_posix()},
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    assert result.returncode == code, result.stdout + result.stderr
+    recorded = outputs.read_text(encoding="utf-8").split() if outputs.exists() else []
+    assert recorded == ([configured] if configured else [])
+    assert message in result.stdout
+
+
+@pytest.mark.parametrize("configured,expected", [
+    ("true", ["notice", "research-answer"]), ("false", ["notice"]), ("", ["notice"]),
+])
+def test_supporting_suite_owes_the_research_receipt_exactly_when_it_ran(
+    tmp_path, configured, expected,
+):
+    root = _batch4_checkout(tmp_path, specs=True, governance=False)
+    result, invoked, required, _ = _run_offline_step(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"], root,
+        {"SUITE": "supporting", "HISTORICAL_A0": "false", "RENEWAL_CONFIGURED": "",
+         "COST_CONFIGURED": "", "RESEARCH_ANSWER_CONFIGURED": configured},
+    )
+    assert result.returncode == 0 and invoked == []
+    assert required == expected
