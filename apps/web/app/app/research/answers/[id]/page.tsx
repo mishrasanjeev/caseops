@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { ResearchAnswerActions, ResearchAnswerStatus, useResearchAnswer } from "@/components/research/ResearchAnswerPanel";
 import { ResearchAnswerView } from "@/components/research/ResearchAnswerView";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadingColumn } from "@/components/ui/ReadingColumn";
 import { apiErrorMessage } from "@/lib/api/config";
 
 export default function ResearchAnswerPage() {
@@ -15,7 +16,7 @@ export default function ResearchAnswerPage() {
   const answer = useResearchAnswer(id);
   const record = answer.data;
   return (
-    <div className="flex flex-col gap-6">
+    <ReadingColumn className="flex flex-col gap-8" data-testid="research-answer-column">
       <PageHeader
         eyebrow="Research"
         title="Research answer"
@@ -32,13 +33,13 @@ export default function ResearchAnswerPage() {
           {apiErrorMessage(answer.error, "This research answer could not be loaded.")}
         </p>
       ) : null}
-      {record ? <ResearchAnswerStatus record={record} /> : null}
+      {record ? <ResearchAnswerStatus record={record} onPermalinkPage /> : null}
       {record?.status === "answered" ? (
         <>
           <ResearchAnswerView record={record} />
           <ResearchAnswerActions record={record} />
         </>
       ) : null}
-    </div>
+    </ReadingColumn>
   );
 }

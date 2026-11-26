@@ -3,13 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Download, FileText, Save } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { MatterName, MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Label } from "@/components/ui/Label";
+import { ReadingColumn } from "@/components/ui/ReadingColumn";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
@@ -114,13 +115,72 @@ export function ResearchAnswerActions({ record }: { record: ResearchAnswerRecord
   );
 }
 
-export function ResearchAnswerStatus({ record }: { record: ResearchAnswerRecord }) {
-  if (researchAnswerPending(record)) {
+/** A timestamp the API wrote without a zone (SQLite) is UTC, never local time. */
+function serverTime(value: string): number {
+  return Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`);
+}
+
+/** Whole seconds since `since`, ticking once a second while `active`. */
+function useElapsedSeconds(since: string, active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  const start = serverTime(since);
+  return Number.isFinite(start) ? Math.max(0, Math.floor((now - start) / 1_000)) : 0;
+}
+
+function formatElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+const USUAL_SECONDS = 120;
+
+export function ResearchAnswerStatus({
+  record,
+  onPermalinkPage = false,
+}: {
+  record: ResearchAnswerRecord;
+  /** On the answer's own page a link to it would point at the current URL. */
+  onPermalinkPage?: boolean;
+}) {
+  const pending = researchAnswerPending(record);
+  // Counted from the record's own creation time, so leaving the page and
+  // coming back shows the true elapsed time, not time since this mount.
+  const elapsed = useElapsedSeconds(record.created_at, pending);
+  if (pending) {
     return (
-      <p role="status" className="text-sm text-[var(--color-ink-2)]" data-testid="research-answer-pending">
-        {record.status === "queued" ? "Queued." : "Retrieving statutes and judgments, then drafting and verifying citations."}
-        {" "}This usually takes under two minutes. You can keep working; the answer stays here.
-      </p>
+      <div role="status" className="flex flex-col gap-1 text-sm text-[var(--color-ink-2)]" data-testid="research-answer-pending">
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-semibold text-[var(--color-ink)]" data-testid="research-answer-step">
+            {record.status === "queued"
+              ? "Queued. Waiting to start the research run."
+              : "Retrieving statutes and judgments, then drafting and verifying citations."}
+          </span>
+          <span className="font-mono tabular-nums" data-testid="research-answer-elapsed">
+            {formatElapsed(elapsed)}
+          </span>
+        </p>
+        <p data-testid="research-answer-expectation">
+          {elapsed > USUAL_SECONDS
+            ? "Research answers usually take one to two minutes. This one is taking longer than usual; it will finish or report a failure here."
+            : "Research answers usually take one to two minutes."}{" "}
+          {onPermalinkPage ? (
+            "You can leave this page and come back; the answer will appear here."
+          ) : (
+            <>
+              You can leave this page; the answer is kept at{" "}
+              <Link className="underline" href={`/app/research/answers/${encodeURIComponent(record.id)}`}>
+                its permanent link
+              </Link>
+              .
+            </>
+          )}
+        </p>
+      </div>
     );
   }
   if (record.status === "abstained" || record.status === "failed") {
@@ -164,77 +224,81 @@ export function ResearchAnswerPanel({
   };
   const record = answer.data;
   return (
-    <Card data-testid="research-answer-panel">
-      <CardHeader>
-        <CardTitle as="h2" className="text-base">Research answer</CardTitle>
-        <CardDescription>
-          Ask a legal question. CaseOps answers in three parts: a short answer, detailed research, then the
-          authorities and sources it relied on. Every citation links to the source.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {contextMatterId ? (
-          <p className="text-sm" data-testid="research-context-matter">
-            Using the recorded facts of matter <MatterName matterId={contextMatterId} />. Matter documents are not read.
-          </p>
-        ) : null}
-        {canGenerate ? (
-          <form onSubmit={submit} className="flex flex-col gap-2" aria-label="Ask a research question">
-            <Label htmlFor="research-question">Legal question</Label>
-            <Textarea
-              id="research-question"
-              rows={3}
-              maxLength={2000}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="For example: What are the notice period and procedure for a complaint under Section 138 of the Negotiable Instruments Act, 1881?"
-              disabled={pending}
-            />
-            <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={pending || question.trim().length < 10}>
-                {pending ? "Researching..." : "Get research answer"}
-              </Button>
-              <span className="text-xs text-[var(--color-mute-2)]">At least 10 characters. Uses AI credits.</span>
-            </div>
-          </form>
-        ) : (
-          <p className="text-sm text-[var(--color-mute-2)]">
-            Your role can search authorities but cannot generate AI research answers.
-          </p>
-        )}
-        {create.isError ? (
-          <p role="alert" className="text-sm text-[var(--color-danger-500)]">{apiErrorMessage(create.error, "The research request was not accepted. Try again.")}</p>
-        ) : null}
-        {answer.isError ? (
-          <p role="alert" className="text-sm text-[var(--color-danger-500)]">{apiErrorMessage(answer.error, "The research answer could not be loaded.")}</p>
-        ) : null}
-        {record ? <ResearchAnswerStatus record={record} /> : null}
-        {record?.status === "answered" ? (
-          <>
-            <ResearchAnswerView record={record} />
-            <ResearchAnswerActions record={record} />
-          </>
-        ) : null}
-        {recent.data?.items.length ? (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-[var(--color-ink-2)]">
-              {contextMatterId ? "Research saved to this matter" : "Your recent research answers"} ({recent.data.items.length})
-            </summary>
-            <ul className="mt-2 flex flex-col gap-1">
-              {recent.data.items.map((item) => (
-                <li key={item.id} className="flex flex-wrap gap-x-2">
-                  <Link className="underline" href={`/app/research/answers/${encodeURIComponent(item.id)}`}>
-                    {item.query.length > 110 ? `${item.query.slice(0, 110)}...` : item.query}
-                  </Link>
-                  <span className="text-[var(--color-mute-2)]">
-                    {formatLegalDate(item.created_at.slice(0, 10))} · {item.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-8">
+      <Card data-testid="research-answer-panel">
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">Research answer</CardTitle>
+          <CardDescription>
+            Ask a legal question. CaseOps answers in three parts: a short answer, detailed research, then the
+            authorities and sources it relied on. Every citation links to the source.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {contextMatterId ? (
+            <p className="text-sm" data-testid="research-context-matter">
+              Using the recorded facts of matter <MatterName matterId={contextMatterId} />. Matter documents are not read.
+            </p>
+          ) : null}
+          {canGenerate ? (
+            <form onSubmit={submit} className="flex flex-col gap-2" aria-label="Ask a research question">
+              <Label htmlFor="research-question">Legal question</Label>
+              <Textarea
+                id="research-question"
+                rows={3}
+                maxLength={2000}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                placeholder="For example: What are the notice period and procedure for a complaint under Section 138 of the Negotiable Instruments Act, 1881?"
+                disabled={pending}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit" disabled={pending || question.trim().length < 10}>
+                  {pending ? "Researching..." : "Get research answer"}
+                </Button>
+                <span className="text-xs text-[var(--color-mute-2)]">At least 10 characters. Uses AI credits.</span>
+              </div>
+            </form>
+          ) : (
+            <p className="text-sm text-[var(--color-mute-2)]">
+              Your role can search authorities but cannot generate AI research answers.
+            </p>
+          )}
+          {create.isError ? (
+            <p role="alert" className="text-sm text-[var(--color-danger-500)]">{apiErrorMessage(create.error, "The research request was not accepted. Try again.")}</p>
+          ) : null}
+          {answer.isError ? (
+            <p role="alert" className="text-sm text-[var(--color-danger-500)]">{apiErrorMessage(answer.error, "The research answer could not be loaded.")}</p>
+          ) : null}
+          {record ? <ResearchAnswerStatus record={record} /> : null}
+          {recent.data?.items.length ? (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-[var(--color-ink-2)]">
+                {contextMatterId ? "Research saved to this matter" : "Your recent research answers"} ({recent.data.items.length})
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1">
+                {recent.data.items.map((item) => (
+                  <li key={item.id} className="flex flex-wrap gap-x-2">
+                    <Link className="underline" href={`/app/research/answers/${encodeURIComponent(item.id)}`}>
+                      {item.query.length > 110 ? `${item.query.slice(0, 110)}...` : item.query}
+                    </Link>
+                    <span className="text-[var(--color-mute-2)]">
+                      {formatLegalDate(item.created_at.slice(0, 10))} · {item.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </CardContent>
+      </Card>
+      {/* The answer is a document, not card content: it sits below the card in
+          the same reading column as its permanent page, so no card nests in a card. */}
+      {record?.status === "answered" ? (
+        <ReadingColumn className="flex flex-col gap-8" data-testid="research-answer-column">
+          <ResearchAnswerView record={record} />
+          <ResearchAnswerActions record={record} />
+        </ReadingColumn>
+      ) : null}
+    </div>
   );
 }
