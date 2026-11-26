@@ -221,7 +221,7 @@ def _seed_mixed_corpus() -> dict[str, str]:
     }
     ids["sc_138"] = _judgment(
         "SC138",
-        title="Cheque dishonour complaint: notice, limitation and jurisdiction under Section 138",
+        title="Meera Exports v. Kiran Steel Traders",
         court="Supreme Court of India",
         forum=MatterForumLevel.SUPREME_COURT,
         text=(
@@ -234,7 +234,7 @@ def _seed_mixed_corpus() -> dict[str, str]:
     )
     ids["quash_138"] = _judgment(
         "HCQ138",
-        title="Petition to quash a cheque dishonour complaint",
+        title="Rohit Traders v. State of Maharashtra",
         court="High Court of Bombay",
         forum=MatterForumLevel.HIGH_COURT,
         text=(
@@ -246,7 +246,7 @@ def _seed_mixed_corpus() -> dict[str, str]:
     )
     ids["off_issue"] = _judgment(
         "HCQ420",
-        title="Quashing of an FIR for cheating involving a bounced cheque",
+        title="Sunil Mehta v. State (NCT of Delhi)",
         court="High Court of Delhi",
         forum=MatterForumLevel.HIGH_COURT,
         text=(
@@ -281,14 +281,14 @@ def test_focus_comes_from_the_facts_when_the_act_is_not_named(
     with get_session_factory()() as session:
         # It is in the corpus and retrieval does return it for these words ...
         retrieved = {row.title for row in service._retrieve_judgments(session, CHEQUE_QUERY)}
-    assert "Quashing of an FIR for cheating involving a bounced cheque" in retrieved
+    assert "Sunil Mehta v. State (NCT of Delhi)" in retrieved
     # ... but it is not offered to the model.
-    assert "Quashing of an FIR for cheating involving a bounced cheque" not in offered
+    assert "Sunil Mehta v. State (NCT of Delhi)" not in offered
     judgments = [s for s in prompt["sources"] if s["kind"] == "judgment"]
     # Binding, on-point authority leads; a quashing petition comes after it and
     # is labelled with the other provision it mainly concerns.
     assert judgments[0]["court"] == "Supreme Court of India"
-    quash = offered["Petition to quash a cheque dishonour complaint"]
+    quash = offered["Rohit Traders v. State of Maharashtra"]
     assert quash["other_provisions"] == ["Section 482 (crpc-1973)"]
     assert judgments.index(quash) > 0
     assert record["answer"]["question_focus"] == [FOCUS_138, FOCUS_142]
@@ -600,3 +600,52 @@ def test_rams_matter_question_is_researched_on_the_matter_statutes(
         "Section 8, Bharatiya Nagarik Suraksha Sanhita, 2023"
     ]
     assert record["sources"][0]["id"] == bnss_8
+
+
+def test_a_judgment_whose_title_is_a_page_header_is_named_from_its_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ram's answers listed judgments titled "AT HYDERABAD" and "931.WP.96.17.doc"."""
+    _seed_sources()
+    named_from_parties = _judgment(
+        "HYD1", title="AT HYDERABAD", court="Telangana High Court",
+        forum=MatterForumLevel.HIGH_COURT,
+        text="4. The complaint under Section 138 of the Negotiable Instruments Act was filed "
+        "after the demand notice for the cheque dishonoured for insufficient funds.",
+        cited=["Section 138 NI Act"],
+    )
+    unnamed = _judgment(
+        "HYD2", title="931.WP.96.17.doc", court="Bombay High Court",
+        forum=MatterForumLevel.HIGH_COURT,
+        text="5. Section 138 of the Negotiable Instruments Act requires a demand notice within "
+        "thirty days of the cheque being dishonoured for insufficient funds.",
+        cited=["Section 138 NI Act"],
+    )
+    with get_session_factory()() as session:
+        row = session.get(AuthorityDocument, named_from_parties)
+        row.parties_json = json.dumps(
+            {"appellant": "K. Ramesh", "respondents": ["Sri Lakshmi Agencies", "State"]}
+        )
+        session.commit()
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token)
+
+    titles = [s["title"] for s in _prompt_input(provider.prompts[0])["sources"]]
+    assert "AT HYDERABAD" not in titles and "931.WP.96.17.doc" not in titles
+    assert "K. Ramesh v. Sri Lakshmi Agencies & Ors." in titles
+    unnamed_title = "Case name not recorded: REF/HYD2/2026, Bombay High Court, 2026-03-01"
+    assert unnamed_title in titles
+    # The unnamed judgment ranks after every named judgment of the same relevance.
+    judgment_titles = [
+        s["title"] for s in _prompt_input(provider.prompts[0])["sources"]
+        if s["kind"] == "judgment"
+    ]
+    assert judgment_titles[-1] == unnamed_title
+    assert record["status"] == "answered"
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    assert unnamed in {item["id"] for item in manifest}
+

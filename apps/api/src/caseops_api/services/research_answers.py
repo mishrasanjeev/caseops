@@ -66,6 +66,7 @@ from caseops_api.schemas.research_answers import (
     ResearchVerification,
 )
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.corpus_title_validation import title_is_case_name
 from caseops_api.services.llm import (
     PURPOSE_RESEARCH,
     LLMCallContext,
@@ -419,6 +420,37 @@ def _retrieval_query(query: str, focus: _Focus, matter: Matter | None) -> str:
     return " ".join(part for part in parts if part)
 
 
+def _judgment_identity(document: AuthorityDocument) -> tuple[str, bool]:
+    """A title a lawyer can recognise, and whether the record names the case.
+
+    Some ingested judgments carry a page header as their title ("AT HYDERABAD",
+    "Court No. - 25", a file name or a URL). Shown as-is, the authority cannot
+    be identified or cited. The recorded parties name the case instead; failing
+    that, the case number, court and date identify it, marked as unnamed.
+    """
+    title = _collapse(document.title or "")
+    if title_is_case_name(title)[0]:
+        return title, True
+    try:
+        parties = json.loads(document.parties_json or "{}")
+    except (TypeError, ValueError):
+        parties = {}
+    if not isinstance(parties, dict):
+        parties = {}
+    appellant = str(parties.get("appellant") or "").strip()
+    respondents = parties.get("respondents")
+    if not isinstance(respondents, list):
+        respondents = []
+    respondent = str(respondents[0]).strip() if respondents else ""
+    if appellant and respondent:
+        suffix = " & Ors." if len(respondents) > 1 else ""
+        return f"{appellant} v. {respondent}{suffix}"[:500], True
+    reference = document.case_reference or document.case_number or document.neutral_citation
+    when = document.decision_date.isoformat() if document.decision_date else None
+    parts = [part for part in (reference, document.court_name, when) if part]
+    return ("Case name not recorded: " + ", ".join(parts))[:500], False
+
+
 def _cited_refs(document: AuthorityDocument) -> list[tuple[str, str]]:
     try:
         cited = json.loads(document.sections_cited_json or "[]")
@@ -597,6 +629,9 @@ def _select_judgments(
     pool.sort(
         key=lambda item: (
             item.tier,
+            # An authority the record cannot name is a weak citation; prefer
+            # named judgments at the same level of relevance.
+            not _judgment_identity(item.document)[1],
             bool(item.others),
             item.result.forum_level != "supreme_court",
             item.rank,
@@ -664,7 +699,7 @@ def _build_sources(
                 number=len(sources) + 1,
                 kind="judgment",
                 id=item.authority_document_id,
-                title=item.title,
+                title=_judgment_identity(document)[0],
                 citation=citation,
                 court=item.court_name,
                 bench=item.bench_name,
