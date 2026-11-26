@@ -42,11 +42,19 @@ Nov 26 row 1 follow-up (Income-tax Act, 1961): the owner chose the Income Tax
 Department consolidation "as amended by Finance Act, 2026" (India Code holds
 only the OCR-garbled as-enacted Gazette) and pinned it as release asset
 `statute-evidence-income-tax-1961-fa2026` (sha256 73d264fd...). It is compiled
-as a retained repealed-law edition (Income-tax Act, 2025 from 2026-04-01; end
-date 2026-03-31): 823 sections attachable of 965 identities, 130 retired, 12
-quarantined with reasons (multi-column tables in sections 40, 40A, 80-ID,
-115BAC, 115VG, 115WJ, 139, 206C, 211 and the Thirteenth and Fourteenth
-Schedules; 282B prints only "[***]"). Section 139 therefore stays withheld; the
+as a retained repealed-law edition (Income-tax Act, 2025 from 2026-04-01, with
+savings; no blanket end date, since endnotes record amendments effective from
+1-4-2026 and saved law governs earlier years): 820 sections attachable of 966
+identities, 133 retired, 13 quarantined with reasons (multi-column tables in
+sections 40, 40A, 80-ID, 115BAC, 115VG, 115WJ, 139, 206C, 211 and the
+Thirteenth and Fourteenth Schedules; stacked fraction formulas in 44DB; 282B
+prints only "[***]"). Review fixes: 80VV (followed on its page by an omitted
+chapter's heading) and 281A (a "[Repealed by" notice) had been admitted as
+verified text; both are now retired, 80VVA is retired from its chapter note,
+chapter headings outside a provision preamble fail closed unless declared, the
+loader refuses any verified row that is only an omission or repeal notice, the
+Act row and the Section 186 placeholder are repealed, and "Income-tax Act,
+2025" no longer resolves to the 1961 Act. Section 139 therefore stays withheld; the
 row 1 journey attaches Section 80C on desktop and phone. Section 186 is not in
 the edition and remains a placeholder. Adjacent, not changed here: drafting,
 strategy and research prompts quote any attachable repealed edition (IPC, CrPC,
