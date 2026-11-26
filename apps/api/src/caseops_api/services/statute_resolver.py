@@ -378,10 +378,11 @@ def _resolve_references(text: str) -> tuple[list[tuple[str, str]], list[str]]:
     """(bound references, base section numbers left without an Act), in question order.
 
     Each section binds to the Act named right after it ("Section 138 of the NI
-    Act"). Failing that, it binds to the nearest Act named before it, but only
-    one that no earlier section has already claimed ("Under the NI Act, what
-    does Section 138 require?"). In "Can Section 482 CrPC quash a Section 138
-    complaint?" CrPC belongs to 482, so 138 stays unbound for the caller to
+    Act"). Failing that, it binds to an Act named before it only when the
+    question names that one Act and no earlier section has already claimed it
+    ("Under the NI Act, what does Section 138 require?"). In "Can Section 482
+    CrPC quash a Section 138 complaint?" CrPC belongs to 482, so 138 stays
+    unbound for the caller to
     place, instead of becoming CrPC Section 138.
     """
     cleaned = _ACT_YEAR_RE.sub(r"\1", _MONEY_RE.sub(" ", text))
@@ -414,7 +415,10 @@ def _resolve_references(text: str) -> tuple[list[tuple[str, str]], list[str]]:
         ]
         if following:
             chosen = following[0]
-        elif len({acts[position][2] for position in preceding}) == 1:
+        elif preceding and len({span[2] for span in acts}) == 1:
+            # Backward only when the question names a single Act at all: "In a
+            # Section 138 NI Act case, how does the Evidence Act burden work with
+            # the presumption in Section 139?" must not become Evidence Act s.139.
             chosen = preceding[-1]
         else:
             unbound.extend((match.start(), number) for number in numbers)

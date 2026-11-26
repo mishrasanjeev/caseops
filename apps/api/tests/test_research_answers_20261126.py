@@ -996,6 +996,12 @@ def test_the_worker_rechecks_matter_access_before_running(
         # Two Acts before the sections: guessing would quote CrPC s.138 text.
         ("Under the NI Act and CrPC, what do Section 138 and Section 200 require?",
          [], ["Section 138", "Section 200"]),
+        # Fourth review round: an Act mentioned in passing never takes a section.
+        ("In a Section 138 NI Act case, how does the Evidence Act burden of proof work with "
+         "the presumption in Section 139?",
+         [("ni-act-1881", "Section 138")], ["Section 139"]),
+        ("Under the Evidence Act, what does Section 118 presume for a cheque under the NI Act?",
+         [("ni-act-1881", "Section 118")], []),
     ],
 )
 def test_a_section_never_borrows_an_act_another_section_claimed(
