@@ -140,7 +140,8 @@ test("BUG-004 a vague question asks for detail without a matter and is researche
     matterId = (await json<{ id: string }>(await created, "Create the journey's Matter through the UI")).id;
 
     await page.goto(`${rt.web.origin}/app/matters/${matterId}`);
-    await page.getByRole("link", { name: "Research", exact: true }).first().click();
+    // The matter's own Research tab, not the sidebar's workspace-wide Research.
+    await page.locator(`a[href*="/app/research?tab=answer&matter=${encodeURIComponent(matterId)}"]`).first().click();
     await expect(page).toHaveURL(new RegExp(`matter=${matterId}`));
     await expect(page.getByTestId("research-context-matter")).toBeVisible();
     await page.getByLabel("Legal question").fill(VAGUE_QUESTION);
