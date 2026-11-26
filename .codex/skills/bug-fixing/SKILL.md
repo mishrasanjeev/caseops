@@ -534,3 +534,30 @@ place or a reopen. The pattern, stated so each part can be checked:
 5. **"Open" was never followed.** A link whose target is the current URL looks
    like a dead button. Click every primary action in the journey and assert
    the destination and the focused item, not only that a link renders.
+
+### Why the November 26 research rows were missed: the brutal version
+
+Ram's four Research Answer rows (layout, Section 138 accuracy, latency,
+"no indexed source") arrived one day after the feature shipped with green
+unit, Playwright and prod-verify runs. Every green run was real, and every one
+measured the wrong thing:
+
+6. **Test tenants were not production-shaped.** No test tenant had a billing
+   subscription, so the AI-credit debit returned early and the released-session
+   guard never saw a write. Every production tenant has one, and every
+   verification retry crashed. Run AI paths as a subscribed tenant.
+7. **The runtime was not production-shaped.** TestClient runs BackgroundTasks
+   synchronously with full CPU; Cloud Run throttles CPU after the response. A
+   job design is only proven on the runtime's billing model, so heavy work never
+   goes into a post-response BackgroundTask (a structural test now enforces it).
+8. **The benchmark corpus had no distractor.** One on-topic judgment cannot
+   reveal that retrieval offers off-issue judgments to the model. Seed the
+   neighbour the tester saw (a Section 482 quashing petition beside Section 138
+   authority) and assert it is never offered.
+9. **Logs were read after the fix, not before.** Production request and
+   exception logs named two defects the tester could only call "slow" and
+   "sometimes fails". Read them for the reported IDs before triage.
+10. **An automated prod run with an offline model cannot pass an accuracy
+    row.** It proves retrieval and focus; the paid model's prose needs a
+    recorded signed-in human run on the deployed release before
+    `Properly fixed`.

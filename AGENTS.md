@@ -3325,6 +3325,39 @@ requirements when using the fallback.
   with its pytest mirror, and `test_batch5_release_wiring.py`. Prove the
   checker against the real `--list` inventory, with the previous checker as
   the failing control.
+- Read production logs for the reported record IDs before triage. Ram's Nov 26
+  research rows ("slow", "sometimes fails") hid two defects no tester could
+  name: a verification-retry crash ("caller transaction contains writes") and
+  a 9-minute CPU-starved job. Request logs (poll spans per ID, instance IDs)
+  and the app's exception lines turn "slow/flaky" into a mechanism.
+- AI-path tests must run as a production-shaped tenant: one with a billing
+  subscription. `debit_ai_credits` returns early without one, so every
+  released-session test passed while every real tenant crashed on the second
+  model call. A released LLM call (`release_session_before_provider`) must
+  leave the session as clean as it found it; it commits its own debit.
+- Never run heavy work in FastAPI `BackgroundTasks` on the request-billed API.
+  Cloud Run throttles CPU once the response is sent, so the job only runs while
+  other requests hit the same instance. Durable jobs go through the Cloud Run
+  job wake plus scheduler backstop, with an atomic claim, a lease and the
+  persisted no-paid marker. The structural guard test lists the only allowed
+  background tasks.
+- A retrieval-grounded answer must be scoped to the question's focus (the
+  provisions named, implied by the stated facts, or recorded on the matter).
+  Statute sources come only from the focus Acts. A judgment that neither cites
+  nor names a focus provision is never offered to the model. Binding on-point
+  authority leads, and other provisions a judgment mainly concerns are
+  labelled. Regress with a mixed corpus that contains the distractor the tester
+  saw (a Section 482 quashing judgment beside Section 138 authority); a corpus
+  of only on-topic sources cannot fail.
+- An abstention is a product state, not an error. Distinguish "could not tell
+  what law this is about" (ask for the Act, section or issue, or use the
+  matter) from "no verified source for an identified provision", and give
+  answerable, deterministic rephrasings. "Found nothing" with no way forward
+  reads as a failure to the tester.
+- Automated production research runs use the deterministic offline model, so
+  they prove retrieval, focus, verification, timing and UI, never the paid
+  model's prose. An accuracy verdict on paid-model output also needs a run by a
+  signed-in human on the deployed release, recorded with the exact question.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
