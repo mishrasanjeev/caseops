@@ -1895,7 +1895,7 @@ function AskCaseFileSection({
                   {matterFileQAStateCopy(result.status)}
                 </p>
                 {answerText ? (
-                  <div className="mt-3 max-w-4xl">
+                  <div className="mt-3">
                     {resultAnalysisLanguage !== "en" ? (
                       <div className="mb-1 text-xs font-medium uppercase tracking-[0.08em] text-[var(--color-mute)]">
                         English authoritative answer
@@ -1913,7 +1913,7 @@ function AskCaseFileSection({
 
                 {localLanguageText ? (
                   <div
-                    className="mt-3 max-w-4xl rounded-md border border-[var(--color-line-2)] bg-[var(--color-bg-2)] px-3 py-2"
+                    className="mt-3 rounded-md border border-[var(--color-line-2)] bg-[var(--color-bg-2)] px-3 py-2"
                     data-testid="matter-file-qa-local-language-analysis"
                   >
                     <div className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--color-mute)]">

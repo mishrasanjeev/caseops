@@ -96,19 +96,21 @@ function AuthorityCard({
     <li
       id={sourceAnchorId(answerId, source.number)}
       tabIndex={-1}
-      className="rounded-md border border-[var(--color-line)] bg-white p-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
+      className="flex flex-col gap-3 rounded-md border border-[var(--color-line)] bg-white p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
       data-testid="research-authority-card"
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-sm font-semibold text-[var(--color-ink)]">[{source.number}]</span>
-        <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--color-mute-2)]">
-          {source.kind === "statute_section" ? "Statute" : "Judgment"} ·{" "}
-          {entry.disposition === "contrary" ? "Contrary" : entry.disposition === "context" ? "Context" : "Supporting"}
-        </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-mono font-semibold text-[var(--color-ink)]">[{source.number}]</span>
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--color-mute-2)]">
+            {source.kind === "statute_section" ? "Statute" : "Judgment"} ·{" "}
+            {entry.disposition === "contrary" ? "Contrary" : entry.disposition === "context" ? "Context" : "Supporting"}
+          </span>
+        </div>
+        <h4 className="text-sm font-semibold text-[var(--color-ink)]">{source.title}</h4>
+        {facts.length ? <p className="text-[var(--color-ink-2)]">{facts.join(" · ")}</p> : null}
       </div>
-      <h4 className="mt-1 text-base font-semibold text-[var(--color-ink)]">{source.title}</h4>
-      {facts.length ? <p className="mt-1 text-sm text-[var(--color-ink-2)]">{facts.join(" · ")}</p> : null}
-      <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
+      <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[10rem_1fr]">
         <dt className="font-medium text-[var(--color-mute-2)]">Weight</dt>
         <dd>{source.weight}</dd>
         {source.kind === "judgment" ? (
@@ -145,26 +147,26 @@ function AuthorityCard({
         ) : null}
       </dl>
       {entry.passage ? (
-        <blockquote className="mt-3 max-w-prose border-l-2 border-[var(--color-line)] pl-3 text-sm text-[var(--color-ink-2)]">
-          <span className="mb-1 block text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--color-mute-2)]">
+        <blockquote className="flex flex-col gap-1 border-l-2 border-[var(--color-line)] pl-3 text-[var(--color-ink-2)]">
+          <span className="text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--color-mute-2)]">
             Verified passage
           </span>
-          {entry.passage}
+          <span>{entry.passage}</span>
         </blockquote>
       ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <SourceAction action={source.source_action ?? null} compact originSurface="research" />
         {source.in_app_href ? (
           <a
             href={source.in_app_href}
             target="_blank"
             rel="noopener"
-            className="inline-flex items-center gap-1 text-sm underline"
+            className="inline-flex items-center gap-1 underline"
           >
             Open section in CaseOps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
           </a>
         ) : null}
-        <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm underline">
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-1 underline">
           <ArrowUp className="h-3.5 w-3.5" aria-hidden /> Back to the answer
         </button>
       </div>
@@ -172,6 +174,24 @@ function AuthorityCard({
   );
 }
 
+/** Part A, B and C headings: the top of the document's heading hierarchy. */
+function PartHeading({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <h3
+      id={id}
+      className="border-b border-[var(--color-line)] pb-2 text-xl font-semibold tracking-tight text-[var(--color-ink)]"
+    >
+      {children}
+    </h3>
+  );
+}
+
+/**
+ * The answer document. Every block spans the full width of its parent (the
+ * page's ReadingColumn), so nothing here sets its own max width. One spacing
+ * scale: gap-8 between the parts, gap-4 between blocks inside a part, gap-2
+ * inside a block (a numbered sub-heading and its paragraphs).
+ */
 export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord }) {
   const answer = record.answer;
   const lastMarker = useRef<HTMLElement | null>(null);
@@ -197,7 +217,7 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
   const retrievedFrom = dateLabel(answer.sources_retrieved_from);
   const retrievedTo = dateLabel(answer.sources_retrieved_to);
   return (
-    <article className="flex flex-col gap-6" data-testid="research-answer" aria-label="Research answer">
+    <article className="flex flex-col gap-8" data-testid="research-answer" aria-label="Research answer">
       <div ref={top} tabIndex={-1} className="text-xs text-[var(--color-mute-2)] outline-none" data-testid="research-law-checked">
         Law checked as of {formatLegalDate(answer.law_checked_as_of)}
         {retrievedFrom ? ` · Sources as indexed ${retrievedFrom === retrievedTo ? retrievedFrom : `${retrievedFrom} to ${retrievedTo}`}` : ""}
@@ -205,38 +225,36 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
         <span className="text-[var(--color-ink-2)]">{record.query}</span>
       </div>
 
-      <section aria-labelledby={`${record.id}-short`} data-testid="research-short-answer">
-        <h3 id={`${record.id}-short`} className="text-lg font-semibold text-[var(--color-ink)]">
-          Short answer
-        </h3>
-        <p className="mt-2 max-w-prose leading-relaxed text-[var(--color-ink)]">{cite(answer.short_answer)}</p>
+      <section className="flex flex-col gap-4" aria-labelledby={`${record.id}-short`} data-testid="research-short-answer">
+        <PartHeading id={`${record.id}-short`}>Short answer</PartHeading>
+        <p className="leading-relaxed text-[var(--color-ink)]">{cite(answer.short_answer)}</p>
         {answer.key_points.length ? (
-          <ul className="mt-3 max-w-prose list-disc space-y-1 pl-5 text-sm leading-relaxed">
+          <ul className="list-disc space-y-1 pl-5 leading-relaxed">
             {answer.key_points.map((point, index) => <li key={index}>{cite(point)}</li>)}
           </ul>
         ) : null}
         {answer.facts_insufficient || answer.missing_facts.length ? (
-          <div className="mt-4 max-w-prose rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] p-3 text-sm" data-testid="research-missing-facts">
+          <div className="flex flex-col gap-1 rounded-md border border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] p-3 text-sm" data-testid="research-missing-facts">
             <p className="font-semibold text-[var(--color-warn-700)]">
               Facts needed before this can be applied to a specific case or deadline
             </p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <ul className="list-disc space-y-0.5 pl-5">
               {answer.missing_facts.map((fact, index) => <li key={index}>{fact}</li>)}
             </ul>
           </div>
         ) : null}
         {answer.assumptions.length ? (
-          <div className="mt-3 max-w-prose text-sm">
+          <div className="flex flex-col gap-1 text-sm" data-testid="research-assumptions">
             <p className="font-medium text-[var(--color-mute-2)]">Assumptions (not stated in the question)</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <ul className="list-disc space-y-0.5 pl-5">
               {answer.assumptions.map((item, index) => <li key={index}>{item}</li>)}
             </ul>
           </div>
         ) : null}
         {answer.matter_facts.length ? (
-          <div className="mt-3 max-w-prose rounded-md border border-[var(--color-line)] p-3 text-sm" data-testid="research-matter-facts">
+          <div className="flex flex-col gap-1 rounded-md border border-[var(--color-line)] p-3 text-sm" data-testid="research-matter-facts">
             <p className="font-medium">Matter facts used (from the matter record, not legal authority)</p>
-            <dl className="mt-1 grid gap-x-3 gap-y-1 sm:grid-cols-[9rem_1fr]">
+            <dl className="grid gap-x-3 gap-y-1 sm:grid-cols-[9rem_1fr]">
               {answer.matter_facts.map((fact) => (
                 <div key={fact.label} className="contents">
                   <dt className="text-[var(--color-mute-2)]">{fact.label}</dt>
@@ -248,58 +266,52 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
         ) : null}
       </section>
 
-      <section aria-labelledby={`${record.id}-detail`} data-testid="research-detailed">
-        <h3 id={`${record.id}-detail`} className="text-lg font-semibold text-[var(--color-ink)]">
-          Detailed research
-        </h3>
-        <div className="mt-2 flex flex-col gap-5">
-          {answer.sections.map((section, index) => (
-            <div key={section.key} data-testid={`research-section-${section.key}`}>
-              <h4 className="text-base font-semibold text-[var(--color-ink)]">
-                {index + 1}. {section.title}
-              </h4>
-              {section.paragraphs.map((paragraph, i) => (
-                <p key={i} className="mt-2 max-w-prose text-sm leading-relaxed">{cite(paragraph)}</p>
-              ))}
-              {section.timeline.length ? (
-                <div className="mt-2 max-w-3xl divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)] text-sm" role="table" aria-label={`${section.title} timeline`}>
-                  <div role="row" className="hidden bg-[var(--color-bg-2)] px-3 py-1.5 font-medium sm:grid sm:grid-cols-[1fr_1fr_2fr] sm:gap-3">
-                    <span role="columnheader">Period</span>
-                    <span role="columnheader">Starts</span>
-                    <span role="columnheader">Detail</span>
-                  </div>
-                  {section.timeline.map((row, i) => (
-                    <div key={i} role="row" className="grid gap-1 px-3 py-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3">
-                      <span role="cell" className="font-medium">{row.period}</span>
-                      <span role="cell">{row.starts}</span>
-                      <span role="cell">{cite(row.detail)}</span>
-                    </div>
-                  ))}
+      <section className="flex flex-col gap-4" aria-labelledby={`${record.id}-detail`} data-testid="research-detailed">
+        <PartHeading id={`${record.id}-detail`}>Detailed research</PartHeading>
+        {answer.sections.map((section, index) => (
+          <div key={section.key} className="flex flex-col gap-2" data-testid={`research-section-${section.key}`}>
+            <h4 className="text-base font-semibold text-[var(--color-ink)]">
+              {index + 1}. {section.title}
+            </h4>
+            {section.paragraphs.map((paragraph, i) => (
+              <p key={i} className="leading-relaxed">{cite(paragraph)}</p>
+            ))}
+            {section.timeline.length ? (
+              <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)] text-sm" role="table" aria-label={`${section.title} timeline`} data-testid="research-timeline">
+                <div role="row" className="hidden bg-[var(--color-bg-2)] px-3 py-1.5 font-medium sm:grid sm:grid-cols-[1fr_1fr_2fr] sm:gap-3">
+                  <span role="columnheader">Period</span>
+                  <span role="columnheader">Starts</span>
+                  <span role="columnheader">Detail</span>
                 </div>
-              ) : null}
-              {section.steps.length ? (
-                <ol className="mt-2 max-w-prose list-decimal space-y-1 pl-5 text-sm leading-relaxed">
-                  {section.steps.map((step, i) => <li key={i}>{cite(step)}</li>)}
-                </ol>
-              ) : null}
-            </div>
-          ))}
-        </div>
+                {section.timeline.map((row, i) => (
+                  <div key={i} role="row" className="grid gap-1 px-3 py-2 sm:grid-cols-[1fr_1fr_2fr] sm:gap-3">
+                    <span role="cell" className="font-medium">{row.period}</span>
+                    <span role="cell">{row.starts}</span>
+                    <span role="cell">{cite(row.detail)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {section.steps.length ? (
+              <ol className="list-decimal space-y-1 pl-5 leading-relaxed">
+                {section.steps.map((step, i) => <li key={i}>{cite(step)}</li>)}
+              </ol>
+            ) : null}
+          </div>
+        ))}
         {answer.verification.notes.length ? (
-          <div className="mt-4 max-w-prose text-xs text-[var(--color-mute-2)]" data-testid="research-verification-notes">
+          <div className="flex flex-col gap-1 text-xs text-[var(--color-mute-2)]" data-testid="research-verification-notes">
             <p className="font-semibold">Verification</p>
-            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <ul className="list-disc space-y-0.5 pl-4">
               {answer.verification.notes.map((note, index) => <li key={index}>{note}</li>)}
             </ul>
           </div>
         ) : null}
       </section>
 
-      <section aria-labelledby={`${record.id}-sources`} data-testid="research-authorities">
-        <h3 id={`${record.id}-sources`} className="text-lg font-semibold text-[var(--color-ink)]">
-          Relevant judicial authorities &amp; sources
-        </h3>
-        <ol className="mt-3 flex flex-col gap-3">
+      <section className="flex flex-col gap-4" aria-labelledby={`${record.id}-sources`} data-testid="research-authorities">
+        <PartHeading id={`${record.id}-sources`}>Relevant judicial authorities &amp; sources</PartHeading>
+        <ol className="flex flex-col gap-4">
           {answer.authorities.map((entry) => {
             const source = sources.get(entry.source);
             return source ? (
@@ -307,7 +319,7 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
             ) : null;
           })}
         </ol>
-        <p className="mt-4 max-w-prose text-xs text-[var(--color-mute-2)]">{answer.disclaimer}</p>
+        <p className="text-xs text-[var(--color-mute-2)]" data-testid="research-disclaimer">{answer.disclaimer}</p>
       </section>
     </article>
   );

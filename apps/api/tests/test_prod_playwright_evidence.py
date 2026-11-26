@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 767, "app-mobile": 70}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 768, "app-mobile": 71}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,7 +3083,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 750, "app-mobile": 60}
+APP_COUNTS = {"app-chromium": 751, "app-mobile": 61}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3132,6 +3132,7 @@ NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
 NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
 NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
+NOV26_LAYOUT_FILE = "research-answer-layout-2026-11-26.spec.ts"
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -3258,6 +3259,16 @@ APP_REQUIRED_NATIVE_CASES = (
     )),
     ("app-mobile", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
+    )),
+    ("app-chromium", NOV26_LAYOUT_FILE, (
+        NOV26_LAYOUT_FILE,
+        "BUG-001 research answer column is centred with shared edges and even spacing at "
+        "1280-1920px and 80-150% zoom",
+    )),
+    ("app-mobile", NOV26_LAYOUT_FILE, (
+        NOV26_LAYOUT_FILE,
+        "[mobile] BUG-001 research answer fills a 375px phone with shared edges, a stacked "
+        "timeline and no sideways scroll",
     )),
 )
 
@@ -3560,13 +3571,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all810_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all812_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 810
+    assert sum(APP_COUNTS.values()) == 812
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

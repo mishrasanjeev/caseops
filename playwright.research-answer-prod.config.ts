@@ -5,10 +5,11 @@ import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 // J05/M04 research answer acceptance against the exact serving release.
 // The no-paid marker routes the model call to the deterministic offline
 // provider, so this proves the deployed retrieval, verification, ordering and
-// UI contract without spending on a paid model.
+// UI contract without spending on a paid model. The BUG-001 layout journey
+// measures the same deployed answer page's geometry on desktop, zoom and phone.
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: /research-answer-2026-11-24\.spec\.ts$/,
+  testMatch: [/research-answer-2026-11-24\.spec\.ts$/, /research-answer-layout-2026-11-26\.spec\.ts$/],
   fullyParallel: false,
   workers: 1,
   retries: 0,

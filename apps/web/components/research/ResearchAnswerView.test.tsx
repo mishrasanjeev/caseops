@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ResearchAnswerRecord } from "@/lib/api/research-answers";
 
@@ -21,6 +21,7 @@ vi.mock("@/lib/api/research-answers", async (load) => ({
   saveResearchAnswerToMatter: saveMock,
 }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: (name: string) => capabilityMock(name) }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "ans-1" }) }));
 vi.mock("@/components/app/MatterPicker", () => ({
   OPERATIONAL_MATTER_STATUSES: new Set(["active"]),
   MatterName: ({ matterId }: { matterId: string }) => <span>{matterId}</span>,
@@ -29,7 +30,9 @@ vi.mock("@/components/app/MatterPicker", () => ({
   ),
 }));
 
-import { ResearchAnswerPanel } from "./ResearchAnswerPanel";
+import ResearchAnswerPage from "@/app/app/research/answers/[id]/page";
+
+import { ResearchAnswerPanel, ResearchAnswerStatus } from "./ResearchAnswerPanel";
 import { ResearchAnswerView, researchAnswerToHtml, researchAnswerToText } from "./ResearchAnswerView";
 
 const action = {
@@ -194,5 +197,121 @@ describe("ResearchAnswerPanel", () => {
     render(withClient(<ResearchAnswerPanel initialQuestion="" contextMatterId={null} />));
     expect(screen.queryByRole("form", { name: "Ask a research question" })).not.toBeInTheDocument();
     expect(screen.getByText(/cannot generate AI research answers/)).toBeVisible();
+  });
+});
+
+// BUG-001 (Ram, 2026-11-26): the answer page put each block under its own
+// width cap (65ch of three font sizes, max-w-3xl, none), so the document
+// hugged the left of an uncapped <main> with ragged right edges.
+describe("research answer layout contract", () => {
+  const record = () => {
+    const base = answered();
+    return answered({
+      answer: { ...base.answer!, matter_facts: [{ label: "Cheque amount", value: "Rs 5 lakh" }] },
+    });
+  };
+  const classes = (element: Element) => (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+  const cappedIn = (root: Element) => [...root.querySelectorAll("[class]")]
+    .filter((element) => classes(element).some((name) => name.startsWith("max-w-")))
+    .map((element) => `${element.tagName.toLowerCase()}.${classes(element).join(".")}`);
+
+  it("sets no per-block width cap inside the document, so every block shares the column's edges", () => {
+    const { container } = render(<ResearchAnswerView record={record()} />);
+    expect(cappedIn(container)).toEqual([]);
+  });
+
+  it("spaces parts, blocks and lines with one gap scale and no vertical sibling margins", () => {
+    const { container } = render(<ResearchAnswerView record={record()} />);
+    const article = screen.getByTestId("research-answer");
+    expect(article).toHaveClass("flex", "flex-col", "gap-8");
+    for (const id of ["research-short-answer", "research-detailed", "research-authorities"]) {
+      const part = screen.getByTestId(id);
+      expect(part.parentElement).toBe(article);
+      expect(part).toHaveClass("flex", "flex-col", "gap-4");
+    }
+    for (const section of ["applicable_law", "time_limits", "ingredients", "procedure"]) {
+      expect(screen.getByTestId(`research-section-${section}`)).toHaveClass("flex", "flex-col", "gap-2");
+    }
+    expect(screen.getAllByTestId("research-authority-card")[0].parentElement).toHaveClass("flex", "flex-col", "gap-4");
+    const margins = [...container.querySelectorAll("[class]")]
+      .flatMap((element) => classes(element).filter((name) => /^-?m[tby]-/.test(name)));
+    expect(margins).toEqual([]);
+  });
+
+  it("gives part headings, numbered sub-sections and authority titles three distinct sizes", () => {
+    render(<ResearchAnswerView record={record()} />);
+    const size = (element: Element) => classes(element).filter((name) => /^text-(xs|sm|base|lg|xl|2xl)$/.test(name)).join();
+    const parts = screen.getAllByRole("heading", { level: 3 });
+    const subSections = within(screen.getByTestId("research-detailed")).getAllByRole("heading", { level: 4 });
+    const authorityTitles = within(screen.getByTestId("research-authorities")).getAllByRole("heading", { level: 4 });
+    expect(new Set(parts.map(size))).toEqual(new Set(["text-xl"]));
+    expect(new Set(subSections.map(size))).toEqual(new Set(["text-base"]));
+    expect(new Set(authorityTitles.map(size))).toEqual(new Set(["text-sm"]));
+  });
+
+  it("renders the permanent page's header, document and actions inside one reading column", async () => {
+    capabilityMock.mockReturnValue(true);
+    fetchMock.mockResolvedValue(record());
+    render(withClient(<ResearchAnswerPage />));
+    const column = await screen.findByTestId("research-answer-column");
+    await waitFor(() => expect(within(column).getByTestId("research-answer")).toBeVisible());
+    expect(column).toHaveClass("mx-auto", "w-full", "max-w-[70ch]", "flex", "flex-col", "gap-8");
+    expect(within(column).getByRole("heading", { level: 1, name: "Research answer" })).toBeVisible();
+    expect(within(column).getByTestId("research-answer-actions")).toBeVisible();
+    expect(cappedIn(within(column).getByTestId("research-answer"))).toEqual([]);
+    expect(cappedIn(within(column).getByTestId("research-answer-actions"))).toEqual([]);
+  });
+
+  it("renders the answer below the question card on /app/research, never as a card inside the card", async () => {
+    capabilityMock.mockReturnValue(true);
+    listMock.mockResolvedValue({ items: [] });
+    createMock.mockResolvedValue(record());
+    render(withClient(<ResearchAnswerPanel initialQuestion="Section 138 notice period and procedure?" contextMatterId={null} />));
+    fireEvent.submit(screen.getByRole("form", { name: "Ask a research question" }));
+    const document = await screen.findByTestId("research-answer");
+    const card = screen.getByTestId("research-answer-panel");
+    expect(card).not.toContainElement(document);
+    expect(card).not.toContainElement(screen.getByTestId("research-answer-actions"));
+    const column = screen.getByTestId("research-answer-column");
+    expect(column).toContainElement(document);
+    expect(column).toHaveClass("mx-auto", "max-w-[70ch]");
+  });
+});
+
+// BUG-003 (Ram, 2026-11-26): a pending answer must say what it is doing, for
+// how long, and what to expect, and survive leaving the page and coming back.
+describe("ResearchAnswerStatus pending state", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("counts mm:ss from the record's creation time, names the step and sets the expectation", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-24T10:01:05Z"));
+    const running = answered({ status: "running", answer: null, sources: [] });
+    const first = render(<ResearchAnswerStatus record={running} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("01:05");
+    expect(screen.getByTestId("research-answer-step")).toHaveTextContent("Retrieving statutes and judgments");
+    expect(screen.getByTestId("research-answer-expectation")).toHaveTextContent("Research answers usually take one to two minutes.");
+    expect(screen.getByRole("link", { name: "its permanent link" })).toHaveAttribute("href", "/app/research/answers/ans-1");
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("01:08");
+    first.unmount();
+
+    // Navigating away and back mounts a new component: the count still
+    // comes from created_at, not from the new mount.
+    vi.setSystemTime(new Date("2026-11-24T10:03:30Z"));
+    render(<ResearchAnswerStatus record={running} onPermalinkPage />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("03:30");
+    expect(screen.getByTestId("research-answer-expectation")).toHaveTextContent("taking longer than usual");
+    expect(screen.queryByRole("link", { name: "its permanent link" })).not.toBeInTheDocument();
+  });
+
+  it("reads an API timestamp without a zone as UTC and names the queued step", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-24T10:00:42Z"));
+    render(<ResearchAnswerStatus record={answered({ status: "queued", answer: null, sources: [], created_at: "2026-11-24T10:00:00.123456" })} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("00:41");
+    expect(screen.getByTestId("research-answer-step")).toHaveTextContent("Queued");
   });
 });
