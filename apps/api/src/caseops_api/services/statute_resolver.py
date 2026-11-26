@@ -224,6 +224,19 @@ def _detect_act(text: str) -> str | None:
     return matches[0][2]
 
 
+def _act_token(text: str) -> str | None:
+    """The literal Act wording ``_detect_act`` chose, for re-use in a fragment."""
+    matches = []
+    for pattern, _statute_id in _ACT_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            matches.append((m.start(), m.end() - m.start(), m.group(0)))
+    if not matches:
+        return None
+    matches.sort(key=lambda t: (-t[1], t[0]))
+    return matches[0][2]
+
+
 def parse_section_string(text: str) -> tuple[str, str] | None:
     """Parse a free-text section reference into (statute_id, section_number).
 
@@ -271,6 +284,41 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
         if not _YEAR_LIKE_RE.match(m.group(1)):
             return statute_id, f"Section {m.group(1)}"
     return None
+
+
+_REFERENCE_SPLIT_RE = re.compile(r"(?=\b(?:Sections?|Secs?\.?|Ss?\.|u/s)\s*[0-9])", re.IGNORECASE)
+
+
+def parse_section_references(text: str) -> list[tuple[str, str]]:
+    """Every (statute_id, section) a free-text question names, in order.
+
+    ``parse_section_string`` stops at the first reference, so "Section 138 of
+    the NI Act and Section 482 CrPC" loses the second provision. Each section
+    marker starts a fragment; a fragment that names no Act takes the Act the
+    whole text names, when the text names exactly one ("Under the NI Act,
+    what does Section 138 require?").
+    """
+    if not text or not isinstance(text, str):
+        return []
+    whole_act = _detect_act(text)
+    whole_act_token = _act_token(text) if whole_act else None
+    found: list[tuple[str, str]] = []
+    for fragment in _REFERENCE_SPLIT_RE.split(text):
+        parsed = parse_section_string(fragment)
+        if (
+            parsed is None
+            and whole_act_token
+            and whole_act != "constitution-india"
+            and _detect_act(fragment) is None
+        ):
+            parsed = parse_section_string(f"{fragment} {whole_act_token}")
+        if parsed is not None and parsed not in found:
+            found.append(parsed)
+    if not found:
+        parsed = parse_section_string(text)
+        if parsed is not None:
+            found.append(parsed)
+    return found
 
 
 def parse_section_strings(items: Iterable[str]) -> list[tuple[str, str]]:

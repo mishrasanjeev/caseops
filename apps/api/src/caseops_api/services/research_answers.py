@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -39,6 +40,7 @@ from caseops_api.db.models import (
     AuthorityDocument,
     AuthorityDocumentChunk,
     Matter,
+    MatterStatuteReference,
     ModelRun,
     ResearchAnswer,
     Statute,
@@ -81,18 +83,27 @@ from caseops_api.services.source_actions import (
     authority_source_verified,
     inspect_source_target_action,
 )
-from caseops_api.services.statute_resolver import parse_section_string
+from caseops_api.services.statute_resolver import (
+    parse_section_references,
+    parse_section_strings,
+)
 from caseops_api.services.statute_selection import is_selectable_statute_section
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-24"
+ANALYSIS_VERSION = "caseops-research-answer-v2-2026-11-26"
 PROMPT_MARKER = "caseops_research_answer_v1"
 DISCLAIMER = (
     "Source-bounded research support, not legal advice and not exhaustive. Verify each "
     "authority, the current statutory text and any amendment before relying on it."
 )
 MAX_JUDGMENTS = 8
+# Candidate pool before judgments are checked against the question's focus.
+JUDGMENT_CANDIDATES = MAX_JUDGMENTS * 4
+MAX_FOCUS_REFS = 4
+# Fewer focus-engaging judgments than this triggers one supplementary search
+# anchored on the focus provision itself.
+MIN_FOCUSED_JUDGMENTS = 3
 MAX_STATUTE_SECTIONS = 6
 MAX_EXCERPT_CHARS = 2_400
 _PASSAGE_MIN_CHARS = 20
@@ -112,9 +123,15 @@ SECTION_ORDER = list(SECTION_TITLES)
 
 STATUS_MESSAGES = {
     "no_sources": (
-        "CaseOps found no indexed statute section or judgment for this question, so no "
-        "answer was generated. Rephrase with the Act, section or legal issue, or search "
-        "authorities directly."
+        "CaseOps has no verified statute text or indexed judgment for the provision this "
+        "question is about, so no answer was generated rather than an unsourced one. Try "
+        "one of the suggested questions, or search authorities directly."
+    ),
+    "needs_detail": (
+        "CaseOps could not tell which law this question is about and found no indexed "
+        "source for it. Name the Act and section or the legal issue (for example, "
+        "\"essential ingredients of Section 138 of the Negotiable Instruments Act\"), or "
+        "start the research from a matter so its recorded facts and statutes are used."
     ),
     "ungrounded": (
         "The draft answer could not be tied to the retrieved sources, so it was withheld. "
@@ -204,6 +221,7 @@ class _LLMResearchAnswer(BaseModel):
     assumptions: list[str] = Field(default_factory=list, max_length=10)
     sections: list[_LLMSection] = Field(min_length=1, max_length=9)
     authorities: list[_LLMAuthority] = Field(default_factory=list, max_length=24)
+    coverage_gaps: list[str] = Field(default_factory=list, max_length=9)
 
 
 # --------------------------------------------------------------------------- #
@@ -229,6 +247,27 @@ class _Source:
     in_app_href: str | None = None
     treatment: tuple[str | None, int] | None = None
     aliases: list[str] = field(default_factory=list)
+    # Provisions outside the question's focus that this judgment cites, e.g.
+    # "Section 482 (crpc-1973)" on a petition to quash a Section 138 complaint.
+    other_provisions: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _Focus:
+    """The provisions a question is about, and where CaseOps found them.
+
+    ``question``: named in the question. ``inferred``: implied by the facts the
+    question states (cheque dishonour -> Section 138 NI Act). ``matter``: the
+    statutes recorded on the matter the research started from.
+    """
+
+    refs: tuple[tuple[str, str], ...] = ()
+    origin: Literal["question", "inferred", "matter", "none"] = "none"
+    labels: tuple[str, ...] = ()
+
+    @property
+    def acts(self) -> frozenset[str]:
+        return frozenset(statute_id for statute_id, _section in self.refs)
 
 
 def _weight(forum_level: str | None, court: str | None) -> str:
@@ -266,6 +305,7 @@ def _judgment_excerpt(
 
 
 def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchResult]:
+    """Readable, de-duplicated judgment candidates for ``query``, best first."""
     from caseops_api.services.authorities import (
         _build_contextual_query_plan,
         _filter_unreadable_authority_results,
@@ -277,7 +317,7 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
     raw = search_authority_catalog(
         session,
         query=plan.planned_query,
-        limit=MAX_JUDGMENTS * 4,
+        limit=JUDGMENT_CANDIDATES,
         search_mode="contextual",
         suppress_unreadable=False,
     )
@@ -291,8 +331,6 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
             continue
         seen.add(row.authority_document_id)
         picked.append(row)
-        if len(picked) >= MAX_JUDGMENTS:
-            break
     return picked
 
 
@@ -300,26 +338,127 @@ def _is_citable_section(section: StatuteSection) -> bool:
     return is_selectable_statute_section(section)
 
 
-def _statute_sections(
-    session: Session, query: str, documents: Iterable[AuthorityDocument]
-) -> list[tuple[StatuteSection, Statute]]:
+def _ref_label(session: Session, ref: tuple[str, str]) -> str:
+    statute = session.get(Statute, ref[0])
+    return f"{ref[1]}, {statute.long_name}" if statute is not None else f"{ref[1]} ({ref[0]})"
+
+
+def _matter_statute_refs(session: Session, matter: Matter | None) -> list[tuple[str, str]]:
+    if matter is None:
+        return []
+    rows = session.execute(
+        select(StatuteSection.statute_id, StatuteSection.section_number)
+        .join(MatterStatuteReference, MatterStatuteReference.section_id == StatuteSection.id)
+        .where(MatterStatuteReference.matter_id == matter.id)
+        .order_by(MatterStatuteReference.created_at, MatterStatuteReference.id)
+    ).all()
     refs: list[tuple[str, str]] = []
-    primary = parse_section_string(query)
-    if primary:
-        refs.append(primary)
-    # Sections the retrieved judgments themselves cite, within the Act(s) the
-    # question is about. This brings in, e.g., Sections 139 and 142 for a
-    # Section 138 question without guessing from model knowledge.
-    statutes_in_scope = {ref[0] for ref in refs}
+    for statute_id, section_number in rows:
+        if (statute_id, section_number) not in refs:
+            refs.append((statute_id, section_number))
+    return refs
+
+
+def _resolve_focus(session: Session, query: str, matter: Matter | None) -> _Focus:
+    """What the question is about: named provisions first, then implied, then the matter's."""
+    from caseops_api.services.authorities import _build_contextual_query_plan
+
+    refs = parse_section_references(query)
+    origin: Literal["question", "inferred", "matter", "none"] = "question"
+    if not refs:
+        refs = parse_section_strings(_build_contextual_query_plan(query).statutes_or_sections)
+        origin = "inferred"
+    if not refs:
+        refs = _matter_statute_refs(session, matter)
+        origin = "matter"
+    if not refs and matter is not None:
+        # No statute is linked to the matter: read the provisions its own record
+        # names or implies (title, description), never the model's guess.
+        matter_text = " ".join(
+            str(value) for value in (matter.title, matter.description) if value
+        )
+        refs = parse_section_references(matter_text) or parse_section_strings(
+            _build_contextual_query_plan(matter_text).statutes_or_sections
+        )
+    if not refs:
+        return _Focus()
+    refs = refs[:MAX_FOCUS_REFS]
+    return _Focus(
+        refs=tuple(refs),
+        origin=origin,
+        labels=tuple(_ref_label(session, ref) for ref in refs),
+    )
+
+
+def _retrieval_query(query: str, focus: _Focus, matter: Matter | None) -> str:
+    """The text judgments are retrieved for.
+
+    A question that names its provision is searched as asked. A vague one
+    ("explain this matter") borrows the matter's recorded facts and statutes,
+    so the search has something legal to match. The matter facts are shown to
+    the model separately and labelled; this only steers retrieval.
+    """
+    parts: list[str] = [query]
+    if focus.origin in {"inferred", "matter"}:
+        parts.extend(focus.labels)
+    if matter is not None and focus.origin in {"matter", "none"}:
+        parts.extend(
+            str(value)
+            for value in (
+                matter.title,
+                matter.matter_type,
+                matter.practice_area,
+                (matter.description or "")[:500],
+            )
+            if value
+        )
+    return " ".join(part for part in parts if part)
+
+
+def _cited_refs(document: AuthorityDocument) -> list[tuple[str, str]]:
+    try:
+        cited = json.loads(document.sections_cited_json or "[]")
+    except (TypeError, ValueError):
+        cited = []
+    if not isinstance(cited, list):
+        return []
+    return parse_section_strings(str(item) for item in cited)
+
+
+def _engagement(
+    document: AuthorityDocument, excerpt: str, focus: _Focus
+) -> tuple[int, list[tuple[str, str]]]:
+    """How directly a judgment deals with the focus provision.
+
+    0: it cites a focus provision. 1: its retrieved text names a focus
+    provision. 2: neither, so it is about something else and is not offered to
+    the model. Also returns the provisions outside the focus that it cites.
+    """
+    cited = _cited_refs(document)
+    others = [ref for ref in cited if ref[0] not in focus.acts]
+    if any(ref in focus.refs for ref in cited):
+        return 0, others
+    named = parse_section_references(
+        " ".join(part for part in (document.title, excerpt, document.summary) if part)
+    )
+    if any(ref in focus.refs for ref in named):
+        return 1, others
+    return 2, others
+
+
+def _statute_sections(
+    session: Session, focus: _Focus, documents: Iterable[AuthorityDocument]
+) -> list[tuple[StatuteSection, Statute]]:
+    """Focus provisions, then sections the chosen judgments cite within the same Acts.
+
+    Sections from other Acts are never added. Before 26 Nov 2026 a question
+    whose Act was not recognised let every section the retrieved judgments
+    cited through, so quashing petitions could make Section 482 CrPC the lead
+    statutory source of a Section 138 answer (BUG-002).
+    """
+    refs: list[tuple[str, str]] = list(focus.refs)
     for document in documents:
-        try:
-            cited = json.loads(document.sections_cited_json or "[]")
-        except (TypeError, ValueError):
-            cited = []
-        for item in cited if isinstance(cited, list) else []:
-            parsed = parse_section_string(str(item))
-            if parsed and (not statutes_in_scope or parsed[0] in statutes_in_scope):
-                refs.append(parsed)
+        refs.extend(ref for ref in _cited_refs(document) if ref[0] in focus.acts)
     found: list[tuple[StatuteSection, Statute]] = []
     seen: set[tuple[str, str]] = set()
     for statute_id, section_number in refs:
@@ -342,20 +481,81 @@ def _statute_sections(
     return found
 
 
-def _build_sources(session: Session, query: str) -> list[_Source]:
-    from caseops_api.services.authority_treatments import compute_search_result_treatments
+@dataclass
+class _Candidate:
+    result: AuthoritySearchResult
+    document: AuthorityDocument
+    excerpt: str
+    tier: int
+    others: list[tuple[str, str]]
+    rank: int
 
-    judgments = _retrieve_judgments(session, query)
+
+def _candidates(
+    session: Session, results: list[AuthoritySearchResult], focus: _Focus, offset: int = 0
+) -> list[_Candidate]:
     documents = {
         row.id: row
         for row in session.scalars(
             select(AuthorityDocument).where(
-                AuthorityDocument.id.in_([item.authority_document_id for item in judgments])
+                AuthorityDocument.id.in_([item.authority_document_id for item in results])
             )
         )
     }
+    picked: list[_Candidate] = []
+    for rank, item in enumerate(results, start=offset):
+        document = documents.get(item.authority_document_id)
+        if document is None:
+            continue
+        excerpt = _judgment_excerpt(session, item, document.document_text)
+        if not excerpt:
+            continue
+        tier, others = _engagement(document, excerpt, focus) if focus.refs else (0, [])
+        picked.append(_Candidate(item, document, excerpt, tier, others, rank))
+    return picked
+
+
+def _select_judgments(
+    session: Session, query: str, focus: _Focus, matter: Matter | None
+) -> list[_Candidate]:
+    """Judgments that deal with the question's focus, binding authority first."""
+    pool = _candidates(
+        session, _retrieve_judgments(session, _retrieval_query(query, focus, matter)), focus
+    )
+    if focus.refs and sum(1 for item in pool if item.tier < 2) < MIN_FOCUSED_JUDGMENTS:
+        # The question's wording pulled in neighbouring topics. Search once more
+        # on the focus provision itself before settling for fewer authorities.
+        seen = {item.result.authority_document_id for item in pool}
+        anchored = [
+            row
+            for row in _retrieve_judgments(session, " ".join(focus.labels))
+            if row.authority_document_id not in seen
+        ]
+        pool.extend(_candidates(session, anchored, focus, offset=len(pool)))
+    if focus.refs:
+        pool = [item for item in pool if item.tier < 2]
+    pool.sort(
+        key=lambda item: (
+            item.tier,
+            bool(item.others),
+            item.result.forum_level != "supreme_court",
+            item.rank,
+        )
+    )
+    return pool[:MAX_JUDGMENTS]
+
+
+def _build_sources(
+    session: Session, query: str, focus: _Focus | None = None, matter: Matter | None = None
+) -> list[_Source]:
+    from caseops_api.services.authority_treatments import compute_search_result_treatments
+
+    focus = focus if focus is not None else _resolve_focus(session, query, matter)
+    judgments = _select_judgments(session, query, focus, matter)
     sources: list[_Source] = []
-    for section, statute in _statute_sections(session, query, documents.values()):
+    for section, statute in _statute_sections(
+        session, focus, [item.document for item in judgments]
+    ):
         label = section.section_label or ""
         title = f"{section.section_number}, {statute.long_name}"
         if label and label.lower() not in title.lower():
@@ -389,15 +589,10 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
             )
         )
     treatments = compute_search_result_treatments(
-        session, [item.authority_document_id for item in judgments]
+        session, [item.result.authority_document_id for item in judgments]
     )
-    for item in judgments:
-        document = documents.get(item.authority_document_id)
-        if document is None:
-            continue
-        excerpt = _judgment_excerpt(session, item, document.document_text)
-        if not excerpt:
-            continue
+    for candidate in judgments:
+        item, document = candidate.result, candidate.document
         citation = item.neutral_citation or item.case_reference
         sources.append(
             _Source(
@@ -410,8 +605,8 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 bench=item.bench_name,
                 decision_date=item.decision_date,
                 weight=_weight(item.forum_level, item.court_name),
-                excerpt=excerpt,
-                full_text=document.document_text or excerpt,
+                excerpt=candidate.excerpt,
+                full_text=document.document_text or candidate.excerpt,
                 retrieved_at=document.retrieved_at,
                 source_action=inspect_source_target_action(
                     item.source_reference,
@@ -421,6 +616,7 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 ).model_dump(mode="json"),
                 treatment=treatments.get(item.authority_document_id),
                 aliases=[value for value in (item.case_reference, item.neutral_citation) if value],
+                other_provisions=[f"{ref[1]} ({ref[0]})" for ref in candidate.others[:4]],
             )
         )
     return sources
@@ -451,7 +647,9 @@ def _build_messages(
     sources: list[_Source],
     matter_facts: list[ResearchMatterFact],
     retry_note: str | None = None,
+    focus: _Focus | None = None,
 ) -> list[LLMMessage]:
+    focus = focus or _Focus()
     system = (
         "You are CaseOps legal research for Indian lawyers. Return only one JSON object "
         "matching the schema. Write in plain legal English.\n"
@@ -478,10 +676,21 @@ def _build_messages(
         "8. authorities: for each source you relied on, give the proposition it supports, "
         "why it matters to this question, disposition (supporting, contrary or context) "
         "and, where possible, a short passage copied verbatim from that source's excerpt.\n"
-        "9. No outcome odds, no judge favourability, no claims of exhaustive research."
+        "9. No outcome odds, no judge favourability, no claims of exhaustive research.\n"
+        "10. QUESTION_FOCUS lists the provisions the question is about. Keep short_answer, "
+        "key_points and every section on those provisions. A judgment whose "
+        "other_provisions shows it mainly concerns a different provision (for example a "
+        "power to quash proceedings) may be cited only for what it says about the focus "
+        "provision. Do not make that other provision the subject of the answer unless the "
+        "question asks about it.\n"
+        "11. When QUESTION_FOCUS is not empty, cover applicable_law, ingredients, "
+        "time_limits, procedure and jurisdiction wherever the SOURCES support them. For each "
+        "of those topics the SOURCES do not support, add one short line to coverage_gaps "
+        "naming the topic, instead of answering it from general knowledge."
     )
     payload = {
         "question": query,
+        "question_focus": list(focus.labels),
         "matter_facts": [fact.model_dump() for fact in matter_facts],
         "sources": [
             {
@@ -491,6 +700,7 @@ def _build_messages(
                 "citation": source.citation,
                 "court": source.court,
                 "decision_date": source.decision_date.isoformat() if source.decision_date else None,
+                "other_provisions": source.other_provisions,
                 "untrusted_excerpt": source.excerpt,
             }
             for source in sources
@@ -501,7 +711,8 @@ def _build_messages(
         "Return this schema: {short_answer: str, key_points: [str], facts_insufficient: bool, "
         "missing_facts: [str], assumptions: [str], sections: [{key: str, paragraphs: [str], "
         "steps: [str], timeline: [{period: str, starts: str, detail: str}]}], authorities: "
-        "[{source: int, disposition: str, proposition: str, relevance: str, passage: str|null}]}"
+        "[{source: int, disposition: str, proposition: str, relevance: str, passage: str|null}], "
+        "coverage_gaps: [str]}"
     )
     if retry_note:
         user += f"\n\nVERIFICATION_RETRY:\n{retry_note}"
@@ -622,21 +833,68 @@ def _prohibited(parsed: _LLMResearchAnswer) -> str | None:
     return None
 
 
-def _retry_note(parsed: _LLMResearchAnswer, verifier: _Verifier) -> str | None:
-    texts = [parsed.short_answer, *parsed.key_points]
+def _off_focus(texts: Iterable[str], focus: _Focus, query: str) -> list[str]:
+    """Provisions the headline text leads with that the question never asked about."""
+    if not focus.refs:
+        return []
+    asked = set(parse_section_references(query))
+    found: list[str] = []
+    for text in texts:
+        for ref in parse_section_references(text):
+            if ref[0] not in focus.acts and ref not in asked:
+                label = f"{ref[1]} ({ref[0]})"
+                if label not in found:
+                    found.append(label)
+    return found
+
+
+# A second full generation roughly doubles the wait (BUG-003). Detail
+# paragraphs that fail verification are dropped deterministically and the drop
+# is reported, so they only justify a retry when they would gut the answer.
+_RETRY_DROP_SHARE = 0.25
+
+
+def _retry_note(
+    parsed: _LLMResearchAnswer,
+    verifier: _Verifier,
+    focus: _Focus | None = None,
+) -> str | None:
+    """Why the draft needs a second generation, or None when it can be verified as is."""
+    focus = focus or _Focus()
+    headline = [parsed.short_answer, *parsed.key_points]
+    detail: list[str] = []
     for section in parsed.sections:
-        texts.extend(section.paragraphs)
-        texts.extend(section.steps)
-        texts.extend(f"{row.period} {row.starts} {row.detail}" for row in section.timeline)
-    mentions = sorted({item for text in texts for item in verifier.unverified_mentions(text)})
+        detail.extend(section.paragraphs)
+        detail.extend(section.steps)
+        detail.extend(f"{row.period} {row.starts} {row.detail}" for row in section.timeline)
+    headline_mentions = sorted(
+        {item for text in headline for item in verifier.unverified_mentions(text)}
+    )
+    flagged_detail = [text for text in detail if verifier.unverified_mentions(text)]
     problems: list[str] = []
-    if mentions:
+    if headline_mentions or (
+        detail and len(flagged_detail) / len(detail) > _RETRY_DROP_SHARE
+    ):
+        mentions = sorted(
+            {
+                item
+                for text in [*headline, *flagged_detail]
+                for item in verifier.unverified_mentions(text)
+            }
+        )
         problems.append(
             "Remove these names, citations, quotations or links that are not in the SOURCES: "
             + "; ".join(mentions[:12])
         )
     if not any(int(n) in verifier.numbers for n in _MARKER_RE.findall(parsed.short_answer)):
         problems.append("The short_answer must cite at least one supplied source marker.")
+    drifted = _off_focus(headline, focus, verifier.query)
+    if drifted:
+        problems.append(
+            "The question is about " + "; ".join(focus.labels) + ". The short_answer and "
+            "key_points lead with " + "; ".join(drifted) + ", which the question did not ask "
+            "about. Answer the question on the focus provisions."
+        )
     category = _prohibited(parsed)
     if category:
         problems.append(f"Remove {category.replace('_', ' ')} language.")
@@ -649,6 +907,7 @@ def _verify(
     sources: list[_Source],
     query: str,
     matter_facts: list[ResearchMatterFact],
+    focus: _Focus | None = None,
 ) -> ResearchAnswerBody | None:
     verifier = _Verifier(sources=sources, query=query)
     short = verifier.cited(parsed.short_answer, requires_source=True)
@@ -749,11 +1008,30 @@ def _verify(
             number,
             ResearchAuthorityEntry(source=number, disposition="supporting", cited_inline=True),
         )
+    # A judgment the answer never cites inline and whose claimed passage could
+    # not be found in its text is a loose association, not an authority for
+    # anything shown. Listing it is how unrelated precedents reached the
+    # authorities section (BUG-002), so it is dropped and counted.
+    unsupported = [
+        number
+        for number, entry in entries.items()
+        if not entry.cited_inline
+        and not entry.passage_verified
+        and by_number[number].kind == "judgment"
+    ]
+    for number in unsupported:
+        del entries[number]
+    verifier.verification.unlinked_authorities = len(unsupported)
     ordered = [entries[number] for number in cited_inline] + [
         entry for number, entry in entries.items() if number not in cited_inline
     ]
 
     verification = verifier.verification
+    if verification.unlinked_authorities:
+        verification.notes.append(
+            f"{verification.unlinked_authorities} retrieved judgment(s) were not listed because "
+            "the answer neither cites them nor quotes a passage found in their text."
+        )
     if verification.removed_unverified_mentions:
         verification.notes.append(
             f"{verification.removed_unverified_mentions} passage(s) were withheld because they "
@@ -779,6 +1057,13 @@ def _verify(
         sections=sections,
         authorities=ordered,
         matter_facts=matter_facts,
+        question_focus=list(focus.labels) if focus else [],
+        coverage_gaps=[
+            text
+            for raw in parsed.coverage_gaps
+            if (text := _MARKER_RE.sub("", raw).strip())
+            and not verifier.unverified_mentions(text)
+        ],
         verification=verification,
         law_checked_as_of=datetime.now(UTC).date(),
         sources_retrieved_from=min(retrieved) if retrieved else None,
@@ -994,17 +1279,25 @@ def run_research_answer_job(answer_id: str) -> None:
 def _run(session: Session, answer: ResearchAnswer) -> None:
     from caseops_api.services.embeddings import EmbeddingProviderError
 
+    started = time.perf_counter()
+    timings: dict[str, int] = {}
+    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
     try:
-        sources = _build_sources(session, answer.query)
+        focus = _resolve_focus(session, answer.query, matter)
+        sources = _build_sources(session, answer.query, focus=focus, matter=matter)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")
         return
+    timings["retrieval_ms"] = int((time.perf_counter() - started) * 1000)
     manifest = _manifest(sources)
     if not sources:
-        _finish(session, answer, state="abstained", error_code="no_sources", manifest=manifest)
+        # A question CaseOps could place but has no source for is different from
+        # one it could not place at all: the second needs the user to say more.
+        code = "no_sources" if focus.refs else "needs_detail"
+        _log_timings(answer.id, code, focus, sources, timings, attempts=0)
+        _finish(session, answer, state="abstained", error_code=code, manifest=manifest)
         return
-    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
     matter_facts = _matter_facts(matter)
     answer_id = answer.id
     call_context = LLMCallContext(
@@ -1013,38 +1306,55 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
         actor_membership_id=answer.created_by_membership_id,
         purpose=PURPOSE_RESEARCH,
     )
-    messages = _build_messages(query=answer.query, sources=sources, matter_facts=matter_facts)
+    messages = _build_messages(
+        query=answer.query, sources=sources, matter_facts=matter_facts, focus=focus
+    )
     # Retrieval can write (for example query telemetry); the model call
     # releases the session and requires a clean transaction.
     session.commit()
+    attempts = 0
     try:
         provider = build_provider(purpose=PURPOSE_RESEARCH)
+        generation_started = time.perf_counter()
         parsed, completion = _generate(
             provider, session=session, messages=messages, context=call_context
         )
-        note = _retry_note(parsed, _Verifier(sources=sources, query=answer.query))
+        attempts = 1
+        timings["first_generation_ms"] = int((time.perf_counter() - generation_started) * 1000)
+        note = _retry_note(parsed, _Verifier(sources=sources, query=answer.query), focus)
         if note:
             messages = _build_messages(
-                query=answer.query, sources=sources, matter_facts=matter_facts, retry_note=note
+                query=answer.query,
+                sources=sources,
+                matter_facts=matter_facts,
+                retry_note=note,
+                focus=focus,
             )
+            retry_started = time.perf_counter()
             parsed, completion = _generate(
                 provider, session=session, messages=messages, context=call_context
             )
+            attempts = 2
+            timings["retry_generation_ms"] = int((time.perf_counter() - retry_started) * 1000)
     except HTTPException as exc:
         session.rollback()
         answer = session.get(ResearchAnswer, answer_id)
         code = "ai_not_permitted" if exc.status_code in {402, 403, 429} else "provider_unavailable"
+        _log_timings(answer_id, code, focus, sources, timings, attempts=attempts)
         _finish(session, answer, state="failed", error_code=code, manifest=manifest)
         return
     except LLMProviderError as exc:
         session.rollback()
         answer = session.get(ResearchAnswer, answer_id)
         logger.warning("research answer provider failure: %s", redact_provider_error(str(exc)))
+        _log_timings(answer_id, "provider_unavailable", focus, sources, timings, attempts=attempts)
         _finish(session, answer, state="failed", error_code="provider_unavailable",
                 manifest=manifest)
         return
     answer = session.get(ResearchAnswer, answer_id)
-    body = _verify(parsed, sources=sources, query=answer.query, matter_facts=matter_facts)
+    body = _verify(
+        parsed, sources=sources, query=answer.query, matter_facts=matter_facts, focus=focus
+    )
     run_id = _model_run(
         session,
         answer,
@@ -1052,11 +1362,39 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
         messages=messages,
         status_label="ok" if body else "rejected_unverified_citations",
     )
+    timings["total_ms"] = int((time.perf_counter() - started) * 1000)
+    _log_timings(
+        answer_id, "answered" if body else "ungrounded", focus, sources, timings, attempts=attempts
+    )
     if body is None:
         _finish(session, answer, state="abstained", error_code="ungrounded", manifest=manifest,
                 model_run_id=run_id)
         return
     _finish(session, answer, state="answered", body=body, manifest=manifest, model_run_id=run_id)
+
+
+def _log_timings(
+    answer_id: str,
+    outcome: str,
+    focus: _Focus,
+    sources: list[_Source],
+    timings: dict[str, int],
+    *,
+    attempts: int,
+) -> None:
+    """One structured line per run, so latency and focus can be read from logs."""
+    logger.info(
+        "research_answer_timing answer_id=%s outcome=%s focus_origin=%s focus_refs=%d "
+        "statute_sources=%d judgment_sources=%d attempts=%d %s",
+        answer_id,
+        outcome,
+        focus.origin,
+        len(focus.refs),
+        sum(1 for source in sources if source.kind == "statute_section"),
+        sum(1 for source in sources if source.kind == "judgment"),
+        attempts,
+        " ".join(f"{key}={value}" for key, value in timings.items()),
+    )
 
 
 def _readable(session: Session, *, context: SessionContext, answer: ResearchAnswer) -> bool:
@@ -1133,7 +1471,44 @@ def serialize_research_answer(session: Session, answer: ResearchAnswer) -> Resea
         saved_at=answer.saved_at,
         answer=body,
         sources=sources,
+        suggestions=_suggestions(session, answer),
     )
+
+
+def _suggestions(session: Session, answer: ResearchAnswer) -> list[str]:
+    """Questions CaseOps can answer instead of one it abstained on.
+
+    Built only from the question's own provisions and the matter record, so a
+    suggestion never names law CaseOps has not identified. Empty when the
+    answer was produced or when there is nothing specific to suggest.
+    """
+    if answer.status != "abstained" or answer.error_code not in {
+        "no_sources",
+        "needs_detail",
+        "ungrounded",
+    }:
+        return []
+    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
+    focus = _resolve_focus(session, answer.query, matter)
+    asked = _collapse(answer.query).casefold()
+    suggestions: list[str] = []
+    for label in focus.labels[:2]:
+        suggestions.append(
+            f"What are the essential ingredients, time limits and procedure under {label}?"
+        )
+        if matter is not None:
+            suggestions.append(f"How does {label} apply to the recorded facts of {matter.title}?")
+    if not focus.refs and matter is not None and (matter.practice_area or matter.matter_type):
+        area = matter.practice_area or matter.matter_type
+        suggestions.append(
+            f"Which provisions govern a {area} matter like {matter.title}, and what must be "
+            "proved under each?"
+        )
+    unique: list[str] = []
+    for item in suggestions:
+        if _collapse(item).casefold() != asked and item not in unique:
+            unique.append(item)
+    return unique[:3]
 
 
 def _settle_stale(session: Session, answer: ResearchAnswer) -> None:

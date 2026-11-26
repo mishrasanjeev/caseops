@@ -308,7 +308,9 @@ def test_no_sources_abstains_without_any_model_call(
     monkeypatch.setattr(service, "build_provider", refuse)
     monkeypatch.setattr(service, "_retrieve_judgments", lambda session, query: [])
     record = _ask(client, token, query="What is the limitation for an unindexed remedy?")
-    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+    # Since 26 Nov 2026 a question that names no law it can be placed under asks
+    # for detail (needs_detail); no_sources is kept for an identified provision.
+    assert (record["status"], record["error_code"]) == ("abstained", "needs_detail")
     assert record["answer"] is None and record["sources"] == []
 
 
