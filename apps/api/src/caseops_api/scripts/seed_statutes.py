@@ -91,10 +91,6 @@ def _apply_verified_release_source(
     effective_from = (
         date.fromisoformat(str(source["effective_from"])) if source.get("effective_from") else None
     )
-    # A retained repealed-law edition records the last day its Act was in force.
-    effective_to = (
-        date.fromisoformat(str(source["effective_to"])) if source.get("effective_to") else None
-    )
     if (
         row.section_label == str(source["section_label"])
         and row.section_text == str(source["section_text"])
@@ -107,7 +103,6 @@ def _apply_verified_release_source(
         and row.source_status == str(source["source_status"])
         and row.legal_status == str(source["legal_status"])
         and row.effective_from == effective_from
-        and row.effective_to == effective_to
         and row.exact_source_version == str(source["exact_source_version"])
         and row.source_locator_type == str(source["source_locator_type"])
         and row.source_policy_json == dict(source["source_policy"])
@@ -134,7 +129,6 @@ def _apply_verified_release_source(
     row.source_status = str(source["source_status"])
     row.legal_status = str(source["legal_status"])
     row.effective_from = effective_from
-    row.effective_to = effective_to
     row.exact_source_version = str(source["exact_source_version"])
     row.source_locator_type = str(source["source_locator_type"])
     row.source_policy_json = dict(source["source_policy"])
@@ -178,7 +172,6 @@ def _record_release_version(
             exact_source_version=row.exact_source_version,
             retrieved_at=row.section_text_fetched_at,
             effective_from=row.effective_from,
-            effective_to=row.effective_to,
             source_policy_json=dict(row.source_policy_json),
             diff_unified="".join(
                 unified_diff(
@@ -244,21 +237,25 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
 
     for act in seeds:
         act_id = act["id"]
+        # A retained repealed-law edition makes its Act repealed too; the Act
+        # row must never present as current law.
+        document = documents.get(act_id, {})
+        act_legal_status = document.get("legal_status", "enacted")
+        placeholder_numbers = set(document.get("retained_legacy_placeholders", []))
         statute = session.scalar(select(Statute).where(Statute.id == act_id))
         if statute is None:
-            session.add(
-                Statute(
-                    id=act_id,
-                    short_name=act["short_name"],
-                    long_name=act["long_name"],
-                    enacted_year=act.get("enacted_year"),
-                    jurisdiction=act.get("jurisdiction", "india"),
-                    source_url=act.get("source_url"),
-                    is_active=True,
-                    created_at=now,
-                    updated_at=now,
-                ),
+            statute = Statute(
+                id=act_id,
+                short_name=act["short_name"],
+                long_name=act["long_name"],
+                enacted_year=act.get("enacted_year"),
+                jurisdiction=act.get("jurisdiction", "india"),
+                source_url=act.get("source_url"),
+                is_active=True,
+                created_at=now,
+                updated_at=now,
             )
+            session.add(statute)
             s_ins += 1
         else:
             statute.short_name = act["short_name"]
@@ -267,6 +264,12 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
             statute.source_url = act.get("source_url") or statute.source_url
             statute.updated_at = now
             s_upd += 1
+        statute.legal_status = act_legal_status
+        if document.get("historical_context"):
+            statute.source_policy_json = {
+                **(statute.source_policy_json or {}),
+                "historical_context": document["historical_context"],
+            }
         session.flush()
 
         existing = {
@@ -323,6 +326,8 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                     if _apply_verified_release_source(row, verified_source, now=now):
                         admitted.append((row, ""))
                     applied_verified_keys.add((act_id, num))
+                if num in placeholder_numbers:
+                    row.legal_status = act_legal_status
                 session.add(row)
                 sec_ins += 1
             else:
@@ -336,6 +341,8 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                     row.section_label = sec.get("section_label") or row.section_label
                     row.section_url = sec.get("section_url") or row.section_url
                 row.ordinal = ordinal
+                if num in placeholder_numbers:
+                    row.legal_status = act_legal_status
                 # Bake-in pattern (2026-04-26): when the seed JSON has
                 # section_text from a curated scrape, persist it so a
                 # fresh deploy lands authoritative bare text without

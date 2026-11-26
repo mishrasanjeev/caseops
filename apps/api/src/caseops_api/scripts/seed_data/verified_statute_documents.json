@@ -3352,7 +3352,6 @@
       "issuing_body": "Ministry of Finance, Government of India",
       "source_version": "ITD edition as amended by Finance Act, 2026; retained repealed-law edition",
       "legal_status": "repealed",
-      "effective_to": "2026-03-31",
       "historical_context": "Retained repealed-law edition. India Code lists the Income-tax Act, 1961 as repealed by the Income-tax Act, 2025 (30 of 2025), which replaced it from 1 April 2026 subject to its repeal, savings and transition provisions. This Income Tax Department consolidation, as amended by the Finance Act, 2026, is source verification for earlier assessment years and saved proceedings, not a determination of present applicability. The publisher prints Finance Act, 2026 amendments in italics within square brackets; italics are not preserved in the extracted text, and amendment markers such as \"54[\" are printed footnote references to the endnotes.",
       "page_count": 1117,
       "body_pages": [
@@ -3388,7 +3387,7 @@
       "preamble_lines": [
         "BE it enacted by Parliament in the Twelfth Year of the Republic of India as follows :—"
       ],
-      "section_count": 940,
+      "section_count": 941,
       "identity_ranges": {
         "18-21": [
           "18",
@@ -3509,7 +3508,9 @@
         "280ZE",
         "sixth-schedule",
         "ninth-schedule",
-        "tenth-schedule"
+        "tenth-schedule",
+        "80VV",
+        "281A"
       ],
       "omission_evidence": {
         "103": {
@@ -3637,8 +3638,24 @@
           "first_line": 2,
           "end_line": 6,
           "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "80VVA": {
+          "page": 374,
+          "first_line": 4,
+          "end_line": 6,
+          "text": "[Chapter VI-B, consisting of section 80VVA, omitted by the Finance Act, 1987, w.e.f. 1-4-1988. Original Chapter was inserted by the Finance Act, 1983,\nw.e.f. 1-4-1984 and amended by the Finance Act, 1985, w.e.f. 1-4-1986 and Finance Act, 1986, w.e.f. 1-4-1987.]"
         }
       },
+      "chapter_blocks": [
+        [
+          374,
+          2
+        ],
+        [
+          375,
+          0
+        ]
+      ],
       "blocked_sections": {
         "40": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
         "40A": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
@@ -3649,7 +3666,8 @@
         "139": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
         "206C": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
         "211": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
-        "282B": "Retained transcription; the edition prints only an elision mark ([***]) under this heading, with no operative text and no omission authority."
+        "282B": "Retained transcription; the edition prints only an elision mark ([***]) under this heading, with no operative text and no omission authority.",
+        "44DB": "Retained transcription; the body contains stacked fraction formulas drawn with a rule, and line extraction does not keep the numerator and denominator in reading order."
       },
       "blocked_supplements": {
         "thirteenth-schedule": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",

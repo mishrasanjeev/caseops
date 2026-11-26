@@ -43,7 +43,7 @@ VERIFIED = {
     "ipc-1860": 554,
     "motor-vehicles-1988": 250,
     "constitution-india": 481,
-    "income-tax-1961": 823,
+    "income-tax-1961": 820,
 }
 INCOME_TAX_URL = (
     "https://www.incometaxindia.gov.in/documents/20117/43006/"
@@ -409,7 +409,7 @@ def test_income_tax_edition_is_a_labelled_repealed_edition_from_the_pinned_relea
     assert document["release_asset"]["size"] == 179_141_656
     assert document["release_asset"]["tag"] == "statute-evidence-income-tax-1961-fa2026"
     states = Counter(row["verification_status"] for row in rows.values())
-    assert states == {"verified_official": 823, "retired": 130, "quarantined": 12}
+    assert states == {"verified_official": 820, "retired": 133, "quarantined": 13}
     # Out-of-order source files still yield the Act's own numbering order.
     order = list(rows)
     assert order[:4] == ["Section 1", "Section 2", "Section 3", "Section 4"]
@@ -430,10 +430,11 @@ def test_income_tax_edition_is_a_labelled_repealed_edition_from_the_pinned_relea
         assert row["verification_status"] == "verified_official", number
         assert row["section_text"].startswith(start), number
         assert row["source_url"] == f"{INCOME_TAX_URL}#page={page}"
-        # Never current law: repealed, historical scope and an end date.
+        # Never current law: repealed, historical scope and the repeal note. No
+        # blanket end date: saved law keeps applying to earlier assessment years.
         assert row["legal_status"] == "repealed"
         assert row["source_policy"]["edition_scope"] == "historical_repealed_law"
-        assert row["effective_to"] == "2026-03-31"
+        assert "effective_to" not in row
         assert "Income-tax Act, 2025" in row["editorial_notes"]
         assert row["exact_source_version"].startswith("ITD edition as amended by Finance Act, 2026")
     rent = rows["Section 194-I"]
@@ -449,7 +450,22 @@ def test_income_tax_edition_is_a_labelled_repealed_edition_from_the_pinned_relea
     for number in ("18", "19", "20", "21"):
         assert rows[f"Section {number}"]["verification_status"] == "retired"
         assert rows[f"Section {number}"]["source_policy"]["arrangement_identity"] == "18-21"
-        assert rows[f"Section {number}"]["effective_to"] is None
+    # Omission and repeal notices are never attachable, however they are printed:
+    # 80VV is followed by an omitted chapter's heading, 281A was repealed.
+    for number in ("80VV", "281A"):
+        assert rows[f"Section {number}"]["verification_status"] == "retired", number
+        assert rows[f"Section {number}"]["legal_status"] == "repealed", number
+    assert rows["Section 80VV"]["section_text"].startswith(
+        "80VV. [Omitted by the Finance Act, 1985"
+    )
+    assert "CHAPTER VI-B" not in rows["Section 80VV"]["section_text"]
+    assert rows["Section 281A"]["section_text"].startswith("281A. [Repealed by the Benami")
+    assert rows["Section 80VVA"]["verification_status"] == "retired"
+    assert rows["Section 80VVA"]["source_policy"]["omission_evidence"]["page"] == 374
+    assert document["chapter_blocks"] == [[374, 2], [375, 0]]
+    # A stacked fraction formula loses its layout in line extraction.
+    assert rows["Section 44DB"]["verification_status"] == "quarantined"
+    assert "stacked fraction" in rows["Section 44DB"]["quarantine_reason"]
     assert rows["Section 103"]["source_policy"]["omission_evidence"]["page"] == 419
     assert "95 to 103" in rows["Section 103"]["section_text"]
     assert rows["Section 280E"]["verification_status"] == "retired"
@@ -619,7 +635,7 @@ def test_arbitration_all_schedules_and_appendix_are_distinct_complete_sources():
         "table_cell",
         "table_missing",
         "section_file_omission_enabled",
-        "section_file_end_date",
+        "section_file_notice_only_text",
     ],
 )
 def test_release_admission_rejects_tampered_or_incomplete_evidence(tmp_path, monkeypatch, defect):
@@ -663,7 +679,10 @@ def test_release_admission_rejects_tampered_or_incomplete_evidence(tmp_path, mon
             # A chapter-note omission must never become attachable text.
             income_tax["Section 103"]["verification_status"] = "verified_official"
         else:
-            income_tax["Section 80C"]["effective_to"] = None
+            # Any Act: a verified row whose body is only a repeal notice is refused.
+            row = income_tax["Section 80C"]
+            row["section_text"] = "80C. [Repealed by the Synthetic Repeal Act, 2026.]"
+            row["source_sha256"] = hashlib.sha256(row["section_text"].encode()).hexdigest()
     elif defect.startswith("table_"):
         schedule = next(
             row

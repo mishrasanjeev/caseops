@@ -472,7 +472,6 @@ class SectionFileEditionTests(unittest.TestCase):
             "issuing_body": "Test issuing body",
             "source_version": "Test edition",
             "legal_status": "repealed",
-            "effective_to": "2026-03-31",
         }
 
     def compile(self):
@@ -498,10 +497,10 @@ class SectionFileEditionTests(unittest.TestCase):
         self.assertIn("Sub. by Act No. 2", second["editorial_notes"])
         self.assertEqual(second["verification_status"], "verified_official")
         self.assertEqual(second["source_policy"]["edition_scope"], "historical_repealed_law")
-        self.assertEqual(second["effective_to"], "2026-03-31")
+        # The repeal is legal status and context, never a blanket end date.
+        self.assertNotIn("effective_to", second)
         for number in ("Section 3", "Section 4"):
             self.assertEqual(rows[number]["verification_status"], "retired")
-            self.assertIsNone(rows[number]["effective_to"])
             self.assertEqual(rows[number]["source_policy"]["arrangement_identity"], "3-4")
         schedule = rows["First Schedule"]
         self.assertTrue(schedule["section_text"].startswith("THE FIRST SCHEDULE\n"))
@@ -542,6 +541,66 @@ class SectionFileEditionTests(unittest.TestCase):
         self.spec["identity_ranges"] = {"3-4": ["3"]}
         with self.assertRaisesRegex(ValueError, "Undeclared printed identity range"):
             self.compile()
+
+    def test_chapter_heading_on_a_page_without_a_start_fails_closed_unless_declared(self):
+        # An omitted chapter printed with no section must not extend Section 1.
+        self.pages[3]["lines"][2:2] = [
+            file_line("CHAPTER II", 50.5, x=270, font="LiberationSerif-BoldItalic"),
+            file_line("[Chapter II, consisting of section 2Z, omitted by the Synthetic", 52),
+            file_line("Act, 1990.]", 54, font="LiberationSerif-Italic"),
+        ]
+        self.pages[3]["lines"][5]["y"] = 66
+        with self.assertRaisesRegex(ValueError, r"declared chapter blocks: \[\(4, 0\)\]"):
+            self.compile()
+        self.spec["chapter_blocks"] = [[4, 0]]
+        self.spec["section_count"] = 4
+        self.spec["omission_evidence"] = {
+            "2Z": {
+                "page": 4,
+                "first_line": 1,
+                "end_line": 3,
+                "text": "[Chapter II, consisting of section 2Z, omitted by the Synthetic\n"
+                "Act, 1990.]",
+            }
+        }
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(
+            rows["Section 1"]["section_text"],
+            "1. The complete first provision text, without endnotes.",
+        )
+        self.assertEqual(rows["Section 2Z"]["verification_status"], "retired")
+        self.assertEqual(rows["Section 2Z"]["legal_status"], "repealed")
+
+    def test_repeal_notice_is_an_omission_that_must_be_inventoried_and_whole(self):
+        omitted = self.pages[4]["lines"][3]
+        omitted["text"] = "3. to 4. [Repealed by the Synthetic Repeal Act, 1990.]"
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(rows["Section 3"]["verification_status"], "retired")
+        self.spec["omitted_provisions"] = []
+        with self.assertRaisesRegex(ValueError, "Omission inventory disagrees"):
+            self.compile()
+        self.spec["omitted_provisions"] = ["3-4"]
+        omitted["text"] += " Operative text printed after the notice."
+        with self.assertRaisesRegex(ValueError, "not the whole printed body"):
+            self.compile()
+
+    def test_stacked_fraction_formula_must_be_quarantined(self):
+        page = self.pages[2]
+        page["lines"].extend(
+            [
+                file_line("B", 120, x=116.8),
+                file_line("A x", 127, x=91.3),
+                file_line("C", 134, x=116.8),
+            ]
+        )
+        for line in page["lines"][-3:]:
+            line["x1"] = line["x"] + 6
+        page["short_rules"] = [(106.12, 133.18, 131.0)]
+        with self.assertRaisesRegex(ValueError, r"Unreconciled bodies differ.*'1'"):
+            self.compile()
+        self.spec["blocked_sections"] = {"1": "Stacked fraction formula not reconciled."}
+        row = next(row for row in self.compile() if row["section_number"] == "Section 1")
+        self.assertEqual(row["verification_status"], "quarantined")
 
     def test_inventory_count_is_pinned(self):
         self.spec["section_count"] = 4

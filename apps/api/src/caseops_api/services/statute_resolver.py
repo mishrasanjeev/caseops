@@ -76,10 +76,13 @@ _ACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # CGST / SGST / IGST — pick CGST as the canonical (sections align
     # across the 3 GST Acts; matter detail typically clarifies).
     (re.compile(r"\bC?GST(?:\s+Act)?\b", re.IGNORECASE), "gst-cgst-2017"),
-    # Income Tax Act 1961 (IT Act / IT-1961 / Income-tax Act).
+    # Income Tax Act 1961 (IT Act / IT-1961 / Income-tax Act). The Income-tax
+    # Act, 2025 is a different Act with its own numbering and is not
+    # catalogued yet, so a 2025 reference resolves to nothing, never to 1961.
     (
         re.compile(
-            r"\b(?:Income[-\s]?tax\s+Act|I\.?T\.?\s*Act|IT(?:-|\s+)?1961)\b",
+            r"\b(?:(?:Income[-\s]?tax\s+Act|I\.?T\.?\s*Act)(?!,?\s*(?:of\s+)?2025)"
+            r"|IT(?:-|\s+)?1961)\b",
             re.IGNORECASE,
         ),
         "income-tax-1961",

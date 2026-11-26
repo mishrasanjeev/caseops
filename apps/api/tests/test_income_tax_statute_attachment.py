@@ -10,13 +10,11 @@ and stay labelled repealed; quarantined, omitted and unprinted ones do not.
 
 from __future__ import annotations
 
-from datetime import date
-
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from caseops_api.api.routes.statutes import _is_selectable_statute_section
-from caseops_api.db.models import StatuteSection
+from caseops_api.db.models import Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers
 from tests.test_matter_statute_references import _bootstrap_with_statutes_and_matter
@@ -30,6 +28,10 @@ WITHHELD = (
     ("Section 103", "retired"),
     ("Thirteenth Schedule", "quarantined"),
     ("Section 186", "unverified"),
+    ("Section 80VV", "retired"),
+    ("Section 80VVA", "retired"),
+    ("Section 281A", "retired"),
+    ("Section 44DB", "quarantined"),
 )
 
 
@@ -59,7 +61,13 @@ def test_income_tax_sections_attach_as_a_labelled_repealed_edition(client: TestC
             assert _is_selectable_statute_section(row), number
             assert row.legal_status == "repealed"
             assert row.source_policy_json["edition_scope"] == "historical_repealed_law"
-            assert row.effective_to == date(2026, 3, 31)
+            # Saved law still governs earlier assessment years: no blanket end date.
+            assert row.effective_to is None
+        # The Act row and the unprinted placeholder are repealed too, never current law.
+        statute = session.get(Statute, ACT)
+        assert statute.legal_status == "repealed"
+        assert "Income-tax Act, 2025" in statute.source_policy_json["historical_context"]
+        assert _section(session, "Section 186").legal_status == "repealed"
         section_ids = {number: str(row.id) for number, row in rows.items()}
 
     for number, section_id in section_ids.items():
@@ -70,9 +78,10 @@ def test_income_tax_sections_attach_as_a_labelled_repealed_edition(client: TestC
     listed = client.get(f"/api/statutes/{ACT}/sections", headers=auth_headers(token))
     assert listed.status_code == 200, listed.text
     body = listed.json()
-    assert body["verified_section_count"] == 823
-    # 965 printed identities and Schedules plus the unprinted Section 186 placeholder.
-    assert body["catalog_section_count"] == 966
+    assert body["verified_section_count"] == 820
+    # 966 printed identities and Schedules plus the unprinted Section 186 placeholder.
+    assert body["catalog_section_count"] == 967
+    assert body["statute"]["legal_status"] == "repealed"
     states = {row["section_number"]: row["selection_state"] for row in body["catalog_sections"]}
     for number in ATTACHABLE:
         assert states[number] == "verified_selectable"
@@ -80,7 +89,7 @@ def test_income_tax_sections_attach_as_a_labelled_repealed_edition(client: TestC
         f"/api/statutes/{ACT}/sections/Section%2080C", headers=auth_headers(token)
     ).json()["section"]
     assert detail["legal_status"] == "repealed"
-    assert detail["effective_to"] == "2026-03-31"
+    assert detail["effective_to"] is None
     assert detail["section_text"].startswith("80C. (1) In computing the total income")
 
 

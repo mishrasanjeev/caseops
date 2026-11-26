@@ -38,7 +38,10 @@ SECTION_FILE_ID = r"\d+(?:-?[A-Z]+)*"
 SECTION_FILE_START = re.compile(
     r"^(" + SECTION_FILE_ID + r")\s?\.(?:\s(?:to|&)\s(" + SECTION_FILE_ID + r")\.)?"
 )
-OMISSION_NOTICE = re.compile(r"(?s)\s*\[Omitted by [^\[\]]+\]\.?")
+OMISSION_NOTICE = re.compile(r"(?s)\s*\[(?:Omitted|Repealed) by [^\[\]]+\]\.?")
+OMISSION_OPENING = re.compile(r"\s*\[(?:Omitted|Repealed) by\b")
+# A chapter heading or bracketed chapter note opens a chapter, never a body.
+CHAPTER_LINE = re.compile(r"CHAPTER [IVXLC]+(?:-?[A-Z]+)*|\[Chapter\b.*")
 ELISION_ONLY = re.compile(r"\s*(?:\d+\s?)?\[\s*(?:\*\s*)+\]\.?")
 FOOTNOTE_MARKER = re.compile(r"^\d+[a-z]?\s?\[")
 
@@ -293,37 +296,53 @@ def section_file_lines(page) -> list[dict]:
     return merged
 
 
-def _read_section_file_chunk(task: tuple) -> list[dict]:
-    path, sha256, page_count, rule, numbers = task
+_WORKER_DOCUMENT: dict = {}
+
+
+def _open_verified_section_file(path: str, sha256: str, page_count: int) -> None:
+    """Hash, then open, the edition once per process; only verified bytes are parsed."""
     data = Path(path).read_bytes()
-    # Every worker parses only bytes it has itself verified.
     if digest(data) != sha256:
         raise ValueError("Official PDF identity mismatch")
+    document = pdfplumber.open(io.BytesIO(data))
+    if len(document.pages) != page_count:
+        document.close()
+        raise ValueError("Official PDF page count changed")
+    _WORKER_DOCUMENT["document"] = document
+
+
+def _read_section_file_chunk(task: tuple) -> list[dict]:
+    rule, numbers = task
+    document = _WORKER_DOCUMENT["document"]
     pages = []
-    with pdfplumber.open(io.BytesIO(data)) as document:
-        if len(document.pages) != page_count:
-            raise ValueError("Official PDF page count changed")
-        for number in numbers:
-            page = document.pages[number - 1]
-            drawings = [item for item in page.rects + page.lines if item["height"] < 2]
-            pages.append(
-                {
-                    "page": number,
-                    "lines": section_file_lines(page),
-                    "note_rules": sorted(
-                        {
-                            round(item["top"], 2)
-                            for item in drawings
-                            if rule["x0_range"][0] <= item["x0"] <= rule["x0_range"][1]
-                            and rule["width_range"][0] <= item["width"] <= rule["width_range"][1]
-                        }
-                    ),
-                    "footer_rules": sorted(
-                        {round(item["top"], 2) for item in drawings if item["width"] > 500}
-                    ),
-                }
-            )
-            page.close()
+    for number in numbers:
+        page = document.pages[number - 1]
+        drawings = [item for item in page.rects + page.lines if item["height"] < 2]
+        note_rule = [
+            item
+            for item in drawings
+            if rule["x0_range"][0] <= item["x0"] <= rule["x0_range"][1]
+            and rule["width_range"][0] <= item["width"] <= rule["width_range"][1]
+        ]
+        pages.append(
+            {
+                "page": number,
+                "lines": section_file_lines(page),
+                "note_rules": sorted({round(item["top"], 2) for item in note_rule}),
+                "footer_rules": sorted(
+                    {round(item["top"], 2) for item in drawings if item["width"] > 500}
+                ),
+                # Short drawn rules other than the endnote rule: fraction bars.
+                "short_rules": sorted(
+                    {
+                        (round(item["x0"], 2), round(item["x1"], 2), round(item["top"], 2))
+                        for item in drawings
+                        if 5 < item["width"] < 150 and item not in note_rule
+                    }
+                ),
+            }
+        )
+        page.close()
     return pages
 
 
@@ -331,14 +350,31 @@ def read_section_file_pages(path: Path, spec: dict, workers: int = 1) -> list[di
     first, last = spec["body_pages"]
     numbers = list(range(first, last + 1))
     size = max(1, -(-len(numbers) // (workers * 4)))
-    tasks = [
-        (str(path), spec["sha256"], spec["page_count"], spec["note_rule"], numbers[i : i + size])
-        for i in range(0, len(numbers), size)
-    ]
+    tasks = [(spec["note_rule"], numbers[i : i + size]) for i in range(0, len(numbers), size)]
+    opener = (str(path), spec["sha256"], spec["page_count"])
     if workers <= 1:
-        return [page for task in tasks for page in _read_section_file_chunk(task)]
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+        _open_verified_section_file(*opener)
+        try:
+            return [page for task in tasks for page in _read_section_file_chunk(task)]
+        finally:
+            _WORKER_DOCUMENT.pop("document").close()
+    with ProcessPoolExecutor(
+        max_workers=workers, initializer=_open_verified_section_file, initargs=opener
+    ) as pool:
         return [page for chunk in pool.map(_read_section_file_chunk, tasks) for page in chunk]
+
+
+def _has_stacked_fraction(lines: list[dict], short_rules: list) -> bool:
+    """A drawn fraction bar with short lines directly above and below it."""
+
+    def over(line, x0, x1):
+        return line["x"] >= x0 - 15 and line["x1"] <= x1 + 15
+
+    return any(
+        any(top - 14 <= line["y"] < top and over(line, x0, x1) for line in lines)
+        and any(top < line["y"] <= top + 10 and over(line, x0, x1) for line in lines)
+        for x0, x1, top in short_rules
+    )
 
 
 def _legal_order(identity: str) -> tuple[int, str]:
@@ -414,6 +450,8 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
         content[number] = lines
         note_top[number] = page["note_rules"][0] if page["note_rules"] else None
 
+    pages_by_number = {page["page"]: page for page in pages}
+
     def main_region(number: int, line: dict) -> bool:
         return note_top[number] is None or line["y"] < note_top[number]
 
@@ -461,6 +499,7 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
     column_gap = spec["column_gap"]
     note_min_x = spec["note_min_x"]
     provisions = {}
+    chapter_blocks = []
     for position, entry in enumerate(entries):
         start_page, start_line = entry["page"], entry["line"]
         end_page = (
@@ -474,19 +513,50 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
         body = []
         notes = []
         in_notes = False
+        in_chapter = False
         for number in range(start_page, end_page + 1):
             lines = content[number]
             first = start_line if number == start_page else 0
+            # A chapter heading or "[Chapter" note after the start never extends
+            # the body: it opens a chapter block (an omitted chapter can be printed
+            # with no section), which must be declared, and which runs to the
+            # next provision file. Each one at a page top is a block of its own.
+            if in_chapter:
+                lines_end = first
+                if lines and CHAPTER_LINE.fullmatch(lines[first]["text"]):
+                    chapter_blocks.append({"page": number, "first_line": first, "opens": True})
+                else:
+                    chapter_blocks.append({"page": number, "first_line": first, "opens": False})
+                chapter_blocks[-1]["end_line"] = len(lines)
+            else:
+                lines_end = next(
+                    (
+                        index
+                        for index in range(first + (number == start_page), len(lines))
+                        if CHAPTER_LINE.fullmatch(lines[index]["text"])
+                    ),
+                    len(lines),
+                )
+                if lines_end < len(lines):
+                    in_chapter = True
+                    chapter_blocks.append(
+                        {
+                            "page": number,
+                            "first_line": lines_end,
+                            "end_line": len(lines),
+                            "opens": True,
+                        }
+                    )
             if in_notes and note_top[number] is not None:
                 raise ValueError(f"Second endnote block inside one provision file: page {number}")
             main = [
-                index for index in range(first, len(lines)) if main_region(number, lines[index])
+                index for index in range(first, lines_end) if main_region(number, lines[index])
             ]
             if in_notes and main:
-                note_lines = list(range(first, len(lines)))
+                note_lines = list(range(first, lines_end))
                 main = []
             else:
-                note_lines = [index for index in range(first, len(lines)) if index not in main]
+                note_lines = [index for index in range(first, lines_end) if index not in main]
             if main:
                 if main != list(range(main[0], main[-1] + 1)):
                     raise ValueError(f"Interleaved body and endnotes: page {number}")
@@ -515,6 +585,16 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
                 for part in body
                 for line in content[part["page"]][part["first_line"] : part["end_line"]]
                 if line["gap"] > column_gap
+            }
+        )
+        stacked = sorted(
+            {
+                part["page"]
+                for part in body
+                if _has_stacked_fraction(
+                    content[part["page"]][part["first_line"] : part["end_line"]],
+                    pages_by_number[part["page"]].get("short_rules", []),
+                )
             }
         )
         heading_lines = []
@@ -568,8 +648,12 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
             notice = SECTION_FILE_START.sub("", text, count=1)
         omitted = key in omitted_inventory
         elided = not entry.get("schedule") and bool(ELISION_ONLY.fullmatch(notice))
-        if omitted != bool(OMISSION_NOTICE.fullmatch(notice)):
+        # Any body opening with an omission or repeal notice must be inventoried,
+        # and an inventoried one must be that notice and nothing else.
+        if omitted != bool(OMISSION_OPENING.match(notice)):
             raise ValueError(f"Omission inventory disagrees with the printed body: {key}")
+        if omitted and not OMISSION_NOTICE.fullmatch(notice):
+            raise ValueError(f"Omission notice is not the whole printed body: {key}")
         if not label:
             if not omitted:
                 raise ValueError(f"Provision has no printed heading: {key}")
@@ -588,6 +672,7 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
                 {"page": start_page, "first_line": 0, "end_line": start_line} if preamble else None
             ),
             "columns": columns,
+            "stacked": stacked,
             "omitted": omitted,
             "elided": elided,
             "schedule": bool(entry.get("schedule")),
@@ -604,6 +689,19 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
             if member in identities:
                 raise ValueError(f"Duplicate provision identity: {member}")
             identities[member] = key
+    declared_blocks = {tuple(item) for item in spec.get("chapter_blocks", [])}
+    opened_blocks = {(item["page"], item["first_line"]) for item in chapter_blocks if item["opens"]}
+    if opened_blocks != declared_blocks:
+        raise ValueError(
+            "Chapter headings outside a provision preamble differ from the declared "
+            f"chapter blocks: {sorted(opened_blocks ^ declared_blocks)}"
+        )
+    # Omission evidence may come only from non-provision text: a provision
+    # preamble or a declared chapter block.
+    regions = [item["preamble"] for item in provisions.values() if item["preamble"]] + [
+        {key: item[key] for key in ("page", "first_line", "end_line")} for item in chapter_blocks
+    ]
+    evidence_regions = {}
     evidence_rows = {}
     for identity, evidence in spec.get("omission_evidence", {}).items():
         lines = content[evidence["page"]]
@@ -612,14 +710,15 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
         )
         owner = next(
             (
-                item
-                for item in provisions.values()
-                if item["preamble"]
-                and item["start_page"] == evidence["page"]
-                and evidence["end_line"] <= item["preamble"]["end_line"]
+                region
+                for region in regions
+                if region["page"] == evidence["page"]
+                and region["first_line"] <= evidence["first_line"] < evidence["end_line"]
+                <= region["end_line"]
             ),
             None,
         )
+        evidence_regions[identity] = owner
         if (
             text != evidence["text"]
             or owner is None
@@ -632,9 +731,12 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
         raise ValueError(f"Incomplete section inventory: {spec['statute_id']}")
     blocked = {**spec.get("blocked_sections", {}), **spec.get("blocked_supplements", {})}
     # Withheld bodies are exactly those the line extractor cannot reproduce
-    # faithfully (multi-column tables) or that print only an elision mark.
+    # faithfully (multi-column tables, stacked formulas) or that print only an
+    # elision mark.
     unreconciled = {
-        key for key, item in provisions.items() if item["columns"] or item["elided"]
+        key
+        for key, item in provisions.items()
+        if item["columns"] or item["stacked"] or item["elided"]
     }
     if unreconciled != set(blocked):
         raise ValueError(
@@ -695,7 +797,6 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
             "source_status": "official",
             "legal_status": "repealed" if state == "retired" else spec["legal_status"],
             "effective_from": None,
-            "effective_to": None if state == "retired" else spec.get("effective_to"),
             "exact_source_version": f"{spec['source_version']}; SHA-256 {spec['sha256']}",
             "source_locator_type": "section_deep_link",
             "source_policy": policy,
@@ -719,11 +820,6 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
         if identity in evidence_rows:
             evidence = spec["omission_evidence"][identity]
             text = evidence_rows[identity]
-            owner = next(
-                item
-                for item in provisions.values()
-                if item["preamble"] and item["start_page"] == evidence["page"]
-            )
             item = {
                 "start_page": evidence["page"],
                 "end_page": evidence["page"],
@@ -738,7 +834,7 @@ def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
                 ],
                 "notes": [],
                 "printed_heading": None,
-                "preamble": owner["preamble"],
+                "preamble": evidence_regions[identity],
             }
             result.append(
                 row(

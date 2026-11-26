@@ -37,13 +37,20 @@ EXPECTED_COUNTS = {
     "consumer-protection-2019": 107,
     "motor-vehicles-1988": 259,
     "constitution-india": 519,
-    "income-tax-1961": 965,
+    "income-tax-1961": 966,
 }
 ARRANGEMENT_METHOD = "pinned_pdf_arrangement_body_reconciliation_v1"
 # Editions printed as concatenated per-provision files have no arrangement;
 # their identities are reconciled from the printed section numbers instead.
 SECTION_FILE_METHOD = "pinned_pdf_section_inventory_reconciliation_v1"
 RELEASE_ASSET_URL = "https://github.com/{repository}/releases/download/{tag}/{name}"
+RELEASE_ASSET_REPOSITORY = "mishrasanjeev/caseops"
+# A provision whose whole printed body is a bracketed omission or repeal notice
+# ("104. [Omitted by ...]", "281A. [Repealed by ...]") is never attachable text.
+NOTICE_ONLY_BODY = re.compile(
+    r"(?s)\S+?\s?\.(?:\s(?:to|&)\s\S+?\.)?\s*(?:\d+\s?)?"
+    r"\[(?:Omitted|Repealed)\b[^\[\]]*\]\.?\s*"
+)
 
 
 def is_omitted_arrangement(label: str) -> bool:
@@ -59,8 +66,7 @@ def _official_document_url(url: str) -> bool:
     if authority == "www.incometaxindia.gov.in":
         # The Income Tax Department (CBDT) publishes its consolidated Income-tax Act.
         return (
-            parsed.query is not None
-            and re.fullmatch(r"version=\d+\.\d+", parsed.query) is not None
+            re.fullmatch(r"version=\d+\.\d+", parsed.query) is not None
             and re.fullmatch(
                 r"/documents/\d+/\d+/[A-Za-z0-9._-]+\.pdf/"
                 r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",
@@ -138,6 +144,7 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
         asset = document.get("release_asset")
         if asset is not None and (
             document.get("layout") != "section_files"
+            or asset["repository"] != RELEASE_ASSET_REPOSITORY
             or asset["name"] != document["file"]
             or asset["url"] != RELEASE_ASSET_URL.format(**asset)
             or not isinstance(asset["size"], int)
@@ -181,8 +188,10 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
         key = act_id, source["section_number"]
         supplements = inventories[act_id]
         prefix = document.get("provision_prefix", "Section")
+        # Two suffix groups ("115V-I") occur only in the section-file edition.
+        suffixes = "{0,2}" if document.get("layout") == "section_files" else "?"
         if key in sources or not (
-            re.fullmatch(re.escape(prefix) + r" \d+(?:-?[A-Z]+){0,2}", key[1])
+            re.fullmatch(re.escape(prefix) + r" \d+(?:-?[A-Z]+)" + suffixes, key[1])
             or key[1] in supplements
         ):
             raise ValueError("Invalid or duplicate official provision identity")
@@ -280,8 +289,10 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             "repealed" if omitted else document.get("legal_status", "enacted")
         ):
             raise ValueError(f"Official provision legal status mismatch: {key}")
-        if source.get("effective_to") != (None if omitted else document.get("effective_to")):
-            raise ValueError(f"Official provision end date mismatch: {key}")
+        if source["verification_status"] == "verified_official" and NOTICE_ONLY_BODY.fullmatch(
+            source["section_text"]
+        ):
+            raise ValueError(f"Omission or repeal notice admitted as provision text: {key}")
         omission = document.get("omission_evidence", {}).get(number)
         if omission is not None and (
             not omitted
