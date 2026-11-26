@@ -78,14 +78,17 @@ INDEXES = {
 
 
 # Migration 20261104_0001 seeds catalog 2026.11.v1 into three reference
-# tables. Those added rows are the only original-table change allowed between
-# the named head and the current head; every retained row must still match.
+# tables, and migration 20261126_0201 adds one constant-default no-paid marker
+# column to recommendations. Those are the only original-table changes allowed
+# between the named head and the current head; every retained row must still
+# match column for column, and every retained row must carry the marker as false.
 CATALOG_SEED_VERSION = "2026.11.v1"
 CATALOG_SEED_KEYS = {
     "billing_plan_versions": "id",
     "billing_plan_prices": "plan_version_id",
     "billing_plan_entitlements": "plan_version_id",
 }
+CURRENT_HEAD_MARKER_COLUMNS = {"recommendations": "review_no_paid_providers"}
 
 
 def without_current_head_catalog_seed(engine, rows):
@@ -102,6 +105,15 @@ def without_current_head_catalog_seed(engine, rows):
     for table, column in CATALOG_SEED_KEYS.items():
         index = [c["name"] for c in schema.get_columns(table)].index(column)
         result[table] = [row for row in rows[table] if row[index] not in seeded]
+    for table, column in CURRENT_HEAD_MARKER_COLUMNS.items():
+        if table not in result:
+            continue
+        names = [c["name"] for c in schema.get_columns(table)]
+        assert names[-1] == column, f"{table}.{column} must be the only appended column"
+        assert all(row[-1] is False for row in result[table]), (
+            f"Retained {table} rows must default {column} to false"
+        )
+        result[table] = [tuple(row[:-1]) for row in result[table]]
     return result
 
 
