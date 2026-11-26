@@ -7842,3 +7842,20 @@ acceptance remains pending. Existing Android version 3 went live November
 17; fresh signed-in Play Console confirms100% production rollout and no
 unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+## November 26 - BUG-003 research answers stall after the 202
+
+**Inconclusive** (fix on a branch, not released). J05/M04. Production logs (2026-11-26) show `POST
+/api/research/answers` queued its job in API BackgroundTasks under
+request-based billing: polls spread over 4 instances, answer efea077b ran 9
+minutes and crashed after polling stopped, and only the 10-minute settle-on-read
+recovered it. Intelligent reviews and async audit exports shared the defect.
+Branch `fix/bugs6-jobs-20261126` runs all three in the `caseops-ai-jobs` Cloud
+Run job (wake on create, per-minute scheduler backstop), with compare-and-set
+claims, lease recovery, the requester's persisted no-paid marker (migration
+`20261126_0201`) and idempotent research submission (an identical in-flight
+question returns the same answer). Regressions:
+`apps/api/tests/test_ai_jobs_20261126.py` and
+`apps/api/tests/test_background_task_allowlist_20261126.py`, each shown failing
+on `e492d6472`. Closure needs a release that creates the job and a production
+answer measured completing in it.
