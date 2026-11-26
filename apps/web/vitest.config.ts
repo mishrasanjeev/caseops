@@ -20,6 +20,13 @@ export default defineConfig({
     css: false,
     // Bound coverage fan-out without extending child collection or UI deadlines.
     maxWorkers: 2,
+    // Reuse the two workers across files instead of one new fork per file.
+    // On Windows every fork re-proves host trust with about ten PowerShell
+    // ACL queries under a fixed five-second bound; ~334 forks meant ~3,000
+    // launches per run, and one slow launch killed its fork before any test
+    // ran ("Worker exited unexpectedly"). Each reused worker still runs the
+    // full trust bootstrap; the trust control and its bounds are unchanged.
+    isolate: false,
     // Native Playwright discovery owns its bounded cold-collection interval.
     // Run that complete source oracle before competing coverage workers;
     // the constructor's 15s/8s limits and every inventory assertion stay fixed.
