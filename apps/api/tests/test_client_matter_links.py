@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     Client,
@@ -451,6 +453,65 @@ def test_client_verification_listing_reports_archived_link(client: TestClient) -
     assert _link(client, owner, matter["id"], linked["id"]).status_code == 409
 
 
+def test_client_verification_listing_carries_contact_details_inside_access_scope(
+    client: TestClient,
+) -> None:
+    """The Matter's Clients card shows the linked client's contact details.
+
+    They come from the same tenant- and wall-scoped read as the KYC status, so a
+    walled member and another tenant see nothing.
+    """
+    owner = str(bootstrap_company(client)["access_token"])
+    member_id, member = _member(client, owner)
+    matter = _mk_matter(client, owner, "LNK-CONTACT")
+    detailed = _mk_client(
+        client,
+        owner,
+        "Contactable Holdings Ltd",
+        primary_contact_name="Meera Shah",
+        primary_contact_email="meera@contactable.example",
+        primary_contact_phone="+91 98200 00001",
+        city="Pune",
+    )
+    bare = _mk_client(client, owner, "Bare Record LLP")
+    assert _link(client, owner, matter["id"], detailed["id"], is_primary=True).status_code == 200
+    assert _link(client, owner, matter["id"], bare["id"], is_primary=False).status_code == 200
+
+    listing = client.get(
+        f"/api/matters/{matter['id']}/client-verification", headers=auth_headers(owner),
+    )
+    assert listing.status_code == 200, listing.text
+    records = {row["client_id"]: row for row in listing.json()["clients"]}
+    contact_keys = (
+        "primary_contact_name", "primary_contact_email", "primary_contact_phone", "city",
+    )
+    assert {key: records[detailed["id"]][key] for key in contact_keys} == {
+        "primary_contact_name": "Meera Shah",
+        "primary_contact_email": "meera@contactable.example",
+        "primary_contact_phone": "+91 98200 00001",
+        "city": "Pune",
+    }
+    assert {key: records[bare["id"]][key] for key in contact_keys} == dict.fromkeys(contact_keys)
+
+    wall = client.post(
+        f"/api/matters/{matter['id']}/access/walls",
+        headers=auth_headers(owner),
+        json={"excluded_membership_id": member_id, "reason": "Acts for the other side"},
+    )
+    assert wall.status_code == 200, wall.text
+    walled = client.get(
+        f"/api/matters/{matter['id']}/client-verification", headers=auth_headers(member),
+    )
+    assert walled.status_code == 404
+    assert "meera@contactable.example" not in walled.text
+    foreign = client.get(
+        f"/api/matters/{matter['id']}/client-verification",
+        headers=auth_headers(_other_tenant(client)),
+    )
+    assert foreign.status_code == 404
+    assert "meera@contactable.example" not in foreign.text
+
+
 # ---------------------------------------------------------------
 # Two-path parity: Matter create with client_id vs the link route
 # ---------------------------------------------------------------
@@ -517,3 +578,57 @@ def test_create_matter_and_link_route_reject_the_same_clients(client: TestClient
         assert session.scalars(select(MatterClientAssignment)).all() == []
         # The archived client row is untouched by either refusal.
         assert session.get(Client, archived["id"]).is_active is False
+
+
+def test_create_with_client_id_gives_case_tracking_the_same_party_names(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matter create with ``client_id`` names the client before auto-linking.
+
+    The case-tracking auto-link runs inside create and reads
+    ``Matter.client_name`` for its party names; a linked client must reach it
+    exactly as the same typed name does.
+    """
+    from caseops_api.services import case_tracking
+
+    owner = str(bootstrap_company(client)["access_token"])
+    registered = _mk_client(client, owner, "Party Parity Holdings Ltd")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-side-token")
+    get_settings.cache_clear()
+    seen: dict[str, list[str]] = {}
+    original = case_tracking._create_or_get_bookmark
+
+    def recording(session, *, context, payload, matter):
+        seen[matter.matter_code] = list(payload.party_names)
+        return original(session, context=context, payload=payload, matter=matter)
+
+    monkeypatch.setattr(case_tracking, "_create_or_get_bookmark", recording)
+    identity = {
+        "court_name": "Delhi High Court",
+        "opposing_party": "Example Respondent",
+    }
+    try:
+        typed = _mk_matter(
+            client, owner, "LNK-PARTY-TYPED",
+            client_name="Party Parity Holdings Ltd",
+            case_number="WP(C) 11/2026",
+            cnr_number="DLHC010011112026",
+            **identity,
+        )
+        linked = _mk_matter(
+            client, owner, "LNK-PARTY-LINKED",
+            client_id=registered["id"],
+            case_number="WP(C) 12/2026",
+            cnr_number="DLHC010012122026",
+            **identity,
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert seen["LNK-PARTY-TYPED"] == ["Party Parity Holdings Ltd", "Example Respondent"]
+    assert seen["LNK-PARTY-LINKED"] == seen["LNK-PARTY-TYPED"]
+    assert typed["client_name"] == linked["client_name"] == "Party Parity Holdings Ltd"
+    assert _assignments(linked["id"])[registered["id"]].is_primary is True

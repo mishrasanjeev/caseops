@@ -82,6 +82,10 @@ function linked(overrides: Partial<MatterClientVerificationRecord> = {}): Matter
     client_is_active: true,
     role: "petitioner",
     is_primary: true,
+    primary_contact_name: null,
+    primary_contact_email: null,
+    primary_contact_phone: null,
+    city: null,
     status: "verified",
     submitted_at: null,
     reviewed_at: null,
@@ -114,7 +118,12 @@ describe("MatterClientsCard", () => {
     fetchMatterClientVerificationMock.mockResolvedValue({
       matter_id: "m-1",
       clients: [
-        linked(),
+        linked({
+          primary_contact_name: "Meera Shah",
+          primary_contact_email: "meera@client001.example",
+          primary_contact_phone: "+91 98200 00001",
+          city: "Pune",
+        }),
         linked({
           client_id: "client-2",
           client_name: "Archived Guarantor LLP",
@@ -137,10 +146,81 @@ describe("MatterClientsCard", () => {
     expect(primary.getByText("Primary")).toBeInTheDocument();
     expect(primary.getByText("petitioner")).toBeInTheDocument();
     expect(primary.getByText("KYC verified")).toBeInTheDocument();
+    // The client's contact details show inside the matter record.
+    const contact = primary.getByTestId("matter-client-contact");
+    expect(contact).toHaveTextContent("Meera Shah");
+    expect(within(contact).getByRole("link", { name: "meera@client001.example" })).toHaveAttribute(
+      "href",
+      "mailto:meera@client001.example",
+    );
+    expect(within(contact).getByRole("link", { name: "+91 98200 00001" })).toHaveAttribute(
+      "href",
+      "tel:+919820000001",
+    );
+    expect(contact).toHaveTextContent("Pune");
     const archived = within(rows[1]);
     expect(archived.getByText("Archived")).toBeInTheDocument();
     expect(archived.queryByText("Primary")).toBeNull();
     expect(archived.getByText("KYC rejected")).toBeInTheDocument();
+    expect(archived.getByTestId("matter-client-contact")).toHaveTextContent(
+      "No contact details recorded on the client record.",
+    );
+  });
+
+  it("checks Primary only when the matter has no primary client, and says it replaces the typed name", async () => {
+    const user = userEvent.setup();
+    fetchMatterClientVerificationMock.mockResolvedValue({ matter_id: "m-1", clients: [] });
+    listClientsMock.mockResolvedValue({ clients: [clientRecord(4)], next_cursor: null });
+    assignClientToMatterMock.mockResolvedValue({
+      id: "a-4",
+      matter_id: "m-1",
+      client_id: "client-4",
+      role: null,
+      is_primary: false,
+      created_at: "2026-11-26T00:00:00Z",
+    });
+    const { page } = renderCard({ id: "m-1", status: "active", client_name: "Typed Only Pvt Ltd" });
+
+    await page.findByText(/as typed text only/);
+    await user.click(page.getByTestId("matter-clients-link-open"));
+    const select = await page.findByLabelText("Client to link");
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, "client-4");
+    const primary = page.getByTestId("matter-clients-primary");
+    expect(primary).toBeChecked();
+    expect(page.getByTestId("matter-clients-primary-caption")).toHaveTextContent(
+      "The client becomes this matter's primary client and its name replaces the typed client name “Typed Only Pvt Ltd”.",
+    );
+    // Unchecking is honoured: the request says not primary.
+    await user.click(primary);
+    expect(page.getByTestId("matter-clients-primary-caption")).toHaveTextContent(
+      "The client is linked as an additional client; the matter's client name does not change.",
+    );
+    await user.click(page.getByTestId("matter-clients-link-submit"));
+    await waitFor(() =>
+      expect(assignClientToMatterMock).toHaveBeenCalledWith({
+        matterId: "m-1",
+        clientId: "client-4",
+        role: null,
+        isPrimary: false,
+      }),
+    );
+  });
+
+  it("does not offer the primary choice before the linked clients have loaded", async () => {
+    const user = userEvent.setup();
+    fetchMatterClientVerificationMock.mockReturnValue(new Promise(() => {}));
+    listClientsMock.mockResolvedValue({ clients: [clientRecord(4)], next_cursor: null });
+    const { page } = renderCard();
+
+    await user.click(page.getByTestId("matter-clients-link-open"));
+    const select = await page.findByLabelText("Client to link");
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, "client-4");
+    // Whether a primary client exists is unknown, so neither default is shown as fact.
+    expect(page.getByTestId("matter-clients-primary")).toBeDisabled();
+    expect(page.getByTestId("matter-clients-link-submit")).toBeDisabled();
+    expect(assignClientToMatterMock).not.toHaveBeenCalled();
   });
 
   it("falls back to the typed client name and invites a link when nothing is linked", async () => {
@@ -186,6 +266,9 @@ describe("MatterClientsCard", () => {
     await user.type(page.getByLabelText("Role on this matter (optional)"), "guarantor");
     // A primary client already exists, so the new link is secondary by default.
     expect(page.getByTestId("matter-clients-primary")).not.toBeChecked();
+    expect(page.getByTestId("matter-clients-primary-caption")).toHaveTextContent(
+      "The client is linked as an additional client; Client 001 Holdings stays the primary client.",
+    );
     await user.click(page.getByTestId("matter-clients-link-submit"));
 
     await waitFor(() => expect(assignClientToMatterMock).toHaveBeenCalledTimes(1));

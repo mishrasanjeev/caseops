@@ -7442,6 +7442,11 @@ export type MatterClientVerificationRecord = {
   client_is_active: boolean;
   role: string | null;
   is_primary: boolean;
+  /** The client record's primary contact, shown on the matter's Clients card. */
+  primary_contact_name: string | null;
+  primary_contact_email: string | null;
+  primary_contact_phone: string | null;
+  city: string | null;
   status: ClientKycStatus;
   submitted_at: string | null;
   reviewed_at: string | null;

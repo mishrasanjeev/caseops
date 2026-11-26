@@ -164,6 +164,9 @@ describe("MatterOverviewPage client links", () => {
     await waitFor(() => expect(select).toBeEnabled());
     await user.selectOptions(select, "client-9");
     expect(page.getByTestId("matter-edit-client")).toBeDisabled();
+    expect(page.getByTestId("matter-edit-client-link-caption")).toHaveTextContent(
+      "Registered Nine Ltd becomes this matter's primary client and its name replaces the typed client name “Typed Client Name”.",
+    );
     await user.click(page.getByTestId("matter-edit-save"));
 
     await waitFor(() => expect(assignClientToMatterMock).toHaveBeenCalledTimes(1));
@@ -177,6 +180,18 @@ describe("MatterOverviewPage client links", () => {
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith("Matter updated and client linked."),
     );
+  });
+
+  it("offers the edit-form client link only once the linked clients are known", async () => {
+    const user = userEvent.setup();
+    fetchMatterClientVerificationMock.mockReturnValue(new Promise(() => {}));
+    const page = renderPage();
+
+    await waitFor(() => expect(fetchMatterClientVerificationMock).toHaveBeenCalled());
+    await user.click(page.getByTestId("matter-edit-open"));
+    // A primary client may already exist; linking as primary here would replace it unseen.
+    expect(page.queryByLabelText("Or link an existing client")).toBeNull();
+    expect(page.getByTestId("matter-edit-client")).toBeEnabled();
   });
 
   it("shows a linked primary client as read-only in the edit form", async () => {

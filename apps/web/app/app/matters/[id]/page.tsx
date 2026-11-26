@@ -600,7 +600,10 @@ export default function MatterOverviewPage() {
                       data-testid="matter-edit-client"
                     />
                   </div>
-                  {canEditClients ? (
+                  {/* Offered only once the links are known: with no primary
+                      client loaded yet, a link saved as primary could replace
+                      one the user never saw. */}
+                  {canEditClients && matterClients.isSuccess ? (
                     <ClientPicker
                       id="matter-edit-client-link"
                       label="Or link an existing client"
@@ -615,6 +618,16 @@ export default function MatterOverviewPage() {
                         })
                       }
                     />
+                  ) : null}
+                  {matterDraft.linkClientId ? (
+                    <p
+                      className="break-words text-xs text-[var(--color-mute)]"
+                      data-testid="matter-edit-client-link-caption"
+                    >
+                      {matterEditBase.client_name
+                        ? `${matterDraft.clientName} becomes this matter's primary client and its name replaces the typed client name “${matterEditBase.client_name}”.`
+                        : `${matterDraft.clientName} becomes this matter's primary client and its name becomes the matter's client name.`}
+                    </p>
                   ) : null}
                 </div>
               )}

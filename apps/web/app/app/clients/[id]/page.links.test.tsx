@@ -161,6 +161,12 @@ describe("ClientProfilePage matter links", () => {
     await user.click(page.getByRole("button", { name: "Load more Matters" }));
     const target = await within(select).findByRole("option", { name: /MAT-065/ });
     await user.selectOptions(select, target);
+    // Unchecked means not primary: the request says so explicitly instead of
+    // leaving the API to promote the client behind an unchecked box.
+    expect(page.getByTestId("client-link-matter-primary")).not.toBeChecked();
+    expect(page.getByTestId("client-link-matter-primary-caption")).toHaveTextContent(
+      "Aster Client is linked as an additional client; the matter's primary client and client name do not change.",
+    );
     await user.click(page.getByTestId("client-link-matter-submit"));
 
     await waitFor(() => expect(assignClientToMatterMock).toHaveBeenCalledTimes(1));
@@ -168,9 +174,44 @@ describe("ClientProfilePage matter links", () => {
       matterId: "m-65",
       clientId: "client-1",
       role: null,
-      isPrimary: undefined,
+      isPrimary: false,
     });
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Matter linked to this client."));
+  });
+
+  it("sends isPrimary true only when the box is checked, and says what that replaces", async () => {
+    const user = userEvent.setup();
+    fetchClientMock.mockResolvedValue(clientRecord());
+    listMattersMock.mockResolvedValue({ matters: [matterRow(7)], next_cursor: null });
+    assignClientToMatterMock.mockResolvedValue({
+      id: "a-7",
+      matter_id: "m-7",
+      client_id: "client-1",
+      role: "guarantor",
+      is_primary: true,
+      created_at: "2026-11-26T00:00:00Z",
+    });
+    const page = renderPage();
+
+    await user.click(await page.findByTestId("client-link-matter-open"));
+    const select = await page.findByLabelText("Matter to link");
+    await waitFor(() => expect(select).toBeEnabled());
+    await user.selectOptions(select, "m-7");
+    await user.type(page.getByLabelText("Role on the matter (optional)"), "guarantor");
+    await user.click(page.getByTestId("client-link-matter-primary"));
+    expect(page.getByTestId("client-link-matter-primary-caption")).toHaveTextContent(
+      "Aster Client becomes the matter's primary client: its name replaces the matter's client name and any current primary client.",
+    );
+    await user.click(page.getByTestId("client-link-matter-submit"));
+
+    await waitFor(() =>
+      expect(assignClientToMatterMock).toHaveBeenCalledWith({
+        matterId: "m-7",
+        clientId: "client-1",
+        role: "guarantor",
+        isPrimary: true,
+      }),
+    );
   });
 
   it("unlinks a matter after one confirmation", async () => {

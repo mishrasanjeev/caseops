@@ -40521,6 +40521,8 @@ export interface components {
         };
         /** MatterClientVerificationRecord */
         MatterClientVerificationRecord: {
+            /** City */
+            city?: string | null;
             /** Client Id */
             client_id: string;
             /**
@@ -40542,6 +40544,12 @@ export interface components {
              * @default false
              */
             is_primary: boolean;
+            /** Primary Contact Email */
+            primary_contact_email?: string | null;
+            /** Primary Contact Name */
+            primary_contact_name?: string | null;
+            /** Primary Contact Phone */
+            primary_contact_phone?: string | null;
             /** Rejection Reason */
             rejection_reason?: string | null;
             /** Reviewed At */

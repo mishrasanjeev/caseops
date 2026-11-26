@@ -67,7 +67,11 @@ export function MatterClientsCard({ matter, className }: MatterClientsCardProps)
   const blockedReason = clientLinkBlockedReason(canEdit, matter.status);
   const clients = useMatterClients(matter.id);
   const linked = clients.data?.clients ?? [];
-  const hasPrimary = linked.some((client) => client.is_primary);
+  // Until the links load, whether a primary client exists is unknown, so the
+  // primary choice (and its default) is not offered as fact.
+  const linksKnown = clients.isSuccess;
+  const currentPrimary = linked.find((client) => client.is_primary) ?? null;
+  const hasPrimary = currentPrimary !== null;
 
   const [linking, setLinking] = useState(false);
   const [clientId, setClientId] = useState("");
@@ -75,6 +79,17 @@ export function MatterClientsCard({ matter, className }: MatterClientsCardProps)
   const [makePrimary, setMakePrimary] = useState<boolean | null>(null);
   const [confirmUnlink, setConfirmUnlink] = useState<string | null>(null);
   const primaryChecked = makePrimary ?? !hasPrimary;
+  const primaryCaption = !linksKnown
+    ? "Checking whether this matter already has a primary client…"
+    : primaryChecked
+      ? currentPrimary
+        ? `The client becomes this matter's primary client in place of ${currentPrimary.client_name}, and its name replaces the matter's client name.`
+        : matter.client_name
+          ? `The client becomes this matter's primary client and its name replaces the typed client name “${matter.client_name}”.`
+          : "The client becomes this matter's primary client and its name becomes the matter's client name."
+      : currentPrimary
+        ? `The client is linked as an additional client; ${currentPrimary.client_name} stays the primary client.`
+        : "The client is linked as an additional client; the matter's client name does not change.";
 
   const refresh = async () => {
     await Promise.all([
@@ -175,15 +190,26 @@ export function MatterClientsCard({ matter, className }: MatterClientsCardProps)
                 onChange={(event) => setRole(event.target.value)}
               />
             </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-[var(--color-ink)]">
-              <input
-                type="checkbox"
-                checked={primaryChecked}
-                onChange={(event) => setMakePrimary(event.target.checked)}
-                data-testid="matter-clients-primary"
-              />
-              {hasPrimary ? "Make primary (replaces the current primary client)" : "Primary client"}
-            </label>
+            <div className="flex min-w-0 flex-col gap-1 self-end pb-2">
+              <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
+                <input
+                  type="checkbox"
+                  checked={linksKnown && primaryChecked}
+                  disabled={!linksKnown}
+                  onChange={(event) => setMakePrimary(event.target.checked)}
+                  aria-describedby="matter-clients-primary-caption"
+                  data-testid="matter-clients-primary"
+                />
+                {hasPrimary ? "Make primary (replaces the current primary client)" : "Primary client"}
+              </label>
+              <p
+                id="matter-clients-primary-caption"
+                className="break-words text-xs text-[var(--color-mute)]"
+                data-testid="matter-clients-primary-caption"
+              >
+                {primaryCaption}
+              </p>
+            </div>
             <div className="flex justify-end gap-2 md:col-span-2">
               <Button type="button" variant="outline" size="sm" onClick={resetForm}>
                 Cancel
@@ -191,7 +217,7 @@ export function MatterClientsCard({ matter, className }: MatterClientsCardProps)
               <Button
                 type="submit"
                 size="sm"
-                disabled={!clientId || linkMutation.isPending}
+                disabled={!clientId || !linksKnown || linkMutation.isPending}
                 data-testid="matter-clients-link-submit"
               >
                 {linkMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
@@ -239,6 +265,60 @@ export function MatterClientsCard({ matter, className }: MatterClientsCardProps)
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** The linked client's primary contact, as recorded on the client record. */
+function ClientContactDetails({ client }: { client: MatterClientVerificationRecord }) {
+  const name = client.primary_contact_name?.trim() || null;
+  const email = client.primary_contact_email?.trim() || null;
+  const phone = client.primary_contact_phone?.trim() || null;
+  const city = client.city?.trim() || null;
+  if (!name && !email && !phone && !city) {
+    return (
+      <p className="text-xs text-[var(--color-mute)]" data-testid="matter-client-contact">
+        No contact details recorded on the client record.
+      </p>
+    );
+  }
+  return (
+    <dl
+      className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-ink-2)]"
+      data-testid="matter-client-contact"
+    >
+      {name ? (
+        <div className="flex min-w-0 gap-1">
+          <dt className="text-[var(--color-mute)]">Contact</dt>
+          <dd className="min-w-0 break-words">{name}</dd>
+        </div>
+      ) : null}
+      {email ? (
+        <div className="flex min-w-0 gap-1">
+          <dt className="text-[var(--color-mute)]">Email</dt>
+          <dd className="min-w-0 break-all">
+            <a href={`mailto:${email}`} className="hover:underline">
+              {email}
+            </a>
+          </dd>
+        </div>
+      ) : null}
+      {phone ? (
+        <div className="flex min-w-0 gap-1">
+          <dt className="text-[var(--color-mute)]">Phone</dt>
+          <dd className="min-w-0 break-words">
+            <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
+              {phone}
+            </a>
+          </dd>
+        </div>
+      ) : null}
+      {city ? (
+        <div className="flex min-w-0 gap-1">
+          <dt className="text-[var(--color-mute)]">City</dt>
+          <dd className="min-w-0 break-words">{city}</dd>
+        </div>
+      ) : null}
+    </dl>
   );
 }
 
@@ -291,6 +371,7 @@ function LinkedClientRow({
         )}
       </div>
       <p className="text-xs capitalize text-[var(--color-mute)]">{client.client_type}</p>
+      <ClientContactDetails client={client} />
       {confirming ? (
         <div
           role="alert"

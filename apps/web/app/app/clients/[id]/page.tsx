@@ -693,9 +693,8 @@ function ClientMattersCard({
         matterId,
         clientId,
         role: role.trim() || null,
-        // Unchecked leaves the choice to the API: primary only when the
-        // Matter has no primary client yet.
-        isPrimary: makePrimary ? true : undefined,
+        // Always explicit: the link is primary exactly when the box is checked.
+        isPrimary: makePrimary,
       }),
     onSuccess: async () => {
       toast.success("Matter linked to this client.");
@@ -776,15 +775,27 @@ function ClientMattersCard({
                 onChange={(event) => setRole(event.target.value)}
               />
             </div>
-            <label className="flex items-center gap-2 self-end pb-2 text-sm text-[var(--color-ink)]">
-              <input
-                type="checkbox"
-                checked={makePrimary}
-                onChange={(event) => setMakePrimary(event.target.checked)}
-                data-testid="client-link-matter-primary"
-              />
-              Make {clientName} the matter&apos;s primary client
-            </label>
+            <div className="flex min-w-0 flex-col gap-1 self-end pb-2">
+              <label className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
+                <input
+                  type="checkbox"
+                  checked={makePrimary}
+                  onChange={(event) => setMakePrimary(event.target.checked)}
+                  aria-describedby="client-link-matter-primary-caption"
+                  data-testid="client-link-matter-primary"
+                />
+                Make {clientName} the matter&apos;s primary client
+              </label>
+              <p
+                id="client-link-matter-primary-caption"
+                className="break-words text-xs text-[var(--color-mute)]"
+                data-testid="client-link-matter-primary-caption"
+              >
+                {makePrimary
+                  ? `${clientName} becomes the matter's primary client: its name replaces the matter's client name and any current primary client.`
+                  : `${clientName} is linked as an additional client; the matter's primary client and client name do not change.`}
+              </p>
+            </div>
             <div className="flex justify-end gap-2 md:col-span-2">
               <Button type="button" variant="outline" size="sm" onClick={resetForm}>
                 Cancel

@@ -184,6 +184,11 @@ class MatterClientVerificationRecord(BaseModel):
     client_is_active: bool = True
     role: str | None = None
     is_primary: bool = False
+    # The client record's contact details, shown on the Matter's Clients card.
+    primary_contact_name: str | None = None
+    primary_contact_email: str | None = None
+    primary_contact_phone: str | None = None
+    city: str | None = None
     status: ClientVerificationStatusLiteral
     submitted_at: datetime | None = None
     reviewed_at: datetime | None = None

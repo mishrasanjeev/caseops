@@ -140,6 +140,9 @@ describe("NewMatterDialog client link", () => {
     await user.selectOptions(select, await within(select).findByRole("option", { name: /Registered Client 74/ }));
     expect(dialog.getByTestId("new-matter-client-name")).toBeDisabled();
     expect(dialog.getByTestId("new-matter-client-name")).toHaveValue("Registered Client 74");
+    expect(dialog.getByTestId("new-matter-client-link-caption")).toHaveTextContent(
+      "Registered Client 74 becomes the new matter's primary client; its name is used as the client name.",
+    );
 
     await user.click(dialog.getByRole("button", { name: /Create matter/i }));
     await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));

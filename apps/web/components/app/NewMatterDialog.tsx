@@ -88,6 +88,7 @@ export function NewMatterDialog() {
   // An existing client to link as the primary client (same validation as
   // linking from the Matter overview); empty keeps the typed name.
   const [linkClientId, setLinkClientId] = useState("");
+  const [linkClientName, setLinkClientName] = useState("");
   const canLinkClients = useCapability("clients:edit");
   const queryClient = useQueryClient();
   const forumCatalogQuery = useQuery({
@@ -313,9 +314,19 @@ export function NewMatterDialog() {
               enabled={open}
               onChange={(clientId, client) => {
                 setLinkClientId(clientId);
+                setLinkClientName(client ? client.name : "");
                 form.setValue("client_name", client ? client.name : "");
               }}
             />
+          ) : null}
+          {linkClientId ? (
+            <p
+              className="break-words text-xs text-[var(--color-mute)] md:col-span-2"
+              data-testid="new-matter-client-link-caption"
+            >
+              {linkClientName} becomes the new matter&apos;s primary client; its name is used
+              as the client name.
+            </p>
           ) : null}
           <Field
             label="Temporary E-Case number"

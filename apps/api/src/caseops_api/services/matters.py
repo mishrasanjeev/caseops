@@ -2142,7 +2142,15 @@ def create_matter(
         title=payload.title.strip(),
         matter_code=payload.matter_code.strip(),
         matter_type=payload.matter_type.strip() if payload.matter_type else None,
-        client_name=payload.client_name.strip() if payload.client_name else None,
+        # A linked client's name replaces any typed name before anything reads
+        # the Matter (the case-tracking auto-link below uses it as a party).
+        client_name=(
+            linked_client.name
+            if linked_client is not None
+            else payload.client_name.strip()
+            if payload.client_name
+            else None
+        ),
         client_code=payload.client_code.strip() if payload.client_code else None,
         client_contact_number=(
             payload.client_contact_number.strip() if payload.client_contact_number else None
