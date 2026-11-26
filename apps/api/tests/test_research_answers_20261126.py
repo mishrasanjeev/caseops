@@ -213,6 +213,11 @@ def _seed_mixed_corpus() -> dict[str, str]:
             "the High Court to make such orders as may be necessary to prevent abuse of the "
             "process of any Court or otherwise to secure the ends of justice.",
         ),
+        "ni_142": _section(
+            "ni-act-1881", "NI Act", "Negotiable Instruments Act, 1881", "Section 142",
+            "No court shall take cognizance of any offence punishable under section 138 except "
+            "upon a complaint, in writing, made by the payee.",
+        ),
         "ipc_420": _section(
             "ipc-1860", "IPC", "Indian Penal Code, 1860", "Section 420",
             "Whoever cheats and thereby dishonestly induces the person deceived to deliver any "
@@ -961,3 +966,91 @@ def test_the_worker_rechecks_matter_access_before_running(
     with get_session_factory()() as session:
         row = session.get(ResearchAnswer, created["id"])
         assert (row.status, row.error_code) == ("failed", "matter_access_revoked")
+
+
+# --------------------------------------------------------------------------- #
+# Second review round: a section must never borrow another section's Act.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("text", "bound", "unbound"),
+    [
+        ("Can Section 482 CrPC quash a Section 138 complaint for a bounced cheque?",
+         [("crpc-1973", "Section 482")], ["Section 138"]),
+        ("Section 138 NI Act and Section 482", [("ni-act-1881", "Section 138")], ["Section 482"]),
+        ("Under Section 138, 15 days after the notice of the NI Act",
+         [("ni-act-1881", "Section 138")], []),
+        ("Article 14, 19 and 21",
+         [("constitution-india", "Article 14"), ("constitution-india", "Article 19"),
+          ("constitution-india", "Article 21")], []),
+        ("Section 138, 141 and 142 of NI Act",
+         [("ni-act-1881", "Section 138"), ("ni-act-1881", "Section 141"),
+          ("ni-act-1881", "Section 142")], []),
+    ],
+)
+def test_a_section_never_borrows_an_act_another_section_claimed(
+    text: str, bound: list, unbound: list
+) -> None:
+    from caseops_api.services.statute_resolver import (
+        bare_section_numbers,
+        parse_section_references,
+    )
+
+    assert parse_section_references(text) == bound
+    assert bare_section_numbers(text) == unbound
+
+
+def test_the_quash_wording_is_researched_on_both_provisions_never_crpc_138(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The commonest BUG-002 wording once bound Section 138 to the CrPC."""
+    ids = _seed_mixed_corpus()
+    crpc_138 = _section(
+        "crpc-1973", "CrPC", "Code of Criminal Procedure, 1973", "Section 138",
+        "Procedure where he appears to show cause against an order under section 133.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer(
+        short_answer=(
+            "A Section 138 complaint may be quashed under Section 482 CrPC only where its "
+            "ingredients are not disclosed [1]."
+        )
+    ))
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(
+        client, token,
+        query="Can Section 482 CrPC quash a Section 138 complaint for a bounced cheque?",
+    )
+
+    assert record["status"] == "answered", (record["error_code"], record["message"])
+    focus = record["answer"]["question_focus"]
+    assert "Section 482, Code of Criminal Procedure, 1973" in focus
+    assert FOCUS_138 in focus
+    assert "Section 138, Code of Criminal Procedure, 1973" not in focus
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    offered = [item["id"] for item in manifest]
+    assert crpc_138 not in offered
+    # The quashing petition on a Section 138 complaint cites both focus
+    # provisions and leads the judgments; the 482/420 FIR case cites only 482.
+    judgments = [item["id"] for item in manifest if item["kind"] == "judgment"]
+    assert judgments[0] == ids["quash_138"]
+    if ids["off_issue"] in judgments:
+        assert judgments.index(ids["off_issue"]) > judgments.index(ids["quash_138"])
+
+
+def test_a_provision_an_act_does_not_have_is_never_the_focus(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """'Section 138 NI Act and Section 482' once produced 'Section 482, NI Act'."""
+    _seed_mixed_corpus()
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token, query="Explain Section 138 NI Act and Section 482")
+
+    assert "Section 482, Negotiable Instruments Act, 1881" not in record["answer"]["question_focus"]
+    assert record["answer"]["question_focus"][0] == FOCUS_138

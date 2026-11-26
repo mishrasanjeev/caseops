@@ -331,7 +331,7 @@ describe("Nov 26 focus, coverage and abstention guidance", () => {
     expect(screen.getByTestId("research-coverage-gaps")).toHaveTextContent("Territorial jurisdiction");
     const text = researchAnswerToText(record);
     expect(text).toContain("Researched as: Section 138, Negotiable Instruments Act, 1881");
-    expect(text).toContain("Not covered by the retrieved sources:");
+    expect(text).toContain("This answer does not cover:");
   });
 
   it("turns an abstention into usable next questions that fill the question box", () => {

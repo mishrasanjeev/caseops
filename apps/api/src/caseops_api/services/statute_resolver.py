@@ -214,7 +214,7 @@ _MONEY_RE = re.compile(
 )
 _SECTION_SYMBOL_RE = re.compile(r"§\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)")
 _ARTICLE_RE = re.compile(
-    r"(?:Article|Art\.?)\s*([0-9]+[A-Za-z]*)", re.IGNORECASE,
+    r"(?:Articles?|Art\.?)\s*([0-9]+[A-Za-z]*)", re.IGNORECASE,
 )
 _BARE_NUMBER_RE = re.compile(r"\b([0-9]{1,4}[A-Za-z]?)\b")
 
@@ -301,10 +301,17 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
 
 # "Sections 138 and 141", "Sections 9, 34 and 37": further numbers after the first.
 _SECTION_LIST_TAIL_RE = re.compile(
-    r"\s*(?:,|\band\b|&|\bor\b|/)\s*(?:Sections?\s*|Secs?\.?\s*|Ss?\.\s*)?"
+    r"\s*(,|\band\b|&|\bor\b|/)\s*(?:Sections?\s*|Secs?\.?\s*|Ss?\.\s*)?"
     r"([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))*)",
     re.IGNORECASE,
 )
+# An Article list continues only with numbers or "Article"; "Article 21 and
+# Section 482" is two provisions, not Article 482.
+_ARTICLE_LIST_TAIL_RE = re.compile(
+    r"\s*(,|\band\b|&|\bor\b|/)\s*(?:Articles?\s*|Arts?\.\s*)?([0-9]+[A-Za-z]*)\b",
+    re.IGNORECASE,
+)
+_PLURAL_MARKER_RE = re.compile(r"^(?:Sections|Ss\.|Articles)", re.IGNORECASE)
 _BASE_SECTION_RE = re.compile(r"[0-9]+[A-Za-z]?")
 # An Act this far after a section marker still names that section's Act
 # ("Section 138 of the Negotiable Instruments Act, 1881").
@@ -336,70 +343,78 @@ def _act_spans(text: str) -> list[tuple[int, int, str]]:
     return kept
 
 
-def bare_section_numbers(text: str) -> list[str]:
-    """Base section numbers a text names without any Act ("explain the section 138?").
+def _list_numbers(text: str, match: re.Match[str], prefix: str) -> tuple[list[str], int]:
+    """The marker's number plus a listed tail, and where the list ends.
 
-    Empty when the text names an Act: then ``parse_section_references`` owns it.
+    A comma or slash continues a list only after a plural marker ("Sections
+    9, 34 and 37"); after a singular one it is ordinary punctuation ("Under
+    Section 138, 15 days after the notice ...").
     """
-    if not text or not isinstance(text, str):
-        return []
-    cleaned = _ACT_YEAR_RE.sub(r"\1", _MONEY_RE.sub(" ", text))
-    if _act_spans(cleaned):
-        return []
-    numbers: list[str] = []
-    for match in _SECTION_RE.finditer(cleaned):
-        for number in _numbers_from(cleaned, match):
-            if number not in numbers:
-                numbers.append(number)
-    return numbers
-
-
-def _numbers_from(text: str, match: re.Match[str]) -> list[str]:
-    numbers = [base_section(f"Section {match.group(1)}")]
+    plural = bool(_PLURAL_MARKER_RE.match(match.group(0)))
+    tails: list[re.Match[str]] = []
     position = match.end()
-    while tail := _SECTION_LIST_TAIL_RE.match(text, position):
-        numbers.append(base_section(f"Section {tail.group(1)}"))
+    tail_re = _ARTICLE_LIST_TAIL_RE if prefix == "Article" else _SECTION_LIST_TAIL_RE
+    while tail := tail_re.match(text, position):
+        tails.append(tail)
         position = tail.end()
-    return numbers
+    closes_with_and = any(tail.group(1) not in {",", "/"} for tail in tails)
+    if not plural and not closes_with_and:
+        # "Article 14, 19 and 21" is a list; "Section 138, 15 days ..." is not.
+        tails = []
+    numbers = [f"{prefix} {match.group(1)}"] + [f"{prefix} {tail.group(2)}" for tail in tails]
+    position = tails[-1].end() if tails else match.end()
+    if prefix == "Section":
+        numbers = [base_section(number) for number in numbers]
+    return numbers, position
 
 
-def parse_section_references(text: str) -> list[tuple[str, str]]:
-    """Every (statute_id, base section) a free-text question names, in order.
+def _resolve_references(text: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """(bound references, base section numbers left without an Act), in question order.
 
     Each section binds to the Act named right after it ("Section 138 of the NI
-    Act"), else to the nearest Act named before it ("Under the NI Act, what
-    does Section 138 require?"). The longest-token rule ``parse_section_string``
-    uses for a single citation string would read "Section 138 of the NI Act
-    ... under the Evidence Act" as Evidence Act s.138. Lists ("Sections 138
-    and 141") keep every number; sub-sections reduce to their section; rupee
-    amounts are never sections.
+    Act"). Failing that, it binds to the nearest Act named before it, but only
+    one that no earlier section has already claimed ("Under the NI Act, what
+    does Section 138 require?"). In "Can Section 482 CrPC quash a Section 138
+    complaint?" CrPC belongs to 482, so 138 stays unbound for the caller to
+    place, instead of becoming CrPC Section 138.
     """
-    if not text or not isinstance(text, str):
-        return []
     cleaned = _ACT_YEAR_RE.sub(r"\1", _MONEY_RE.sub(" ", text))
     acts = _act_spans(cleaned)
     markers = sorted(
         [m for pattern in (_SECTION_RE, _SECTION_SYMBOL_RE) for m in pattern.finditer(cleaned)],
         key=lambda m: m.start(),
     )
+    claimed: set[int] = set()
     positioned: list[tuple[int, tuple[str, str]]] = []
+    unbound: list[tuple[int, str]] = []
+    consumed_to = -1
     for index, match in enumerate(markers):
-        numbers = _numbers_from(cleaned, match)
-        tail_end = match.end()
-        while tail := _SECTION_LIST_TAIL_RE.match(cleaned, tail_end):
-            tail_end = tail.end()
-        next_marker = markers[index + 1].start() if index + 1 < len(markers) else len(cleaned)
+        if match.start() < consumed_to:
+            continue  # already read as part of the previous marker's list
+        numbers, tail_end = _list_numbers(cleaned, match, "Section")
+        consumed_to = tail_end
+        next_marker = next(
+            (m.start() for m in markers[index + 1:] if m.start() >= tail_end), len(cleaned)
+        )
         following = [
-            span for span in acts
+            position
+            for position, span in enumerate(acts)
             if tail_end <= span[0] < min(next_marker, tail_end + _FOLLOWING_ACT_WINDOW)
         ]
-        preceding = [span for span in acts if span[1] <= match.start()]
+        preceding = [
+            position
+            for position, span in enumerate(acts)
+            if span[1] <= match.start() and position not in claimed
+        ]
         if following:
-            statute_id = following[0][2]
+            chosen = following[0]
         elif preceding:
-            statute_id = preceding[-1][2]
+            chosen = preceding[-1]
         else:
+            unbound.extend((match.start(), number) for number in numbers)
             continue
+        claimed.add(chosen)
+        statute_id = acts[chosen][2]
         if statute_id == "constitution-india":
             continue
         positioned.extend((match.start(), (statute_id, number)) for number in numbers)
@@ -409,17 +424,47 @@ def parse_section_references(text: str) -> list[tuple[str, str]]:
         )
         nearby = [span for span in acts if match.end() <= span[0] < stop]
         if not nearby or nearby[0][2] == "constitution-india":
-            positioned.append((match.start(), ("constitution-india", f"Article {match.group(1)}")))
+            articles, _end = _list_numbers(cleaned, match, "Article")
+            positioned.extend((match.start(), ("constitution-india", item)) for item in articles)
     found: list[tuple[str, str]] = []
     for _position, ref in sorted(positioned, key=lambda item: item[0]):
         if ref not in found:
             found.append(ref)
+    left: list[str] = []
+    for _position, number in sorted(unbound):
+        if number not in left:
+            left.append(number)
     if not found and not markers:
         # "BNSS 483": an unambiguous Act with a bare number and no marker.
         parsed = parse_section_string(text)
         if parsed is not None:
             found.append((parsed[0], base_section(parsed[1])))
-    return found
+    return found, left
+
+
+def bare_section_numbers(text: str) -> list[str]:
+    """Base section numbers the text names without an Act that can be theirs.
+
+    "explain the section 138?" names none; in "Can Section 482 CrPC quash a
+    Section 138 complaint?" CrPC is Section 482's, so 138 is returned here.
+    """
+    if not text or not isinstance(text, str):
+        return []
+    return _resolve_references(text)[1]
+
+
+def parse_section_references(text: str) -> list[tuple[str, str]]:
+    """Every (statute_id, base section) a free-text question names with its Act, in order.
+
+    The longest-token rule ``parse_section_string`` uses for a single citation
+    string would read "Section 138 of the NI Act ... under the Evidence Act" as
+    Evidence Act s.138. Lists keep every number ("Sections 138 and 141"),
+    sub-sections reduce to their section, rupee amounts are never sections,
+    and a section with no Act of its own is left to ``bare_section_numbers``.
+    """
+    if not text or not isinstance(text, str):
+        return []
+    return _resolve_references(text)[0]
 
 
 def parse_section_strings(items: Iterable[str]) -> list[tuple[str, str]]:

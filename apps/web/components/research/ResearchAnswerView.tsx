@@ -269,7 +269,7 @@ export function ResearchAnswerView({ record }: { record: ResearchAnswerRecord })
         {(answer.coverage_gaps ?? []).length ? (
           <div className="flex flex-col gap-1 text-sm" data-testid="research-coverage-gaps">
             <p className="font-medium text-[var(--color-mute-2)]">
-              Not covered, because the retrieved sources do not address it
+              This answer does not cover
             </p>
             <ul className="list-disc space-y-0.5 pl-5">
               {(answer.coverage_gaps ?? []).map((gap, index) => <li key={index}>{gap}</li>)}
@@ -373,7 +373,7 @@ export function researchAnswerToText(record: ResearchAnswerRecord): string {
     answer.missing_facts.forEach((fact) => lines.push(`- ${fact}`));
   }
   if (answer.coverage_gaps?.length) {
-    lines.push("", "Not covered by the retrieved sources:");
+    lines.push("", "This answer does not cover:");
     (answer.coverage_gaps ?? []).forEach((gap) => lines.push(`- ${gap}`));
   }
   if (answer.assumptions.length) {

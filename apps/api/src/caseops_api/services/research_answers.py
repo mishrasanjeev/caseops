@@ -298,6 +298,10 @@ class _Focus:
     labels: tuple[str, ...] = ()
     # Shown as an assumption when CaseOps had to choose the Act itself.
     note: str | None = None
+    # Section numbers the question names without an Act of their own, for the
+    # retrieved judgments to place ("Can Section 482 CrPC quash a Section 138
+    # complaint?": CrPC is 482's, 138 is pending).
+    pending: tuple[str, ...] = ()
 
     @property
     def acts(self) -> frozenset[str]:
@@ -394,49 +398,80 @@ def _matter_statute_refs(session: Session, matter: Matter | None) -> list[tuple[
 
 
 def _resolve_focus(session: Session, query: str, matter: Matter | None) -> _Focus:
-    """What the question is about: named provisions first, then implied, then the matter's."""
+    """What the question is about: named provisions first, then implied, then the matter's.
+
+    Provisions that do not exist in a catalogued Act are dropped (no "Section
+    482, Negotiable Instruments Act"). A section named without an Act of its
+    own is placed from the question's stated facts when they imply one, else
+    left pending for the retrieved judgments.
+    """
     from caseops_api.services.authorities import _build_contextual_query_plan
 
-    refs = parse_section_references(query)
-    origin: Literal["question", "inferred", "matter", "none"] = "question"
     bare = bare_section_numbers(query)
-    if not refs:
-        refs = [
-            _base_ref(ref)
-            for ref in parse_section_strings(
-                _build_contextual_query_plan(query).statutes_or_sections
-            )
-        ]
+    implied = [
+        _base_ref(ref)
+        for ref in parse_section_strings(_build_contextual_query_plan(query).statutes_or_sections)
+    ]
+    refs = list(parse_section_references(query))
+    origin: Literal["question", "inferred", "matter", "none"] = "question"
+    if refs:
+        refs.extend(ref for ref in implied if ref[1] in bare and ref not in refs)
+    else:
         origin = "inferred"
-        if bare:
-            # The question named the section; only an Act for that number fits.
-            refs = [ref for ref in refs if ref[1] in bare]
+        # A named section number limits the implied Acts to that number.
+        refs = [ref for ref in implied if not bare or ref[1] in bare]
     if not refs:
-        refs = _matter_statute_refs(session, matter)
         origin = "matter"
+        refs = _matter_statute_refs(session, matter)
         if bare:
             # "explain the section 138?" from a matter that records only BNSS 8
             # is about Section 138, not about Section 8. Keep the matter's
             # same-numbered provision, else let the judgments place the Act.
             refs = [ref for ref in refs if ref[1] in bare]
-            if not refs:
-                return _Focus()
-    if not refs and matter is not None:
+    if not refs and matter is not None and not bare:
         # No statute is linked to the matter: read the provisions its own record
         # names or implies (title, description), never the model's guess.
         matter_text = " ".join(
             str(value) for value in (matter.title, matter.description) if value
         )
-        refs = parse_section_references(matter_text) or parse_section_strings(
-            _build_contextual_query_plan(matter_text).statutes_or_sections
-        )
+        refs = parse_section_references(matter_text) or [
+            _base_ref(ref)
+            for ref in parse_section_strings(
+                _build_contextual_query_plan(matter_text).statutes_or_sections
+            )
+        ]
+    refs = [ref for ref in refs if _known_provision(session, ref)][:MAX_FOCUS_REFS]
+    pending = tuple(number for number in bare if number not in {ref[1] for ref in refs})
     if not refs:
-        return _Focus()
-    refs = refs[:MAX_FOCUS_REFS]
+        return _Focus(pending=pending)
     return _Focus(
         refs=tuple(refs),
         origin=origin,
         labels=tuple(_ref_label(session, ref) for ref in refs),
+        pending=pending,
+    )
+
+
+def _known_provision(session: Session, ref: tuple[str, str]) -> bool:
+    """False for a section an otherwise catalogued Act does not have.
+
+    An Act CaseOps holds no sections for cannot be checked and is kept; its
+    sources will simply be judgments.
+    """
+    if ref[1].startswith("Article"):
+        return True
+    catalogued = session.scalar(
+        select(StatuteSection.id).where(StatuteSection.statute_id == ref[0]).limit(1)
+    )
+    if catalogued is None:
+        return True
+    return (
+        session.scalar(
+            select(StatuteSection.id)
+            .where(StatuteSection.statute_id == ref[0], StatuteSection.section_number == ref[1])
+            .limit(1)
+        )
+        is not None
     )
 
 
@@ -633,7 +668,7 @@ def _candidates(
 
 
 def _infer_bare_section_focus(
-    session: Session, query: str, pool: list[_Candidate]
+    session: Session, query: str, pool: list[_Candidate], *, numbers: tuple[str, ...] = ()
 ) -> _Focus | None:
     """The Act a bare "section 138" means, read from the judgments that apply it.
 
@@ -643,7 +678,7 @@ def _infer_bare_section_focus(
     section most of them cite or name wins, provided no other Act's section of
     that number ties it. The choice is shown to the user as an assumption.
     """
-    numbers = bare_section_numbers(query)
+    numbers = numbers or tuple(bare_section_numbers(query))
     if not numbers:
         return None
     counts: Counter[tuple[str, str]] = Counter()
@@ -656,7 +691,9 @@ def _infer_bare_section_focus(
                 )
             )
         )
-        counts.update(ref for ref in refs if ref[1] in numbers)
+        counts.update(
+            ref for ref in refs if ref[1] in numbers and _known_provision(session, ref)
+        )
     chosen: list[tuple[str, str]] = []
     for number in numbers:
         ranked = sorted(
@@ -689,10 +726,16 @@ def _select_judgments(
     pool = _candidates(
         session, _retrieve_judgments(session, _retrieval_query(query, focus, matter)), focus
     )
-    if not focus.refs:
-        inferred = _infer_bare_section_focus(session, query, pool)
+    if focus.pending:
+        inferred = _infer_bare_section_focus(session, query, pool, numbers=focus.pending)
         if inferred is not None:
-            focus = inferred
+            refs = tuple(dict.fromkeys(focus.refs + inferred.refs))
+            focus = _Focus(
+                refs=refs,
+                origin=focus.origin if focus.refs else inferred.origin,
+                labels=tuple(_ref_label(session, ref) for ref in refs),
+                note=inferred.note,
+            )
             for item in pool:
                 item.tier, item.others = _engagement(item.document, item.excerpt, focus)
     if focus.refs and sum(1 for item in pool if item.tier < 2) < MIN_FOCUSED_JUDGMENTS:
@@ -720,12 +763,23 @@ def _select_judgments(
         pool,
         key=lambda item: (
             item.tier,
+            # A judgment that cites more of the focus (both Section 482 and
+            # Section 138 for a quashing-of-a-138-complaint question) is closer
+            # to the question than one citing only part of it.
+            -len(set(_cited_refs(item.document)) & set(focus.refs)),
             not _judgment_identity(item.document)[1],
             bool(item.others),
             item.rank,
         ),
     )[:MAX_JUDGMENTS]
-    chosen.sort(key=lambda item: (item.tier, item.result.forum_level != "supreme_court", item.rank))
+    chosen.sort(
+        key=lambda item: (
+            item.tier,
+            -len(set(_cited_refs(item.document)) & set(focus.refs)),
+            item.result.forum_level != "supreme_court",
+            item.rank,
+        )
+    )
     return chosen, focus
 
 
