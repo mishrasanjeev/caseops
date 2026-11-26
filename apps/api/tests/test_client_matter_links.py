@@ -267,9 +267,10 @@ def test_archived_client_cannot_be_linked(client: TestClient) -> None:
     owner = str(bootstrap_company(client)["access_token"])
     matter = _mk_matter(client, owner, "LNK-ARCHIVED")
     archived = _mk_client(client, owner, "Archived Client Ltd")
-    assert client.delete(
+    archived_response = client.delete(
         f"/api/clients/{archived['id']}", headers=auth_headers(owner),
-    ).status_code == 200
+    )
+    assert archived_response.status_code == 200
 
     resp = _link(client, owner, matter["id"], archived["id"])
     assert resp.status_code == 409, resp.text
@@ -437,9 +438,10 @@ def test_client_verification_listing_reports_archived_link(client: TestClient) -
     matter = _mk_matter(client, owner, "LNK-LIST")
     linked = _mk_client(client, owner, "Listed Then Archived Ltd")
     assert _link(client, owner, matter["id"], linked["id"]).status_code == 200
-    assert client.delete(
+    archived_response = client.delete(
         f"/api/clients/{linked['id']}", headers=auth_headers(owner),
-    ).status_code == 200
+    )
+    assert archived_response.status_code == 200
 
     listing = client.get(
         f"/api/matters/{matter['id']}/client-verification", headers=auth_headers(owner),
@@ -545,9 +547,10 @@ def test_create_matter_and_link_route_reject_the_same_clients(client: TestClient
     owner_a = str(bootstrap_company(client)["access_token"])
     target = _mk_matter(client, owner_a, "LNK-PARITY-TARGET")
     archived = _mk_client(client, owner_a, "Parity Archived Ltd")
-    assert client.delete(
+    archived_response = client.delete(
         f"/api/clients/{archived['id']}", headers=auth_headers(owner_a),
-    ).status_code == 200
+    )
+    assert archived_response.status_code == 200
     owner_b = _other_tenant(client)
     foreign = _mk_client(client, owner_b, "Parity Foreign Ltd")
 

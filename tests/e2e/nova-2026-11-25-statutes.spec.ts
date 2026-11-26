@@ -12,8 +12,9 @@
  * creates its own matter through the UI, chooses the Act and the Article with
  * a real pointer (mouse on desktop, touch on a phone), attaches the reference,
  * checks it through the API oracle, then removes it and disposes the matter.
- * The statute catalogue is never seeded here: locally it comes from the
- * release seed job, in production from the deployed release.
+ * Locally the release statute seed (the same `_seed` the release job runs) is
+ * applied first, so the journey never depends on another spec having seeded
+ * the catalogue; in production the catalogue comes from the deployed release.
  *
  * Production runs need CASEOPS_EXPECTED_RELEASE_SHA and the tester's
  * credentials in CASEOPS_NOVA_PROD_EMAIL / CASEOPS_NOVA_PROD_PASSWORD (never
@@ -26,6 +27,7 @@ import { noPaidProviderHeaders } from "./support/cost-controls";
 import { e2eEnv } from "./support/env";
 import { assertPublicReleaseIdentity } from "./support/public-release-identity";
 import { json, signIn, stamp, type TesterCredentials } from "./support/ram-bugs4";
+import { seedVerifiedLocalStatute } from "./support/verified-statute-fixture";
 
 test.use({ trace: "off", screenshot: "off", video: "off", storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: "default", retries: 0 });
@@ -71,6 +73,8 @@ async function runtimeFor(baseURL: string | undefined, request: APIRequestContex
   const sha = local ? (process.env.CASEOPS_RELEASE_SHA?.trim() || e2eEnv.CASEOPS_RELEASE_SHA)
     : required("CASEOPS_EXPECTED_RELEASE_SHA");
   await assertPublicReleaseIdentity([`${api.origin}/api/build`, `${web.origin}/api/release-identity`], sha);
+  // CI app-mobile ran this file before any spec that seeds the catalogue (26 Nov 2026).
+  seedVerifiedLocalStatute(local);
   const credentials: TesterCredentials = local ? localCredentials() : {
     slug: process.env.CASEOPS_NOVA_PROD_SLUG?.trim() || "nova-legal",
     email: required("CASEOPS_NOVA_PROD_EMAIL"),
