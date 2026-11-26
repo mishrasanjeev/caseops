@@ -23,6 +23,12 @@ Usage::
     python -m caseops_api.scripts.eval_statute_retrieval
     python -m caseops_api.scripts.eval_statute_retrieval --k 10 --calibrate --json-out out.json
 
+Semantic retrieval is evaluated even while
+``CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED`` is off for the live service, so
+the benchmark can gate enabling it. Set ``CASEOPS_RERANK_ENABLED`` and
+``CASEOPS_RERANK_BACKEND`` to the live API service's values so the rating
+reflects production ranking.
+
 Read-only: no writes to the database. Each question costs one query embedding.
 """
 
@@ -43,7 +49,11 @@ from caseops_api.db.models import StatuteSection
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.embeddings import EmbeddingProvider, build_provider
 from caseops_api.services.statute_selection import selectable_statute_section_sql
-from caseops_api.services.statute_vectors import min_similarity_for, search_statute_sections
+from caseops_api.services.statute_vectors import (
+    min_similarity_for,
+    search_statute_sections,
+    semantic_retrieval_enabled,
+)
 
 BENCHMARK_PATH = Path(__file__).resolve().parent / "statute_retrieval_benchmark.json"
 PRODUCTION_MODEL = "voyage-4-large"
@@ -99,6 +109,7 @@ class Report:
     negative_false_positives: int = 0
     negative_top_similarity: list[float] = field(default_factory=list)
     income_tax_extension_queries: int = 0
+    live_semantic_setting: bool = False
 
     @property
     def rating(self) -> float:
@@ -133,6 +144,7 @@ def evaluate(
         k=k,
         floor=min_similarity_for(embedder.model),
         rerank=os.environ.get("CASEOPS_RERANK_ENABLED", "false") or "false",
+        live_semantic_setting=semantic_retrieval_enabled(),
         income_tax_extension_queries=len(
             benchmark.get("income_tax_extension", {}).get("queries", [])
         ),
@@ -146,7 +158,9 @@ def evaluate(
         if not expected & selectable:
             report.skipped += 1
             continue
-        hits = search_statute_sections(session, item["query"], limit=k, embedder=embedder)
+        hits = search_statute_sections(
+            session, item["query"], limit=k, embedder=embedder, semantic=True
+        )
         keys = [(hit.statute.id, hit.section.section_number) for hit in hits]
         rank = next((index for index, key in enumerate(keys, start=1) if key in expected), 0)
         result = QueryResult(
@@ -159,7 +173,12 @@ def evaluate(
         )
         if calibrate:
             pool = search_statute_sections(
-                session, item["query"], limit=50, embedder=embedder, min_similarity=-1.0
+                session,
+                item["query"],
+                limit=50,
+                embedder=embedder,
+                min_similarity=-1.0,
+                semantic=True,
             )
             result.expected_similarity = next(
                 (
@@ -179,11 +198,18 @@ def evaluate(
         session.rollback()
     for negative in benchmark.get("negatives", []):
         report.negatives += 1
-        if search_statute_sections(session, negative["query"], limit=k, embedder=embedder):
+        if search_statute_sections(
+            session, negative["query"], limit=k, embedder=embedder, semantic=True
+        ):
             report.negative_false_positives += 1
         if calibrate:
             pool = search_statute_sections(
-                session, negative["query"], limit=1, embedder=embedder, min_similarity=-1.0
+                session,
+                negative["query"],
+                limit=1,
+                embedder=embedder,
+                min_similarity=-1.0,
+                semantic=True,
             )
             if pool and pool[0].similarity is not None:
                 report.negative_top_similarity.append(pool[0].similarity)
@@ -200,7 +226,8 @@ def format_report(report: Report) -> str:
     lines = [
         f"# Statute retrieval benchmark (k={report.k})",
         "",
-        f"model: {report.model} · rerank: {report.rerank} · similarity floor: {report.floor:.2f}",
+        f"model: {report.model} · rerank: {report.rerank} · similarity floor: {report.floor:.2f}"
+        f" · live semantic setting: {report.live_semantic_setting}",
     ]
     if report.model != PRODUCTION_MODEL:
         lines.append(

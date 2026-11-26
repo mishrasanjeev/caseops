@@ -2,13 +2,24 @@
 
 Feature: section-level vector retrieval over verified statute text (PRD J05/M04,
 MOD-TS-017, US-010/US-011; tests FT-117..FT-122, NFT-026, SEC-034). Migration
-`20261126_0101` adds `statute_section_chunks`. Until this runbook is executed,
-production behaves exactly as before: research answers find a statute section
-only by an exact reference in the question or a section cited by a retrieved
-judgment.
+`20261126_0101` adds `statute_section_chunks`.
+
+Live answers use the index only when the API service has
+`CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED=true` (default `false`). Until then
+production behaves exactly as before, even after the index is built: research
+answers find a statute section only by an exact reference in the question or a
+section cited by a retrieved judgment. Build the index, benchmark it, and only
+then enable the setting (step 8).
 
 Nothing in the code calls a paid provider on its own. The index is built by an
 operator-run job, like the judgment title-chunk backfill.
+
+Retrieval order in research answers, at most six statute sources: the section
+the question names (when it has verified text), then sections cited by the
+retrieved judgments, then semantic matches (limited to the named Act when the
+question names one). A question that names a section without verified text
+(unverified, retired, quarantined, not in the Act, or an Act CaseOps cannot
+resolve) gets no substitute section.
 
 ## What runs where
 
@@ -16,7 +27,7 @@ operator-run job, like the judgment title-chunk backfill.
 | --- | --- | --- |
 | Seed verified statute text | `caseops-seed-statutes` job (already part of `scripts/deploy-prod.sh`) | none |
 | Build or refresh the index | `python -m caseops_api.scripts.embed_statute_sections` (operator) | Voyage `voyage-4-large`, `input_type=document` |
-| Research answer retrieval | API, research answer background job | one Voyage query embedding per answer (`input_type=query`), skipped when the index is empty |
+| Research answer retrieval | API, research answer background job | only with the setting on: one Voyage query embedding per answer (`input_type=query`), made with no database transaction open, and skipped when no chunk of the configured model exists |
 | Reranking | API process, local fastembed cross-encoder when `CASEOPS_RERANK_ENABLED=true` | none |
 | Benchmark | `python -m caseops_api.scripts.eval_statute_retrieval` (operator) | one Voyage query embedding per question (two with `--calibrate`) |
 
@@ -38,6 +49,12 @@ operator-run job, like the judgment title-chunk backfill.
 - Retrieval re-checks selectability and the section's current `source_sha256`
   and `source_version` on every read, so a stale chunk is never returned even
   before the job runs again.
+- A section that fails only its link check keeps its chunks while its source
+  hash and version are unchanged (reported as `retained_link_unavailable`), so
+  a flapping link check does not delete and re-buy embeddings; reads exclude
+  the section until the link check passes again.
+- A vector query error (pgvector, dimension mismatch, timeout) is rolled back
+  and the answer falls back to the exact and judgment-cited paths.
 
 ## Cost estimate (measured offline on the current release bundle)
 
@@ -55,7 +72,8 @@ to_embed_chunks=7198 estimated_tokens=1708561
 - Later runs embed only changed sections. Adding the Income-tax Act edition
   adds its own sections only; run `--dry-run` after it is seeded for its
   figure.
-- Per research answer: one extra query embedding (under 150 tokens).
+- Per research answer, once the setting is on: one extra query embedding
+  (under 150 tokens).
 - Storage: the offline build used 117 MB for 7,198 chunks, including a 56 MB
   HNSW index (JSON copy of each vector plus the pgvector column, the same
   layout as `authority_document_chunks`).
@@ -63,8 +81,18 @@ to_embed_chunks=7198 estimated_tokens=1708561
 ## Production backfill (release owner)
 
 Run only after the release that contains migration `20261126_0101` is deployed
-and its `caseops-seed-statutes` execution has finished. Use the same
-workstation or VM setup as the judgment title-chunk backfill
+and its `caseops-seed-statutes` execution has finished. Steps 1-7 do not change
+live answers while `CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED` is off; confirm
+it is off first:
+
+```bash
+gcloud run services describe caseops-api --region asia-south1 \
+  --project perfect-period-305406 --format=json \
+  | jq -r '.spec.template.spec.containers[0].env[]
+           | select(.name|test("STATUTE_SEMANTIC|RERANK")) | "\(.name)=\(.value)"'
+```
+
+Use the same workstation or VM setup as the judgment title-chunk backfill
 (`.codex/skills/corpus-ingest/SKILL.md`): Cloud SQL Auth Proxy on port 25432
 and the production embedding environment.
 
@@ -76,8 +104,10 @@ export CASEOPS_EMBEDDING_PROVIDER=voyage
 export CASEOPS_EMBEDDING_MODEL=voyage-4-large
 export CASEOPS_EMBEDDING_DIMENSIONS=1024
 export CASEOPS_EMBEDDING_API_KEY=$(gcloud secrets versions access latest --secret=caseops-voyage-api-key)
-export CASEOPS_RERANK_ENABLED=true
-export CASEOPS_RERANK_BACKEND=fastembed
+# Rank exactly as the live API does: copy its reranker settings from the
+# describe output above (unset in the service means disabled).
+export CASEOPS_RERANK_ENABLED=<value from caseops-api, default false>
+export CASEOPS_RERANK_BACKEND=<value from caseops-api, default fastembed>
 export PYTHONUTF8=1 PYTHONUNBUFFERED=1
 cd apps/api   # checkout of the deployed commit
 
@@ -127,7 +157,9 @@ GROUP BY 1;
 -- Expected: only verified_official / verified_licensed.
 ```
 
-5. Benchmark on the production provider with reranking on:
+5. Benchmark on the production provider with the live API's reranker
+settings (above). The harness evaluates the semantic path even while the live
+setting is off and prints the setting it observed:
 
 ```bash
 uv run --no-sync python -m caseops_api.scripts.eval_statute_retrieval --calibrate --json-out statute-benchmark.json
@@ -135,8 +167,9 @@ uv run --no-sync python -m caseops_api.scripts.eval_statute_retrieval --calibrat
 
 Report the printed line, for example
 `rating: X.Y/5 (recall@10=NN.N%, MRR=0.YYY, rank=Z.ZZ)`, with the negatives
-line and the calibration block. The slice is production-ready only at 4.8+/5
-(PRD 12.4) with zero negatives returning a statute.
+line, the rerank value and the calibration block. The slice is production-ready
+only at 4.8+/5 (PRD 12.4) with zero negatives returning a statute. If the live
+reranker setting changes later, re-run this step.
 
 6. Similarity floor. `services/statute_vectors.py` uses a provisional floor of
 0.30 for `voyage-4-large`. The calibration block prints the minimum and median
@@ -146,18 +179,29 @@ maximum and below most expected hits. If it does not, change
 `_MIN_SIMILARITY_BY_MODEL` in a reviewed PR and re-run step 5; do not call the
 slice production-ready before that.
 
-7. End-user check: in Research, ask a paraphrased question that names no
+7. Gate: continue only if step 5 reports 4.8/5 or better, zero negatives
+returned a statute, and step 6 confirmed the floor. Otherwise leave the setting
+off; the index stays harmless.
+
+8. Enable: set `CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED=true` on the
+`caseops-api` service through the normal release path (deploy environment, not
+an ad hoc console edit), with the benchmark output recorded in the release
+evidence.
+
+9. End-user check: in Research, ask a paraphrased question that names no
 section (for example "presumption that the holder received the cheque for a
 debt") and confirm a statute source with the matching section, verified text
-and source link appears, and that the Section 138 benchmark question still
-lists Section 138 first.
+and source link appears. Confirm the Section 138 benchmark question still lists
+Section 138 first, followed by the sections the judgments cite, and that a
+question naming an unverified section (for example one marked pending in
+`/app/statutes`) gets no substitute section.
 
 ## Rollback
 
-The index is derived data. To stop semantic statute retrieval without a
-deploy, delete the rows (`DELETE FROM statute_section_chunks;`); research falls
-back to exact references and judgment-cited sections. Rebuild later with step
-3. The migration is restore-forward only: its downgrade refuses before any DDL,
+Turn `CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED` off; research falls back to
+exact references and judgment-cited sections and the index is kept. The index
+is derived data: deleting its rows (`DELETE FROM statute_section_chunks;`) also
+stops semantic retrieval, and step 3 rebuilds it. The migration is restore-forward only: its downgrade refuses before any DDL,
 like the research-answers revision below it.
 
 ## After each statute seed

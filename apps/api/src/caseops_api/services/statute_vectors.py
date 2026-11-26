@@ -16,11 +16,15 @@ hash of the exact text that was embedded, so a text, label or chunking change
 re-embeds and a citation resolves to the exact verified provision.
 
 Retrieval is hybrid: an exact section reference parsed from the question is
-always ranked first; semantic neighbours follow, scored with the shared
+always ranked first and limits semantic neighbours to its Act; a named section
+without verified text gets no substitute. Semantic neighbours, only when
+``statute_semantic_retrieval_enabled`` is on, are scored with the shared
 lexical/vector blend from ``services/retrieval.py`` and reordered by the
 configured reranker exactly as the judgment path does. A neighbour below the
 embedding model's similarity floor is not evidence, so an unrelated question
-gets no statute source rather than the nearest unrelated provision.
+gets no statute source rather than the nearest unrelated provision. No
+transaction is held across the query embedding, and a vector query error
+degrades to the exact path.
 
 The index job mirrors the judgment title-chunk backfill: state-based (each run
 compares what should be embedded with what is stored), committed per batch,
@@ -40,9 +44,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
+from fastapi import HTTPException
 from sqlalchemy import delete, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import Statute, StatuteSection, StatuteSectionChunk
 from caseops_api.services.embeddings import (
     EmbeddingMoneyBudgetError,
@@ -75,6 +82,13 @@ SEMANTIC_CANDIDATE_CHUNKS = 40
 # SQLite (tests and offline development) scores in Python; bound the scan.
 _SQLITE_MAX_CHUNKS = 20_000
 _MAX_QUERY_CHARS = 600
+# The shared ranker maps cosine similarity onto 0..240; lexical scores are
+# capped to the same scale before blending.
+_SCORE_SCALE = 240.0
+# "Section 139", "s. 139", "ss. 138", "Article 21A", "Art. 21", "§ 34".
+_PROVISION_REFERENCE_RE = re.compile(
+    r"(?:\b(?:sections?|secs?\.|ss?\.|articles?|arts?\.)|§)\s*\d", re.IGNORECASE
+)
 # Cosine similarity below which a neighbour is not evidence of relevance.
 # Similarity scales differ between embedding spaces, so the floor is per model.
 # The voyage-4-large value is provisional until the production benchmark's
@@ -257,6 +271,7 @@ class StatuteIndexSummary:
     embedded_chunks: int = 0
     removed_sections: int = 0
     removed_chunks: int = 0
+    retained_link_unavailable: int = 0
     changed_during_embedding: int = 0
     errors: int = 0
     stop_reason: str | None = None
@@ -271,6 +286,7 @@ class StatuteIndexSummary:
             f"to_embed_chunks={self.chunks_to_embed} estimated_tokens={self.estimated_tokens} "
             f"embedded_sections={self.embedded_sections} embedded_chunks={self.embedded_chunks} "
             f"removed_sections={self.removed_sections} removed_chunks={self.removed_chunks} "
+            f"retained_link_unavailable={self.retained_link_unavailable} "
             f"changed_during_embedding={self.changed_during_embedding} errors={self.errors} "
             f"stop_reason={self.stop_reason or 'none'}"
         )
@@ -339,6 +355,40 @@ def _stored_fingerprints(session: Session) -> dict[str, tuple]:
     return stored
 
 
+class _WithAvailableLink:
+    """Read-only view of a section as if its link check had passed."""
+
+    def __init__(self, section: StatuteSection) -> None:
+        self._section = section
+
+    def __getattr__(self, name: str):
+        if name == "link_health_status":
+            return "available"
+        return getattr(self._section, name)
+
+
+def _link_only_unavailable(
+    session: Session, section_ids: Sequence[str], stored: dict[str, tuple]
+) -> set[str]:
+    """Sections excluded only by their link check, with unchanged chunk identity."""
+    retained: set[str] = set()
+    for offset in range(0, len(section_ids), 200):
+        for section in session.scalars(
+            select(StatuteSection).where(
+                StatuteSection.id.in_(section_ids[offset : offset + 200]),
+                StatuteSection.link_health_status != "available",
+            )
+        ):
+            fingerprint = stored.get(section.id, ())
+            if (
+                len(fingerprint) > 2
+                and fingerprint[:2] == (section.source_sha256, section.source_version)
+                and is_selectable_statute_section(_WithAvailableLink(section))
+            ):
+                retained.add(section.id)
+    return retained
+
+
 def _estimate_tokens(texts: Iterable[str]) -> int:
     # The same ~4 characters per token heuristic the Voyage batcher uses.
     return sum(max(1, len(value) // 4) for value in texts)
@@ -400,6 +450,13 @@ def sync_statute_section_chunks(
     stale_ids = sorted(
         set(stored) - {section_id for section_id, plan in plans.items() if plan.chunks}
     )
+    # A failed link check alone does not make the verified text different.
+    # Keep those chunks while their source identity still matches, so a
+    # flapping link check never deletes and re-buys embeddings; reads exclude
+    # the section for as long as it is not selectable.
+    retained = _link_only_unavailable(session, stale_ids, stored)
+    summary.retained_link_unavailable = len(retained)
+    stale_ids = [section_id for section_id in stale_ids if section_id not in retained]
     pending: list[SectionPlan] = []
     for plan in plans.values():
         if not plan.chunks:
@@ -545,6 +602,15 @@ def min_similarity_for(model: str) -> float:
     return _MIN_SIMILARITY_BY_MODEL.get(model, _DEFAULT_MIN_SIMILARITY)
 
 
+def semantic_retrieval_enabled() -> bool:
+    return bool(get_settings().statute_semantic_retrieval_enabled)
+
+
+def names_a_provision(query: str) -> bool:
+    """Whether the question names a section or Article by number."""
+    return parse_section_string(query) is not None or bool(_PROVISION_REFERENCE_RE.search(query))
+
+
 def _exact_hit(session: Session, query: str) -> StatuteSectionHit | None:
     reference = parse_section_string(query)
     if reference is None:
@@ -570,40 +636,62 @@ def _exact_hit(session: Session, query: str) -> StatuteSectionHit | None:
     )
 
 
+def _release_read_transaction(session: Session) -> bool:
+    """End a proven read-only transaction so no transaction spans provider I/O.
+
+    A session that holds the caller's uncommitted writes is never rolled back:
+    semantic retrieval is skipped instead and the exact path stands.
+    """
+    try:
+        require_read_only_upload_session(
+            session, detail="Statute retrieval requires a session without caller-owned writes."
+        )
+    except HTTPException:
+        logger.warning("semantic statute retrieval skipped: the session holds uncommitted writes")
+        return False
+    session.rollback()
+    return True
+
+
 def _nearest_chunks(
-    session: Session, *, query_vector: list[float], model: str, dimensions: int
+    session: Session,
+    *,
+    query_vector: list[float],
+    model: str,
+    dimensions: int,
+    statute_id: str | None,
 ) -> list[tuple[str, float]]:
     """``(chunk_id, cosine similarity)`` of the nearest chunks of this model."""
     if _postgres(session):
         # The model filter is applied after the index scan: with it in the WHERE
         # clause PostgreSQL prefers the embedding_model btree plus a full sort
         # over the HNSW index. Every chunk normally carries one model, because
-        # the index job re-embeds all sections when the model changes.
+        # the index job re-embeds all sections when the model changes. A scope
+        # to one Act is a small, exact scan through the statute_id index.
         literal = "[" + ",".join(f"{value:.6f}" for value in query_vector) + "]"
+        scope = "AND statute_id = :statute " if statute_id is not None else ""
         rows = session.execute(
             text(
                 "SELECT id, embedding_model, embedding_dimensions, "
                 "1 - (embedding_vector <=> CAST(:query AS vector)) AS similarity "
-                "FROM statute_section_chunks WHERE embedding_vector IS NOT NULL "
+                f"FROM statute_section_chunks WHERE embedding_vector IS NOT NULL {scope}"
                 "ORDER BY embedding_vector <=> CAST(:query AS vector) LIMIT :limit"
             ),
-            {"query": literal, "limit": SEMANTIC_CANDIDATE_CHUNKS},
+            {"query": literal, "limit": SEMANTIC_CANDIDATE_CHUNKS, "statute": statute_id},
         ).all()
         return [
             (str(row.id), float(row.similarity))
             for row in rows
             if row.embedding_model == model and row.embedding_dimensions == dimensions
         ]
-    rows = session.execute(
-        select(StatuteSectionChunk.id, StatuteSectionChunk.embedding_json)
-        .where(
-            StatuteSectionChunk.embedding_model == model,
-            StatuteSectionChunk.embedding_dimensions == dimensions,
-        )
-        .limit(_SQLITE_MAX_CHUNKS)
-    ).all()
+    statement = select(StatuteSectionChunk.id, StatuteSectionChunk.embedding_json).where(
+        StatuteSectionChunk.embedding_model == model,
+        StatuteSectionChunk.embedding_dimensions == dimensions,
+    )
+    if statute_id is not None:
+        statement = statement.where(StatuteSectionChunk.statute_id == statute_id)
     scored = []
-    for chunk_id, raw in rows:
+    for chunk_id, raw in session.execute(statement.limit(_SQLITE_MAX_CHUNKS)).all():
         try:
             vector = [float(value) for value in json.loads(raw)]
         except (TypeError, ValueError):
@@ -613,34 +701,26 @@ def _nearest_chunks(
     return scored[:SEMANTIC_CANDIDATE_CHUNKS]
 
 
-def _semantic_hits(
+def _rank_semantic(
     session: Session,
     query: str,
     *,
+    query_vector: list[float],
+    model: str,
+    dimensions: int,
+    floor: float,
     limit: int,
     exclude: set[str],
-    embedder: EmbeddingProvider | None,
-    min_similarity: float | None,
+    statute_id: str | None,
 ) -> list[StatuteSectionHit]:
-    cleaned = " ".join(query.split())[:_MAX_QUERY_CHARS]
-    if not cleaned or session.scalar(select(StatuteSectionChunk.id).limit(1)) is None:
-        return []
-    try:
-        provider = embedder or build_provider()
-        embedded = provider.embed([cleaned], input_type="query")
-    except Exception:  # noqa: BLE001 - retrieval degrades to the exact path.
-        logger.warning("statute query embedding unavailable; semantic statute retrieval skipped")
-        return []
-    if len(embedded.vectors) != 1:
-        return []
-    floor = min_similarity_for(embedded.model) if min_similarity is None else min_similarity
     neighbours = [
         (chunk_id, similarity)
         for chunk_id, similarity in _nearest_chunks(
             session,
-            query_vector=embedded.vectors[0],
-            model=embedded.model,
-            dimensions=embedded.dimensions,
+            query_vector=query_vector,
+            model=model,
+            dimensions=dimensions,
+            statute_id=statute_id,
         )
         if similarity >= floor
     ]
@@ -684,7 +764,7 @@ def _semantic_hits(
     lexical = {
         result.attachment_id: result.score
         for result in rank_candidates(
-            query=cleaned,
+            query=query,
             candidates=[
                 RetrievalCandidate(
                     attachment_id=chunk.id,
@@ -699,8 +779,12 @@ def _semantic_hits(
     best: dict[str, StatuteSectionHit] = {}
     for chunk, section, statute in usable:
         similarity = similarity_by_chunk[chunk.id]
-        score = (HYBRID_LEXICAL_WEIGHT * lexical.get(chunk.id, 0)) + (
-            HYBRID_VECTOR_WEIGHT * similarity * 240
+        # Both components share the shared ranker's 0..240 scale; the lexical
+        # score is unbounded there, so it is capped to keep keyword overlap
+        # from outweighing meaning.
+        lexical_score = min(float(lexical.get(chunk.id, 0)), _SCORE_SCALE)
+        score = (HYBRID_LEXICAL_WEIGHT * lexical_score) + (
+            HYBRID_VECTOR_WEIGHT * similarity * _SCORE_SCALE
         )
         current = best.get(section.id)
         if current is not None and current.score >= score:
@@ -724,7 +808,7 @@ def _semantic_hits(
 
             by_id = {hit.section.id: hit for hit in ordered}
             reranked = build_reranker().rerank(
-                cleaned,
+                query,
                 [
                     RerankerCandidate(
                         identifier=hit.section.id,
@@ -743,6 +827,76 @@ def _semantic_hits(
     return ordered[:limit]
 
 
+def _semantic_hits(
+    session: Session,
+    query: str,
+    *,
+    limit: int,
+    exclude: set[str],
+    embedder: EmbeddingProvider | None,
+    min_similarity: float | None,
+    statute_id: str | None,
+) -> list[StatuteSectionHit]:
+    cleaned = " ".join(query.split())[:_MAX_QUERY_CHARS]
+    if not cleaned or not _release_read_transaction(session):
+        return []
+    try:
+        provider = embedder or build_provider()
+    except Exception:  # noqa: BLE001 - retrieval degrades to the exact path.
+        logger.warning("statute query embedder unavailable; semantic statute retrieval skipped")
+        return []
+    try:
+        # Only chunks of the provider's own model can be compared. A request
+        # with no comparable chunks (an empty index, or the offline model a
+        # no-paid request receives) makes no embedding call at all.
+        comparable = session.scalar(
+            select(StatuteSectionChunk.id)
+            .where(
+                StatuteSectionChunk.embedding_model == provider.model,
+                StatuteSectionChunk.embedding_dimensions == provider.dimensions,
+            )
+            .limit(1)
+        )
+    except SQLAlchemyError:
+        logger.warning("statute index unavailable; semantic statute retrieval skipped")
+        session.rollback()
+        return []
+    # No transaction is held while the provider embeds the query.
+    session.rollback()
+    if comparable is None:
+        return []
+    try:
+        embedded = provider.embed([cleaned], input_type="query")
+    except Exception:  # noqa: BLE001 - retrieval degrades to the exact path.
+        logger.warning("statute query embedding unavailable; semantic statute retrieval skipped")
+        return []
+    if (
+        len(embedded.vectors) != 1
+        or embedded.model != provider.model
+        or embedded.dimensions != provider.dimensions
+    ):
+        return []
+    try:
+        return _rank_semantic(
+            session,
+            cleaned,
+            query_vector=embedded.vectors[0],
+            model=embedded.model,
+            dimensions=embedded.dimensions,
+            floor=min_similarity_for(embedded.model) if min_similarity is None else min_similarity,
+            limit=limit,
+            exclude=exclude,
+            statute_id=statute_id,
+        )
+    except SQLAlchemyError:
+        # pgvector errors, dimension mismatches, timeouts or a missing
+        # extension degrade to the exact path. Only reads ran since the proven
+        # read-only release above, so the rollback discards no caller work.
+        logger.warning("statute vector query failed; semantic statute retrieval skipped")
+        session.rollback()
+        return []
+
+
 def search_statute_sections(
     session: Session,
     query: str,
@@ -750,21 +904,33 @@ def search_statute_sections(
     limit: int = 10,
     embedder: EmbeddingProvider | None = None,
     min_similarity: float | None = None,
+    semantic: bool | None = None,
 ) -> list[StatuteSectionHit]:
     """Verified statute sections for a question, exact reference first.
 
-    Reads only the global statute tables. The exact section a question names
-    always ranks first; semantic neighbours follow. Every returned section
-    passes the canonical selectability predicate at read time.
-    ``min_similarity`` overrides the model's floor for benchmark calibration
-    only; product callers leave it unset.
+    Reads only the global statute tables.
+
+    * A question that names a section with verified text gets that section
+      first; semantic neighbours, if enabled, are limited to the same Act.
+    * A question that names a section without verified text (unverified,
+      retired, quarantined, absent from the Act, or an Act CaseOps cannot
+      resolve) gets nothing: another provision is never substituted for the
+      one the lawyer asked about.
+    * Otherwise semantic neighbours are returned when semantic retrieval is
+      enabled (``statute_semantic_retrieval_enabled``).
+
+    Every returned section passes the canonical selectability predicate at
+    read time. ``semantic`` and ``min_similarity`` override the setting and the
+    model's floor for the offline benchmark only; product callers leave them
+    unset.
     """
-    hits: list[StatuteSectionHit] = []
     exact = _exact_hit(session, query)
-    if exact is not None:
-        hits.append(exact)
+    if exact is None and names_a_provision(query):
+        return []
+    hits = [exact] if exact is not None else []
+    enabled = semantic_retrieval_enabled() if semantic is None else semantic
     remaining = limit - len(hits)
-    if remaining > 0:
+    if enabled and remaining > 0:
         hits.extend(
             _semantic_hits(
                 session,
@@ -773,6 +939,7 @@ def search_statute_sections(
                 exclude={hit.section.id for hit in hits},
                 embedder=embedder,
                 min_similarity=min_similarity,
+                statute_id=exact.statute.id if exact is not None else None,
             )
         )
     return hits[:limit]
@@ -788,7 +955,9 @@ __all__ = [
     "chunk_section_text",
     "embedding_text",
     "min_similarity_for",
+    "names_a_provision",
     "plan_section",
     "search_statute_sections",
+    "semantic_retrieval_enabled",
     "sync_statute_section_chunks",
 ]

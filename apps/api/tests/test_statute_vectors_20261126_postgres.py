@@ -145,7 +145,9 @@ def test_hnsw_path_returns_the_paraphrased_section_and_drops_stale_rows(
         assert (missing_vectors, mismatched) == (0, 0)
 
         with Session(pg_engine) as session:
-            hits = vectors.search_statute_sections(session, PARAPHRASE, embedder=embedder)
+            hits = vectors.search_statute_sections(
+                session, PARAPHRASE, embedder=embedder, semantic=True
+            )
             assert hits[0].statute.id == statute_id
             assert (hits[0].section.section_number, hits[0].match) == ("Section 195", "semantic")
             assert hits[0].similarity >= vectors.min_similarity_for(embedder.model)
@@ -179,7 +181,9 @@ def test_hnsw_path_returns_the_paraphrased_section_and_drops_stale_rows(
             section.verification_status = "quarantined"
             session.commit()
         with Session(pg_engine) as session:
-            hits = vectors.search_statute_sections(session, PARAPHRASE, embedder=embedder)
+            hits = vectors.search_statute_sections(
+                session, PARAPHRASE, embedder=embedder, semantic=True
+            )
             assert "Section 195" not in {
                 hit.section.section_number for hit in hits if hit.statute.id == statute_id
             }
@@ -195,6 +199,64 @@ def test_hnsw_path_returns_the_paraphrased_section_and_drops_stale_rows(
                 {"statute": statute_id},
             )
         assert remaining == 0
+    finally:
+        with Session(pg_engine) as session:
+            session.execute(delete(StatuteSectionChunk).where(
+                StatuteSectionChunk.statute_id == statute_id
+            ))
+            session.execute(delete(StatuteSection).where(StatuteSection.statute_id == statute_id))
+            session.execute(delete(Statute).where(Statute.id == statute_id))
+            session.commit()
+
+
+@pytest.mark.postgres
+def test_a_pgvector_error_degrades_to_the_exact_path_and_leaves_the_session_usable(
+    pg_engine, _ensure_migrations  # noqa: F811
+) -> None:
+    """A dimension mismatch reaching pgvector must not become an internal error."""
+    statute_id = f"pg-statute-vectors-{uuid4().hex[:12]}"
+    embedder = ContentWordProvider()
+
+    class ShortQueries(ContentWordProvider):
+        model = embedder.model
+
+        def embed(self, texts, *, input_type="document"):
+            result = embedder.embed(texts, input_type=input_type)
+            if input_type == "query":
+                # Claims 1024 dimensions but returns 512: pgvector raises.
+                result.vectors = [vector[:512] for vector in result.vectors]
+            return result
+
+    try:
+        with Session(pg_engine) as session:
+            session.add(Statute(id=statute_id, short_name="PG Act", long_name="PG Revenue Act"))
+            session.flush()
+            body = SECTION_TEXT["Section 195"]
+            session.add(StatuteSection(
+                statute_id=statute_id, section_number="Section 195", section_label="Other sums",
+                section_text=body, section_text_source="official_release_manifest",
+                section_text_fetched_at=datetime.now(UTC),
+                verification_status="verified_official",
+                source_sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                source_publisher="India Code", issuing_body="Legislative Department",
+                source_status="official", legal_status="enacted",
+                exact_source_version="pg test edition", source_locator_type="section_deep_link",
+                link_health_status="available", ordinal=195, is_active=True,
+            ))
+            session.commit()
+        with Session(pg_engine) as session:
+            vectors.sync_statute_section_chunks(session, embedder=embedder)
+        with Session(pg_engine) as session:
+            hits = vectors.search_statute_sections(
+                session, PARAPHRASE, embedder=ShortQueries(), semantic=True
+            )
+            assert hits == []
+            # The failed statement was rolled back; the session still works.
+            assert session.scalar(text("SELECT 1")) == 1
+            healthy = vectors.search_statute_sections(
+                session, PARAPHRASE, embedder=embedder, semantic=True
+            )
+            assert [hit.statute.id for hit in healthy][:1] == [statute_id]
     finally:
         with Session(pg_engine) as session:
             session.execute(delete(StatuteSectionChunk).where(

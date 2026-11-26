@@ -95,6 +95,15 @@ class ContentWordProvider:
         )
 
 
+@pytest.fixture(autouse=True)
+def semantic_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Production default is off (runbook gate); these tests exercise it on.
+    from caseops_api.core.settings import get_settings
+
+    monkeypatch.setenv("CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED", "true")
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def content_words(monkeypatch: pytest.MonkeyPatch) -> ContentWordProvider:
     provider = ContentWordProvider()
@@ -482,8 +491,8 @@ def test_no_paid_requests_never_match_against_production_vectors(client: TestCli
     _sync()
     token = set_automated_test_request("no-paid-providers")
     try:
-        # The marked request embeds with the offline test model, which is never
-        # compared with vectors from a different model.
+        # The marked request gets the offline test embedder, whose model has no
+        # chunks in the index, so no query is embedded and nothing is compared.
         assert _search(PARAPHRASE) == []
     finally:
         reset_automated_test_request(token)
@@ -569,7 +578,11 @@ def test_a_long_section_is_quoted_from_the_passage_that_matched(
     assert "paying to a non-resident any rent" in excerpt
     assert len(excerpt) <= research.MAX_EXCERPT_CHARS
     with get_session_factory()() as session:
-        assert excerpt in session.get(StatuteSection, section_id).section_text
+        stored = session.get(StatuteSection, section_id).section_text
+    # The section's opening line, then the widened matched passage; every part
+    # is verbatim section text.
+    assert excerpt.startswith("200. Duties.")
+    assert all(part in stored for part in excerpt.split("\n[...]\n"))
 
 
 # --------------------------------------------------------------------------- #
@@ -738,3 +751,455 @@ def test_harness_reports_recall_mrr_rank_and_labels_offline_ratings(
     assert harness.rating(0.96, 0.91, 1.1) == 5.0
     assert harness.rating(0.94, 0.89, 1.2) == 4.8
     assert harness.rating(0.5, 0.4, 3.0) == 2.5
+
+
+# --------------------------------------------------------------------------- #
+# Review follow-up (PR #669): named sections, judgment citations, the
+# rollout setting, the similarity floor, error and transaction boundaries.
+# --------------------------------------------------------------------------- #
+
+NI = "ni-act-1881"
+NI_TEXTS = {
+    "Section 138": (
+        "138. Dishonour of cheque for insufficiency of funds.—Where any cheque drawn by a "
+        "person on an account maintained by him with a banker is returned by the bank unpaid, "
+        "because the amount of money standing to the credit of that account is insufficient, "
+        "such person shall be deemed to have committed an offence."
+    ),
+    "Section 139": (
+        "139. Presumption in favour of holder.—It shall be presumed, unless the contrary is "
+        "proved, that the holder received it for the discharge, in whole or in part, of any "
+        "debt or other liability."
+    ),
+    "Section 142": (
+        "142. Cognizance of offences.—No court shall take cognizance of any offence punishable "
+        "under section 138 except upon a complaint, in writing, made by the payee or the holder "
+        "in due course."
+    ),
+    "Section 143": (
+        "143. Power of Court to try cases summarily.—All offences relating to dishonour of a "
+        "cheque returned unpaid by the bank shall be tried by a Judicial Magistrate."
+    ),
+    "Section 143A": (
+        "143A. Power to direct interim compensation.—The Court trying an offence of dishonour "
+        "of a cheque returned unpaid by the bank may order the drawer to pay interim "
+        "compensation."
+    ),
+    "Section 144": (
+        "144. Mode of service of summons.—A summons in a complaint of dishonour of a cheque "
+        "returned unpaid by the bank may be served by speed post."
+    ),
+    "Section 145": (
+        "145. Evidence on affidavit.—The evidence of the complainant in a complaint of "
+        "dishonour of a cheque returned unpaid by the bank may be given on affidavit."
+    ),
+    "Section 146": (
+        "146. Bank's slip prima facie evidence.—The bank's slip denoting that a cheque has been "
+        "returned unpaid by the bank is prima facie evidence of dishonour."
+    ),
+    "Section 147": (
+        "147. Offences to be compoundable.—Every offence of dishonour of a cheque returned "
+        "unpaid by the bank shall be compoundable."
+    ),
+}
+OTHER_ACT = "test-cheque-rules-2026"
+
+
+def _seed_ni(session, **status_by_number) -> dict[str, str]:
+    _statute(session, NI, "Negotiable Instruments Act, 1881")
+    ids = {}
+    for number, body in NI_TEXTS.items():
+        ids[number] = _section(
+            session, number, body, statute_id=NI, label=number,
+            **status_by_number.get(number, {}),
+        ).id
+    session.commit()
+    return ids
+
+
+class _CitingDocument:
+    def __init__(self, *cited: str) -> None:
+        self.sections_cited_json = json.dumps(list(cited))
+
+
+def test_judgment_cited_sections_rank_before_semantic_hits(
+    client: TestClient, content_words: ContentWordProvider
+) -> None:
+    """Reviewer finding 2: semantic hits pushed out judgment-cited sections."""
+    with get_session_factory()() as session:
+        _seed_ni(session)
+        # A close paraphrase in another Act must not enter a named-Act question.
+        _statute(session, OTHER_ACT, "Test Cheque Rules, 2026")
+        _section(
+            session, "Section 9",
+            "9. Returned cheques.—A cheque returned unpaid by the bank is a dishonoured cheque.",
+            statute_id=OTHER_ACT, label="Returned cheques",
+        )
+        session.commit()
+    with get_session_factory()() as session:
+        vectors.sync_statute_section_chunks(session, embedder=content_words)
+    query = (
+        "Section 138 of the Negotiable Instruments Act: is a complaint maintainable when a "
+        "cheque is returned unpaid by the bank?"
+    )
+    documents = [_CitingDocument(
+        "Section 139 of the Negotiable Instruments Act",
+        "Section 142 of the Negotiable Instruments Act",
+    )]
+    with get_session_factory()() as session:
+        found = research._statute_sections(session, query, documents)
+        got = [(m.statute.id, m.section.section_number, m.retrieval) for m in found]
+    assert got[:3] == [
+        (NI, "Section 138", "exact_reference"),
+        (NI, "Section 139", "judgment_citation"),
+        (NI, "Section 142", "judgment_citation"),
+    ], got
+    assert len(got) <= research.MAX_STATUTE_SECTIONS
+    assert {statute_id for statute_id, _number, _kind in got} == {NI}, got
+
+
+@pytest.mark.parametrize(
+    ("label", "query", "statuses"),
+    [
+        (
+            "unverified named section",
+            "What does Section 139 of the Negotiable Instruments Act presume about a cheque "
+            "returned unpaid by the bank?",
+            {"Section 139": {"verification_status": "pending_review"}},
+        ),
+        (
+            "retired named section",
+            "What does Section 139 of the Negotiable Instruments Act presume about a cheque "
+            "returned unpaid by the bank?",
+            {"Section 139": {"verification_status": "retired"}},
+        ),
+        (
+            "section absent from the named Act",
+            "What does Section 999 of the Negotiable Instruments Act say about a cheque "
+            "returned unpaid by the bank?",
+            {},
+        ),
+        (
+            "Act CaseOps cannot resolve",
+            "What does Section 139 of the Imaginary Cheques Act say about a cheque returned "
+            "unpaid by the bank?",
+            {},
+        ),
+    ],
+)
+def test_a_named_section_without_verified_text_is_never_substituted(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    content_words: ContentWordProvider,
+    label: str,
+    query: str,
+    statuses: dict,
+) -> None:
+    """Reviewer finding 1: a named unverified section got six substitutes."""
+    with get_session_factory()() as session:
+        _seed_ni(session, **statuses)
+    with get_session_factory()() as session:
+        vectors.sync_statute_section_chunks(session, embedder=content_words)
+    with get_session_factory()() as session:
+        found = research._statute_sections(session, query, [])
+    assert [(m.section.section_number, m.retrieval) for m in found] == [], label
+
+    token = bootstrap_company(client)["access_token"]
+
+    def refuse(**_):
+        raise AssertionError("no model call without sources")
+
+    monkeypatch.setattr(research, "build_provider", refuse)
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    record = _ask(client, token, query=query)
+    assert (record["status"], record["error_code"]) == ("abstained", "no_sources"), label
+
+
+def test_semantic_retrieval_is_off_unless_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, content_words: ContentWordProvider
+) -> None:
+    from caseops_api.core.settings import Settings, get_settings
+
+    assert Settings.model_fields["statute_semantic_retrieval_enabled"].default is False
+    with get_session_factory()() as session:
+        ids = _seed_ni(session)
+        _seed_act(session)
+    _sync()
+    monkeypatch.setenv("CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED", "false")
+    get_settings.cache_clear()
+    calls: list[str] = []
+    original = content_words.embed
+
+    def counting(texts, *, input_type="document"):
+        calls.append(input_type)
+        return original(texts, input_type=input_type)
+
+    monkeypatch.setattr(content_words, "embed", counting)
+    # An index that exists changes nothing while the setting is off.
+    assert _search(PARAPHRASE) == []
+    assert _search("Section 139 of the Negotiable Instruments Act presumption") == [
+        (NI, "Section 139", "exact_reference")
+    ]
+    assert calls == []
+    with get_session_factory()() as session:
+        found = research._statute_sections(
+            session,
+            "Section 138 of the Negotiable Instruments Act cheque returned unpaid",
+            [_CitingDocument("Section 142 of the Negotiable Instruments Act")],
+        )
+    assert [m.section.id for m in found] == [ids["Section 138"], ids["Section 142"]]
+    # The benchmark can still evaluate the semantic path explicitly.
+    with get_session_factory()() as session:
+        hits = vectors.search_statute_sections(session, PARAPHRASE, semantic=True)
+    assert hits[0].section.section_number == "Section 195"
+
+
+class _FloorProbe:
+    """Offline embedder whose query sits at an exact cosine from every chunk.
+
+    Documents embed to e0; a query embeds to cos(t)*e0 + sin(t)*e1, with the
+    cosine read from the query text, so a test can place a neighbour just
+    below or just above the configured floor.
+    """
+
+    name = "floor-probe"
+    dimensions = 1024
+
+    def __init__(self, model: str) -> None:
+        self.model = model
+        self.queries: list[float] = []
+
+    def embed(self, texts, *, input_type="document"):
+        vectors_out = []
+        for value in texts:
+            vector = [0.0] * self.dimensions
+            if input_type == "query":
+                cosine = float(value.rsplit(" ", 1)[1])
+                self.queries.append(cosine)
+                vector[0], vector[1] = cosine, (1 - cosine * cosine) ** 0.5
+            else:
+                vector[0] = 1.0
+            vectors_out.append(vector)
+        return EmbeddingResult(
+            vectors=vectors_out, provider=self.name, model=self.model,
+            dimensions=self.dimensions,
+        )
+
+
+@pytest.mark.parametrize(
+    "model", ["voyage-4-large", "caseops-mock-embed"], ids=["production-model", "other-model"]
+)
+def test_the_configured_similarity_floor_decides_admission(
+    client: TestClient, model: str
+) -> None:
+    """Reviewer finding 4: exercise the floor itself, not a zero-similarity miss.
+
+    The voyage-4-large floor is provisional until production calibration; this
+    proves the configured value is the one enforced, offline.
+    """
+    floor = vectors.min_similarity_for(model)
+    assert floor == (0.30 if model == "voyage-4-large" else 0.10)
+    probe = _FloorProbe(model)
+    with get_session_factory()() as session:
+        _seed_act(session)
+    with get_session_factory()() as session:
+        vectors.sync_statute_section_chunks(session, embedder=probe)
+    with get_session_factory()() as session:
+        below = vectors.search_statute_sections(
+            session, f"tax on rent {floor - 0.005:.3f}", embedder=probe
+        )
+        above = vectors.search_statute_sections(
+            session, f"tax on rent {floor + 0.005:.3f}", embedder=probe
+        )
+    assert below == []
+    assert above and all(abs(hit.similarity - (floor + 0.005)) < 1e-4 for hit in above)
+    assert all(hit.score <= 240 for hit in above)
+
+
+def test_a_vector_query_failure_degrades_to_the_exact_reference(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, content_words: ContentWordProvider
+) -> None:
+    """Reviewer finding 5: a pgvector or SQL error must not fail the answer."""
+    from sqlalchemy.exc import OperationalError
+
+    with get_session_factory()() as session:
+        _seed_ni(session)
+    _sync()
+
+    def broken(*_args, **_kwargs):
+        raise OperationalError("SELECT ...", {}, Exception("different vector dimensions"))
+
+    monkeypatch.setattr(vectors, "_nearest_chunks", broken)
+    query = "Section 138 of the Negotiable Instruments Act cheque returned unpaid by the bank"
+    assert _search(query) == [(NI, "Section 138", "exact_reference")]
+    assert _search("presumption that the holder received the cheque for a debt") == []
+
+    token = bootstrap_company(client)["access_token"]
+    monkeypatch.setattr(research, "build_provider", lambda **_: _Scripted(_answer(
+        short_answer="The drawer commits an offence when the cheque is returned unpaid [1].",
+        key_points=[], authorities=[],
+        sections=[{"key": "applicable_law", "paragraphs": ["The offence is defined [1]."]}],
+    )))
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    record = _ask(client, token, query=query)
+    assert record["status"] == "answered", (record["error_code"], record["message"])
+    assert [source["kind"] for source in record["sources"]] == ["statute_section"]
+
+
+def test_no_transaction_is_held_across_the_query_embedding(
+    client: TestClient, content_words: ContentWordProvider
+) -> None:
+    """Reviewer finding 6: the provider call runs with no open transaction."""
+    with get_session_factory()() as session:
+        _seed_act(session)
+    _sync()
+    observed: list[bool] = []
+
+    class Watching(ContentWordProvider):
+        def embed(self, texts, *, input_type="document"):
+            if input_type == "query":
+                observed.append(session.in_transaction())
+            return content_words.embed(texts, input_type=input_type)
+
+    watcher = Watching()
+    with get_session_factory()() as session:
+        session.scalar(select(StatuteSection.id).limit(1))  # an open read transaction
+        assert session.in_transaction()
+        hits = vectors.search_statute_sections(session, PARAPHRASE, embedder=watcher)
+    assert observed == [False]
+    assert hits[0].section.section_number == "Section 195"
+
+    # A session holding the caller's uncommitted writes is never rolled back:
+    # semantic retrieval is skipped and the write survives.
+    observed.clear()
+    with get_session_factory()() as session:
+        statute = session.get(Statute, ACT_ID)
+        statute.long_name = "Test Revenue Act, 2026 (pending edit)"
+        session.flush()
+        assert vectors.search_statute_sections(session, PARAPHRASE, embedder=watcher) == []
+        assert observed == []
+        assert session.get(Statute, ACT_ID).long_name.endswith("(pending edit)")
+        session.rollback()
+
+
+def test_a_long_proviso_match_keeps_the_provision_it_qualifies(
+    client: TestClient, content_words: ContentWordProvider
+) -> None:
+    """Reviewer finding 7: quote the qualified sub-section with its proviso."""
+    filler = "\n".join(
+        f"({n}) The assessing officer may call for any document relating to the assessment "
+        f"of the previous year and shall record reasons, item {n}." * 4
+        for n in range(1, 9)
+    )
+    qualified = (
+        "\n(9) Every person paying wages to a seasonal worker shall keep a register of the "
+        "payments made in each month"
+        # Long enough that the proviso starts the next chunk.
+        + ", and shall preserve those records for inspection by the officer" * 25
+        + "."
+    )
+    proviso = (
+        "\nProvided that no register is required where the seasonal worker is paid through a "
+        "bank account in the worker's own name."
+    )
+    tail = "(10) The Board may issue general instructions for the purposes of this section."
+    body = "200. Duties of payers.—" + filler + qualified + proviso + "\n" + tail
+    with get_session_factory()() as session:
+        section = _section(session, "Section 200", body, label="Duties of payers")
+        session.commit()
+    _sync()
+    with get_session_factory()() as session:
+        hits = vectors.search_statute_sections(
+            session, "is a register needed when a seasonal worker is paid through a bank account"
+        )
+        hit = next(item for item in hits if item.section.section_number == "Section 200")
+        excerpt = research._statute_excerpt(body, (hit.char_start, hit.char_end))
+    assert len(excerpt) <= research.MAX_EXCERPT_CHARS
+    assert "Provided that no register is required" in excerpt
+    assert "(9) Every person paying wages to a seasonal worker" in excerpt
+    assert excerpt.startswith("200. Duties of payers.")
+    for part in excerpt.split("\n[...]\n"):
+        assert part in body  # every part is verbatim
+    assert section.id
+
+
+def test_a_flapping_link_check_keeps_chunks_without_re_embedding(
+    client: TestClient, content_words: ContentWordProvider
+) -> None:
+    """Reviewer finding 8: no delete-and-rebuy when only the link check fails."""
+    with get_session_factory()() as session:
+        ids = _seed_act(session)
+    _sync()
+    with get_session_factory()() as session:
+        before = {row.id: row.embedded_at for row in session.scalars(select(StatuteSectionChunk))}
+        session.get(StatuteSection, ids["Section 195"]).link_health_status = "unavailable"
+        session.commit()
+    summary = _sync()
+    assert (summary.retained_link_unavailable, summary.removed_chunks) == (1, 0)
+    # Reads still exclude the section while it is not selectable.
+    assert "Section 195" not in {number for _act, number, _kind in _search(PARAPHRASE)}
+    with get_session_factory()() as session:
+        session.get(StatuteSection, ids["Section 195"]).link_health_status = "available"
+        session.commit()
+    summary = _sync()
+    assert (summary.embedded_sections, summary.up_to_date_sections) == (0, 3)
+    with get_session_factory()() as session:
+        after = {row.id: row.embedded_at for row in session.scalars(select(StatuteSectionChunk))}
+    assert after == before
+    assert _search(PARAPHRASE)[0][1] == "Section 195"
+    # A text change while the link is down is not retained.
+    with get_session_factory()() as session:
+        section = session.get(StatuteSection, ids["Section 195"])
+        section.link_health_status = "unavailable"
+        section.section_text += " Amended."
+        section.source_sha256 = _sha(section.section_text)
+        session.commit()
+    assert _sync().removed_chunks == 1
+
+
+def test_the_no_paid_http_marker_reaches_the_background_statute_embedding(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reviewer finding 11: the marker on the request reaches the answer job."""
+    from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+
+    with get_session_factory()() as session:
+        _seed_act(session)
+    _sync()  # indexed with the configured mock model
+    original_build = vectors.build_provider
+    built: list[tuple[bool, str]] = []
+    embedded: list[str] = []
+
+    def spying_build():
+        provider = original_build()
+        built.append((paid_providers_blocked_for_request(), provider.model))
+        inner = provider.embed
+
+        def embed(texts, *, input_type="document"):
+            embedded.append(provider.model)
+            return inner(texts, input_type=input_type)
+
+        provider.embed = embed
+        return provider
+
+    monkeypatch.setattr(vectors, "build_provider", spying_build)
+    monkeypatch.setattr(research, "build_provider", lambda **_: _Scripted(_semantic_answer()))
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    token = bootstrap_company(client)["access_token"]
+    headers = auth_headers(token)
+    headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
+    response = client.post("/api/research/answers", headers=headers, json={"query": PARAPHRASE})
+    assert response.status_code == 202, response.text
+    record = client.get(
+        f"/api/research/answers/{response.json()['id']}", headers=auth_headers(token)
+    ).json()
+    # Marked: the offline test embedder is built inside the job, it has no
+    # comparable chunks, so no query is embedded and no statute is matched.
+    assert built == [(True, "caseops-automated-test-embed")]
+    assert embedded == []
+    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+
+    built.clear()
+    unmarked = _ask(client, token, query=PARAPHRASE)
+    assert built == [(False, "caseops-mock-embed")] and embedded == ["caseops-mock-embed"]
+    assert unmarked["sources"][0]["kind"] == "statute_section"

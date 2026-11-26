@@ -318,28 +318,23 @@ class _StatuteMatch:
 def _statute_sections(
     session: Session, query: str, documents: Iterable[AuthorityDocument]
 ) -> list[_StatuteMatch]:
+    """Statute sources in fixed priority, at most ``MAX_STATUTE_SECTIONS``.
+
+    1. The section the question names, when it has verified text.
+    2. Sections the retrieved judgments cite, within the named Act if any.
+    3. Verified sections that match the question's meaning (semantic
+       retrieval, limited to the named Act when one is named).
+
+    A question that names a section without verified text gets no substitute
+    section from steps 1 or 3.
+    """
     from caseops_api.services.statute_vectors import search_statute_sections
 
-    found: list[_StatuteMatch] = []
-    seen_ids: set[str] = set()
-    # The section the question names ranks first, then verified sections that
-    # match the question's meaning (section-level vector retrieval).
-    for hit in search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS):
-        seen_ids.add(hit.section.id)
-        found.append(
-            _StatuteMatch(
-                section=hit.section,
-                statute=hit.statute,
-                retrieval=hit.match,
-                span=(hit.char_start, hit.char_end) if hit.match == "semantic" else None,
-            )
-        )
-    refs: list[tuple[str, str]] = []
     primary = parse_section_string(query)
-    # Sections the retrieved judgments themselves cite, within the Act(s) the
-    # question is about. This brings in, e.g., Sections 139 and 142 for a
-    # Section 138 question without guessing from model knowledge.
+    # Read the citations before retrieval: semantic retrieval releases its
+    # read transaction around the provider call.
     statutes_in_scope = {primary[0]} if primary else set()
+    refs: list[tuple[str, str]] = []
     for document in documents:
         try:
             cited = json.loads(document.sections_cited_json or "[]")
@@ -349,6 +344,15 @@ def _statute_sections(
             parsed = parse_section_string(str(item))
             if parsed and (not statutes_in_scope or parsed[0] in statutes_in_scope):
                 refs.append(parsed)
+
+    hits = search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS)
+    exact = [hit for hit in hits if hit.match == "exact_reference"]
+    semantic = [hit for hit in hits if hit.match == "semantic"]
+    found: list[_StatuteMatch] = [
+        _StatuteMatch(section=hit.section, statute=hit.statute, retrieval=hit.match)
+        for hit in exact
+    ]
+    seen_ids = {match.section.id for match in found}
     seen: set[tuple[str, str]] = set()
     for statute_id, section_number in refs:
         if len(found) >= MAX_STATUTE_SECTIONS:
@@ -370,7 +374,60 @@ def _statute_sections(
         found.append(
             _StatuteMatch(section=row[0], statute=row[1], retrieval="judgment_citation")
         )
-    return found[:MAX_STATUTE_SECTIONS]
+    for hit in semantic:
+        if len(found) >= MAX_STATUTE_SECTIONS:
+            break
+        if hit.section.id in seen_ids:
+            continue
+        seen_ids.add(hit.section.id)
+        found.append(
+            _StatuteMatch(
+                section=hit.section,
+                statute=hit.statute,
+                retrieval=hit.match,
+                span=(hit.char_start, hit.char_end),
+            )
+        )
+    return found
+
+
+def _statute_excerpt(section_text: str, span: tuple[int, int] | None) -> str:
+    """A verbatim excerpt of at most ``MAX_EXCERPT_CHARS``.
+
+    A short section, or one found by an exact reference or a judgment
+    citation, is quoted from its opening. A long section found by meaning is
+    quoted around the matched passage, widened to whole neighbouring passages
+    (earlier ones first, so a proviso or Explanation keeps the provision it
+    qualifies) and preceded by the section's opening line when that is not
+    already included. Every part is a verbatim slice of the section text.
+    """
+    from caseops_api.services.statute_vectors import chunk_section_text
+
+    text = section_text.strip()
+    if span is None or len(text) <= MAX_EXCERPT_CHARS:
+        return text[:MAX_EXCERPT_CHARS]
+    spans = chunk_section_text(section_text)
+    if span not in spans:
+        return section_text[span[0] : span[1]].strip()[:MAX_EXCERPT_CHARS]
+    newline = section_text.find("\n", spans[0][0], spans[0][1])
+    opening_end = newline if newline >= 0 else spans[0][1]
+    opening = section_text[spans[0][0] : opening_end].strip()[:200]
+    gap = "\n[...]\n"
+    index = spans.index(span)
+    first = last = index
+
+    def size(lo: int, hi: int) -> int:
+        body = spans[hi][1] - spans[lo][0]
+        return body if lo == 0 else body + len(opening) + len(gap)
+
+    while first > 0 and size(first - 1, last) <= MAX_EXCERPT_CHARS:
+        first -= 1
+    while last + 1 < len(spans) and size(first, last + 1) <= MAX_EXCERPT_CHARS:
+        last += 1
+    body = section_text[spans[first][0] : spans[last][1]]
+    if first == 0:
+        return body[:MAX_EXCERPT_CHARS]
+    return f"{opening}{gap}{body}"[:MAX_EXCERPT_CHARS]
 
 
 def _build_sources(session: Session, query: str) -> list[_Source]:
@@ -393,12 +450,7 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
         if label and label.lower() not in title.lower():
             title = f"{title} ({label})"
         text = (section.section_text or "").strip()
-        excerpt = text[:MAX_EXCERPT_CHARS]
-        if match.span is not None and len(text) > MAX_EXCERPT_CHARS:
-            # A long section is represented by the verbatim passage that
-            # matched the question, not by its opening words.
-            start, end = match.span
-            excerpt = (section.section_text or "")[start:end].strip()[:MAX_EXCERPT_CHARS]
+        excerpt = _statute_excerpt(section.section_text or "", match.span)
         verified = section.verification_status in {"verified_official", "verified_licensed"}
         sources.append(
             _Source(

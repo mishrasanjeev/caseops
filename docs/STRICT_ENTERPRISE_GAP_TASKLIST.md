@@ -12,7 +12,9 @@ section-level vector retrieval over verified statute text; landed in code on
   verified text leaves the changed sections out of semantic retrieval until the
   job runs. Fail-closed: the read path re-checks selectability and the source
   hash and version, so stale text is never returned.
-- The `voyage-4-large` similarity floor (0.30) is provisional until the
+- Live use is gated by `CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED` (default
+  off), so building the index cannot change answers before the benchmark gate.
+  The `voyage-4-large` similarity floor (0.30) is provisional until the
   production benchmark's calibration confirms it; no production rating exists.
 - HNSW uses `m=16, ef_construction=64` and the default `hnsw.ef_search=40`
   (candidate pool 40 chunks), measured locally at 7,198 chunks (2 ms, index
