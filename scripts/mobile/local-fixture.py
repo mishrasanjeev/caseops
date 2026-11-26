@@ -209,6 +209,7 @@ def _write_private(name, value, *, update=False, expected=None, expected_root=No
                         "frame": {key: str(getattr(final, key)) for key in identity_fields}, "ownedNoFollowSingleLink": True}
             finally:
                 actual[:] = b"\0" * len(actual)
+        return None
     finally:
         os.close(descriptor)
 

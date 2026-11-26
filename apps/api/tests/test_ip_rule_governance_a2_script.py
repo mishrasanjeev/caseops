@@ -236,10 +236,12 @@ def _run(
         [
             _find_working_bash(),
             "-c",
-            'export PATH="$1:$PATH"; '
-            'for cli in gcloud git python sleep; do '
-            '[[ "$(command -v "$cli")" == "$1/$cli" ]] || exit 99; done; '
-            'shift; bash scripts/ip-rule-governance-a2.sh "$@"',
+            (
+                'export PATH="$1:$PATH"; '
+                'for cli in gcloud git python sleep; do '
+                '[[ "$(command -v "$cli")" == "$1/$cli" ]] || exit 99; done; '
+                'shift; bash scripts/ip-rule-governance-a2.sh "$@"'
+            ),
             "a2-test",
             _bash_path(fake_bin),
             *arguments,

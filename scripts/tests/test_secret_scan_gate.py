@@ -2075,20 +2075,20 @@ class ReviewedHistoryPolicyTests(unittest.TestCase):
                         ),
                         "Reviewed line must remain a public-key fingerprint",
                     )
-                    self.assertTrue("const SDK37_REPORT =" in text)
+                    self.assertIn("const SDK37_REPORT =", text)
                 elif row["kind"] == "reviewed_file_checksum":
-                    self.assertTrue("const reviewedFiles =" in text)
-                    self.assertTrue("Object.entries(reviewedFiles)" in text)
+                    self.assertIn("const reviewedFiles =", text)
+                    self.assertIn("Object.entries(reviewedFiles)", text)
                     self.assertTrue(
                         bool(re.search(r"""createHash\((['"])sha256\1\)""", text))
                     )
                 elif row["kind"] == "certifi_bundle_checksum":
-                    self.assertTrue("CERTIFI_BYTES =" in text)
-                    self.assertTrue("sha(data) == CERTIFI_BYTES[key]" in text)
+                    self.assertIn("CERTIFI_BYTES =", text)
+                    self.assertIn("sha(data) == CERTIFI_BYTES[key]", text)
                 elif row["kind"] == "synthetic_receipt_kind":
-                    self.assertTrue("kind: plan.phase ===" in line)
-                    self.assertTrue("syntheticDataOnly: true" in text)
-                    self.assertTrue("fixture.v1.preparedOnly = true" in text)
+                    self.assertIn("kind: plan.phase ===", line)
+                    self.assertIn("syntheticDataOnly: true", text)
+                    self.assertIn("fixture.v1.preparedOnly = true", text)
                 else:
                     self.assertEqual(row["kind"], "rfc6238_public_test_vector")
                     value = re.fullmatch(r"const secret = '([A-Z2-7]+)';", line)
@@ -2099,7 +2099,7 @@ class ReviewedHistoryPolicyTests(unittest.TestCase):
                         base64.b32decode(value.group(1)) == b"1234567890" * 2,
                         "Reviewed seed must be the published RFC6238 vector",
                     )
-                    self.assertTrue("assert.equal(totp(secret, 59000)" in text)
+                    self.assertIn("assert.equal(totp(secret, 59000)", text)
                 checked.append(row["fingerprint"])
         return {"checked": checked, "not_selected": not_selected}
 

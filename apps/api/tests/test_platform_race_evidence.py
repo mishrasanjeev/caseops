@@ -11,6 +11,10 @@ from tests.platform_race_evidence import MAX_STAGE_EVENTS, JoinedActorPool
 SECRET = "synthetic-credential-token-password-never-record"
 
 
+def _raise(error):
+    raise error
+
+
 def _capture(*, joined=None):
     properties, sections = [], []
 
@@ -60,7 +64,7 @@ def test_body_assertion_keeps_priority_and_records_eventual_actor(outcome):
                 assert not future.done()
             assert not properties and not sections
             try:
-                raise primary
+                _raise(primary)
             finally:
                 release.set()
     assert caught.value is primary
@@ -121,7 +125,7 @@ def test_reader_and_revocation_writer_are_both_observed_after_body_failure(write
         with JoinedActorPool(request, record, actors=("reader", "writer")) as pool:
             pool.submit_actor("reader", lambda: True)
             pool.submit_actor("writer", revoke)
-            raise primary
+            _raise(primary)
     assert caught.value is primary
     assert _payload(properties, sections)["actors"] == {
         "reader": {"outcome": "returned"},
@@ -164,7 +168,7 @@ def test_control_flow_exceptions_propagate_by_identity(error_type, origin):
     with pytest.raises(error_type) as caught:
         with JoinedActorPool(request, record, actors=("accept",)) as pool:
             pool.submit_actor("accept", worker).result(timeout=1)
-            raise original
+            _raise(original)
     assert caught.value is original
     outcome = _payload(properties, sections)["actors"]["accept"]
     assert outcome == (
@@ -277,7 +281,7 @@ def test_stage_calls_captured_original_once_preserves_identity_and_restores(
                 assert worker_caught.value is original_error
             else:
                 assert future.result(timeout=1) is returned
-            raise primary
+            _raise(primary)
     assert caught.value is primary
     assert all(getattr(target, name) is original for name in vars(target))
     assert calls == [((SECRET,), {"token": SECRET})]
@@ -328,7 +332,7 @@ def test_failure_report_section_is_retained_without_user_properties(tmp_path):
     with pytest.raises(AssertionError):
         with JoinedActorPool(request, record, actors=("accept",)) as pool:
             pool.submit_actor("accept", lambda: 401)
-            raise primary
+            _raise(primary)
     _payload(properties, sections)
     target = tmp_path / "phase-results.jsonl"
     journal = RetainedResults(target)

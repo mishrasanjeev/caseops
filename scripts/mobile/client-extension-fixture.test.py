@@ -79,12 +79,12 @@ class Producer(unittest.TestCase):
         q={**self.q,'credentialEvidence':{'path':str(credential),'sha256':hashlib.sha256(raw).hexdigest(),'uid':os.getuid()}};request=self.root/'request.json';data=json.dumps(q).encode();request.write_bytes(data)
         clients=[];requests=[]
         class Client:
-            def __init__(client,**options):
-                client.options=options;client.headers=dict(options['headers']);client.cookies=SimpleNamespace(clear=lambda:requests.append(('clear-cookies',)));clients.append(client)
-            def __enter__(client):return client
-            def __exit__(client,*args):requests.append(('closed',client is clients[-1]))
-            def post(client,route,**options):
-                requests.append((route,options,dict(client.headers)))
+            def __init__(self,**options):
+                self.options=options;self.headers=dict(options['headers']);self.cookies=SimpleNamespace(clear=lambda:requests.append(('clear-cookies',)));clients.append(self)
+            def __enter__(self):return self
+            def __exit__(self,*args):requests.append(('closed',self is clients[-1]))
+            def post(self,route,**options):
+                requests.append((route,options,dict(self.headers)))
                 if route=='/api/auth/login':return response({'access_token':'offline-response-token','user':{'id':uid(4)},'membership':{'id':uid(3)},'company':{'id':uid(2)}})
                 if route=='/api/auth/mfa/step-up':return response({'status':'verified'})
                 raise AssertionError('unexpected offline CLI route')

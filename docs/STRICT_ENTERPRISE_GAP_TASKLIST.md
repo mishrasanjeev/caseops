@@ -6640,3 +6640,57 @@ until the owner-run enablement in
   or the source text. Unknown markers, untraceable names, citations,
   quotations and links are removed after one retry and counted. Tests:
   `apps/api/tests/test_research_answers_20261124.py`.
+
+## November 26 - CodeQL and Dependabot triage (EH-SEC-2026-11-26)
+
+- **Status:** Implemented for the code-scanning and Dependabot alerts open on
+  `main` at `083d27402` (59 code scanning: 1 high, 16 warnings, 42 notes; 3
+  Dependabot: 1 high, 1 medium, 1 low). The architecture debt in
+  EH-ARCH-2026-09-26 stays open.
+- **Fixed in code (38):** implicit string concatenations in test lists are now
+  parenthesised (788-792, 893); a `raise` inside `pytest.raises` now runs
+  through a helper, so the assertions after it are reachable and checked (728-732,
+  744-746, 831); the no-op recorder in a `finally` is a named function (760); test
+  helpers return one tuple or list shape (753, 754); an always-true chained
+  bound was removed (752); `assertTrue(a in b)` became `assertIn` (772-780); fake
+  HTTP clients name their receiver `self` (762-765, 782-785); `ctypes` is
+  imported one way only (868); `_write_private` returns explicitly on every
+  path (781).
+- **Dismissed with reasons (21):**
+  - 867 `js/insufficient-password-hash` in
+    `scripts/mobile/native-producer-host.mjs`: false positive. `producerHash`
+    is a SHA-256 content digest. The only body it hashes is an exact calendar
+    or IP docket write, admitted by route in
+    `scripts/mobile/native-producer-route-file.mjs`. The login body that
+    carries the synthetic password goes straight to `send()` and is never
+    hashed or written.
+  - 793 `py/unnecessary-lambda` in `services/ip_portfolio_workflow.py`: false
+    positive. `EXPORT_COLUMNS` is a module-level table built before
+    `portfolio_status_text` is defined, so the lambda is a required forward
+    reference.
+  - 809 `py/unused-import` in `db/models.py`: false positive, same as 543.
+    The AI spend models are re-exported through `caseops_api.db.models` and
+    the import registers their tables on `Base.metadata`.
+  - 881-883 `py/cyclic-import` between `notification_delivery` and
+    `phone_notifications`: won't fix here. Lazy function-level back-edges
+    inside the service tangle recorded in EH-ARCH-2026-09-26, to be
+    decomposed with that work.
+  - 712-716, 747-750, 755-759 `py/catch-base-exception` in PostgreSQL race
+    and evidence tests: used in tests, same as 546. Each harness catches
+    every terminal exception, including pytest's `BaseException` outcomes,
+    so it can release workers and write evidence before re-raising the
+    original or asserting it is absent.
+  - 735 `py/catch-base-exception` in `scripts/mobile/ios-git-readonly.py`:
+    won't fix. `main` turns every failure, including an interrupt, into the
+    fail-closed `IOS_GIT_READONLY_REFUSED` exit.
+- **Dependabot 84, 86, 87** (`@fastify/busboy` 3.2.0 and `esbuild` ^0.27.3):
+  dismissed as not used. The manifest is
+  `license-policy/upstream/undici_7.30.2/package.json`, a byte-pinned copy of
+  the published undici package kept as licence evidence. These packages are
+  undici's own development dependencies. No CaseOps lockfile installs either
+  package, and the file's SHA-256 is pinned in
+  `apps/api/tests/test_license_notice_image_contract_20261012.py`, so editing
+  it would falsify the evidence. Any future advisory on a retained upstream
+  manifest needs the same check.
+- **Verification:** see the PR for command evidence. CodeQL on the PR head is
+  the proof that the 38 code fixes close their alerts.
