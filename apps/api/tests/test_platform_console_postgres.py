@@ -44,7 +44,9 @@ def client(isolated_postgres_client):
 
 
 def _wait_for_edge(engine, holder, waiter, future):
-    deadline = monotonic() + 1
+    # The loop ends as soon as the edge appears or the waiter finishes, so the
+    # bound only stops a hang; one second is too short on a loaded runner.
+    deadline = monotonic() + 30
     blockers = []
     with engine.connect() as observer:
         while True:
