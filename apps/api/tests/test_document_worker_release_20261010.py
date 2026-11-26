@@ -20,7 +20,7 @@ OLD_IMAGE = "registry.invalid/caseops-api@sha256:" + "a" * 64
 IMAGE = "registry.invalid/caseops-api@sha256:" + "b" * 64
 
 
-@pytest.fixture(params=["document", "court"])
+@pytest.fixture(params=["document", "court", "ai"])
 def harness(monkeypatch, request):
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     module = importlib.import_module("document_worker_release")

@@ -20,7 +20,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 12
+    assert len(inventory["jobs"]) == 13
     document_job = next(
         job for job in inventory["jobs"] if job["run_job_name"] == "caseops-document-processing"
     )
@@ -49,6 +49,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "caseops-judge-mapping-refresh",
         "caseops-document-processing",
         "caseops-court-sync",
+        "caseops-ai-jobs",
         "caseops-portfolio-export-recovery",
     }
     authority_job = next(
@@ -172,7 +173,7 @@ def test_activity_report_reuses_its_scheduler_at_0730_with_four_private_recipien
         "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL="
         + report["bootstrap"]["environment"]["CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL"]
     ) in environment.split(",")
-    assert len(inventory["jobs"]) == 12
+    assert len(inventory["jobs"]) == 13
 
 
 def test_release_hold_rejects_an_unknown_scheduler() -> None:
@@ -190,6 +191,8 @@ def test_release_hold_rejects_an_unknown_scheduler() -> None:
      "CASEOPS_DOCUMENT_WORKER_ADMISSION_PROTOCOL_VERSION"),
     ("caseops-court-sync", "CASEOPS_COURT_SYNC_WORKER_ADMISSION_ENABLED",
      "CASEOPS_COURT_SYNC_WORKER_ADMISSION_PROTOCOL_VERSION"),
+    ("caseops-ai-jobs", "CASEOPS_AI_JOB_WORKER_ADMISSION_ENABLED",
+     "CASEOPS_AI_JOB_WORKER_ADMISSION_PROTOCOL_VERSION"),
 ])
 def test_execution_release_hold_disables_only_its_worker_admission(
     job_name, admission_key, protocol_key,
@@ -235,7 +238,44 @@ def test_court_worker_contract_is_bounded_and_contains_no_court_provider_secrets
     }
 
 
-@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+def test_ai_worker_contract_is_bounded_and_mirrors_the_api_ai_configuration() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    job = next(row for row in inventory["jobs"] if row["run_job_name"] == "caseops-ai-jobs")
+    # The 600 s task timeout bounds every execution so a release drain fits.
+    assert job["schedule"] == "* * * * *" and job["task_timeout_seconds"] == 600
+    assert job["scheduler_name"] == "caseops-ai-jobs-cadence"
+    assert job["bootstrap"]["command"] == ["caseops-ai-job-worker"]
+    assert job["bootstrap"]["args"] == ["--once", "--batch-size=3", "--skip-migrations"]
+    assert job["bootstrap"]["max_retries"] == 0
+    assert job["additional_invoker_service_accounts"] == [
+        "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com"
+    ]
+    environment = job["bootstrap"]["environment"]
+    assert environment["CASEOPS_AI_JOB_WORKER_ADMISSION_PROTOCOL_VERSION"] == "1"
+    assert environment["CASEOPS_AI_JOB_WORKER_BATCH_SIZE"] == "3"
+    # Research answers retrieve with production Voyage embeddings and rerank;
+    # reviews use the recommendations model; exports write the document bucket.
+    for name, value in {
+        "CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini",
+        "CASEOPS_EMBEDDING_PROVIDER": "voyage",
+        "CASEOPS_EMBEDDING_MODEL": "voyage-4-large",
+        "CASEOPS_EMBEDDING_DIMENSIONS": "1024",
+        "CASEOPS_RERANK_ENABLED": "true",
+        "CASEOPS_DOCUMENT_STORAGE_BACKEND": "gcs",
+        "CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET": "caseops-prod-documents",
+    }.items():
+        assert environment[name] == value, name
+    assert job["bootstrap"]["secrets"] == {
+        "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+        "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+        "CASEOPS_LLM_API_KEY": "caseops-openai-api-key:latest",
+        "CASEOPS_EMBEDDING_API_KEY": "caseops-voyage-api-key:latest",
+    }
+
+
+@pytest.mark.parametrize(
+    "job_name", ["caseops-document-processing", "caseops-court-sync", "caseops-ai-jobs"],
+)
 def test_independent_worker_configuration_preserves_api_provider_and_transaction_policy(
     job_name,
 ) -> None:
@@ -701,7 +741,7 @@ def test_reconcile_grants_each_job_invoker_before_its_scheduler(monkeypatch) -> 
 
     _reconcile_through_exit_codes(monkeypatch, inventory, calls)
 
-    assert len(inventory["jobs"]) == 12
+    assert len(inventory["jobs"]) == 13
     for job in inventory["jobs"]:
         run_job = job["run_job_name"]
         job_write = next(
@@ -862,7 +902,9 @@ def test_inventory_rejects_invalid_additional_invoker_accounts(accounts) -> None
 
 
 @pytest.mark.parametrize("job_exists", [False, True])
-@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+@pytest.mark.parametrize(
+    "job_name", ["caseops-document-processing", "caseops-court-sync", "caseops-ai-jobs"],
+)
 def test_first_execution_release_allows_absence_only_when_both_resources_are_missing(
     monkeypatch,
     job_exists,
@@ -894,7 +936,9 @@ def test_first_execution_release_allows_absence_only_when_both_resources_are_mis
 
 
 @pytest.mark.parametrize("wait_seconds", [0, 4, 601])
-@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+@pytest.mark.parametrize(
+    "job_name", ["caseops-document-processing", "caseops-court-sync", "caseops-ai-jobs"],
+)
 def test_allow_missing_cannot_bypass_execution_drain_budget(
     monkeypatch, wait_seconds, job_name,
 ) -> None:
@@ -918,7 +962,9 @@ def test_allow_missing_cannot_bypass_execution_drain_budget(
 @pytest.mark.parametrize(
     "condition, accepted", [("missing", False), ("conditional", False), ("unconditional", True)]
 )
-@pytest.mark.parametrize("job_name", ["caseops-document-processing", "caseops-court-sync"])
+@pytest.mark.parametrize(
+    "job_name", ["caseops-document-processing", "caseops-court-sync", "caseops-ai-jobs"],
+)
 def test_execution_live_readback_requires_unconditional_runtime_invoker(
     monkeypatch,
     condition,

@@ -1298,7 +1298,8 @@ try {
     $WorkerStartupReceipts = @()
     foreach ($Worker in @(
         @{ Command = "caseops-document-worker"; Prefix = "DOCUMENT"; Args = @("--documents-only", "--once", "--skip-migrations") },
-        @{ Command = "caseops-court-sync-worker"; Prefix = "COURT_SYNC"; Args = @("--once", "--skip-migrations") }
+        @{ Command = "caseops-court-sync-worker"; Prefix = "COURT_SYNC"; Args = @("--once", "--skip-migrations") },
+        @{ Command = "caseops-ai-job-worker"; Prefix = "AI_JOB"; Args = @("--once", "--skip-migrations") }
     )) {
         $WorkerArguments = @(
             "run", "--rm", "--pull=never", "--network=none", "--read-only", "--entrypoint=timeout",
