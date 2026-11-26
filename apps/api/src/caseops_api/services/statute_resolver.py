@@ -201,6 +201,13 @@ _ACT_YEAR_RE = re.compile(
     re.IGNORECASE,
 )
 _YEAR_LIKE_RE = re.compile(r"^(?:1[6-9][0-9]{2}|20[0-9]{2})$")
+# Rupee amounts in Indian legal prose: "Rs 5 lakh", "Rs. 5,00,000", "INR 2 crore",
+# "₹5 lakh". Removed before any section number is read.
+_MONEY_RE = re.compile(
+    r"(?:₹|\bRs\.?|\bINR)\s*[0-9][0-9,]*(?:\.[0-9]+)?(?:\s*/-)?"
+    r"(?:\s*(?:lakhs?|lacs?|crores?|cr\.?|thousand)\b)?",
+    re.IGNORECASE,
+)
 _SECTION_SYMBOL_RE = re.compile(r"§\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)")
 _ARTICLE_RE = re.compile(
     r"(?:Article|Art\.?)\s*([0-9]+[A-Za-z]*)", re.IGNORECASE,
@@ -247,7 +254,9 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
     """
     if not text or not isinstance(text, str):
         return None
-    cleaned = text.strip()
+    # A money amount is never a section number: "a cheque of Rs 5 lakh ...
+    # Section 138 NI Act" was read as Section 5 (Nov 26 2026, BUG-002).
+    cleaned = _MONEY_RE.sub(" ", text).strip()
     if not cleaned:
         return None
 
@@ -289,6 +298,24 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
 _REFERENCE_SPLIT_RE = re.compile(r"(?=\b(?:Sections?|Secs?\.?|Ss?\.|u/s)\s*[0-9])", re.IGNORECASE)
 
 
+def bare_section_numbers(text: str) -> list[str]:
+    """Section numbers a text names without any Act ("explain the section 138?").
+
+    Empty when the text names an Act: then ``parse_section_references`` owns it.
+    """
+    if not text or not isinstance(text, str):
+        return []
+    cleaned = _MONEY_RE.sub(" ", text)
+    if _detect_act(cleaned) is not None:
+        return []
+    numbers: list[str] = []
+    for match in _SECTION_RE.finditer(_ACT_YEAR_RE.sub(r"\1", cleaned)):
+        number = f"Section {match.group(1)}"
+        if number not in numbers:
+            numbers.append(number)
+    return numbers
+
+
 def parse_section_references(text: str) -> list[tuple[str, str]]:
     """Every (statute_id, section) a free-text question names, in order.
 
@@ -300,10 +327,18 @@ def parse_section_references(text: str) -> list[tuple[str, str]]:
     """
     if not text or not isinstance(text, str):
         return []
+    text = _MONEY_RE.sub(" ", text)
     whole_act = _detect_act(text)
     whole_act_token = _act_token(text) if whole_act else None
     found: list[tuple[str, str]] = []
     for fragment in _REFERENCE_SPLIT_RE.split(text):
+        # Only a fragment that carries its own section or article marker names
+        # a provision; the bare-number fallback would read "5" in "a cheque of
+        # 5 lakh" as a section.
+        if not any(
+            pattern.search(fragment) for pattern in (_SECTION_RE, _SECTION_SYMBOL_RE, _ARTICLE_RE)
+        ):
+            continue
         parsed = parse_section_string(fragment)
         if (
             parsed is None

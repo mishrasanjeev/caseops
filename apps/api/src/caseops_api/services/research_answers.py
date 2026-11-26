@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -84,6 +85,7 @@ from caseops_api.services.source_actions import (
     inspect_source_target_action,
 )
 from caseops_api.services.statute_resolver import (
+    bare_section_numbers,
     parse_section_references,
     parse_section_strings,
 )
@@ -264,6 +266,8 @@ class _Focus:
     refs: tuple[tuple[str, str], ...] = ()
     origin: Literal["question", "inferred", "matter", "none"] = "none"
     labels: tuple[str, ...] = ()
+    # Shown as an assumption when CaseOps had to choose the Act itself.
+    note: str | None = None
 
     @property
     def acts(self) -> frozenset[str]:
@@ -515,13 +519,69 @@ def _candidates(
     return picked
 
 
+def _infer_bare_section_focus(
+    session: Session, query: str, pool: list[_Candidate]
+) -> _Focus | None:
+    """The Act a bare "section 138" means, read from the judgments that apply it.
+
+    "explain the section 138?" names no Act. Section 138 exists in several
+    Acts, and guessing one from model knowledge is not allowed. The retrieved
+    judgments say which one practitioners mean: the Act whose same-numbered
+    section most of them cite or name wins, provided no other Act's section of
+    that number ties it. The choice is shown to the user as an assumption.
+    """
+    numbers = bare_section_numbers(query)
+    if not numbers:
+        return None
+    counts: Counter[tuple[str, str]] = Counter()
+    for item in pool:
+        refs = set(_cited_refs(item.document)) | set(
+            parse_section_references(
+                " ".join(
+                    part for part in (item.document.title, item.excerpt, item.document.summary)
+                    if part
+                )
+            )
+        )
+        counts.update(ref for ref in refs if ref[1] in numbers)
+    chosen: list[tuple[str, str]] = []
+    for number in numbers:
+        ranked = sorted(
+            ((count, ref) for ref, count in counts.items() if ref[1] == number), reverse=True
+        )
+        if ranked and (len(ranked) == 1 or ranked[0][0] > ranked[1][0]):
+            chosen.append(ranked[0][1])
+    if not chosen:
+        return None
+    labels = tuple(_ref_label(session, ref) for ref in chosen)
+    return _Focus(
+        refs=tuple(chosen),
+        origin="inferred",
+        labels=labels,
+        note=(
+            "The question names "
+            + ", ".join(ref[1] for ref in chosen)
+            + " without an Act. It was researched as "
+            + "; ".join(labels)
+            + ", the provision most of the matching judgments apply. Name the Act if you "
+            "meant another."
+        ),
+    )
+
+
 def _select_judgments(
     session: Session, query: str, focus: _Focus, matter: Matter | None
-) -> list[_Candidate]:
+) -> tuple[list[_Candidate], _Focus]:
     """Judgments that deal with the question's focus, binding authority first."""
     pool = _candidates(
         session, _retrieve_judgments(session, _retrieval_query(query, focus, matter)), focus
     )
+    if not focus.refs:
+        inferred = _infer_bare_section_focus(session, query, pool)
+        if inferred is not None:
+            focus = inferred
+            for item in pool:
+                item.tier, item.others = _engagement(item.document, item.excerpt, focus)
     if focus.refs and sum(1 for item in pool if item.tier < 2) < MIN_FOCUSED_JUDGMENTS:
         # The question's wording pulled in neighbouring topics. Search once more
         # on the focus provision itself before settling for fewer authorities.
@@ -542,16 +602,21 @@ def _select_judgments(
             item.rank,
         )
     )
-    return pool[:MAX_JUDGMENTS]
+    return pool[:MAX_JUDGMENTS], focus
 
 
 def _build_sources(
     session: Session, query: str, focus: _Focus | None = None, matter: Matter | None = None
-) -> list[_Source]:
+) -> tuple[list[_Source], _Focus]:
+    """Sources for the question and the focus they were chosen for.
+
+    The focus can change here: a bare section number gets its Act from the
+    retrieved judgments (``_infer_bare_section_focus``).
+    """
     from caseops_api.services.authority_treatments import compute_search_result_treatments
 
     focus = focus if focus is not None else _resolve_focus(session, query, matter)
-    judgments = _select_judgments(session, query, focus, matter)
+    judgments, focus = _select_judgments(session, query, focus, matter)
     sources: list[_Source] = []
     for section, statute in _statute_sections(
         session, focus, [item.document for item in judgments]
@@ -619,7 +684,7 @@ def _build_sources(
                 other_provisions=[f"{ref[1]} ({ref[0]})" for ref in candidate.others[:4]],
             )
         )
-    return sources
+    return sources, focus
 
 
 # --------------------------------------------------------------------------- #
@@ -1053,7 +1118,8 @@ def _verify(
         key_points=key_points,
         facts_insufficient=parsed.facts_insufficient,
         missing_facts=[item.strip() for item in parsed.missing_facts if item.strip()],
-        assumptions=[item.strip() for item in parsed.assumptions if item.strip()],
+        assumptions=([focus.note] if focus and focus.note else [])
+        + [item.strip() for item in parsed.assumptions if item.strip()],
         sections=sections,
         authorities=ordered,
         matter_facts=matter_facts,
@@ -1284,7 +1350,7 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
     matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
     try:
         focus = _resolve_focus(session, answer.query, matter)
-        sources = _build_sources(session, answer.query, focus=focus, matter=matter)
+        sources, focus = _build_sources(session, answer.query, focus=focus, matter=matter)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")

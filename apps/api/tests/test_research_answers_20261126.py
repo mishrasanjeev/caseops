@@ -204,8 +204,9 @@ def _judgment(key: str, *, title: str, court: str, forum, text: str, cited: list
 
 def _seed_mixed_corpus() -> dict[str, str]:
     """A corpus shaped like production: many cheque judgments are quashing petitions."""
-    _seed_sources()  # NI Act Section 138 and one High Court Section 138 judgment.
+    _section_id, hc_138 = _seed_sources()  # NI Act s.138 and one High Court s.138 judgment.
     ids = {
+        "hc_138": hc_138,
         "crpc_482": _section(
             "crpc-1973", "CrPC", "Code of Criminal Procedure, 1973", "Section 482",
             "Nothing in this Code shall be deemed to limit or affect the inherent powers of "
@@ -486,3 +487,116 @@ def test_an_unsourced_provision_offers_answerable_rephrasings(
         "How does Section 9, Arbitration and Conciliation Act, 1996 apply to the recorded "
         "facts of Supplier cheque complaint?",
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Ram's exact production questions (read from his research history, 26 Nov).
+# --------------------------------------------------------------------------- #
+
+RAM_BENCHMARK = (
+    "A cheque of Rs 5 lakh was dishonoured due to insufficient funds. What are the legal "
+    "requirements, notice period and procedure for filing a case under Section 138 of the "
+    "Negotiable Instruments Act, 1881?"
+)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (RAM_BENCHMARK, [("ni-act-1881", "Section 138")]),
+        ("Rs. 5,00,000/- cheque under NI Act section 138", [("ni-act-1881", "Section 138")]),
+        ("INR 2 crore cheque under the NI Act", []),
+        ("a cheque of \u20b95 lakh, Section 138 NI Act", [("ni-act-1881", "Section 138")]),
+        ("BNSS 483 bail", [("bnss-2023", "Section 483")]),
+    ],
+)
+def test_a_rupee_amount_is_never_read_as_a_section(text: str, expected: list) -> None:
+    from caseops_api.services.statute_resolver import (
+        parse_section_references,
+        parse_section_string,
+    )
+
+    assert parse_section_references(text) == expected
+    assert parse_section_string(text) == (expected[0] if expected else None)
+
+
+def test_rams_rupee_benchmark_never_cites_section_5(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_mixed_corpus()
+    section_5 = _section(
+        "ni-act-1881", "NI Act", "Negotiable Instruments Act, 1881", "Section 5",
+        "A bill of exchange is an instrument in writing containing an unconditional order.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token, query=RAM_BENCHMARK)
+
+    assert record["status"] == "answered"
+    assert _prompt_input(provider.prompts[0])["question_focus"] == [FOCUS_138]
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    assert section_5 not in {item["id"] for item in manifest}
+    assert manifest[0]["title"].startswith("Section 138, Negotiable Instruments Act")
+
+
+def test_a_bare_section_number_is_researched_in_the_act_the_judgments_apply(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = _seed_mixed_corpus()
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    # Ram's a26e66ed: CrPC 482 was statutory source [1] and four of five
+    # judgments were Section 482 applications.
+    record = _ask(client, token, query="explain the section 138?")
+
+    assert record["status"] == "answered", (record["error_code"], record["message"])
+    assert record["answer"]["question_focus"] == [FOCUS_138]
+    assert any(
+        "without an Act" in item and FOCUS_138 in item for item in record["answer"]["assumptions"]
+    )
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    offered = {item["id"] for item in manifest}
+    assert ids["crpc_482"] not in offered
+    assert ids["off_issue"] not in offered
+    assert manifest[0]["kind"] == "statute_section"
+    assert manifest[0]["title"].startswith("Section 138, Negotiable Instruments Act")
+    judgments = {item["id"] for item in manifest if item["kind"] == "judgment"}
+    # Every judgment offered deals with Section 138 (the quashing petition does,
+    # and is labelled); none is about another provision only.
+    assert judgments and judgments <= {ids["sc_138"], ids["quash_138"], ids["hc_138"]}
+
+
+def test_rams_matter_question_is_researched_on_the_matter_statutes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_sources()
+    bnss_8 = _section(
+        "bnss-2023", "BNSS", "Bharatiya Nagarik Suraksha Sanhita, 2023", "Section 8",
+        "There shall be a Court of Session for every sessions division.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    matter_id = _matter(
+        client, token, "RA-MEHANI", title="Sh. Satish Kumar Mehani Vs Punjab National Bank",
+    )
+    with get_session_factory()() as session:
+        session.add(MatterStatuteReference(matter_id=matter_id, section_id=bnss_8))
+        session.commit()
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(
+        client, token, query="what is act and section under this matter",
+        context_matter_id=matter_id,
+    )
+
+    assert record["status"] == "answered", (record["error_code"], record["message"])
+    assert record["answer"]["question_focus"] == [
+        "Section 8, Bharatiya Nagarik Suraksha Sanhita, 2023"
+    ]
+    assert record["sources"][0]["id"] == bnss_8
