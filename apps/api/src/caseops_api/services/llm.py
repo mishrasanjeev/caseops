@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -492,22 +493,128 @@ def _mock_workspace_assistant_response(prompt: str) -> str:
             },
             separators=(",", ":"),
         )
-    first_id, first_label, first_text = sources[0]
+    question = ""
+    for line in prompt.splitlines():
+        if line.startswith("QUESTION:"):
+            question = line.split(":", 1)[1].strip()
+            break
+    ranked = _mock_rank_assistant_sources(question, sources)
+    if not ranked:
+        # Evidence-sensitive like a real provider: a question none of the
+        # permitted sources speaks to is abstained, so tests can detect
+        # missing evidence instead of receiving an answer from any source.
+        return json.dumps(
+            {
+                "status": "abstained",
+                "answer": "None of the permitted workspace sources contain this evidence.",
+                "confidence": "insufficient",
+                "used_source_ids": [],
+                "suggested_searches": [],
+            },
+            separators=(",", ":"),
+        )
+    best_id, best_label, best_text = ranked[0][1]
     # The deterministic provider must exercise the same untrusted-source
     # boundary as a real provider; echoing source instructions makes local E2E
     # safety evidence meaningless and can teach fixtures the wrong contract.
-    safe_text = _mock_remove_document_instructions(first_text)
-    preview = " ".join((safe_text or first_text).split()[:55])
+    terms = _mock_question_terms(question)
+    clauses = [
+        clause
+        for clause in __import__("re").split(r"(?<=[.;])\s+", best_text)
+        if terms and _mock_hits(terms, _mock_tokens(clause))
+    ]
+    safe_text = _mock_remove_document_instructions(" ".join(clauses) or best_text)
+    preview = " ".join((safe_text or _mock_remove_document_instructions(best_text)).split()[:80])
     return json.dumps(
         {
             "status": "answered",
-            "answer": f"Based on {first_label}: {preview}",
+            "answer": f"Based on {best_label}: {preview}",
             "confidence": "medium",
-            "used_source_ids": [source[0] for source in sources[:3]],
+            "used_source_ids": [source[0] for _score, source in ranked[:3]],
             "suggested_searches": [],
         },
         separators=(",", ":"),
     )
+
+
+_MOCK_STOPWORDS = frozenset(
+    "a about all an and any anything are as at available be before been by can could "
+    "current currently did do does done explain for from give has have how i in "
+    "involved is it its kindly list me my of on or our please show summarise summarize "
+    "tell than that the their them there these this those to under us was we what "
+    "when where which who whom why will with without would you your".split()
+)
+# Generic words only select a source when nothing more specific matches.
+_MOCK_GENERIC = frozenset({"matter", "case", "record", "recorded", "detail", "file"})
+_MOCK_SYNONYMS = {
+    "party": {"party", "client", "opposing", "petitioner", "respondent", "counsel"},
+    "action": {"action", "task", "deadline", "compliance"},
+    "pending": {"pending", "open", "task", "deadline", "compliance"},
+    "todo": {"task", "open"},
+    "document": {"document", "filename"},
+    "section": {"section", "statute"},
+    "act": {"act", "statute"},
+}
+
+
+def _mock_stem(token: str) -> str:
+    if len(token) > 4 and token.endswith("ies"):
+        return f"{token[:-3]}y"
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def _mock_tokens(text: str) -> Counter[str]:
+    return Counter(
+        _mock_stem(token) for token in __import__("re").findall(r"[a-z0-9]+", text.casefold())
+    )
+
+
+def _mock_question_terms(question: str) -> list[str]:
+    return list(
+        dict.fromkeys(
+            _mock_stem(token)
+            for token in __import__("re").findall(r"[a-z0-9]+", question.casefold())
+            if len(token) > 1 and token not in _MOCK_STOPWORDS
+        )
+    )
+
+
+def _mock_hits(terms: list[str], tokens: Counter[str]) -> int:
+    # Each specific term scores its (capped) occurrences, synonyms included,
+    # so the record that is about the asked thing outranks a passing mention.
+    return sum(
+        min(5, sum(tokens[word] for word in _MOCK_SYNONYMS.get(term, {term})))
+        for term in terms
+        if term not in _MOCK_GENERIC
+    )
+
+
+def _mock_rank_assistant_sources(
+    question: str, sources: list[tuple[str, str, str]]
+) -> list[tuple[int, tuple[str, str, str]]]:
+    """Return the sources that answer ``question`` best, best first.
+
+    A source scores the capped occurrences of each specific question term (or
+    a synonym of it). Every source sharing the best score is cited. When
+    only generic words such as "matter" match, the first such source answers.
+    """
+
+    terms = _mock_question_terms(question)
+    scored = [
+        (_mock_hits(terms, _mock_tokens(f"{label} {text}")), source)
+        for source in sources
+        for _id, label, text in (source,)
+    ]
+    best = max((score for score, _source in scored), default=0)
+    if best > 0:
+        return [(score, source) for score, source in scored if score == best]
+    generic = [term for term in terms if term in _MOCK_GENERIC]
+    for _score, source in scored:
+        if any(term in _mock_tokens(f"{source[1]} {source[2]}") for term in generic):
+            return [(0, source)]
+    return []
 
 
 def _mock_matter_file_qa_response(prompt: str) -> str:

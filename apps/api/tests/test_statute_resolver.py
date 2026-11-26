@@ -89,6 +89,31 @@ def test_ft_s3_3_parser_returns_none_for_unresolvable_input() -> None:
     assert parse_section_string(None) is None  # type: ignore[arg-type]
 
 
+def test_act_enactment_year_is_never_a_section_number() -> None:
+    """Nov 25 nova-legal row 3: "Hindu Marriage Act, 1955" parsed as Section
+    1955, so the research hand-off looked up a section that does not exist."""
+    for raw in (
+        "Explain the relevant sections of the Hindu Marriage Act, 1955",
+        "Hindu Marriage Act, 1955",
+        "Hindu Marriage Act 1955",
+        "Hindu Marriage Act of 1955",
+        "Hindu Marriage Acts 1955",
+        "Companies Act, 2013",
+        "BNSS, 2023",
+    ):
+        assert parse_section_string(raw) is None, raw
+    for raw, expected in (
+        ("Section 13 of the Hindu Marriage Act, 1955", ("hindu-marriage-1955", "Section 13")),
+        ("s. 13B Hindu Marriage Act, 1955", ("hindu-marriage-1955", "Section 13B")),
+        ("Hindu Marriage Act, 1955, section 13B", ("hindu-marriage-1955", "Section 13B")),
+        ("u/s 13 Hindu Marriage Act", ("hindu-marriage-1955", "Section 13")),
+        ("Sections 13 and 13B of the Hindu Marriage Act", ("hindu-marriage-1955", "Section 13")),
+        ("Companies Act, 2013 241", ("companies-2013", "Section 241")),
+        ("BNSS 2023 483", ("bnss-2023", "Section 483")),
+    ):
+        assert parse_section_string(raw) == expected, raw
+
+
 def test_ft_s3_4_parse_section_strings_dedupes(client: TestClient) -> None:
     """vectorised parse dedupes (statute_id, section_number) pairs
     while preserving first-seen order."""

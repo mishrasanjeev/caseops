@@ -16,6 +16,18 @@ AssistantScopeType = Literal[
     "matter_document",
     "ip_document",
 ]
+# Internal citation source kinds derived from a selected Matter's own records.
+# They are never user-selectable scopes (not AssistantScopeType); every read
+# re-derives them through the canonical Matter visibility filter.
+MATTER_RECORD_SOURCE_TYPES = frozenset(
+    {
+        "matter_parties",
+        "matter_hearings",
+        "matter_tasks",
+        "matter_documents",
+        "matter_statutes",
+    }
+)
 
 
 class AssistantScopeInput(BaseModel):
