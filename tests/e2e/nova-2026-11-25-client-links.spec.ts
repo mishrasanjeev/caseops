@@ -276,6 +276,32 @@ test("row 2 links a client from the client page and from the matter overview", a
     expect((await removed).status(), "Unlink from the client page").toBe(204);
     await expect(mattersCard).toContainText("No matters linked yet");
     expect(await linkedClients(request, rt, matter.id)).toEqual([]);
+
+    // Matter management: link the same client from the matter's edit form.
+    await page.goto(`${rt.web.origin}/app/matters/${matter.id}`);
+    await expect(card).toContainText(`names “${n.client}” as typed text only`);
+    await page.getByTestId("matter-edit-open").click();
+    const editForm = page.getByTestId("matter-edit-form");
+    await editForm.getByLabel("Search clients").fill(n.client);
+    const editPicker = editForm.getByLabel("Or link an existing client");
+    await expect(editPicker.locator(`option[value="${created.clientId}"]`)).toHaveCount(1);
+    await editPicker.selectOption(created.clientId);
+    await expect(editForm.getByTestId("matter-edit-client")).toBeDisabled();
+    await expect(editForm.getByTestId("matter-edit-client")).toHaveValue(n.client);
+    await expect(editForm.getByTestId("matter-edit-client-link-caption"))
+      .toContainText(`${n.client} becomes this matter's primary client`);
+    const editLinked = page.waitForResponse(isPost(new RegExp(`^/api/matters/${matter.id}/clients$`)));
+    await editForm.getByTestId("matter-edit-save").click();
+    const editLink = await editLinked;
+    expect(editLink.request().postDataJSON()).toMatchObject({ client_id: created.clientId, is_primary: true });
+    expect(await json<{ is_primary: boolean; matter_client_name: string }>(editLink, "Link from the matter edit form"))
+      .toMatchObject({ is_primary: true, matter_client_name: n.client });
+    await expect(editForm).toBeHidden();
+    await expect(card.getByTestId("matter-client-row").filter({ hasText: n.client })).toContainText("Primary");
+    expect(await linkedClients(request, rt, matter.id)).toEqual([
+      expect.objectContaining({ client_id: created.clientId, client_name: n.client, is_primary: true }),
+    ]);
+    expect(await matterClientName(request, rt, matter.id)).toBe(n.client);
   } finally {
     await retire(page, request, rt, created);
   }

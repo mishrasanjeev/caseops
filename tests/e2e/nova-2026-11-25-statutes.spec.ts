@@ -155,12 +155,13 @@ async function attachArticle21(page: Page, rt: Runtime, matterId: string, phone:
   const [, verified, catalogued] = label.match(/\((\d+) verified of (\d+) catalogued\)/) ?? [];
   expect(Number(verified), "Constitution Articles with verified official text").toBeGreaterThanOrEqual(400);
   expect(Number(catalogued)).toBeGreaterThanOrEqual(Number(verified));
+  // The Income Tax Act has no verified provision text today, by design: it must be listed,
+  // only in the pending group, and disabled, never looking attachable.
   const incomeTax = page.getByRole("option", { name: /^Income Tax Act — / });
-  if (await incomeTax.count()) {
-    // Still unverified: it must sit in the pending group and stay disabled, never look attachable.
-    await expect(page.getByTestId("matter-statute-act-group-pending").getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(1);
-    await expect(incomeTax).toHaveAttribute("data-disabled", /.*/);
-  }
+  await expect(incomeTax, "The Income Tax Act is listed exactly once").toHaveCount(1);
+  await expect(page.getByTestId("matter-statute-act-group-pending").getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(1);
+  await expect(attachableActs.getByRole("option", { name: /^Income Tax Act — / })).toHaveCount(0);
+  await expect(incomeTax).toHaveAttribute("data-disabled", /.*/);
   await press(constitution, phone);
   await expect(dialog.getByTestId("matter-statute-act-select")).toContainText("The Constitution of India");
 
