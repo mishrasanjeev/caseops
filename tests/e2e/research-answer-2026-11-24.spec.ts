@@ -15,12 +15,29 @@ for (const phone of [false, true]) {
     await page.goto(`${runtime.web.origin}/app/research?tab=answer`);
     await expect(page.getByTestId("research-tool-answer")).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Legal question").fill(QUESTION);
+    const created = page.waitForResponse((r) => r.request().method() === "POST"
+      && new URL(r.url()).pathname === "/api/research/answers");
     await page.getByRole("button", { name: "Get research answer" }).click();
+    const answerId = ((await (await created).json()) as { id: string }).id;
 
     const answer = page.getByTestId("research-answer");
     const unavailable = page.getByTestId("research-answer-unavailable");
     await expect(answer.or(unavailable)).toBeVisible({ timeout: 180_000 });
     await expect(unavailable, "the benchmark must be answered from indexed sources").toHaveCount(0);
+
+    // Relevance, not only structure (Nov 26): this run passed while citing NI Act
+    // Section 5 ("Rs 5" read as a section) and judgments titled "AT HYDERABAD".
+    const record = (await (await request.get(`${runtime.api.origin}/api/research/answers/${answerId}`,
+      { headers: runtime.headers })).json()) as { sources: { kind: string; title: string }[] };
+    expect(record.sources[0]?.title, "Section 138 is the first source")
+      .toMatch(/^Section 138, Negotiable Instruments Act/);
+    for (const source of record.sources.filter((item) => item.kind === "statute_section")) {
+      expect(source.title).toContain("Negotiable Instruments Act");
+    }
+    for (const source of record.sources.filter((item) => item.kind === "judgment")) {
+      expect(source.title, "an authority a lawyer can identify")
+        .not.toMatch(/^AT [A-Z]+$|\.docx?$|^https?:|^Court No\.?\s*-|^HON.?BLE/i);
+    }
 
     // Part order is fixed.
     const headings = await answer.getByRole("heading", { level: 3 }).allTextContents();
