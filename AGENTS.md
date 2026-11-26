@@ -3354,6 +3354,15 @@ requirements when using the fallback.
   matter) from "no verified source for an identified provision", and give
   answerable, deterministic rephrasings. "Found nothing" with no way forward
   reads as a failure to the tester.
+- A new setting is proven by building `Settings()` from the exact environment
+  strings the deploy sets, not from Python values in a unit test. The AI job
+  worker's admission protocol accepted `1` in tests and crashed on Cloud Run's
+  `"1"`; only Docker acceptance's offline worker-start gate caught it.
+- A free-text legal parser change ships with an adversarial phrase matrix:
+  slash shorthand (`u/s 406/420`), lists, sub-sections, money, two Acts in one
+  question, an Act mentioned in passing, a bare section from a matter. Four
+  independent review rounds on the Nov 26 fix each found a new wrong-Act
+  binding; every one is now a parametrized regression.
 - Automated production research runs use the deterministic offline model, so
   they prove retrieval, focus, verification, timing and UI, never the paid
   model's prose. An accuracy verdict on paid-model output also needs a run by a

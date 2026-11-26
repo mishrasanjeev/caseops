@@ -14,9 +14,10 @@ its own width; spacing is gap-8 between parts, gap-4 between blocks, gap-2
 inside a block; part headings 20px, numbered sub-sections 16px, authority
 titles 14px. On /app/research the answer renders below the question card. The
 pending state (BUG-003 frontend) shows the step, an mm:ss counter from
-`created_at` and "usually take one to two minutes". Sweep: the Matter File Q&A
-answer had the same mismatched caps (fixed); other inventory items were
-acceptable or uncapped-line issues (not changed).
+`created_at` and "usually take one to two minutes". Sweep: other inventory
+items were acceptable or uncapped-line issues (not changed). The Matter File
+Q&A width change was reverted after independent review: removing its cap made
+lines unbounded at wide viewports, and that page was not reported.
 
 Tests: vitest layout/pending contracts (7 failed on the old code) and
 `tests/e2e/research-answer-layout-2026-11-26.spec.ts` (geometry at
@@ -7885,3 +7886,70 @@ question returns the same answer). Regressions:
 `apps/api/tests/test_background_task_allowlist_20261126.py`, each shown failing
 on `e492d6472`. Closure needs a release that creates the job and a production
 answer measured completing in it.
+
+
+## November 26 - BUG-002 Section 138 research drifts to Section 482 and cites unrelated judgments (Ram, Critical)
+
+**Inconclusive** until the production journey passes on the deployed release
+and a signed-in human repeats Ram's questions (the paid model's prose cannot be
+proven by the offline-model automation). J05/M04, US-067..069.
+
+Evidence read from Ram's own production history (20 answers, 26 Nov):
+`a26e66ed` "explain the section 138?" named no Act, so every section the
+retrieved judgments cited was admitted: CrPC s.482 was statutory source [1]
+and four of five judgments were Section 482 applications. Four "Rs 5 lakh ...
+Section 138" runs cited NI Act **Section 5** (the deployed section pattern read
+"Rs 5" as "S 5"; main already had the word boundary). Judgments were titled
+"AT HYDERABAD", "931.WP.96.17.doc", "Court No. - 25" and a bare URL. The
+automated acceptance passed on all of this because it asserted structure only.
+
+Fix (branch `fix/bugs6-research-20261126`, PR #674): the answer is scoped to
+the question's focus (provisions named, implied by stated facts, or recorded
+on the matter); each section binds to its own Act (following Act, else a
+single unclaimed preceding Act, else placed by the facts or the judgments);
+money is never a section; sub-sections reduce to their section; provisions an
+Act does not have are dropped. Statute sources stay in the focus Acts;
+judgments that neither cite nor name the focus are not offered (the best three
+are kept and labelled context only when none does); judgments citing more of
+the focus rank first, binding authority reorders the chosen set, unnamed
+judgments are shown by verified party names or "Case name not recorded"; a
+short answer that never reaches the focus is redrafted; uncited judgments with
+no verified passage are not listed; each judgment shows whether it cites the
+provision researched. Independent adversarial review ran four rounds; every
+finding (wrong Act binding, matter override, slash lists, two-Act questions,
+Evidence Act s.139) is a regression in
+`apps/api/tests/test_research_answers_20261126.py`, each shown failing on the
+code before it. Production proof: `tests/e2e/research-answer-2026-11-26.spec.ts`
+and the strengthened `research-answer-2026-11-24.spec.ts` (Section 138 leads,
+every judgment cites or names it, identifiable titles).
+
+## November 26 - BUG-003 research answers slow, and failing (Ram, High)
+
+**Inconclusive** until the release creates `caseops-ai-jobs` and a production
+answer is measured inside the promised bound. Two defects besides the
+CPU-starved BackgroundTasks entry above: every verification retry crashed with
+"The caller transaction contains writes and cannot be released" for every
+subscribed tenant (11 of Ram's 20 runs failed), because `generate_structured`
+debited credits into the released session without committing and no test
+tenant had a subscription; and one unverifiable detail paragraph cost a full
+second generation. Fixed: a released LLM call commits its own debit; retries
+only for headline problems or a material share of dropped paragraphs; a
+running answer is judged by claim time (11-minute lease) and settling is a
+compare-and-set; duplicate submissions never cross the no-paid boundary.
+Docker acceptance then caught the new worker rejecting the Cloud Run string
+"1" for its admission protocol (every scheduled run would have crashed);
+fixed and regressed in `test_ai_jobs_20261126.py`.
+
+## November 26 - BUG-004 "Explain about this matter/case" dead-ends (Ram, High)
+
+**Inconclusive** until the production journey passes on the deployed release.
+`7429a1af` (matter "Sh. Satish Kumar Mehani Vs Punjab National Bank", statutes
+BNSS 8 and 66) abstained with "no indexed statute section or judgment" because
+retrieval used only the question text; `90354019` "what is act and section
+under this matter" crashed (BUG-003). Fixed: a vague question takes the
+matter's recorded statutes (only same-numbered ones when it names a bare
+section), else provisions its title or description names or implies, and the
+matter facts steer retrieval; an unplaceable question abstains with
+`needs_detail` guidance; suggestions are deterministic, name only provisions
+with citable text, never repeat one that just had no sources, and never carry
+the matter title. The worker rechecks matter access before using matter facts.
