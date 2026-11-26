@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
@@ -41,6 +42,7 @@ VERIFIED = {
     "specific-relief-1963": 47,
     "ipc-1860": 554,
     "motor-vehicles-1988": 250,
+    "constitution-india": 481,
 }
 
 
@@ -187,6 +189,7 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
                 == evidence["sha256"]
             )
         rows = [row for (act, _), row in sources.items() if act == act_id]
+        prefix = document.get("provision_prefix", "Section")
         assert len(rows) == release.EXPECTED_COUNTS[act_id]
         assert (
             sum(row["verification_status"] == "verified_official" for row in rows)
@@ -215,12 +218,24 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
             "specific-relief-1963": 44,
             "ipc-1860": 511,
             "motor-vehicles-1988": 217,
+            "constitution-india": 395,
         }[act_id]
-        assert {f"Section {number}" for number in range(1, last + 1)} <= numbers
+        assert {f"{prefix} {number}" for number in range(1, last + 1)} <= numbers
         previous = None
+        prior_row = None
         for row in rows:
             policy = row["source_policy"]
             fragments = policy["body_fragments"]
+            shared_identity = policy.get("arrangement_identity")
+            if shared_identity and shared_identity == (prior_row or {}).get(
+                "source_policy", {}
+            ).get("arrangement_identity"):
+                # One printed omitted run ("379-391") backs each member row.
+                assert row["section_text"] == prior_row["section_text"]
+                assert fragments == prior_row["source_policy"]["body_fragments"]
+                assert row["verification_status"] == "retired"
+                continue
+            prior_row = row
             parent_number = policy.get("parent_provision")
             local_previous = None
             if parent_number:
@@ -243,7 +258,7 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
                 assert hashlib.sha256(part.encode()).hexdigest() == fragment["text_sha256"]
                 if fragment.get("region") == "publisher_notes":
                     evidence = document["omission_evidence"][
-                        row["section_number"].removeprefix("Section ")
+                        row["section_number"].removeprefix(f"{prefix} ")
                     ]
                     assert row["verification_status"] == "retired"
                     assert part == evidence["text"]
@@ -263,7 +278,11 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
                 if not parent_number:
                     previous = end
             assert row["source_url"].endswith(f"#page={fragments[0]['page']}")
-            assert len(row["section_text"]) > 20
+            assert len(row["section_text"]) > 20 or (
+                # An omitted entry may print only its identity and an elision mark.
+                row["verification_status"] == "retired"
+                and re.fullmatch(r"\S+\.\s*(?:\d+\s*)?\[\s*(?:\*\s*)+\]\.?", row["section_text"])
+            )
             assert row["effective_from"] is None  # No invented blanket commencement.
     bns_106 = sources["bns-2023", "Section 106"]
     assert "excludes section 106(2)" in bns_106["editorial_notes"]
@@ -272,6 +291,56 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
     assert last_bns["source_policy"]["official_pdf_end_page"] == 111
     assert "(4) The mention of particular matters" in last_bns["section_text"]
     assert "STATEMENT OF OBJECTS AND REASONS" not in last_bns["section_text"]
+
+
+def test_constitution_edition_admits_every_article_from_the_pinned_official_pdf():
+    documents, sources = release.load_release_bundle()
+    act = "constitution-india"
+    document = documents[act]
+    rows = {number: row for (key, number), row in sources.items() if key == act}
+    assert document["source_url"] == (
+        "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf"
+    )
+    assert document["sha256"] == (
+        "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5"
+    )
+    states = Counter(row["verification_status"] for row in rows.values())
+    assert states == {"verified_official": 481, "retired": 35, "quarantined": 3}
+    article_14 = rows["Article 14"]
+    assert article_14["source_url"].endswith("#page=62")
+    assert article_14["section_text"].startswith("14. Equality before law.")
+    for number in ("19", "20", "21", "21A", "22", "32", "136", "141", "142", "226", "227",
+                   "243-I", "243ZD", "300A", "371-I", "394A"):
+        row = rows[f"Article {number}"]
+        assert row["verification_status"] == "verified_official", number
+        assert row["legal_status"] == "enacted", number
+        assert row["source_publisher"] == "Legislative Department, Ministry of Law and Justice"
+        # English body pages only: the Malayalam translation is on odd pages.
+        assert all(f["page"] % 2 == 0 for f in row["source_policy"]["body_fragments"])
+    article_21 = rows["Article 21"]["section_text"]
+    assert article_21.startswith("21. Protection of life and personal liberty.")
+    assert "Eighty-sixth Amendment" not in article_21  # Publisher notes stay separate.
+    assert "Eighty-sixth Amendment" in rows["Article 21"]["editorial_notes"]
+    assert "Article 21A" not in article_21 and "21A. Right to education" not in article_21
+    retired = {
+        number for number, row in rows.items() if row["verification_status"] == "retired"
+    }
+    assert {f"Article {number}" for number in range(379, 392)} <= retired
+    for number in ("2A", "31", "31D", "32A", "232", "268A", "362"):
+        assert f"Article {number}" in retired
+    assert rows["Article 232"]["source_policy"]["omission_evidence"]["page"] == 252
+    assert rows["Article 385"]["source_policy"]["arrangement_identity"] == "379-391"
+    quarantined = {
+        number: row["quarantine_reason"]
+        for number, row in rows.items()
+        if row["verification_status"] == "quarantined"
+    }
+    assert set(quarantined) == {"First Schedule", "Third Schedule", "Fourth Schedule"}
+    assert all(reason.startswith("Retained transcription;") for reason in quarantined.values())
+    assert rows["Preamble"]["section_text"].startswith("PREAMBLE\nWE, THE PEOPLE OF INDIA")
+    assert rows["Seventh Schedule"]["verification_status"] == "verified_official"
+    assert "LIST I-UNION LIST" in rows["Seventh Schedule"]["section_text"]
+    assert "APPENDIX I" not in rows["Twelfth Schedule"]["section_text"]
 
 
 def test_motor_vehicles_edition_withholds_illustrated_and_omitted_schedules():
@@ -546,7 +615,7 @@ def test_complete_release_seed_details_history_and_idempotence(client):
             row.id: (row.section_id, row.proposed_source_version, row.candidate_sha256, row.status)
             for row in history
         }
-        assert len(history_before) == len(sources) + 1  # Retain Article 14's existing owner.
+        assert len(history_before) == len(sources)
         assert _seed(session)[::2] == (0, 0)
         session.expire_all()
         for row in session.scalars(

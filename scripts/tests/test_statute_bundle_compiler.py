@@ -237,6 +237,121 @@ class StatuteCompilerBoundaryTests(unittest.TestCase):
             self.compile()
 
 
+def line(text, x=90, y=100):
+    return {"text": text, "size": 11, "bold": True, "x": x, "y": y}
+
+
+class PrintedArrangementTests(unittest.TestCase):
+    """Diglot-style arrangements: printed pages, glued page numbers, omitted runs."""
+
+    def setUp(self):
+        self.document = SimpleNamespace(
+            pages=[
+                SimpleNamespace(
+                    page_number=1,
+                    close=lambda: None,
+                    rows=[
+                        line("1. Example provision.1", y=100),
+                        line("2-4. [Omitted.]. 1", y=114),
+                        line("5. Wrapped provision", y=128),
+                        line("heading continues. 2", x=130, y=142),
+                    ],
+                ),
+                SimpleNamespace(
+                    page_number=2,
+                    close=lambda: None,
+                    rows=[
+                        line("1. Example provision.—The complete first provision text."),
+                        line("2-4. Omitted by the synthetic amending enactment.", y=114),
+                    ],
+                ),
+                SimpleNamespace(
+                    page_number=3,
+                    close=lambda: None,
+                    rows=[line("5. Wrapped provision heading continues.—Complete text.")],
+                ),
+            ]
+        )
+        self.spec = {
+            "statute_id": "test-constitution",
+            "provision_prefix": "Article",
+            "toc_pages": [1, 1],
+            "body_pages": [2, 3],
+            "section_count": 3,
+            "complete_arrangement_labels": True,
+            "arrangement_continuation_indent": [8, 50],
+            "arrangement_page_mapping": {"stride": 1, "offset": 1},
+            "identity_ranges": {"2-4": ["2", "3", "4"]},
+            "body_heading_evidence": {
+                "2-4": {"page": 2, "text": "2-4. Omitted by the synthetic amending enactment."}
+            },
+            "non_provision_pages": [{"pages": [1, 1], "kind": "arrangement"}],
+            "source_url": "https://www.legislative.gov.in/static/uploads/2025/08/test.pdf",
+            "sha256": "a" * 64,
+            "retrieved_at": "2026-09-08T00:00:00+00:00",
+            "source_version": "Test publisher edition",
+            "issuing_body": "Test publisher",
+        }
+
+    def compile(self):
+        with (
+            patch.object(compiler, "page_lines", side_effect=lambda value: value.rows),
+            patch.object(compiler, "note_boundary", return_value=1000),
+        ):
+            return compiler._compile_document(self.spec, self.document)
+
+    def test_printed_omitted_run_keeps_one_retired_row_per_identity(self):
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(
+            list(rows), ["Article 1", "Article 2", "Article 3", "Article 4", "Article 5"]
+        )
+        self.assertEqual(rows["Article 1"]["section_label"], "Example provision")
+        self.assertEqual(rows["Article 5"]["section_label"], "Wrapped provision heading continues")
+        self.assertEqual(rows["Article 5"]["verification_status"], "verified_official")
+        for number in ("2", "3", "4"):
+            row = rows[f"Article {number}"]
+            self.assertEqual(row["verification_status"], "retired")
+            self.assertEqual(row["legal_status"], "repealed")
+            self.assertEqual(row["source_policy"]["arrangement_identity"], "2-4")
+            self.assertEqual(row["section_text"], rows["Article 2"]["section_text"])
+
+    def test_range_members_must_equal_the_printed_range(self):
+        self.spec["identity_ranges"] = {"2-4": ["2", "4"]}
+        with self.assertRaisesRegex(ValueError, "members differ from the printed range"):
+            self.compile()
+
+    def test_undeclared_printed_range_is_rejected(self):
+        self.spec["identity_ranges"] = {"6-7": ["6", "7"]}
+        with self.assertRaisesRegex(ValueError, "Undeclared arrangement identity range: 2-4"):
+            self.compile()
+
+    def test_range_cannot_expand_a_substantive_provision(self):
+        self.document.pages[0].rows[1] = line("2-4. Synthetic substantive provisions. 1", y=114)
+        with self.assertRaisesRegex(ValueError, "Identity range must be one omitted entry"):
+            self.compile()
+
+    def test_printed_page_must_agree_with_the_body(self):
+        self.document.pages[0].rows[3] = line("heading continues. 1", x=130, y=142)
+        with self.assertRaisesRegex(ValueError, "Body disagrees with printed arrangement page: 5"):
+            self.compile()
+
+    def test_entry_without_a_printed_page_is_rejected(self):
+        self.document.pages[0].rows[3] = line("heading continues.", x=130, y=142)
+        with self.assertRaisesRegex(ValueError, "Missing printed arrangement page"):
+            self.compile()
+
+    def test_short_body_is_admitted_only_as_an_omitted_elision_mark(self):
+        self.document.pages[1].rows[1] = line("2-4. 3 [* * *]", y=114)
+        self.spec["body_heading_evidence"]["2-4"]["text"] = "2-4. 3 [* * *]"
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(rows["Article 3"]["section_text"], "2-4. 3 [* * *]")
+        self.assertEqual(rows["Article 3"]["verification_status"], "retired")
+        self.document.pages[2].rows[0] = line("5. Wrapped [***]")
+        self.spec["body_heading_evidence"]["5"] = {"page": 3, "text": "5. Wrapped [***]"}
+        with self.assertRaisesRegex(ValueError, "Invalid complete provision text: 5"):
+            self.compile()
+
+
 class RealTableReconciliationTests(unittest.TestCase):
     def test_both_real_schedules_reconcile_pinned_cells_and_notes(self):
         documents = json.loads(compiler.DOCUMENTS.read_text(encoding="utf-8"))["documents"]

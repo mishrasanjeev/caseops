@@ -11,13 +11,15 @@
         {
           "url": "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf",
           "checked_at": "2026-09-08T05:07:03.6136620+00:00",
-          "status": "unverified_download",
+          "status": "retained_release_document",
           "sha256": "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5",
           "bytes": 2404584,
-          "error": null
+          "error": null,
+          "file": "tests/fixtures/statutes/official/constitution-india.pdf",
+          "source_version": "Constitution of India, Second Diglot Edition 2024 (incl. 106th Amendment, 2023)"
         }
       ],
-      "remaining_work": "Full articles, inserted/omitted articles, 12 schedules and appendices; only Article 14 currently admitted."
+      "remaining_work": "Preamble, every article (including inserted and omitted identities) and the twelve schedules reproduce from pinned PDF bytes. First, Third and Fourth Schedules stay quarantined pending table/form layout reconciliation; appendices are not admitted. Relevant-date applicability and judicial treatment remain open."
     },
     {
       "statute_id": "bnss-2023",
