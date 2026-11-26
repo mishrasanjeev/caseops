@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.metadata
+import io
 import json
+import os
 import re
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pdfplumber
@@ -23,9 +26,21 @@ DOCUMENTS = DATA / "verified_statute_documents.json"
 OUTPUT = DATA / "verified_india_code_sources.json"
 CHECKSUM = DATA / "verified_india_code_sources.sha256"
 PDF_ROOT = ROOT / "tests/fixtures/statutes/official"
+# Official editions too large for the repository are pinned as hash-checked
+# release assets and read from a cache directory outside the build context.
+EVIDENCE_DIR_ENV = "CASEOPS_STATUTE_EVIDENCE_DIR"
 NUMBER = r"\d+(?:-?[A-Z]+)?"
 TOC = re.compile(r"^\s*(" + NUMBER + r")\.\s*(.+)")
 BODY = re.compile(r"^(?:\d+\s*\[)?\s*(" + NUMBER + r")\.\s*(.+)")
+SECTION_FILE_METHOD = "pinned_pdf_section_inventory_reconciliation_v1"
+SECTION_FILE_ID = r"\d+(?:-?[A-Z]+)*"
+# "139. (1)", "150.(1)", "276CC.If", "269D . (1)", "18. to 21." and "76. & 77.".
+SECTION_FILE_START = re.compile(
+    r"^(" + SECTION_FILE_ID + r")\s?\.(?:\s(?:to|&)\s(" + SECTION_FILE_ID + r")\.)?"
+)
+OMISSION_NOTICE = re.compile(r"(?s)\s*\[Omitted by [^\[\]]+\]\.?")
+ELISION_ONLY = re.compile(r"\s*(?:\d+\s?)?\[\s*(?:\*\s*)+\]\.?")
+FOOTNOTE_MARKER = re.compile(r"^\d+[a-z]?\s?\[")
 
 
 def digest(value: bytes) -> str:
@@ -218,7 +233,562 @@ def compile_table(document, spec: dict) -> dict:
     return table
 
 
-def compile_document(spec: dict) -> list[dict]:
+def release_asset_path(spec: dict, evidence_dir: Path | None) -> Path:
+    """Return the cached release asset only after its size and SHA-256 match."""
+    asset = spec["release_asset"]
+    if evidence_dir is None:
+        raise ValueError(
+            f"{spec['statute_id']} is pinned as release asset {asset['name']}; pass "
+            f"--evidence-dir or set {EVIDENCE_DIR_ENV} to a directory holding it ({asset['url']})"
+        )
+    root = evidence_dir.resolve()
+    if root == ROOT or ROOT in root.parents:
+        raise ValueError("Release-asset evidence must stay outside the repository build context")
+    path = root / asset["name"]
+    if Path(asset["name"]).name != asset["name"] or spec["file"] != asset["name"]:
+        raise ValueError("Release asset name must be a plain file name")
+    if not path.is_file():
+        raise ValueError(f"Missing release-asset evidence {path}; download {asset['url']}")
+    if path.stat().st_size != asset["size"]:
+        raise ValueError(f"Release-asset size mismatch: {spec['statute_id']}")
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            hasher.update(block)
+    if hasher.hexdigest() != spec["sha256"]:
+        raise ValueError(f"Official PDF identity mismatch: {spec['statute_id']}")
+    return path
+
+
+def section_file_lines(page) -> list[dict]:
+    """Like page_lines, plus the first glyph's font and the widest glyph gap."""
+    result = []
+    for line in page.extract_text_lines():
+        text = line["text"].strip()
+        chars = [char for char in line["chars"] if char["text"].strip()]
+        if not text or not chars:
+            continue
+        gaps = [
+            after["x0"] - before["x1"] for before, after in zip(chars, chars[1:], strict=False)
+        ]
+        result.append(
+            {
+                "text": text,
+                "y": round(line["top"], 3),
+                "x": round(line["x0"], 3),
+                "x1": round(line["x1"], 3),
+                "font": chars[0]["fontname"].split("+", 1)[-1],
+                "gap": round(max(gaps, default=0.0), 3),
+            }
+        )
+    merged = []
+    for item in sorted(result, key=lambda row: (round(row["y"]), row["x"])):
+        if merged and abs(merged[-1]["y"] - item["y"]) < 2:
+            prior = merged[-1]
+            prior["gap"] = max(prior["gap"], item["gap"], round(item["x"] - prior["x1"], 3))
+            prior["text"] += " " + item["text"]
+            prior["x1"] = max(prior["x1"], item["x1"])
+        else:
+            merged.append(item)
+    return merged
+
+
+def _read_section_file_chunk(task: tuple) -> list[dict]:
+    path, sha256, page_count, rule, numbers = task
+    data = Path(path).read_bytes()
+    # Every worker parses only bytes it has itself verified.
+    if digest(data) != sha256:
+        raise ValueError("Official PDF identity mismatch")
+    pages = []
+    with pdfplumber.open(io.BytesIO(data)) as document:
+        if len(document.pages) != page_count:
+            raise ValueError("Official PDF page count changed")
+        for number in numbers:
+            page = document.pages[number - 1]
+            drawings = [item for item in page.rects + page.lines if item["height"] < 2]
+            pages.append(
+                {
+                    "page": number,
+                    "lines": section_file_lines(page),
+                    "note_rules": sorted(
+                        {
+                            round(item["top"], 2)
+                            for item in drawings
+                            if rule["x0_range"][0] <= item["x0"] <= rule["x0_range"][1]
+                            and rule["width_range"][0] <= item["width"] <= rule["width_range"][1]
+                        }
+                    ),
+                    "footer_rules": sorted(
+                        {round(item["top"], 2) for item in drawings if item["width"] > 500}
+                    ),
+                }
+            )
+            page.close()
+    return pages
+
+
+def read_section_file_pages(path: Path, spec: dict, workers: int = 1) -> list[dict]:
+    first, last = spec["body_pages"]
+    numbers = list(range(first, last + 1))
+    size = max(1, -(-len(numbers) // (workers * 4)))
+    tasks = [
+        (str(path), spec["sha256"], spec["page_count"], spec["note_rule"], numbers[i : i + size])
+        for i in range(0, len(numbers), size)
+    ]
+    if workers <= 1:
+        return [page for task in tasks for page in _read_section_file_chunk(task)]
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return [page for chunk in pool.map(_read_section_file_chunk, tasks) for page in chunk]
+
+
+def _legal_order(identity: str) -> tuple[int, str]:
+    match = re.fullmatch(r"(\d+)(.*)", identity)
+    return int(match[1]), match[2].replace("-", "")
+
+
+def _printed_identity(identity: str, text: str) -> bool:
+    if re.search(r"(?<![\w-])" + re.escape(identity) + r"(?![\w-])", text):
+        return True
+    return identity.isdigit() and any(
+        int(low) <= int(identity) <= int(high)
+        for low, high in re.findall(r"\b(\d+) to (\d+)\b", text)
+    )
+
+
+def _preamble_is_heading_only(lines: list[dict], allowed: set[str]) -> bool:
+    """A file opens with chapter/sub-headings, bracketed chapter notes and its heading."""
+    in_note = False
+    for line in lines:
+        text = line["text"]
+        if in_note or text.startswith("["):
+            in_note = not re.search(r"\]\.?$", text)
+            continue
+        if (
+            text in allowed
+            or line["x"] > 100
+            or (line["x"] > 60 and line["font"].endswith("-Italic"))
+            or line["font"].endswith(("-Bold", "-BoldItalic"))
+            or FOOTNOTE_MARKER.match(text)
+        ):
+            continue
+        return False
+    return not in_note
+
+
+def _compile_section_files(spec: dict, pages: list[dict]) -> list[dict]:
+    """Compile an edition printed as concatenated per-provision files.
+
+    The Income Tax Department edition has no arrangement and prints provisions
+    out of order, one file per section or schedule: chapter and sub-headings,
+    the section heading, the body, then the file's amendment endnotes below a
+    short rule (continuing over later pages when long). Identities come from the
+    printed section numbers, never page order, and every page line is assigned
+    to exactly one file's preamble, body or endnotes.
+    """
+    first_page, last_page = spec["body_pages"]
+    if [page["page"] for page in pages] != list(range(first_page, last_page + 1)):
+        raise ValueError("Section-file page inventory is incomplete")
+    if last_page != spec["page_count"] or first_page != 1:
+        raise ValueError("Section-file edition must cover every page")
+    header = spec["page_header"]
+    footer = re.compile(spec["page_footer"])
+    start_style = spec["section_start"]
+    content = {}
+    note_top = {}
+    for page in pages:
+        number = page["page"]
+        lines = page["lines"]
+        if [line["text"] for line in lines[: len(header)]] != header or any(
+            line["y"] >= 50 for line in lines[: len(header)]
+        ):
+            raise ValueError(f"Publisher page header changed: page {number}")
+        lines = lines[len(header) :]
+        if lines and footer.fullmatch(lines[-1]["text"]):
+            if not page["footer_rules"] or lines[-1]["y"] <= max(page["footer_rules"]):
+                raise ValueError(f"Publisher page footer is not below its rule: page {number}")
+            lines = lines[:-1]
+        if any(footer.search(line["text"]) or line["y"] < 50 for line in lines):
+            raise ValueError(f"Unexpected page furniture: page {number}")
+        if len(page["note_rules"]) > 1:
+            raise ValueError(f"Ambiguous publisher endnote boundary: page {number}")
+        content[number] = lines
+        note_top[number] = page["note_rules"][0] if page["note_rules"] else None
+
+    def main_region(number: int, line: dict) -> bool:
+        return note_top[number] is None or line["y"] < note_top[number]
+
+    supplements = {item["key"]: item for item in spec.get("supplements", [])}
+    if len(supplements) != len(spec.get("supplements", [])) or any(
+        item["kind"] != "schedule" for item in supplements.values()
+    ):
+        raise ValueError("Invalid section-file supplement inventory")
+    schedule_heading = re.compile(spec["schedule_heading"])
+    detected_schedules = [
+        (number, index, line["text"])
+        for number, lines in content.items()
+        for index, line in enumerate(lines)
+        if schedule_heading.fullmatch(line["text"]) and line["font"].endswith("-BoldItalic")
+    ]
+    if [(page, text) for page, _, text in detected_schedules] != [
+        (item["page"], item["heading"]) for item in supplements.values()
+    ] or any(index != 0 for _, index, _ in detected_schedules):
+        raise ValueError("Schedule headings differ from the declared inventory")
+    first_schedule = detected_schedules[0][0] if detected_schedules else last_page + 1
+    entries = []
+    for number in range(first_page, first_schedule):
+        for index, line in enumerate(content[number]):
+            match = SECTION_FILE_START.match(line["text"])
+            if (
+                match
+                and main_region(number, line)
+                and line["font"] == start_style["font"]
+                and start_style["x_range"][0] <= line["x"] <= start_style["x_range"][1]
+            ):
+                entries.append(
+                    {"page": number, "line": index, "identity": match[1], "range_end": match[2]}
+                )
+    for (page, index, _), item in zip(detected_schedules, supplements.values(), strict=True):
+        entries.append({"page": page, "line": index, "identity": item["key"], "schedule": True})
+    pages_with_starts = Counter(entry["page"] for entry in entries)
+    if any(count > 1 for count in pages_with_starts.values()):
+        raise ValueError("A page opens more than one provision file")
+    entries.sort(key=lambda entry: entry["page"])
+    if not entries or entries[0]["page"] != first_page:
+        raise ValueError("The edition does not open with a provision file")
+    allowed_preamble = set(spec.get("preamble_lines", []))
+    ranges = spec.get("identity_ranges", {})
+    omitted_inventory = set(spec.get("omitted_provisions", []))
+    column_gap = spec["column_gap"]
+    note_min_x = spec["note_min_x"]
+    provisions = {}
+    for position, entry in enumerate(entries):
+        start_page, start_line = entry["page"], entry["line"]
+        end_page = (
+            entries[position + 1]["page"] - 1 if position + 1 < len(entries) else last_page
+        )
+        preamble = content[start_page][:start_line]
+        if any(not main_region(start_page, line) for line in preamble) or not (
+            _preamble_is_heading_only(preamble, allowed_preamble)
+        ):
+            raise ValueError(f"Provision file does not open at a page top: page {start_page}")
+        body = []
+        notes = []
+        in_notes = False
+        for number in range(start_page, end_page + 1):
+            lines = content[number]
+            first = start_line if number == start_page else 0
+            if in_notes and note_top[number] is not None:
+                raise ValueError(f"Second endnote block inside one provision file: page {number}")
+            main = [
+                index for index in range(first, len(lines)) if main_region(number, lines[index])
+            ]
+            if in_notes and main:
+                note_lines = list(range(first, len(lines)))
+                main = []
+            else:
+                note_lines = [index for index in range(first, len(lines)) if index not in main]
+            if main:
+                if main != list(range(main[0], main[-1] + 1)):
+                    raise ValueError(f"Interleaved body and endnotes: page {number}")
+                body.append({"page": number, "first_line": main[0], "end_line": main[-1] + 1})
+            if note_lines:
+                if any(lines[index]["x"] < note_min_x for index in note_lines):
+                    raise ValueError(f"Endnote region holds body-shaped text: page {number}")
+                note_text = "\n".join(lines[index]["text"] for index in note_lines)
+                notes.append({"page": number, "text": note_text})
+            in_notes = in_notes or note_top[number] is not None
+        if not body:
+            raise ValueError(f"Provision file has no body: page {start_page}")
+        parts = [
+            "\n".join(
+                line["text"]
+                for line in content[part["page"]][part["first_line"] : part["end_line"]]
+            )
+            for part in body
+        ]
+        text = "\n\n".join(parts)
+        for part, part_text in zip(body, parts, strict=True):
+            part["text_sha256"] = digest(part_text.encode("utf-8"))
+        columns = sorted(
+            {
+                part["page"]
+                for part in body
+                for line in content[part["page"]][part["first_line"] : part["end_line"]]
+                if line["gap"] > column_gap
+            }
+        )
+        heading_lines = []
+        for index in range(len(preamble) - 1, -1, -1):
+            line = preamble[index]
+            if not (
+                start_style["x_range"][0] <= line["x"] <= start_style["x_range"][1]
+                and (line["font"] == start_style["font"] or FOOTNOTE_MARKER.match(line["text"]))
+            ):
+                break
+            heading_lines.insert(0, index)
+        identity = entry["identity"]
+        if entry.get("schedule"):
+            key = identity
+            label = supplements[key]["label"]
+            printed_heading = None
+            notice = text.split("\n", 1)[1] if "\n" in text else ""
+            notice = re.sub(r"^\[See [^\]]+\]\n", "", notice)
+        else:
+            printed = " ".join(preamble[index]["text"] for index in heading_lines)
+            label = FOOTNOTE_MARKER.sub("", printed)
+            if label != printed and label.count("]") > label.count("["):
+                # The inserting amendment's bracket closes at the heading's end.
+                label = label.removesuffix("]")
+            printed_heading = (
+                {
+                    "page": start_page,
+                    "first_line": heading_lines[0],
+                    "end_line": heading_lines[-1] + 1,
+                    "text": printed,
+                }
+                if heading_lines
+                else None
+            )
+            if entry["range_end"]:
+                key = f"{identity}-{entry['range_end']}"
+                members = ranges.get(key)
+                if not members or members[0] != identity or members[-1] != entry["range_end"]:
+                    raise ValueError(f"Undeclared printed identity range: {key}")
+                if identity.isdigit() and entry["range_end"].isdigit():
+                    if members != [
+                        str(value) for value in range(int(identity), int(entry["range_end"]) + 1)
+                    ]:
+                        raise ValueError(
+                            f"Identity range members differ from the printed range: {key}"
+                        )
+                elif not all(_printed_identity(member, text) for member in members):
+                    raise ValueError(f"Identity range member is not printed: {key}")
+            else:
+                key = identity
+            notice = SECTION_FILE_START.sub("", text, count=1)
+        omitted = key in omitted_inventory
+        elided = not entry.get("schedule") and bool(ELISION_ONLY.fullmatch(notice))
+        if omitted != bool(OMISSION_NOTICE.fullmatch(notice)):
+            raise ValueError(f"Omission inventory disagrees with the printed body: {key}")
+        if not label:
+            if not omitted:
+                raise ValueError(f"Provision has no printed heading: {key}")
+            label = " ".join(notice.split()).rstrip(".")
+        if key in provisions:
+            raise ValueError(f"Duplicate printed provision identity: {key}")
+        provisions[key] = {
+            "start_page": start_page,
+            "end_page": body[-1]["page"],
+            "body": body,
+            "text": text,
+            "notes": notes,
+            "label": label,
+            "printed_heading": printed_heading,
+            "preamble": (
+                {"page": start_page, "first_line": 0, "end_line": start_line} if preamble else None
+            ),
+            "columns": columns,
+            "omitted": omitted,
+            "elided": elided,
+            "schedule": bool(entry.get("schedule")),
+        }
+    if set(ranges) - set(provisions):
+        raise ValueError("Declared identity range is not printed")
+    if omitted_inventory - set(provisions):
+        raise ValueError("Declared omitted provision is not printed")
+    identities = {}
+    for key, item in provisions.items():
+        if item["schedule"]:
+            continue
+        for member in ranges.get(key, [key]):
+            if member in identities:
+                raise ValueError(f"Duplicate provision identity: {member}")
+            identities[member] = key
+    evidence_rows = {}
+    for identity, evidence in spec.get("omission_evidence", {}).items():
+        lines = content[evidence["page"]]
+        text = "\n".join(
+            line["text"] for line in lines[evidence["first_line"] : evidence["end_line"]]
+        )
+        owner = next(
+            (
+                item
+                for item in provisions.values()
+                if item["preamble"]
+                and item["start_page"] == evidence["page"]
+                and evidence["end_line"] <= item["preamble"]["end_line"]
+            ),
+            None,
+        )
+        if (
+            text != evidence["text"]
+            or owner is None
+            or identity in identities
+            or not _printed_identity(identity, text)
+        ):
+            raise ValueError(f"Exact publisher omission evidence changed: {identity}")
+        evidence_rows[identity] = text
+    if len(provisions) - len(supplements) + len(evidence_rows) != spec["section_count"]:
+        raise ValueError(f"Incomplete section inventory: {spec['statute_id']}")
+    blocked = {**spec.get("blocked_sections", {}), **spec.get("blocked_supplements", {})}
+    # Withheld bodies are exactly those the line extractor cannot reproduce
+    # faithfully (multi-column tables) or that print only an elision mark.
+    unreconciled = {
+        key for key, item in provisions.items() if item["columns"] or item["elided"]
+    }
+    if unreconciled != set(blocked):
+        raise ValueError(
+            "Unreconciled bodies differ from the blocked inventory: "
+            f"{sorted(unreconciled ^ set(blocked))}"
+        )
+    for key, item in provisions.items():
+        if item["omitted"] and key in blocked:
+            raise ValueError(f"An omitted provision cannot also be blocked: {key}")
+
+    prefix = spec.get("provision_prefix", "Section")
+    base_note = (
+        "Published-edition text. Commencement, amendments, territorial applicability and "
+        "judicial treatment must be checked for the relevant date; the edition is not a "
+        "current-law certification."
+    )
+
+    def row(section_number, label, text, item, state, reason, policy_extra):
+        notes = "\n\n".join(
+            f"Publisher endnotes for this provision file, PDF page {note['page']}:\n{note['text']}"
+            for note in item["notes"]
+        )
+        policy = {
+            "release_manifest_verified": True,
+            "verification_method": SECTION_FILE_METHOD,
+            "extractor": "pdfplumber 0.11.9 / pdfminer.six 20251230",
+            "official_pdf_page": item["start_page"],
+            "official_pdf_end_page": item["end_page"],
+            "source_document_sha256": spec["sha256"],
+            "body_fragments": item["body"],
+            "publisher_page_notes": item["notes"],
+            "arrangement_label": label,
+            "printed_heading": item["printed_heading"],
+            "preamble": item["preamble"],
+            "source_discrepancy": None,
+            "treatment_evidence": None,
+            "scope": (
+                "Published central section with labelled amendment context; "
+                "not a current-law applicability determination."
+            ),
+            **policy_extra,
+        }
+        if spec.get("legal_status") == "repealed" and state != "retired":
+            policy["edition_scope"] = "historical_repealed_law"
+        result = {
+            "statute_id": spec["statute_id"],
+            "section_number": section_number,
+            "section_label": label.rstrip("."),
+            "section_text": text,
+            "section_text_source": "official_release_manifest",
+            "source_sha256": digest(text.encode("utf-8")),
+            "source_document_sha256": spec["sha256"],
+            "source_retrieved_at": spec["retrieved_at"],
+            "source_url": f"{spec['source_url']}#page={policy['official_pdf_page']}",
+            "source_publisher": spec["source_publisher"],
+            "issuing_body": spec["issuing_body"],
+            "source_category": "consolidated_statute",
+            "source_status": "official",
+            "legal_status": "repealed" if state == "retired" else spec["legal_status"],
+            "effective_from": None,
+            "effective_to": None if state == "retired" else spec.get("effective_to"),
+            "exact_source_version": f"{spec['source_version']}; SHA-256 {spec['sha256']}",
+            "source_locator_type": "section_deep_link",
+            "source_policy": policy,
+            "link_health_status": "available",
+            "verification_status": state,
+            "quarantine_reason": reason,
+            "editorial_notes": "\n\n".join(
+                part for part in [base_note, spec.get("historical_context"), reason, notes] if part
+            ),
+        }
+        if len(result["exact_source_version"]) > 160 or len(result["section_label"]) > 500:
+            raise ValueError(f"Provision exceeds the persisted contract: {section_number}")
+        if (len(text) < 20 and state != "retired" and not item.get("elided")) or len(
+            text
+        ) > 200_000:
+            raise ValueError(f"Invalid complete provision text: {section_number}")
+        return result
+
+    result = []
+    for identity in sorted({*identities, *evidence_rows}, key=_legal_order):
+        if identity in evidence_rows:
+            evidence = spec["omission_evidence"][identity]
+            text = evidence_rows[identity]
+            owner = next(
+                item
+                for item in provisions.values()
+                if item["preamble"] and item["start_page"] == evidence["page"]
+            )
+            item = {
+                "start_page": evidence["page"],
+                "end_page": evidence["page"],
+                "body": [
+                    {
+                        "page": evidence["page"],
+                        "first_line": evidence["first_line"],
+                        "end_line": evidence["end_line"],
+                        "region": "publisher_notes",
+                        "text_sha256": digest(text.encode("utf-8")),
+                    }
+                ],
+                "notes": [],
+                "printed_heading": None,
+                "preamble": owner["preamble"],
+            }
+            result.append(
+                row(
+                    f"{prefix} {identity}",
+                    "Omitted; recorded only in the publisher's chapter note",
+                    text,
+                    item,
+                    "retired",
+                    None,
+                    {"omission_evidence": evidence},
+                )
+            )
+            continue
+        key = identities[identity]
+        item = provisions[key]
+        reason = spec.get("blocked_sections", {}).get(key)
+        state = "retired" if item["omitted"] else "quarantined" if reason else "verified_official"
+        extra = {"arrangement_identity": key} if key in ranges else {}
+        result.append(
+            row(f"{prefix} {identity}", item["label"], item["text"], item, state, reason, extra)
+        )
+    for key, supplement in supplements.items():
+        item = provisions[key]
+        reason = spec.get("blocked_supplements", {}).get(key)
+        state = "retired" if item["omitted"] else "quarantined" if reason else "verified_official"
+        entry = row(
+            supplement["section_number"],
+            supplement["label"],
+            item["text"],
+            item,
+            state,
+            reason,
+            {"provision_kind": "schedule"},
+        )
+        entry["source_policy"]["scope"] = (
+            "Published central schedule, including its complete forms and notes; "
+            "not a current-law applicability determination."
+        )
+        result.append(entry)
+    return result
+
+
+def compile_document(
+    spec: dict, evidence_dir: Path | None = None, workers: int = 1
+) -> list[dict]:
+    if spec.get("layout") == "section_files":
+        path = release_asset_path(spec, evidence_dir)
+        return _compile_section_files(spec, read_section_file_pages(path, spec, workers))
+    if "release_asset" in spec:
+        raise ValueError("Release-asset evidence requires a reviewed layout")
     path = PDF_ROOT / spec["file"]
     if path.parent != PDF_ROOT or digest(path.read_bytes()) != spec["sha256"]:
         raise ValueError(f"Official PDF identity mismatch: {spec['statute_id']}")
@@ -659,13 +1229,19 @@ def _compile_document(spec: dict, document) -> list[dict]:
     return result
 
 
-def compile_bundle(manifest_path: Path = DOCUMENTS) -> list[dict]:
+def compile_bundle(
+    manifest_path: Path = DOCUMENTS, evidence_dir: Path | None = None, workers: int = 1
+) -> list[dict]:
     if pdfplumber.__version__ != "0.11.9":
         raise ValueError("Use the pinned build-tool version pdfplumber==0.11.9")
     if importlib.metadata.version("pdfminer.six") != "20251230":
         raise ValueError("Use pdfplumber's pinned pdfminer.six==20251230 dependency")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return [row for document in manifest["documents"] for row in compile_document(document)]
+    return [
+        row
+        for document in manifest["documents"]
+        for row in compile_document(document, evidence_dir, workers)
+    ]
 
 
 def main() -> None:
@@ -674,10 +1250,19 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=DOCUMENTS)
     parser.add_argument("--output", type=Path, default=OUTPUT)
     parser.add_argument("--checksum", type=Path, default=CHECKSUM)
+    parser.add_argument(
+        "--evidence-dir",
+        type=Path,
+        default=Path(os.environ[EVIDENCE_DIR_ENV]) if os.environ.get(EVIDENCE_DIR_ENV) else None,
+        help=f"Directory holding hash-pinned release-asset PDFs (default: ${EVIDENCE_DIR_ENV})",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=min(os.cpu_count() or 1, 8), help="Page reader processes"
+    )
     args = parser.parse_args()
     if args.manifest != DOCUMENTS and (args.output == OUTPUT or args.checksum == CHECKSUM):
         parser.error("A separate source pack requires separate output and checksum files")
-    rows = compile_bundle(args.manifest)
+    rows = compile_bundle(args.manifest, args.evidence_dir, args.workers)
     rendered = json.dumps(rows, ensure_ascii=False, indent=2) + "\n"
     if args.check:
         if args.output.read_text(encoding="utf-8") != rendered:

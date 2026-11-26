@@ -91,6 +91,10 @@ def _apply_verified_release_source(
     effective_from = (
         date.fromisoformat(str(source["effective_from"])) if source.get("effective_from") else None
     )
+    # A retained repealed-law edition records the last day its Act was in force.
+    effective_to = (
+        date.fromisoformat(str(source["effective_to"])) if source.get("effective_to") else None
+    )
     if (
         row.section_label == str(source["section_label"])
         and row.section_text == str(source["section_text"])
@@ -103,6 +107,7 @@ def _apply_verified_release_source(
         and row.source_status == str(source["source_status"])
         and row.legal_status == str(source["legal_status"])
         and row.effective_from == effective_from
+        and row.effective_to == effective_to
         and row.exact_source_version == str(source["exact_source_version"])
         and row.source_locator_type == str(source["source_locator_type"])
         and row.source_policy_json == dict(source["source_policy"])
@@ -129,6 +134,7 @@ def _apply_verified_release_source(
     row.source_status = str(source["source_status"])
     row.legal_status = str(source["legal_status"])
     row.effective_from = effective_from
+    row.effective_to = effective_to
     row.exact_source_version = str(source["exact_source_version"])
     row.source_locator_type = str(source["source_locator_type"])
     row.source_policy_json = dict(source["source_policy"])
@@ -172,6 +178,7 @@ def _record_release_version(
             exact_source_version=row.exact_source_version,
             retrieved_at=row.section_text_fetched_at,
             effective_from=row.effective_from,
+            effective_to=row.effective_to,
             source_policy_json=dict(row.source_policy_json),
             diff_unified="".join(
                 unified_diff(
