@@ -51,7 +51,14 @@ COURT = Executor(
     ("--once", "--batch-size=3", "--skip-migrations"), "CASEOPS_COURT_SYNC_DISPATCH_MODE",
     "CASEOPS_COURT_SYNC_RUN_JOB", "CASEOPS_COURT_SYNC_RUN_REGION",
 )
-EXECUTORS = {"document": DOCUMENT, "court": COURT}
+AI = Executor(
+    "caseops-ai-jobs", "caseops-ai-jobs-cadence",
+    "CASEOPS_AI_JOB_WORKER_ADMISSION_PROTOCOL_VERSION",
+    "CASEOPS_AI_JOB_WORKER_ADMISSION_ENABLED", "caseops-ai-job-worker",
+    ("--once", "--batch-size=3", "--skip-migrations"), "CASEOPS_AI_JOB_DISPATCH_MODE",
+    "CASEOPS_AI_JOB_RUN_JOB", "CASEOPS_AI_JOB_RUN_REGION",
+)
+EXECUTORS = {"document": DOCUMENT, "court": COURT, "ai": AI}
 
 
 def _call(arguments: list[str], *, project: str, region: str, json_result=True, timeout=90):

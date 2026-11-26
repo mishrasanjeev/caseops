@@ -52,17 +52,39 @@ def configure(monkeypatch, **overrides):
         court_sync_dispatch_mode="cloud_run_job",
         court_sync_run_region="asia-south1",
         court_sync_run_job="caseops-court-sync",
+        ai_job_dispatch_mode="cloud_run_job",
+        ai_job_run_region="asia-south1",
+        ai_job_run_job="caseops-ai-jobs",
     )
     values.update(overrides)
     monkeypatch.setattr(dispatch, "get_settings", lambda: SimpleNamespace(**values))
 
 
-@pytest.fixture(params=["document", "court"])
+def dispatch_ai_job(**kwargs):
+    from caseops_api.services.research_answers import run_research_answer_job
+
+    return dispatch.dispatch_ai_job(**kwargs, runner=run_research_answer_job)
+
+
+JOBS = {
+    "dispatch_document_processing_job": "caseops-document-processing",
+    "dispatch_court_sync_processing_job": "caseops-court-sync",
+    "dispatch_ai_job": "caseops-ai-jobs",
+}
+RUNNERS = {
+    "dispatch_document_processing_job": "run_document_processing_job",
+    "dispatch_court_sync_processing_job": "run_matter_court_sync_job",
+    "dispatch_ai_job": "run_research_answer_job",
+}
+
+
+@pytest.fixture(params=["document", "court", "ai"])
 def dispatcher(request):
-    return (
-        dispatch.dispatch_document_processing_job if request.param == "document"
-        else dispatch.dispatch_court_sync_processing_job
-    )
+    return {
+        "document": dispatch.dispatch_document_processing_job,
+        "court": dispatch.dispatch_court_sync_processing_job,
+        "ai": dispatch_ai_job,
+    }[request.param]
 
 
 @pytest.mark.parametrize("pending", ["new", "dirty", "deleted", "nested", "flushed", "external"])
@@ -129,8 +151,7 @@ def test_production_wake_releases_transaction_and_never_runs_after_response(
             dict(
                 project="perfect-period-305406",
                 region="asia-south1",
-                job=("caseops-document-processing" if dispatcher.__name__
-                     == "dispatch_document_processing_job" else "caseops-court-sync"),
+                job=JOBS[dispatcher.__name__],
             )
         ]
         assert not tasks.tasks
@@ -156,7 +177,8 @@ def test_only_local_runtime_can_keep_the_inline_background_path(
     monkeypatch, env, expected_tasks, dispatcher,
 ):
     configure(monkeypatch, env=env, document_processing_dispatch_mode="local_background",
-              court_sync_dispatch_mode="local_background")
+              court_sync_dispatch_mode="local_background",
+              ai_job_dispatch_mode="local_background")
     monkeypatch.setattr(
         dispatch, "_wake_cloud_run_queue", lambda **_: pytest.fail("unexpected transport")
     )
@@ -167,10 +189,7 @@ def test_only_local_runtime_can_keep_the_inline_background_path(
         )
         assert len(tasks.tasks) == expected_tasks
         if expected_tasks:
-            assert tasks.tasks[0].func.__name__ == (
-                "run_document_processing_job" if dispatcher.__name__
-                == "dispatch_document_processing_job" else "run_matter_court_sync_job"
-            )
+            assert tasks.tasks[0].func.__name__ == RUNNERS[dispatcher.__name__]
 
 
 def _transport(monkeypatch, handler):
@@ -196,7 +215,9 @@ def _wake(job="caseops-document-processing"):
 
 
 @pytest.mark.parametrize("status", [200, 202, 302, 403, 429, 503])
-@pytest.mark.parametrize("job", ["caseops-document-processing", "caseops-court-sync"])
+@pytest.mark.parametrize(
+    "job", ["caseops-document-processing", "caseops-court-sync", "caseops-ai-jobs"],
+)
 def test_cloud_run_kick_is_one_bounded_no_override_post(monkeypatch, status, job):
     calls = []
 

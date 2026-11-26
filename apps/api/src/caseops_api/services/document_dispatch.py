@@ -93,6 +93,24 @@ def dispatch_court_sync_processing_job(
     )
 
 
+def dispatch_ai_job(
+    *, session: Session, background_tasks: BackgroundTasks, job_id: str,
+    runner: Callable[[str], object],
+) -> None:
+    """Research answers, intelligent reviews and audit exports share one AI job.
+
+    The route passes its own runner so local runs keep the in-process path;
+    production refuses that path and wakes ``caseops-ai-jobs`` instead.
+    """
+    settings = get_settings()
+    _dispatch_processing_job(
+        session=session, background_tasks=background_tasks, job_id=job_id, settings=settings,
+        mode=settings.ai_job_dispatch_mode,
+        region=settings.ai_job_run_region, job=settings.ai_job_run_job,
+        runner=runner,
+    )
+
+
 def _dispatch_processing_job(
     *, session: Session, background_tasks: BackgroundTasks, job_id: str,
     settings: Settings, mode: str, region: str, job: str, runner: Callable[[str], object],

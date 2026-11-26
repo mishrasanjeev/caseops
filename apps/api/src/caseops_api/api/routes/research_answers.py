@@ -14,6 +14,7 @@ from caseops_api.schemas.research_answers import (
     ResearchAnswerRecord,
     ResearchAnswerSaveRequest,
 )
+from caseops_api.services.document_dispatch import dispatch_ai_job
 from caseops_api.services.research_answers import (
     create_research_answer,
     get_research_answer,
@@ -49,13 +50,18 @@ def create_answer(
     context: ResearchGenerator,
     session: DbSession,
 ) -> ResearchAnswerRecord:
-    answer = create_research_answer(session, context=context, payload=payload)
+    answer, created = create_research_answer(session, context=context, payload=payload)
     answer_id = answer.id
     record = serialize_research_answer(session, answer)
-    # End the read transaction before a model call that can outlive the
-    # database's idle-transaction boundary.
-    session.rollback()
-    background_tasks.add_task(run_research_answer_job, answer_id)
+    if created:
+        # Production wakes the independent AI job; a failed wake leaves the
+        # committed row queued for its per-minute scheduler.
+        dispatch_ai_job(
+            session=session,
+            background_tasks=background_tasks,
+            job_id=answer_id,
+            runner=run_research_answer_job,
+        )
     return record
 
 

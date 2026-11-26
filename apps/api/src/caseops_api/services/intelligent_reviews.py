@@ -11,9 +11,13 @@ from typing import Any, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from caseops_api.core.automated_test_context import (
+    paid_providers_blocked_for_request,
+    restored_no_paid_marker,
+)
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     AuditActorType,
@@ -377,6 +381,7 @@ def enqueue_intelligent_review(
         status="proposed",
         review_state="queued",
         review_progress=0,
+        review_no_paid_providers=paid_providers_blocked_for_request(),
         review_context_json=_canonical_json(context_manifest),
         source_manifest_json=_canonical_json(private_source_manifest),
         review_selection_json=_canonical_json(
@@ -726,8 +731,43 @@ def run_intelligent_review_job(
     review_id: str,
     *,
     provider: LLMProvider | None = None,
+) -> bool:
+    """Claim and generate one queued review; False when it was not queued.
+
+    The compare-and-set claim is atomic on every dialect, so concurrent
+    executors cannot both generate the same review. A claimed review that
+    never finishes is settled by the AI job's lease recovery.
+    """
+    SessionFactory = get_session_factory()
+    with SessionFactory() as session:
+        claimed = session.execute(
+            update(Recommendation)
+            .where(
+                Recommendation.id == review_id,
+                Recommendation.type == "intelligent_review",
+                Recommendation.review_state == "queued",
+            )
+            .values(review_state="running", updated_at=datetime.now(UTC))
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        session.commit()
+        no_paid = session.scalar(
+            select(Recommendation.review_no_paid_providers).where(Recommendation.id == review_id)
+        )
+        session.rollback()
+    if claimed != 1:
+        return False
+    with restored_no_paid_marker(bool(no_paid)):
+        _run_claimed_intelligent_review(review_id, provider=provider)
+    return True
+
+
+def _run_claimed_intelligent_review(
+    review_id: str,
+    *,
+    provider: LLMProvider | None,
 ) -> None:
-    """Generate one persisted review using a fresh worker-owned session."""
+    """Generate one claimed review using a fresh worker-owned session."""
     SessionFactory = get_session_factory()
     with SessionFactory() as session:
         review = session.scalar(
@@ -735,7 +775,7 @@ def run_intelligent_review_job(
             .where(
                 Recommendation.id == review_id,
                 Recommendation.type == "intelligent_review",
-                Recommendation.review_state == "queued",
+                Recommendation.review_state == "running",
             )
             .with_for_update(skip_locked=True)
         )
