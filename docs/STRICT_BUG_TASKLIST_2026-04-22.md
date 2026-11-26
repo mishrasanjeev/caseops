@@ -1,3 +1,43 @@
+## November 26 - workbook "Caseops Bugs (2)" (25 Nov, three rows, nova-legal)
+
+Triage (all three reproduce on production release 1ed725ce2 and on main):
+
+- Row 1 Act and Section options not clickable - valid bug (source data, not a
+  click defect). Production on 2026-11-26: Income-tax Act 0 of 298 sections
+  verified (whole Act disabled); Constitution 1 of 11 (only Article 14
+  attachable; 19, 21, 32, 226, 227 disabled "verification pending"). The
+  picker matched the validator (`statute_section_not_verified` 409), so
+  loosening either would admit unverified legal text. Fix: the Constitution is
+  compiled into the pinned official bundle from the retained 2023 edition
+  (sha256 d001a5b4...; 481 attachable of 519; 35 retired; First, Third and
+  Fourth Schedules quarantined). Picker groups pending and withheld entries
+  apart. Adjacent: drafting and litigation strategy re-implemented a looser
+  verified predicate and quoted a repealed section; both now use
+  `services/statute_selection.py`. Not changed: Income-tax Act (needs an
+  official consolidated edition; the 2025 Act superseded it from 2026-04-01).
+- Row 2 no option to link a client with a matter - valid enhancement (PRD J12
+  step 2, US-034, FT-045 were API-only). Adjacent security defect: the client
+  profile and list returned every linked Matter's code, title and status with
+  no visibility filter (dormant because nothing created links). Fixed before
+  adding the UI; the wall test failed on the old code (3 Matters shown, 1
+  allowed). Also: archived clients rejected (409), one primary per Matter,
+  audited role/primary changes, unlink resolves the client in-tenant first,
+  Matter create accepts `client_id` with the same validation (two-path
+  parity). Known limit: renaming a client does not rename Matters that already
+  copied its name.
+- Row 3 Ask Workspace refuses parties, pending actions, documents and Act
+  sections - valid bug. The selected Matter's evidence was a 1600-character
+  summary; parties, hearings, tasks, deadlines, documents and linked statutes
+  never reached the model, and the offline mock answered from any source, so
+  no test could see it. Fix: cited Matter-record sources with explicit
+  absence, an evidence-sensitive mock, named-Act statute questions answered as
+  cited facts with a Research hand-off, and "Hindu Marriage Act, 1955" no
+  longer parsed as "Section 1955". New tests: 65 failed on the old code.
+
+Verdicts (recorded after production verification): rows 1-3 Inconclusive until
+`nov25-prod-*` passes on the deployed release and row 3 is repeated with the
+real model on the reporting tester's MAT-003.
+
 ## November 25 - workbook "Caseops Bugs (1)" (24 Nov, six rows)
 
 Triage (all six reproduce against `origin/main` a430c593c):
