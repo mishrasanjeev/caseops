@@ -1237,6 +1237,10 @@ def compile_bundle(
     if importlib.metadata.version("pdfminer.six") != "20251230":
         raise ValueError("Use pdfplumber's pinned pdfminer.six==20251230 dependency")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Refuse missing or unverified release assets before compiling anything.
+    for document in manifest["documents"]:
+        if "release_asset" in document:
+            release_asset_path(document, evidence_dir)
     return [
         row
         for document in manifest["documents"]
