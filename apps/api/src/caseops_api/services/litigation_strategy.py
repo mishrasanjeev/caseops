@@ -99,7 +99,10 @@ from caseops_api.services.llm import (
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.session_context import SessionContext
-from caseops_api.services.statute_selection import selectable_statute_section_sql
+from caseops_api.services.statute_selection import (
+    repealed_edition_caution,
+    selectable_statute_section_sql,
+)
 from caseops_api.services.template_recommender import (
     TemplateRecommendation,
     recommend_templates,
@@ -284,6 +287,7 @@ class _StatuteSnippet:
     section_label: str | None
     section_text: str | None
     relevance: str  # 'cited' | 'opposing' | 'context'
+    status_note: str | None = None
 
 
 @dataclass
@@ -409,6 +413,7 @@ def _assemble_context(session: Session, matter: Matter) -> _StrategyContext:
                 section_label=section.section_label,
                 section_text=text,
                 relevance=ref.relevance,
+                status_note=repealed_edition_caution(section.legal_status),
             )
         )
 
@@ -537,6 +542,9 @@ def _build_prompt(
                 if snip.section_label
                 else ""
             )
+            status_block = (
+                f"\n    STATUS: {snip.status_note}" if snip.status_note else ""
+            )
             text_block = (
                 f"\n    TEXT: {snip.section_text}"
                 if snip.section_text
@@ -544,7 +552,7 @@ def _build_prompt(
             )
             statute_lines.append(
                 f"- [{snip.relevance}] {snip.statute_name} "
-                f"s.{snip.section_number}{label}{text_block}"
+                f"s.{snip.section_number}{label}{status_block}{text_block}"
             )
         statute_block = "\n".join(statute_lines)
     else:

@@ -38,6 +38,19 @@ Verdicts (recorded after production verification): rows 1-3 Inconclusive until
 `nov25-prod-*` passes on the deployed release and row 3 is repeated with the
 real model on the reporting tester's MAT-003.
 
+Adjacent defect, found while compiling the Income-tax Act, 1961 for row 1:
+retained repealed-law editions (CrPC 1973, IPC, Evidence Act, and the
+Income-tax Act, 1961) are attachable by design, but the drafting and
+litigation strategy prompts quoted their text with no repeal status, so a
+draft could present repealed law as current. Fix: one caution in
+`services/statute_selection.py` that both prompts print beside every quoted
+repealed provision, and only there.
+`tests/test_repealed_statute_prompt_status_20261126.py` attaches repealed
+CrPC s.482 and current Article 21. Both tests failed on the old code (no
+`legal_status` in drafting references, no strategy status note). Research
+answers are being reworked in a parallel branch and adopt the same caution
+there.
+
 ## November 25 - workbook "Caseops Bugs (1)" (24 Nov, six rows)
 
 Triage (all six reproduce against `origin/main` a430c593c):
