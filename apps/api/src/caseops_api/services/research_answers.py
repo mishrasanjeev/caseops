@@ -86,7 +86,7 @@ from caseops_api.services.statute_selection import is_selectable_statute_section
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-24"
+ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-26"
 PROMPT_MARKER = "caseops_research_answer_v1"
 DISCLAIMER = (
     "Source-bounded research support, not legal advice and not exhaustive. Verify each "
@@ -229,6 +229,11 @@ class _Source:
     in_app_href: str | None = None
     treatment: tuple[str | None, int] | None = None
     aliases: list[str] = field(default_factory=list)
+    # Statute sources only: how the section was found and the verified source
+    # identity the excerpt was taken from.
+    retrieval: str | None = None
+    source_sha256: str | None = None
+    source_version: int | None = None
 
 
 def _weight(forum_level: str | None, court: str | None) -> str:
@@ -300,17 +305,41 @@ def _is_citable_section(section: StatuteSection) -> bool:
     return is_selectable_statute_section(section)
 
 
+@dataclass(frozen=True)
+class _StatuteMatch:
+    section: StatuteSection
+    statute: Statute
+    # exact_reference | semantic | judgment_citation
+    retrieval: str
+    # Verbatim span of section_text that matched a semantic query.
+    span: tuple[int, int] | None = None
+
+
 def _statute_sections(
     session: Session, query: str, documents: Iterable[AuthorityDocument]
-) -> list[tuple[StatuteSection, Statute]]:
+) -> list[_StatuteMatch]:
+    from caseops_api.services.statute_vectors import search_statute_sections
+
+    found: list[_StatuteMatch] = []
+    seen_ids: set[str] = set()
+    # The section the question names ranks first, then verified sections that
+    # match the question's meaning (section-level vector retrieval).
+    for hit in search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS):
+        seen_ids.add(hit.section.id)
+        found.append(
+            _StatuteMatch(
+                section=hit.section,
+                statute=hit.statute,
+                retrieval=hit.match,
+                span=(hit.char_start, hit.char_end) if hit.match == "semantic" else None,
+            )
+        )
     refs: list[tuple[str, str]] = []
     primary = parse_section_string(query)
-    if primary:
-        refs.append(primary)
     # Sections the retrieved judgments themselves cite, within the Act(s) the
     # question is about. This brings in, e.g., Sections 139 and 142 for a
     # Section 138 question without guessing from model knowledge.
-    statutes_in_scope = {ref[0] for ref in refs}
+    statutes_in_scope = {primary[0]} if primary else set()
     for document in documents:
         try:
             cited = json.loads(document.sections_cited_json or "[]")
@@ -320,9 +349,10 @@ def _statute_sections(
             parsed = parse_section_string(str(item))
             if parsed and (not statutes_in_scope or parsed[0] in statutes_in_scope):
                 refs.append(parsed)
-    found: list[tuple[StatuteSection, Statute]] = []
     seen: set[tuple[str, str]] = set()
     for statute_id, section_number in refs:
+        if len(found) >= MAX_STATUTE_SECTIONS:
+            break
         if (statute_id, section_number) in seen:
             continue
         seen.add((statute_id, section_number))
@@ -334,12 +364,13 @@ def _statute_sections(
                 StatuteSection.section_number == section_number,
             )
         ).first()
-        if row is None or not _is_citable_section(row[0]):
+        if row is None or not _is_citable_section(row[0]) or row[0].id in seen_ids:
             continue
-        found.append((row[0], row[1]))
-        if len(found) >= MAX_STATUTE_SECTIONS:
-            break
-    return found
+        seen_ids.add(row[0].id)
+        found.append(
+            _StatuteMatch(section=row[0], statute=row[1], retrieval="judgment_citation")
+        )
+    return found[:MAX_STATUTE_SECTIONS]
 
 
 def _build_sources(session: Session, query: str) -> list[_Source]:
@@ -355,12 +386,19 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
         )
     }
     sources: list[_Source] = []
-    for section, statute in _statute_sections(session, query, documents.values()):
+    for match in _statute_sections(session, query, documents.values()):
+        section, statute = match.section, match.statute
         label = section.section_label or ""
         title = f"{section.section_number}, {statute.long_name}"
         if label and label.lower() not in title.lower():
             title = f"{title} ({label})"
         text = (section.section_text or "").strip()
+        excerpt = text[:MAX_EXCERPT_CHARS]
+        if match.span is not None and len(text) > MAX_EXCERPT_CHARS:
+            # A long section is represented by the verbatim passage that
+            # matched the question, not by its opening words.
+            start, end = match.span
+            excerpt = (section.section_text or "")[start:end].strip()[:MAX_EXCERPT_CHARS]
         verified = section.verification_status in {"verified_official", "verified_licensed"}
         sources.append(
             _Source(
@@ -373,7 +411,7 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 bench=None,
                 decision_date=None,
                 weight="Statutory provision (verified text)",
-                excerpt=text[:MAX_EXCERPT_CHARS],
+                excerpt=excerpt,
                 full_text=text,
                 retrieved_at=section.section_text_fetched_at,
                 source_action=inspect_source_target_action(
@@ -386,6 +424,9 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                     f"/app/statutes/{quote(statute.id, safe='')}"
                     f"/sections/{quote(section.section_number, safe='')}"
                 ),
+                retrieval=match.retrieval,
+                source_sha256=section.source_sha256,
+                source_version=section.source_version,
             )
         )
     treatments = compute_search_result_treatments(
@@ -813,6 +854,9 @@ def _manifest(sources: list[_Source]) -> list[dict[str, Any]]:
             ),
             "retrieved_at": source.retrieved_at.isoformat() if source.retrieved_at else None,
             "excerpt_sha256": hashlib.sha256(source.excerpt.encode("utf-8")).hexdigest(),
+            "retrieval": source.retrieval,
+            "source_sha256": source.source_sha256,
+            "source_version": source.source_version,
             "prompt_injection_detected": any(
                 marker in source.excerpt.lower() for marker in _INJECTION_MARKERS
             ),

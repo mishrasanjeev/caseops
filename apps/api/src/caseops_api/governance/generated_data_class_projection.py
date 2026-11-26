@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "bb4f3672c0d308c4a59e9b5a9ca3297137d096ceda61a45161681f935613dba4"
-MAP_SCHEMA_FINGERPRINT = "3f3d9fb34f9f1b5c63debfefc3cae0964ce7098f223ad1b31e4340782b6233a9"
+MAP_DOCUMENT_FINGERPRINT = "5f4b47c4a96795b71c7ed8b6191ec2a61d960b450f41b839aa2572d771bfa0e4"
+MAP_SCHEMA_FINGERPRINT = "0aebc778b9ef508e62715da03375f858b0253aa76659d52a58fbe8eb7e2258f6"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "db7b69ad87587db52dc889078d284309c26a4a2bef81674d67437891d605db84"
+ORM_SCHEMA_FINGERPRINT = "388448de055440309233ca3bbe7844aee20c4fb3d9737b5c634d536e8c5af88a"
 
-PROJECTION_ID = "1a013302a7c2f7f748267ef232e9148babc895862a0f827381db9dc5c662eaa3"
+PROJECTION_ID = "be6b9ac48b0c4ac9336e40a3e97cffe3e14ed600ef22224d2ffe57529d15b876"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -373,6 +373,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "research_answers",
         "source_link_reports",
         "statute_change_events",
+        "statute_section_chunks",
         "statute_sections",
         "statute_source_conflicts",
         "statute_source_versions",
@@ -439,6 +440,7 @@ INVENTORIED_NON_SQL_CLASSES = frozenset(
         "portfolio-export-dispatch-envelope",
         "public-enquiry-reference-notification",
         "sql-relational-index-projections",
+        "statute-section-pgvector-index",
         "tenant-private-retrieval-candidate-cache",
     }
 )

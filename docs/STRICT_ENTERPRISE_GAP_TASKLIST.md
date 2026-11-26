@@ -1,3 +1,23 @@
+## November26 - statute vector index is an operator-run, unscheduled job
+
+**Partially implemented** (J05/M04, MOD-TS-017, FT-117..FT-122, NFT-026,
+SEC-034). Migration `20261126_0101` and `services/statute_vectors.py` add
+section-level vector retrieval over verified statute text; landed in code on
+`feat/statute-vector-retrieval-20261126`, not deployed. Open operations gaps:
+
+- The index is built by `python -m caseops_api.scripts.embed_statute_sections`
+  run by an operator (`docs/runbooks/statute-vector-index-2026-11-26.md`). It is
+  not in `infra/cloudrun/scheduler-inventory.json` and does not run after
+  `caseops-seed-statutes` in `scripts/deploy-prod.sh`, so a seed that changes
+  verified text leaves the changed sections out of semantic retrieval until the
+  job runs. Fail-closed: the read path re-checks selectability and the source
+  hash and version, so stale text is never returned.
+- The `voyage-4-large` similarity floor (0.30) is provisional until the
+  production benchmark's calibration confirms it; no production rating exists.
+- HNSW uses `m=16, ef_construction=64` and the default `hnsw.ef_search=40`
+  (candidate pool 40 chunks), measured locally at 7,198 chunks (2 ms, index
+  chosen without hints). Not measured on Cloud SQL.
+
 ## November25 - DataTable data contract (EH-B4-02 progress)
 
 **Partially implemented.** The shared web `DataTable` filtered, paged and
