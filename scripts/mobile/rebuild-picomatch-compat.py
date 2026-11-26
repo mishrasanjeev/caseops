@@ -18,6 +18,11 @@ NPM_BASE_SHA256 = "fcfa9290ee0acca362be71768de3dcc591f6af00622270529e70fbb25b831
 NPM_BASE_PROVENANCE_SHA256 = "8503f15b490279b9c5f26622c5c1a21e03e6fd8a1934b942e925adb576ea7480"
 ARBORIST_SHA256 = "1df524ba355949e271d9d2259b05fdd914b7f3a57fe1880595c41483c53d57e4"
 ARBORIST_INTEGRITY = "sha512-OxRSMNRPzL2/x2zsVrzdMZItfNj3cVXZIYgGNlUaBRUyH16YKdwN1r9z+I13keR1mjVNKelMfi2a7A/0JJ4NCw=="
+MINIMATCH_SECURITY_SHA256 = "1dc838a033c6105308d3d49c1881f9304b2b6821683dfe4815c37f8e19e7956a"
+NONRECURSIVE_SECURITY_SHA256 = "d8eab172188bcaa83b950160fcd7c0b9dc68f44f7c470660e5d7f4c8a437d658"
+# Exact separately qualified two-build private Glob output, not a registry alias.
+GLOB_SECURITY_SHA256 = "f9c33abe2f13a5965bd3c32d70955742821d4e5e8ee6edb7a7f16d1c0aaaf374"
+BRACE_SECURITY_SHA256 = "015c8761629e59fc31f3a6e472a940f6d759fc8227e67882c399dfb9a703ae6e"
 MEMBERS = {"LICENSE", "README.md", "index.js", "posix.js", "package.json",
            "lib/constants.js", "lib/parse.js", "lib/picomatch.js", "lib/scan.js", "lib/utils.js"}
 NOTICE = """picomatch 4.0.7-caseops.1: private CaseOps security backport, not an upstream release.
@@ -227,7 +232,8 @@ def build(raw):
     return result
 
 
-def build_npm(raw, baseline_provenance, backport, arborist_raw):
+def build_npm_historical_picopatch(raw, baseline_provenance, backport, arborist_raw):
+    """Reproduce the retained pre-November22 layer, not current admission."""
     if digest(raw) != NPM_BASE_SHA256 or digest(baseline_provenance) != NPM_BASE_PROVENANCE_SHA256:
         raise ValueError("EXACT_NPM_BASELINE_REQUIRED")
     if digest(arborist_raw) != ARBORIST_SHA256:
@@ -368,6 +374,148 @@ scanner exception, upstream-release claim or native-app acceptance is implied.
             "upstream/arborist-9.9.3.tgz": arborist_raw}
 
 
+def _regular_package(raw, expected_sha, expected_name, expected_version):
+    if digest(raw) != expected_sha:
+        raise ValueError("EXACT_CURRENT_NPM_DEPENDENCY_INPUT_REQUIRED")
+    files, modes, size = {}, {}, 0
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+        for item in archive:
+            parts = item.name.split("/")
+            if (not item.isfile() or parts[0] != "package" or len(parts) < 2
+                    or any(part in ("", ".", "..") for part in parts)
+                    or item.name in files or len(files) >= 4096
+                    or item.size > 8388608 or item.mode not in (0o644, 0o755)):
+                raise ValueError("BOUNDED_REGULAR_DEPENDENCY_MEMBERS_REQUIRED")
+            body = archive.extractfile(item).read(8388609)
+            size += len(body)
+            if len(body) != item.size or size > 33554432:
+                raise ValueError("DEPENDENCY_BYTES_BOUND")
+            files[item.name], modes[item.name] = body, item.mode
+    manifest = json.loads(files["package/package.json"])
+    if manifest.get("name") != expected_name or manifest.get("version") != expected_version:
+        raise ValueError("EXACT_CURRENT_DEPENDENCY_IDENTITY_REQUIRED")
+    return files, modes
+
+
+def build_npm(raw, baseline_provenance, backport, arborist_raw,
+              glob_raw, minimatch_raw, nonrecursive_raw, brace_raw):
+    """Compose current explicit inputs over the reproducible historical layer."""
+    inputs = [
+        ("glob", "14.0.6-caseops.2", glob_raw, GLOB_SECURITY_SHA256),
+        ("minimatch", "11.0.8", minimatch_raw, MINIMATCH_SECURITY_SHA256),
+        ("@isaacs/nonrecursive-glob-match", "1.1.0", nonrecursive_raw, NONRECURSIVE_SECURITY_SHA256),
+        ("brace-expansion", "5.0.13", brace_raw, BRACE_SECURITY_SHA256),
+    ]
+    # Validate every replacement before constructing or publishing any output.
+    replacements = [(name, version, data, sha, *_regular_package(data, sha, name, version))
+                    for name, version, data, sha in inputs]
+    previous = build_npm_historical_picopatch(raw, baseline_provenance, backport, arborist_raw)
+    artifact_name = "npm-11.12.1-caseops-security.tgz"
+    files, modes = _regular_package(previous[artifact_name],
+                                    "f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b",
+                                    "npm", "11.12.1")
+    original = dict(files)
+    prefixes = []
+    original_modes = dict(modes)
+    for name, version, data, sha, selected, selected_modes in replacements:
+        prefix = "package/node_modules/" + name + "/"
+        prefixes.append(prefix)
+        removed = [member for member in files if member.startswith(prefix)]
+        if not removed:
+            raise ValueError("CURRENT_DEPENDENCY_PREFIX_REQUIRED")
+        for member in removed:
+            del files[member]
+            del modes[member]
+        for member, body in selected.items():
+            target = prefix + member[8:]
+            files[target], modes[target] = body, selected_modes[member]
+
+    parent_edges = {
+        "package/node_modules/@npmcli/arborist/package.json": {"minimatch": "11.0.1"},
+        "package/node_modules/@npmcli/map-workspaces/package.json": {
+            "glob": "14.0.2-caseops.1", "minimatch": "11.0.1"},
+        "package/node_modules/@npmcli/package-json/package.json": {"glob": "14.0.2-caseops.1"},
+        "package/node_modules/@tufjs/models/package.json": {"minimatch": "11.0.1"},
+        "package/node_modules/cacache/package.json": {"glob": "14.0.2-caseops.1"},
+        "package/node_modules/ignore-walk/package.json": {"minimatch": "11.0.1"},
+        "package/node_modules/libnpmdiff/package.json": {"minimatch": "11.0.1"},
+        "package/package.json": {"glob": "14.0.2-caseops.1", "minimatch": "11.0.1"},
+    }
+    versions = {name: version for name, version, _, _ in inputs}
+    edits = []
+    for member, edges in parent_edges.items():
+        manifest = json.loads(files[member])
+        for name, before in edges.items():
+            if manifest["dependencies"].get(name) != before:
+                raise ValueError("EXACT_CURRENT_PARENT_RANGE_REQUIRED")
+            manifest["dependencies"][name] = versions[name]
+            edits.append({"path": member, "field": "dependencies." + name,
+                          "from": before, "to": versions[name]})
+        files[member] = (json.dumps(manifest, indent=2) + "\n").encode()
+    changed = sorted(name for name in files
+                     if files[name] != original.get(name) or modes[name] != original_modes.get(name))
+    removed = sorted(set(original) - set(files))
+    if (any(not name.startswith(tuple(prefixes)) and name not in parent_edges for name in changed)
+            or any(not name.startswith(tuple(prefixes)) for name in removed)):
+        raise ValueError("NPM_OWN_CODE_CHANGE_REFUSED")
+    if len(files) > 4096 or sum(map(len, files.values())) > 33554432:
+        raise ValueError("CURRENT_NPM_PAYLOAD_BOUND")
+    packed = pack(files, modes)
+    provenance = json.loads(previous["PROVENANCE.json"])
+    old_artifact = provenance["artifact"]
+    provenance["artifact"] = {"file": artifact_name, "sha256": digest(packed), "sizeBytes": len(packed),
+                              "integrity": "sha512-" + base64.b64encode(hashlib.sha512(packed).digest()).decode()}
+    provenance["dependencySecurityLayer20261122"] = {
+        "previousArtifact": old_artifact,
+        "historicalReproducer": "build_npm_historical_picopatch",
+        "npmOwnCodeChanged": False, "changedMembers": changed, "removedMembers": removed,
+        "manifestEdits": edits,
+        "memberCount": len(files), "acceptance": "Fresh actual CLI health, audit and native gates required.",
+        "inputs": [{"name": name, "version": version, "sha256": sha, "sizeBytes": len(data)}
+                   for name, version, data, sha in inputs],
+        "previousUpstreamInputs": provenance["upstreamInputs"],
+        "supersededCandidate": {
+            "sha256": "e11da6ed76a0f7d7b56e9c7c9df991f4949319ff3364fd997eb4532cfe0da62c",
+            "sizeBytes": 4120712,
+            "reason": "Its brace-expansion5.0.12 supplier is affected by GHSA-6jwq-xf8q-xcwh.",
+            "evidenceDisposition": "Retain original candidate/source/reports separately; not verified by this factory.",
+            "currentAcceptance": False,
+        },
+    }
+    # Current origins name the current bytes; the historical list remains in
+    # the dated layer rather than masquerading as the installed dependency set.
+    provenance["upstreamInputs"] = [row for row in provenance["upstreamInputs"]
+                                    if row["name"] not in versions]
+    for name, version, data, sha in inputs:
+        row = {"name": name, "version": version,
+               "kind": "verified-local-glob" if name == "glob" else "official",
+               "targetPrefix": "package/node_modules/" + name + "/",
+               "archive": {"sha256": sha, "sizeBytes": len(data)},
+               "integrity": "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()}
+        if name == "glob":
+            row["localArtifact"] = "../glob-14.0.6-caseops.2/glob-14.0.6-caseops.2.tgz"
+        else:
+            leaf = {"minimatch": "minimatch-11.0.8.tgz",
+                    "@isaacs/nonrecursive-glob-match": "nonrecursive-glob-match-1.1.0.tgz",
+                    "brace-expansion": "brace-expansion-5.0.13.tgz"}[name]
+            row["url"] = "https://registry.npmjs.org/" + name + "/-/" + leaf
+        provenance["upstreamInputs"].append(row)
+    provenance["manifestEdits"].extend(edits)
+    catalogue = {"kind": "exact-npm-rebundle-member-catalogue", "artifactSha256": digest(packed),
+                 "members": [{"path": name, "sha256": digest(body), "sizeBytes": len(body), "mode": modes[name]}
+                             for name, body in sorted(files.items())]}
+    result = dict(previous)
+    result.update({artifact_name: packed,
+                   "PROVENANCE.json": (json.dumps(provenance, indent=2) + "\n").encode(),
+                   "MEMBERS.json": (json.dumps(catalogue, indent=2) + "\n").encode(),
+                   "upstream/glob-14.0.6-caseops.2.tgz": glob_raw,
+                   "upstream/minimatch-11.0.8.tgz": minimatch_raw,
+                   "upstream/nonrecursive-glob-match-1.1.0.tgz": nonrecursive_raw,
+                   "upstream/brace-expansion-5.0.13.tgz": brace_raw})
+    result["README.md"] += b"\nNovember22 successor: exact private Glob14.0.6-caseops.2, official Minimatch11.0.8,\nnonrecursive-glob-match1.1.0 and brace-expansion5.0.13 replace only their four\ndependency prefixes and explicit runtime parent ranges. The earlier e11da6ed\ncandidate retained vulnerable brace5.0.12. Preserve its original evidence/source\nas superseded, not security acceptance. The prior Pico/Arborist layer remains\nreproducible separately. All replacement licence files are preserved in the\npayload. npm's own CLI JavaScript remains unchanged. Fresh health/audits required.\n"
+    return result
+
+
 def verify_output(root, expected, deadline):
     expected_entries = {"."} | set(expected)
     for name in expected:
@@ -452,9 +600,17 @@ def main():
     parser.add_argument("--npm-baseline", type=Path)
     parser.add_argument("--npm-provenance", type=Path)
     parser.add_argument("--arborist-tarball", type=Path)
+    parser.add_argument("--glob-tarball", type=Path)
+    parser.add_argument("--minimatch-tarball", type=Path)
+    parser.add_argument("--nonrecursive-tarball", type=Path)
+    parser.add_argument("--brace-tarball", type=Path)
     args = parser.parse_args()
     if ((args.npm_baseline is None) != (args.npm_provenance is None)
-            or (args.npm_baseline is None) != (args.arborist_tarball is None)):
+            or (args.npm_baseline is None) != (args.arborist_tarball is None)
+            or (args.npm_baseline is None) != (args.glob_tarball is None)
+            or (args.npm_baseline is None) != (args.minimatch_tarball is None)
+            or (args.npm_baseline is None) != (args.nonrecursive_tarball is None)
+            or (args.npm_baseline is None) != (args.brace_tarball is None)):
         raise ValueError("COMPLETE_NPM_INPUT_DOMAIN_REQUIRED")
     if not args.output.is_absolute() or args.output.parent.resolve() != args.output.parent:
         raise ValueError("NEW_CANONICAL_OUTPUT_REQUIRED")
@@ -463,7 +619,11 @@ def main():
     if args.npm_baseline is not None:
         files = build_npm(read_pinned(args.npm_baseline, NPM_BASE_SHA256, 8388608),
                           read_pinned(args.npm_provenance, NPM_BASE_PROVENANCE_SHA256, 65536), files,
-                          read_pinned(args.arborist_tarball, ARBORIST_SHA256, 262144, ARBORIST_INTEGRITY))
+                          read_pinned(args.arborist_tarball, ARBORIST_SHA256, 262144, ARBORIST_INTEGRITY),
+                          read_pinned(args.glob_tarball, GLOB_SECURITY_SHA256, 2097152),
+                          read_pinned(args.minimatch_tarball, MINIMATCH_SECURITY_SHA256, 1048576),
+                          read_pinned(args.nonrecursive_tarball, NONRECURSIVE_SECURITY_SHA256, 1048576),
+                          read_pinned(args.brace_tarball, BRACE_SECURITY_SHA256, 1048576))
         artifact_name = "npm-11.12.1-caseops-security.tgz"
     deadline = time.monotonic() + 5
     args.output.mkdir()

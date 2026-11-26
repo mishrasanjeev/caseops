@@ -245,11 +245,13 @@ jobs:
           export PATH="$audit/node_modules/.bin:$PATH"
           export CASEOPS_LICENSE_CHECKER_PACKAGE="$audit/node_modules/license-checker/package.json"
           python3 -B -m unittest discover -s scripts/tests -p test_js_license_coverage.py -v
+          # Match the shipped prod-deps tree before identity-collapsed scanning.
+          node scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund
           output="$CASEOPS_JS_LICENSE_EVIDENCE/host"
-          python3 -B scripts/check_js_license_coverage.py inventory --output "$output"
+          python3 -B scripts/check_js_license_coverage.py inventory --output "$output" --require-pruned-tree
           packages="$(cat "$output/packages.txt")"
           license-checker --json --packages "$packages" > "$output/license-report.json"
-          python3 -B scripts/check_js_license_coverage.py verify --output "$output" --review-root "$GITHUB_WORKSPACE"
+          python3 -B scripts/check_js_license_coverage.py verify --output "$output" --require-pruned-tree --review-root "$GITHUB_WORKSPACE"
       # Independent of host policy success: inspect the same install-scripts/prune
       # stage copied into the shipped runner. Audit tools mutate only a disposable
       # root container, never the production Dockerfile or /app dependency tree.

@@ -144,3 +144,50 @@ currently says Orchestrum Technologies LLP (Pending), enrollment GZQJ2D9M4N is
 being processed. No new sign-in or agreement action was needed. Distribution
 signing remains unavailable; the Mac has no local code-signing identity or
 provisioning profile at the fresh census. Simulator work can continue separately.
+
+## Live web update and actual production browser proof
+
+The preceding predeployment statements are historical. PR642 merged at
+`6cdbe7915e1d1d16522d3d2ec716fa05deb87c0d`. Its immutable web image
+`sha256:ee3b235eeb5d4bb3458d52844ee400ae403235c48c753699185374970a852c93`
+is serving100% traffic in `caseops-web-login-6cdbe791`. Marked public identity
+checks confirm the exact revision. Unrelated web settings and the whole API
+service specification are unchanged. The API stays at1b6ba0f6. This is a scoped
+web login rollout, not a paired API or native binary release.
+
+The actual production browser journey passed using the existing owned disposable
+QA account: login200, account200, native authorization403 with the expected MFA
+requirement, one step-up200, fresh account200, automatic authorization200, and
+logout204. Open CaseOps became ready without another Connect. Verify and input
+targets were48px and visible, and the field was focused. The worker took4.413s
+and its owner6.061s; both actual exits were0 and the owned process group was absent.
+All35 browser requests carried the no-paid marker; the seven auth journal rows
+are not a count of all requests. No credentials, response bodies, MFA media,
+screenshots, traces or videos were retained.
+
+Proof is `production-native-mfa-hotfix-20261122-01/proof-01.json`, SHA256
+`791d71f81caeb5db991ba612a56e67dff2c4c67a98320b11ee46f6f95600a62d`,
+with separate actual-parent and independent-review receipts. The journey did
+not open the callback or exchange its token. Reporting-user/physical callback
+and complete native acceptance therefore remain **Inconclusive**, not properly
+fixed by attribution from a different account or browser surface.
+
+Both hosted web platforms passed; Linux reconciles316 modules and3268 cases,
+including web/E2E typing, Next build and Docker builder. Canonical main Security
+run45008715739 passed8/8 jobs; CodeQL analyses and the independent alert verdict
+also passed. Remaining main API/PostgreSQL CI is still separate and pending at
+this checkpoint. Do not claim a completely green release from these subsets.
+
+Fresh signed-in Play Console shows existing CaseOps1.0.0(3) at100% production
+rollout, no unpublished changes and an empty ready-to-publish list. The existing
+binary consumes the web login update without reinstall. Managed publishing
+remains on for future updates. Actual passive device checks verify code3 with
+Google Play as installer on the connected OnePlus, whose screen is currently
+off and locked; no callback acceptance is inferred. Its existing official Google
+SDK33.0.3 server was independently verified against Google's byte-exact archive,
+then used with its matching client without a restart or phone changes.
+
+The signed-in Apple account still shows enrollmentGZQJ2D9M4N Pending, with no
+additional owner action requested. No iOS distribution archive or submission
+exists. Current-source native tooling/builds and independent full83-case platform
+suites continue separately from this live web update.

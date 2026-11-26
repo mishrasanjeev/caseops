@@ -70,6 +70,20 @@ def workflow_contract(text):
         raise ValueError("License coverage or policy wiring missing")
 
 
+    host = block.split("- name: Check host-installed JS production licenses", 1)[1].split(
+        "- name: Audit actual pruned Linux x64 musl production licenses", 1
+    )[0]
+    ordered = (
+        "node scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund",
+        'scripts/check_js_license_coverage.py inventory --output "$output" --require-pruned-tree',
+        'license-checker --json --packages "$packages"',
+        'scripts/check_js_license_coverage.py verify --output "$output" --require-pruned-tree',
+    )
+    if any(host.count(marker) != 1 for marker in ordered) or [
+        host.index(marker) for marker in ordered
+    ] != sorted(host.index(marker) for marker in ordered):
+        raise ValueError("License coverage or policy wiring missing")
+
     audit = re.findall(r"<<'AUDIT'[^\n]*\n(.*?)^\s+AUDIT\s*$", block, re.MULTILINE | re.DOTALL)
     if len(audit) != 1:
         raise ValueError("License coverage or policy wiring missing")
@@ -531,6 +545,30 @@ class ReviewCounterexampleTests(LicenseFixture):
 
     def test_zero_platform_rejection_retains_receipt(self):
         self.platform_receipt(0)
+
+
+class DuplicateDevProductionReportTests(LicenseFixture):
+    def test_same_identity_dev_copy_never_replaces_production_in_either_order(self):
+        dev = "node_modules/devtool/node_modules/a"
+        self.manifest["devDependencies"] = {"devtool": "1.0.0"}
+        self.packages[""]["devDependencies"] = dict(self.manifest["devDependencies"])
+        self.packages["node_modules/devtool"] = {
+            "version": "1.0.0", "license": "MIT", "dev": True,
+            "dependencies": {"a": "1.0.0"},
+        }
+        self.packages[dev] = {"version": "1.0.0", "license": "MIT", "dev": True}
+        self.add_package("devtool", "1.0.0", "MIT")
+        self.add_package("a", "1.0.0", "MIT", dev)
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                self.packages = dict(sorted(self.packages.items(), reverse=reverse))
+                prepared = self.prepared()
+                self.assertEqual(set(prepared["expected"]), {"a@1.0.0"})
+                self.assertEqual([row["path"] for row in prepared["expected"]["a@1.0.0"]], ["node_modules/a"])
+                report = {"a@1.0.0": {"licenses": "MIT", "path": str(self.root / dev)}}
+                with self.assertRaisesRegex(ValueError, "Report path differs"):
+                    self.verify(report=report, prepared=prepared)
+                self.assertTrue(self.verify(prepared=prepared)["coverage_exact"])
 
 
 class PolicyTests(LicenseFixture):
@@ -1172,6 +1210,20 @@ class WiringTests(unittest.TestCase):
 
     def test_actual_standard_security_workflow_selects_guard_and_tests(self):
         workflow_contract((ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8"))
+
+    def test_host_prune_and_pruned_coverage_cannot_be_missing_or_reordered(self):
+        text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")
+        prune = "          node scripts/mobile/npm-tooling.mjs prune --omit=dev --no-audit --no-fund\n"
+        broken = (
+            text.replace(prune, ""),
+            text.replace(prune, "").replace('          packages="$(cat "$output/packages.txt")"',
+                '          packages="$(cat "$output/packages.txt")"\n' + prune.rstrip()),
+            text.replace('inventory --output "$output" --require-pruned-tree', 'inventory --output "$output"'),
+            text.replace('verify --output "$output" --require-pruned-tree', 'verify --output "$output"'),
+        )
+        for changed in broken:
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, "wiring missing"):
+                workflow_contract(changed)
 
     def test_historical_filter_comment_is_not_an_executable_bypass(self):
         text = (ROOT / ".github/workflows/security.yml").read_text(encoding="utf-8")

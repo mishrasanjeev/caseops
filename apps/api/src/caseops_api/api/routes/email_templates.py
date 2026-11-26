@@ -39,7 +39,7 @@ EmailAdmin = Annotated[
     response_model=EmailTemplateListResponse,
     summary="List email templates for the current workspace.",
 )
-async def list_current_company_email_templates(
+def list_current_company_email_templates(
     context: EmailAdmin,
     session: DbSession,
     include_inactive: bool = False,
@@ -54,7 +54,7 @@ async def list_current_company_email_templates(
     response_model=EmailTemplateRecord,
     summary="Create an email template.",
 )
-async def post_current_company_email_template(
+def post_current_company_email_template(
     payload: EmailTemplateCreateRequest,
     context: EmailAdmin,
     session: DbSession,
@@ -67,7 +67,7 @@ async def post_current_company_email_template(
     response_model=EmailTemplateRecord,
     summary="Fetch a single email template.",
 )
-async def get_current_company_email_template(
+def get_current_company_email_template(
     template_id: str,
     context: EmailAdmin,
     session: DbSession,
@@ -82,7 +82,7 @@ async def get_current_company_email_template(
     response_model=EmailTemplateRecord,
     summary="Update an email template.",
 )
-async def patch_current_company_email_template(
+def patch_current_company_email_template(
     template_id: str,
     payload: EmailTemplateUpdateRequest,
     context: EmailAdmin,
@@ -98,7 +98,7 @@ async def patch_current_company_email_template(
     response_model=EmailTemplateRecord,
     summary="Archive an email template (soft delete).",
 )
-async def archive_current_company_email_template(
+def archive_current_company_email_template(
     template_id: str,
     context: EmailAdmin,
     session: DbSession,
@@ -113,7 +113,7 @@ async def archive_current_company_email_template(
     response_model=EmailRenderResponse,
     summary="Render the template with the supplied variables (preview).",
 )
-async def render_current_company_email_template(
+def render_current_company_email_template(
     template_id: str,
     payload: EmailRenderRequest,
     context: EmailAdmin,

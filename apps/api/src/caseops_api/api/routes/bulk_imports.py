@@ -25,7 +25,7 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 
 
 @router.get("/history", response_model=BulkImportHistoryResponse)
-async def get_bulk_import_history(
+def get_bulk_import_history(
     context: CurrentContext,
     session: DbSession,
     domain: BulkImportDomain | None = None,
@@ -35,7 +35,7 @@ async def get_bulk_import_history(
 
 
 @router.get("/{domain}/{job_id}", response_model=BulkImportJobSummary)
-async def get_bulk_import_summary(
+def get_bulk_import_summary(
     domain: BulkImportDomain,
     job_id: str,
     context: CurrentContext,
@@ -45,7 +45,7 @@ async def get_bulk_import_summary(
 
 
 @router.get("/{domain}/{job_id}/manifest", response_model=BulkImportManifest)
-async def get_bulk_import_job_manifest(
+def get_bulk_import_job_manifest(
     domain: BulkImportDomain,
     job_id: str,
     context: CurrentContext,
@@ -55,7 +55,7 @@ async def get_bulk_import_job_manifest(
 
 
 @router.get("/{domain}/{job_id}/errors")
-async def download_bulk_import_errors(
+def download_bulk_import_errors(
     domain: BulkImportDomain,
     job_id: str,
     context: CurrentContext,

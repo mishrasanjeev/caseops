@@ -56,16 +56,104 @@ class Backport(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UPSTREAM_HASH_REQUIRED"):
             builder.build(bytes(corrupted))
 
+    def current_npm(self, **changes):
+        inputs = {
+            "raw": self.npm_raw, "baseline_provenance": self.npm_provenance,
+            "backport": builder.build(self.raw), "arborist_raw": self.arborist_raw,
+            "glob_raw": (NPM / "upstream/glob-14.0.6-caseops.2.tgz").read_bytes(),
+            "minimatch_raw": (NPM / "upstream/minimatch-11.0.8.tgz").read_bytes(),
+            "nonrecursive_raw": (NPM / "upstream/nonrecursive-glob-match-1.1.0.tgz").read_bytes(),
+            "brace_raw": (NPM / "upstream/brace-expansion-5.0.13.tgz").read_bytes(),
+        }
+        inputs.update(changes)
+        return builder.build_npm(**inputs)
+
     def test_every_committed_npm_byte_reproduces_twice(self):
-        backport = builder.build(self.raw)
-        first = builder.build_npm(self.npm_raw, self.npm_provenance, backport, self.arborist_raw)
-        second = builder.build_npm(self.npm_raw, self.npm_provenance, backport, self.arborist_raw)
+        first, second = self.current_npm(), self.current_npm()
         self.assertEqual(first, second)
-        for name, body in first.items():
-            self.assertEqual((NPM / name).read_bytes(), body, name)
+        receipt = builder.verify_output(NPM, first, time.monotonic() + 5)
+        self.assertTrue(receipt["rootPresent"])
+        self.assertEqual(receipt["files"], len(first))
+
+    def test_current_npm_keeps_every_unaffected_historical_payload_and_all_parent_edges(self):
+        previous = builder.build_npm_historical_picopatch(
+            self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw)
+        current = self.current_npm()
+        artifact = "npm-11.12.1-caseops-security.tgz"
+        def members(raw):
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
+                return {item.name: (archive.extractfile(item).read(), item.mode) for item in archive}
+        before, after = members(previous[artifact]), members(current[artifact])
+        proof = json.loads(current["PROVENANCE.json"])
+        layer = proof["dependencySecurityLayer20261122"]
+        self.assertFalse(layer["npmOwnCodeChanged"])
+        self.assertEqual(layer["previousArtifact"], json.loads(previous["PROVENANCE.json"])["artifact"])
+        changed = set(layer["changedMembers"])
+        removed = set(layer["removedMembers"])
+        prefixes = ("package/node_modules/glob/", "package/node_modules/minimatch/",
+                    "package/node_modules/@isaacs/nonrecursive-glob-match/",
+                    "package/node_modules/brace-expansion/")
+        parents = {"package/node_modules/@npmcli/arborist/package.json",
+                   "package/node_modules/@npmcli/map-workspaces/package.json",
+                   "package/node_modules/@npmcli/package-json/package.json",
+                   "package/node_modules/@tufjs/models/package.json",
+                   "package/node_modules/cacache/package.json",
+                   "package/node_modules/ignore-walk/package.json",
+                   "package/node_modules/libnpmdiff/package.json", "package/package.json"}
+        self.assertEqual(changed, {name for name in after if after[name] != before.get(name)})
+        self.assertEqual(removed, set(before) - set(after))
+        self.assertTrue(all(name.startswith(prefixes) or name in parents for name in changed))
+        self.assertTrue(all(name.startswith(prefixes) for name in removed))
+        for name, value in before.items():
+            if not name.startswith(prefixes) and name not in parents:
+                self.assertEqual(after[name], value, name)
+        for name in removed:
+            self.assertNotIn(name, after)
+        edits = proof["manifestEdits"][-10:]
+        self.assertEqual({row["path"] for row in edits}, parents)
+        for row in edits:
+            # The explicit successor records ten runtime edges, independent of
+            # the earlier backport's historical manifest edits.
+            self.assertEqual(json.loads(after[row["path"]][0])["dependencies"][row["field"].split(".", 1)[1]], row["to"])
+        for member in parents:
+            expected = json.loads(before[member][0])
+            for row in edits:
+                if row["path"] == member:
+                    key = row["field"].split(".", 1)[1]
+                    self.assertEqual(expected["dependencies"][key], row["from"])
+                    expected["dependencies"][key] = row["to"]
+            self.assertEqual(json.loads(after[member][0]), expected)
+        current_inputs = {row["name"]: row for row in proof["upstreamInputs"]}
+        archives = {"glob": "glob-14.0.6-caseops.2.tgz", "minimatch": "minimatch-11.0.8.tgz",
+                    "@isaacs/nonrecursive-glob-match": "nonrecursive-glob-match-1.1.0.tgz",
+                    "brace-expansion": "brace-expansion-5.0.13.tgz"}
+        for name, version in [("glob", "14.0.6-caseops.2"), ("minimatch", "11.0.8"),
+                              ("@isaacs/nonrecursive-glob-match", "1.1.0"),
+                              ("brace-expansion", "5.0.13")]:
+            prefix = "package/node_modules/" + name + "/"
+            self.assertEqual(json.loads(after[prefix + "package.json"][0])["version"], version)
+            self.assertEqual(current_inputs[name]["version"], version)
+            self.assertTrue(any(member.startswith(prefix) and "LICENSE" in member for member in after))
+            # Independently compare complete payload bytes AND modes, not just
+            # the patched version or a matching package.json.
+            source_members = members((NPM / "upstream" / archives[name]).read_bytes())
+            wanted = {prefix + member[8:]: value for member, value in source_members.items()}
+            actual = {member: value for member, value in after.items() if member.startswith(prefix)}
+            self.assertEqual(actual, wanted)
+        self.assertEqual(layer["supersededCandidate"]["sha256"],
+                         "e11da6ed76a0f7d7b56e9c7c9df991f4949319ff3364fd997eb4532cfe0da62c")
+        self.assertIs(layer["supersededCandidate"]["currentAcceptance"], False)
+        self.assertEqual(before["package/bin/npm-cli.js"], after["package/bin/npm-cli.js"])
+        self.assertEqual(before["package/LICENSE"], after["package/LICENSE"])
+
+    def test_current_npm_requires_all_four_exact_successor_inputs(self):
+        for field in ["glob_raw", "minimatch_raw", "nonrecursive_raw", "brace_raw"]:
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, "EXACT_CURRENT_NPM_DEPENDENCY_INPUT_REQUIRED"):
+                    self.current_npm(**{field: b"not the approved package"})
 
     def test_npm_own_code_and_every_unaffected_member_are_unchanged(self):
-        built = builder.build_npm(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw)
+        built = builder.build_npm_historical_picopatch(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw)
         with tarfile.open(fileobj=io.BytesIO(self.npm_raw), mode="r:gz") as archive:
             original = {m.name: (archive.extractfile(m).read(), m.mode) for m in archive}
         with tarfile.open(fileobj=io.BytesIO(built["npm-11.12.1-caseops-security.tgz"]), mode="r:gz") as archive:
@@ -97,7 +185,7 @@ class Backport(unittest.TestCase):
         self.assertEqual(before_root, after_root)
 
     def test_official_arborist_runtime_and_notice_bytes_are_unmodified(self):
-        built = builder.build_npm(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw)
+        built = builder.build_npm_historical_picopatch(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw)
         with tarfile.open(fileobj=io.BytesIO(self.arborist_raw), mode="r:gz") as archive:
             official = {m.name: (archive.extractfile(m).read(), m.mode) for m in archive}
         with tarfile.open(fileobj=io.BytesIO(built["npm-11.12.1-caseops-security.tgz"]), mode="r:gz") as archive:
@@ -117,11 +205,11 @@ class Backport(unittest.TestCase):
         for raw, review in ((self.npm_raw + b"x", self.npm_provenance), (self.npm_raw, self.npm_provenance + b"x")):
             with self.subTest(archive_changed=raw != self.npm_raw):
                 with self.assertRaisesRegex(ValueError, "EXACT_NPM_BASELINE_REQUIRED"):
-                    builder.build_npm(raw, review, builder.build(self.raw), self.arborist_raw)
+                    builder.build_npm_historical_picopatch(raw, review, builder.build(self.raw), self.arborist_raw)
 
     def test_corrupted_arborist_is_refused(self):
         with self.assertRaisesRegex(ValueError, "EXACT_OFFICIAL_ARBORIST_REQUIRED"):
-            builder.build_npm(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw + b"x")
+            builder.build_npm_historical_picopatch(self.npm_raw, self.npm_provenance, builder.build(self.raw), self.arborist_raw + b"x")
 
     def test_output_requires_every_file_and_refuses_extra_files_and_empty_directories(self):
         with tempfile.TemporaryDirectory(prefix="picomatch-output-") as temporary:

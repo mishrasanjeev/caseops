@@ -66,6 +66,205 @@ but it was not separately measured. The other per-docket callers in
 `matter_access.py` and `matters.py` are bounded by one Matter's dockets and
 were not changed.
 
+## November24 — Teams removal scale and event-loop class after issue 611
+
+**Partially implemented.** J14/M13/US-040, NFT-001, SEC-002/003/004.
+Recorded by the issue 611 reconciliation. The unused-team bound and the sync
+Teams routes from `1bc2ed101` are deployed in 609914f5a. AI-TEAM-01 passed on
+desktop and phone in exact-release prod-verify 45388561841. Open:
+
+- A team with any Matter, grant or wall still runs
+  `_operational_ip_role_fence_snapshot` over every active IP docket in the
+  tenant. It runs at least six role queries per docket, plus the Matter
+  role queries for linked dockets. It does this three times per mutation, and
+  two of those passes run while the actor's and the target's Membership and
+  User rows are locked. For a populated team in a tenant with about 10,000
+  dockets, that is at least 180,000 queries per removal. It has not
+  been measured, but it can exceed the 120 s request timeout. While it runs,
+  logins for those identities wait on the same rows and fail at the 5 s lock
+  timeout. Batching the role sources, including the JSON hearing attendee and
+  reminder lists, needs its own PostgreSQL-proven design.
+- The November 22 entry below still applies: other `async def` routes run
+  synchronous DB work on the event loop. A long request on one of them can
+  freeze its container after Cloud Run returns 504, so the next request sent to
+  that container hangs. That is the inferred cause of the November 14
+  later-login 504s.
+
+## November24 — bounded synchronous audit export and IP filing bundle cap
+
+**Partially implemented: landed in code with tests; not merged, deployed or
+verified in production.** These are the two server-side follow-ups that the
+issue613 download-body candidate (PR #655) recorded as open.
+
+- `GET /api/admin/audit/export` loaded every row of the window into memory, and
+  a `since` without `until` had no upper bound. It now counts the window with a
+  bounded `COUNT(... LIMIT cap+1)` and streams rows in (created_at, id) order
+  through a server-side cursor (`yield_per` 1,000), so at most one batch of rows
+  is held at a time, and sends one response chunk per batch instead of one per
+  row. One download holds at most `AUDIT_EXPORT_MAX_ROWS` = 50,000 rows, about
+  24 MB of JSONL or 15 MB of CSV at ~480 bytes a row. Measured locally on
+  SQLite through the test client, 50,000 rows took 6.1 s (JSONL) and 11.5 s
+  (CSV); with one chunk per row they took 51 s and 56 s. On local PostgreSQL
+  17 through the server-side cursor they took 11.5 s and 17.0 s. That leaves the
+  120 s Cloud Run and browser deadlines room for network transfer; no timeout
+  was raised. A wider window gets a typed 422 problem
+  (`audit_export_row_cap_exceeded`, `row_cap`) before any byte is sent, and the
+  refusal is audited as `audit.exported` with result `denied`. An open `until`
+  is pinned to the request time. If rows committed late push the counted window
+  past the cap while it streams, the stream aborts instead of ending as a
+  complete-looking file. An explicit `limit` at or under the cap still returns
+  the first rows; a larger `limit` no longer bypasses the cap (it used to be
+  clamped silently to 100,000). CSV/JSONL format, tenant scoping, the
+  `audit:export` gate, export auditing and the 30-day default are unchanged.
+  The admin page already shows the problem's `detail`, so no web change.
+- The IP pleading filing bundle (`/api/ip/.../filing-bundle.zip`) is built into
+  a buffer that refuses any write past `max_attachment_size_bytes` (25 MiB), the
+  limit for any single file. An oversized bundle stops while it is built and
+  returns a typed 422 (`ip_filing_bundle_too_large`, `max_bundle_bytes`).
+- The Matter court-filing bundle (`services/filing_bundle.py`) read every
+  selected exhibit into memory and zipped them with no total cap. It now stops
+  reading exhibits once their stored size passes `max_attachment_size_bytes`,
+  builds into the same capped buffer, and returns a typed 422
+  (`matter_filing_bundle_too_large`, `max_bundle_bytes`).
+- Security: the synchronous export did not apply the IP ethical-wall audit
+  filter that the async job applies, so an admin walled off an IP docket could
+  read that docket's audit rows, or infer them from the row count. The filter
+  is now one shared function (`visible_ip_audit_events_filter` in
+  `services/audit_exports.py`) used by the async job, by both the cap count and
+  the streamed rows of the synchronous export, and by the Matter audit list,
+  count and export. The Matter audit path had the same gap: a Matter-IP link
+  event names the docket, and a member who can see the Matter but is walled
+  off the docket saw it. Other audit reads were checked: the IP docket audit
+  list is scoped to an already-authorized docket, employee audit reads only
+  employee and membership targets, and activity reports read only a per-tenant
+  latest timestamp.
+- Evidence: `apps/api/tests/test_audit_export_bounded_20261124.py` (with a
+  `_postgres` replay that also asserts the server-side cursor),
+  `apps/api/tests/test_ip_filing_bundle_size_cap_20261124.py` and
+  `apps/api/tests/test_matter_filing_bundle_size_cap_20261124.py`. Every test
+  fails on the previous code.
+- Still open, recorded follow-up: the async worker (`run_export_job`) still
+  loads up to 500,000 rows and the whole artifact into memory before storing
+  it.
+
+## November25 — hollow caplog PII/secret assertions in native tests
+
+**Partially implemented.** Alembic's `fileConfig` (default
+`disable_existing_loggers=True`) silences every logger imported before the
+session's first migration, so `secret not in caplog.text` checks were vacuous
+in normal ordering. A shared `live_logs` fixture (`apps/api/tests/conftest.py`)
+now guards 11 tests in 8 modules; injected-sentinel runs proved them live,
+except the tracestate test, which needs the opentelemetry extra (CI only).
+Remaining: new absence checks must opt in to `live_logs`; capsys-based stderr
+checks were not assessed. Evidence: `docs/STRICT_BUG_TASKLIST_2026-04-22.md`,
+section "November24 — issue #513 public lead failure observability".
+
+## November24 — async routes ran synchronous database work on the event loop
+
+**Partially implemented.** Code and a CI-enforced check are on branch
+`fix/async-routes-blocking-db-20261124` (PR #656). Not merged, released
+or verified on a deployed revision.
+
+FastAPI runs an `async def` route on the event loop and a `def` route in its
+worker threadpool. A synchronous SQLAlchemy call made directly in an `async def`
+route freezes every request on that instance until it returns. On 2026-11-14 a
+slow async Teams route blocked the loop; after Cloud Run returned a 504, the next
+request routed to that container (a login) also hung and returned a 504. PR #644
+fixed the same shape for the Admin ethical walls read (November22 entry).
+
+Inventory on origin/main 609914f5a: 555 `async def` routes under
+`caseops_api/api`, of which 515 used the request `DbSession` on the loop.
+
+- 501 awaited nothing and are now `def`: `ip_operations` 168, `matters` 109,
+  `companies` 23, `calendar` 22, `notifications` 19, `authorities` 17, `portal`
+  16, `mailbox` 15, `clients` 13, `portal_ip` 13, and 86 in 21 smaller modules.
+- 14 must stay async (they read an upload or raw body) and now run their
+  synchronous work through `run_in_threadpool`: employee import preview; IP
+  document upload and new version; IP import file upload (error-path rollback);
+  IP portfolio export and retry (admission write); inbound email webhook;
+  matter court-sync pull; matter attachment retry and reindex; SendGrid and
+  WhatsApp webhooks; Pine Labs webhook (`handle_pine_labs_webhook` is now
+  synchronous and takes the raw body and headers); the recommendation
+  strategy capability check.
+- Unchanged: 15 async routes that already offloaded all session work, and 25
+  async routes with no session that do only in-memory work (health, build,
+  metadata, templates, static catalogues).
+
+One reviewed exemption: the two portfolio export routes pass the session to
+`dispatch_portfolio_export` on the loop. It awaits the async Cloud Tasks client;
+its only session work ends the already-committed admission transaction.
+
+Proof:
+
+- `apps/api/tests/test_async_routes_event_loop_20261124.py` scans every route
+  under `caseops_api/api`. It fails when an async route takes a `DbSession` and
+  awaits nothing, uses its session outside `run_in_threadpool`/`to_thread`/
+  `run_sync` arguments, or calls a listed blocking primitive. It has a
+  positive-control sample and fails on stale exemptions. Run against origin/main
+  it reports 519 violations across 515 routes; it passes on the branch.
+- `apps/api/tests/test_async_route_loop_responsiveness_20261124.py` holds the
+  dashboard summary (converted to `def`) and the employee import preview
+  (offloaded) inside their database service and requires a concurrent
+  `/api/build` to answer within 1 s. Both cases fail with `TimeoutError` on the
+  origin/main route modules and pass on the branch.
+
+Still open:
+
+- Merge, release, and a deployed check: hold a slow request on one instance and
+  confirm a concurrent health check and login still answer.
+- The check reads route bodies only. Async dependencies and middleware are not
+  scanned (none does database work today; `get_db_session` closes the session
+  on the loop by design), and a service that opens its own session is caught
+  only when the route calls a listed primitive directly.
+- `dry_run_current_company_matter_import` still parses the document manifest
+  and ZIP entry names on the loop (CPU only, bounded by upload limits).
+- About 500 handlers now run in the threadpool (AnyIO default: 40 threads), so
+  they run concurrently wherever an instance serves more than one request.
+  Production runs at concurrency 1.
+
+## November24 — Android compiler classpath gap
+
+**Not fixed; replacement release remains NO-GO.** The actual `a782b66d`
+Android QA build failed before native compilation because the retained Expo
+compiler plug-ins do not publish their current base versions for Kotlin
+2.4.21. The earlier successful dependency inventory covered compile/runtime
+and buildscript views, omitting compiler plug-in classpaths. Its QA-scoped
+supplier closure does not establish full SDK or APK acceptance. A plug-in-only
+V2 upgrade also changes generated runtime APIs and is incompatible with the
+retained runtime. Preserve the failed build, repair the supported version
+combination, extend the actual task-input inventory, then complete the actual
+APK/AAB and unchanged native acceptance. See
+[the exact failure and retained evidence](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md#24-november-actual-compiler-dependency-failure).
+
+The isolated source repair selects the published Kotlin 2.4.20 intersection
+without changing the Expo runtime or plug-in base versions. The maintainer's
+fixed boundary, immutable fix ancestry and 19 fresh zero-finding candidate
+queries support that deliberate pin supersession. Complete affected Node
+modules report 638 passes and two existing Windows-only skips. Native-build
+verification remains **Inconclusive**; full selected compiler/task supplier
+capture, Groovy controls and actual APK/AAB acceptance are still required.
+
+## November23 — Android release supplier closure
+
+**Partially implemented; replacement release remains NO-GO.** Actual native
+Gradle resolution and fresh advisory queries found affected app runtime and
+build suppliers, including an obsolete WebView AGP classpath and suppliers
+bundled in Gradle itself. A scoped minimum-version repair is being verified;
+the supporting Maven/local plugin outputs and bundled tools also require
+complete supplier and licence reconciliation. Candidate metadata is not proof
+of resolved, rebuilt or tested Android bytes. Full 83-case native acceptance,
+the replacement signed AAB and submission remain open. See
+[the measured finding and acceptance requirements](security/ANDROID_SUPPLIER_REPAIR_2026-11-23.md).
+
+## November23 — targeted root dependency security repair
+
+Partially implemented. The new candidate replaces affected Vite/Undici and the
+associated Rolldown supplier, with actual local ci, strict audits, complete
+parser/notice regressions and web/E2E typing. Full current-source CI, normal CSS
+build, public-content browser replay and all14 qualification gates remain open;
+no native, signing or deployment credit transfers from FDD. See
+[the dated evidence record](security/ROOT_DEPENDENCY_SECURITY_2026-11-23.md).
+
 ## November22 — intermittent Admin API stall under SQLite release CI
 
 **Implemented.** Released 2026-11-23 in e3e40fc38 (PR #644): API revision
@@ -95,7 +294,8 @@ is not exposed: the API runs at Cloud Run concurrency 1, so one instance never
 serves the concurrent reads the deadlock needs. Open, not fixed: other `async def`
 routes still write synchronously on the event loop, and a read that leaves an
 uncommitted write holds SQLite's lock until teardown. Both remain possible
-CI-only stall sources.
+CI-only stall sources. The first is addressed in code by the November24
+async-route entry above.
 
 ## November22 — walled admins could change walls and grants on their Matter
 
@@ -864,7 +1064,15 @@ and complete deployed certification. A current merged release has failed
 production verification; old stale checkpoints and green components cannot close
 that gate. Native/MacBook and other projects are outside this task.
 Open adjacent boundaries: eight legacy authenticated binary-success consumers
-still finish body reads outside `apiBlobRequest`'s deadline; Matter email
+finished body reads outside `apiBlobRequest`'s deadline; the November24
+[issue613](https://github.com/mishrasanjeev/caseops/issues/613) candidate moves
+them (and the later rendition download) onto the whole-body helper with no
+client byte cap, and bounds the sibling status-handling downloads (import
+templates and errors, cause-list PDF, `downloadApiFile`, audit export) the same
+way, under a 120-second download deadline equal to the API's server request
+ceiling. Separate open server-side follow-ups: the synchronous audit export has
+no size bound, and the IP filing bundle has no explicit size cap. Partially implemented until merged, deployed and verified in a
+browser; see the triage. Matter email
 transport still owns its parent lock during external I/O. The new private
 draft/contract helper and template shared-reader fence do not close those
 larger contracts. Their explicit inventories and acceptance are retained in the
@@ -6429,10 +6637,15 @@ until the owner-run enablement in
   pending after 10 minutes as `failed/timed_out`, so the page never polls
   forever. Durable orchestration (Temporal) is not used. Measure completion
   time on the production provider before any claim of reliability.
+  Deployed 2026-11-25 in `bce18d1d2` (API `caseops-api-00535-8qh`,
+  prod-verify 45513817072 passed); no production completion time has been
+  measured yet.
 
 ### EH-RA-02 - Model output cannot introduce an authority
 
-- **Status:** Implemented in code, not deployed. Titles, citations, courts,
+- **Status:** Partially implemented. Deployed 2026-11-25 in `bce18d1d2`
+  (prod-verify 45513817072 passed), but no production answer has yet been
+  run through the verifier, so runtime proof is pending. Titles, citations, courts,
   dates, weight labels, links and paragraph numbers come from CaseOps records
   or the source text. Unknown markers, untraceable names, citations,
   quotations and links are removed after one retry and counted. Tests:

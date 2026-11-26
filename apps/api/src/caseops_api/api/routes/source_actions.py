@@ -71,7 +71,7 @@ async def open_source(
     response_class=RedirectResponse,
     summary="Open a canonical source without exposing its destination in the request URL",
 )
-async def open_source_target(
+def open_source_target(
     target_type: SourceTargetType,
     target_id: str,
     context: SourceInspector,
@@ -150,7 +150,7 @@ async def open_source_target(
     status_code=status.HTTP_201_CREATED,
     summary="Report a wrong or unavailable canonical source",
 )
-async def report_source_link(
+def report_source_link(
     payload: SourceLinkReportCreateRequest,
     context: SourceInspector,
     session: DbSession,

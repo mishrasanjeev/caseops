@@ -41,7 +41,7 @@ ReviewPublisher = Annotated[SessionContext, Depends(require_capability("drafts:r
     summary="Queue a frozen, source-grounded intelligent review",
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def create_intelligent_review(
+def create_intelligent_review(
     request: Request,
     payload: IntelligentReviewCreateRequest,
     background_tasks: BackgroundTasks,
@@ -64,7 +64,7 @@ async def create_intelligent_review(
     response_model=IntelligentReviewListResponse,
     summary="List permission-visible intelligent reviews",
 )
-async def get_intelligent_reviews(
+def get_intelligent_reviews(
     context: CurrentContext,
     session: DbSession,
     matter_id: str | None = Query(default=None),
@@ -85,7 +85,7 @@ async def get_intelligent_reviews(
     response_model=IntelligentReviewRecord,
     summary="Read one source-frozen intelligent review",
 )
-async def get_intelligent_review_by_id(
+def get_intelligent_review_by_id(
     review_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -102,7 +102,7 @@ async def get_intelligent_review_by_id(
     response_model=IntelligentReviewRecord,
     summary="Include or exclude authorities before finalization",
 )
-async def patch_intelligent_review_authorities(
+def patch_intelligent_review_authorities(
     review_id: str,
     payload: IntelligentReviewSelectionRequest,
     context: ReviewFinalizer,
@@ -122,7 +122,7 @@ async def patch_intelligent_review_authorities(
     response_model=IntelligentReviewRecord,
     summary="Finalize a complete review as an authorized lawyer",
 )
-async def post_intelligent_review_finalize(
+def post_intelligent_review_finalize(
     review_id: str,
     payload: IntelligentReviewFinalizeRequest,
     context: ReviewFinalizer,
@@ -141,7 +141,7 @@ async def post_intelligent_review_finalize(
     response_model=IntelligentReviewPublishResponse,
     summary="Publish a finalized review into the existing Draft lifecycle",
 )
-async def post_intelligent_review_publish(
+def post_intelligent_review_publish(
     review_id: str,
     payload: IntelligentReviewPublishRequest,
     context: ReviewPublisher,

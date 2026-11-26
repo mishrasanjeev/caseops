@@ -1,0 +1,63 @@
+{
+  "kind": "caseops-published-kotlin-compiler-compatibility-v1",
+  "kotlinVersion": "2.4.20",
+  "supersededProjectPin": "2.4.21",
+  "runtimeVersionsUnchanged": true,
+  "compilerPlugins": [
+    {
+      "group": "io.github.expo.pika",
+      "module": "pika-compiler",
+      "declaredGradlePlugin": "pika-gradle",
+      "pluginVersion": "1.1.0",
+      "metadata": {
+        "fixture": "pika-compiler-metadata.xml",
+        "url": "https://repo.maven.apache.org/maven2/io/github/expo/pika/pika-compiler/maven-metadata.xml",
+        "sha256": "c3d447ae00c89adda215d6b71a133b33a79b3d4fca3499300f569fb6b196a1a0",
+        "sizeBytes": 2209
+      },
+      "officialProviderSource": {
+        "sourcesJarUrl": "https://repo.maven.apache.org/maven2/io/github/expo/pika/pika-gradle/1.1.0/pika-gradle-1.1.0-sources.jar",
+        "sourcesJarSha256": "e7b846bc0b13615665a2b377e089527997a0133829304907a23a8f7a1cbe4b14",
+        "sourcesJarSizeBytes": 2364,
+        "member": "io/github/expo/pika/PikaGradlePlugin.kt",
+        "memberSha256": "3969753e1dcc410778eaa318113c6e2c459685fc0fb576c60585d7bb124445e6",
+        "memberSizeBytes": 1977,
+        "getPluginArtifactVersionExpression": "${BuildConfig.PIKA_VERSION}-${project.getKotlinPluginVersion()}",
+        "unitTestDoesNotCompileProvider": true
+      }
+    },
+    {
+      "group": "io.github.expo",
+      "module": "expo-modules-v2-compiler-plugin",
+      "declaredGradlePlugin": "expo-modules-v2-gradle-plugin",
+      "pluginVersion": "0.2.6",
+      "metadata": {
+        "fixture": "expo-v2-compiler-metadata.xml",
+        "url": "https://repo.maven.apache.org/maven2/io/github/expo/expo-modules-v2-compiler-plugin/maven-metadata.xml",
+        "sha256": "0a26ae23e3d55df568f608da5ffcdce8516c0bb573b4092bb1b02bec5d9f2507",
+        "sizeBytes": 4641
+      },
+      "officialProviderSource": {
+        "sourcesJarUrl": "https://repo.maven.apache.org/maven2/io/github/expo/expo-modules-v2-gradle-plugin/0.2.6/expo-v2-gradle-0.2.6-sources.jar",
+        "sourcesJarSha256": "1b66affecb833445029b7f6890e6c2bc5f07fffa88a2f8d3130e940b6203a164",
+        "sourcesJarSizeBytes": 3153,
+        "member": "io/github/expo/modules/v2/gradle/ExpoModulesV2GradlePlugin.kt",
+        "memberSha256": "de5f72e7abe597ad76acb786c8321d754715093f9338f65f613b0e5503fe2030",
+        "memberSizeBytes": 2775,
+        "getPluginArtifactVersionExpression": "${BuildConfig.EXPO_MODULES_V2_VERSION}-${project.getKotlinPluginVersion()}",
+        "unitTestDoesNotCompileProvider": true
+      }
+    }
+  ],
+  "security": {
+    "advisory": "GHSA-r937-wjx7-w2jp",
+    "alias": "CVE-2026-53914",
+    "firstFixed": "2.4.20-Beta1",
+    "stable": "2.4.20",
+    "maintainerFix": "bf51df665b458fda7c3eaf436c4d88dc119d7ec6",
+    "maintainerFixUrl": "https://github.com/JetBrains/kotlin/commit/bf51df665b458fda7c3eaf436c4d88dc119d7ec6",
+    "stableContainsFixCompare": "https://api.github.com/repos/JetBrains/kotlin/compare/bf51df665b458fda7c3eaf436c4d88dc119d7ec6...v2.4.20"
+  },
+  "actualNativeCompatibilityProven": false,
+  "jetBrainsGradle992SupportClaimed": false
+}

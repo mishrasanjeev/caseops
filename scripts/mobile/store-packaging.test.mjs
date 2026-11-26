@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { packagingPlan, prepare } from './prepare-store-packaging.mjs';
 import { sourceSnapshot } from './source-snapshot.mjs';
 const require = createRequire(import.meta.url);
-const { readHashed, readJson, validateStoreBuild, readStoreBuildSettings, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
+const { readHashed, readJson, validateStoreBuild, readStoreBuildSettings, storeNumberReservations, reserveBuildNumbers } = require('../../apps/mobile/plugins/store-build.cjs');
 const { readNativeLinkConfig } = require('../../apps/web/lib/native-link-config.cjs');
 const repo = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -91,6 +91,21 @@ test('exclusive number reservation survives replay and identity-key ordering', t
   assert.throws(() => reserveBuildNumbers(dir, { ...f.build, iosBuildNumber: '../bad' }, digest('request3')), /IOS_BUILD_NUMBER/);
 });
 test('each platform reservation survives changes to the other platform identity', t => {
+  for (const platform of ['ios','android']) {
+    const f = fixture(t), dir=path.join(f.root,'selected-'+platform);fs.mkdirSync(dir,{mode:0o700});
+    const other=platform==='ios'?'android':'ios';
+    reserveBuildNumbers(dir,f.build,digest('other-platform'),other);
+    const before=fs.readdirSync(dir);assert.equal(before.length,1);
+    reserveBuildNumbers(dir,f.build,digest('selected-platform'),platform);
+    const after=fs.readdirSync(dir);assert.equal(after.length,2);
+    assert.deepEqual(storeNumberReservations(f.build,platform).map(row=>row.platform),[platform]);
+    assert.ok(after.some(name=>name.includes('-'+platform+'-')));
+    assert.throws(()=>reserveBuildNumbers(dir,f.build,digest('collision'),platform),/EEXIST/);
+    assert.deepEqual(fs.readdirSync(dir),after);
+    for (const invalid of [null,'other',true,0]) assert.throws(()=>reserveBuildNumbers(dir,f.build,digest('invalid'),invalid),/STORE_RESERVATION_PLATFORM_REQUIRED/);
+    assert.deepEqual(fs.readdirSync(dir),after);
+  }
+
   const f = fixture(t);
   for (const other of ['androidPackageName', 'iosBundleIdentifier']) {
     const dir = path.join(f.root, other); fs.mkdirSync(dir, { mode: 0o700 });

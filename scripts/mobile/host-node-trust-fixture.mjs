@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { assertHostNodeTrust, HOST_NODE_TRUST_ENV } from './host-node-trust.mjs';
+import { assertHostNodeTrust, HOST_NODE_TRUST_ENV, HOST_NODE_ROOTS } from './host-node-trust.mjs';
 
 export function localCertificates() {
   const require = createRequire(new URL('../../apps/mobile/package.json', import.meta.url));
@@ -84,7 +84,7 @@ if (!isMainThread) {
   const { default: test } = await import('node:test');
   test('forwarded-approved-bootstrap', () => {
     const report = assertHostNodeTrust({ policyRef: { path: process.env[HOST_NODE_TRUST_ENV.file], sha256: process.env[HOST_NODE_TRUST_ENV.sha256] } });
-    if (!report.defaultEnumerationVerified || report.expectedDefaultCount !== 144) throw new Error('ROOTS_NOT_ACTIVATED');
+    if (!report.defaultEnumerationVerified || report.expectedDefaultCount !== HOST_NODE_ROOTS[process.versions.node]?.outputCount) throw new Error('ROOTS_NOT_ACTIVATED');
   });
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {

@@ -64,7 +64,7 @@ set before prebuild and Metro, the Windows build from `apps/mobile/android` is:
 
 ```powershell
 $env:GRADLE_USER_HOME = "$HOME/.cache/caseops-mobile/gradle"
-$jdk17 = "$HOME/.cache/caseops-mobile/jdk/jdk-17.0.20.1+1"
+$jdk17 = "$HOME/.cache/caseops-mobile/jdk/jdk-17.0.21.1+2"
 ./gradlew.bat :app:assembleDebug "-Dorg.gradle.java.installations.paths=$jdk17,$env:JAVA_HOME" `
   -Dorg.gradle.java.installations.auto-download=false -PreactNativeArchitectures=x86_64 `
   -Pandroid.cmakeVersion=3.30.5 -Pexpo.android.cmakeObjectPathMax=250 `

@@ -30,7 +30,7 @@ TagManager = Annotated[SessionContext, Depends(require_capability("matter_access
 
 
 @router.get("/", response_model=MatterTagListResponse, summary="List matter tags")
-async def get_current_company_matter_tags(
+def get_current_company_matter_tags(
     context: CurrentContext,
     session: DbSession,
 ) -> MatterTagListResponse:
@@ -43,7 +43,7 @@ async def get_current_company_matter_tags(
     status_code=status.HTTP_201_CREATED,
     summary="Create a matter tag",
 )
-async def post_current_company_matter_tag(
+def post_current_company_matter_tag(
     payload: MatterTagCreateRequest,
     context: TagManager,
     session: DbSession,
@@ -58,7 +58,7 @@ async def post_current_company_matter_tag(
     response_model=MatterTagRecord,
     summary="Update a matter tag",
 )
-async def patch_current_company_matter_tag(
+def patch_current_company_matter_tag(
     tag_id: str,
     payload: MatterTagUpdateRequest,
     context: TagManager,
@@ -74,7 +74,7 @@ async def patch_current_company_matter_tag(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a matter tag",
 )
-async def delete_current_company_matter_tag(
+def delete_current_company_matter_tag(
     tag_id: str,
     context: TagManager,
     session: DbSession,

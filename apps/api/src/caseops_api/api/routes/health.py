@@ -64,7 +64,7 @@ async def build_identity() -> dict[str, str]:
     "/health/ingest",
     summary="Ingest-VM watchdog probe — aggregate corpus freshness",
 )
-async def ingest_freshness(session: DbSession) -> dict[str, int | str | None]:
+def ingest_freshness(session: DbSession) -> dict[str, int | str | None]:
     """Unauthenticated aggregate counters for the corpus.
 
     Used by the GCP-hosted ingest-VM watchdog (scripts/cron/) to decide

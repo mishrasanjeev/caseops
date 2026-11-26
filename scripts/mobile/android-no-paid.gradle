@@ -1,6 +1,6 @@
 // Invocation-owned init.d input, loaded for the root and each included build.
 // Public repository APIs set credentials; pinned Gradle internals enforce transport and redirect isolation.
-// Inspect only Gradle 9.4.1's exact repository wrapper to recover its already
+// Inspect only Gradle 9.9.2's exact repository wrapper to recover its already
 // admitted delegate; the delegate receives every original transport guard.
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 import org.gradle.api.artifacts.repositories.IvyArtifactRepository
@@ -24,7 +24,7 @@ import org.gradle.internal.resource.connector.ResourceConnectorFactory
 import org.gradle.internal.resource.connector.ResourceConnectorSpecification
 import org.gradle.internal.resource.transfer.ExternalResourceConnector
 import org.gradle.internal.resource.transport.http.HttpConnectorFactory
-import org.gradle.api.internal.artifacts.repositories.transport.RepositoryTransportFactory
+import org.gradle.internal.resource.transport.RepositoryTransportFactory
 import org.gradle.internal.verifier.HttpRedirectVerifier
 
 final class CaseOpsReviewedRedirectPolicy {
@@ -142,19 +142,19 @@ final Set<String> repositoryBases = [
 final Set<String> reviewedRedirectBases = Collections.singleton('https://plugins-artifacts.gradle.org')
 final CaseOpsReviewedRedirectPolicy markedRedirectPolicy = new CaseOpsReviewedRedirectPolicy((repositoryBases + reviewedRedirectBases).toList(), markerName, markerValue)
 def installMarkedHttpConstructor = {
-    if (gradle.gradleVersion != '9.4.1') throw new GradleException('ANDROID_REVIEWED_HTTP_GRADLE_VERSION')
+    if (gradle.gradleVersion != '9.9.2') throw new GradleException('ANDROID_REVIEWED_HTTP_GRADLE_VERSION')
     File expectedHome = gradle.gradleHomeDir.canonicalFile
     Map<Class,String> origins = [
-        (RepositoryTransportFactory):'lib/plugins/gradle-dependency-management-9.4.1.jar',
-        (HttpConnectorFactory):'lib/gradle-resources-http-9.4.1.jar',
-        (ResourceConnectorFactory):'lib/gradle-resources-9.4.1.jar',
-        (ResourceConnectorSpecification):'lib/gradle-resources-9.4.1.jar',
-        (HttpRedirectVerifier):'lib/gradle-resources-9.4.1.jar',
-        (AuthenticationInternal):'lib/gradle-core-9.4.1.jar',
-        (HttpHeaderCredentials):'lib/gradle-core-api-9.4.1.jar',
-        (HttpHeaderAuthentication):'lib/gradle-resources-http-9.4.1.jar',
-        (DefaultHttpHeaderAuthentication):'lib/gradle-resources-http-9.4.1.jar',
-        (DefaultHttpHeaderCredentials):'lib/gradle-model-core-9.4.1.jar'
+        (RepositoryTransportFactory):'lib/plugins/gradle-dependency-management-resources-9.9.2.jar',
+        (HttpConnectorFactory):'lib/gradle-resources-http-9.9.2.jar',
+        (ResourceConnectorFactory):'lib/gradle-resources-9.9.2.jar',
+        (ResourceConnectorSpecification):'lib/gradle-resources-9.9.2.jar',
+        (HttpRedirectVerifier):'lib/gradle-resources-9.9.2.jar',
+        (AuthenticationInternal):'lib/gradle-credentials-9.9.2.jar',
+        (HttpHeaderCredentials):'lib/gradle-credentials-api-9.9.2.jar',
+        (HttpHeaderAuthentication):'lib/gradle-resources-http-9.9.2.jar',
+        (DefaultHttpHeaderAuthentication):'lib/gradle-resources-http-9.9.2.jar',
+        (DefaultHttpHeaderCredentials):'lib/gradle-model-core-9.9.2.jar'
     ]
     origins.each { Class type, String relative ->
         def location = type.protectionDomain?.codeSource?.location
@@ -185,7 +185,7 @@ def installMarkedHttpConstructor = {
             if (!current.matches(original, markedRedirectPolicy.digest)) throw new GradleException('ANDROID_HTTP_FACTORY_POLICY_DRIFT')
         } else factories.set(index, new CaseOpsMarkedHttpConnectorFactory(original, markedRedirectPolicy))
         if (factories.size() != before.size() || !before.indices.every { int i -> i == index || factories[i].is(before[i]) } || factories[index].supportedProtocols != before[index].supportedProtocols || factories[index].supportedAuthentication != before[index].supportedAuthentication) throw new GradleException('ANDROID_HTTP_FACTORY_ORDER_OR_PROTOCOL_DRIFT')
-        logger.lifecycle('CASEOPS_MARKED_HTTP_CONSTRUCTOR ' + JsonOutput.toJson([gradle:'9.4.1',policySha256:markedRedirectPolicy.digest,factoryIndex:index,factoryCount:before.size(),protocolOrderPreserved:true,httpCodeOrigin:new File(HttpConnectorFactory.protectionDomain.codeSource.location.toURI()).canonicalPath,httpClassLoader:HttpConnectorFactory.classLoader.class.name,httpClassLoaderIdentity:System.identityHashCode(HttpConnectorFactory.classLoader),transportClassLoader:RepositoryTransportFactory.classLoader.class.name,transportClassLoaderIdentity:System.identityHashCode(RepositoryTransportFactory.classLoader)]))
+        logger.lifecycle('CASEOPS_MARKED_HTTP_CONSTRUCTOR ' + JsonOutput.toJson([gradle:'9.9.2',policySha256:markedRedirectPolicy.digest,factoryIndex:index,factoryCount:before.size(),protocolOrderPreserved:true,httpCodeOrigin:new File(HttpConnectorFactory.protectionDomain.codeSource.location.toURI()).canonicalPath,httpClassLoader:HttpConnectorFactory.classLoader.class.name,httpClassLoaderIdentity:System.identityHashCode(HttpConnectorFactory.classLoader),transportClassLoader:RepositoryTransportFactory.classLoader.class.name,transportClassLoaderIdentity:System.identityHashCode(RepositoryTransportFactory.classLoader)]))
     }
 }
 
@@ -287,7 +287,7 @@ def inside = { File child, File parent -> child.toPath().startsWith(parent.toPat
 def effectiveRepository = { repository ->
     if (repository instanceof MavenArtifactRepository || repository instanceof IvyArtifactRepository) return repository
     final String wrapperName = 'org.gradle.plugin.use.internal.PluginArtifactRepository'
-    if (gradle.gradleVersion != '9.4.1' || repository.getClass().getName() != wrapperName) {
+    if (gradle.gradleVersion != '9.9.2' || repository.getClass().getName() != wrapperName) {
         throw new GradleException('ANDROID_UNREVIEWED_REPOSITORY_TYPE')
     }
     Class reviewedClass = Class.forName(wrapperName, false, this.getClass().getClassLoader())
@@ -383,3 +383,74 @@ gradle.projectsLoaded { instance ->
 gradle.projectsEvaluated {
     logger.lifecycle('CASEOPS_MARKED_REPOSITORY_GRAPH ' + JsonOutput.toJson([buildPath: gradle.buildPath, configuredHttpRepositories: configured.size(), includedBuilds: gradle.includedBuilds.collect { it.name }.sort()]))
 }
+
+// BEGIN CASEOPS ANDROID DEPENDENCY SECURITY
+// Scoped repairs; audit before signing.
+final class CaseOpsAndroidDependencySecurity {
+static final Map<String,String> BUILD = Collections.unmodifiableMap([
+'com.google.guava:guava':'33.8.0-jre',
+'org.jetbrains.kotlin:kotlin-gradle-plugin':'2.4.20',
+'org.bouncycastle:bcprov-jdk18on':'1.86',
+'org.bouncycastle:bcpkix-jdk18on':'1.86',
+'org.bouncycastle:bcutil-jdk18on':'1.86',
+'org.apache.commons:commons-lang3':'3.22.0',
+'org.bitbucket.b_c:jose4j':'0.9.7',
+'org.jdom:jdom2':'2.0.6.1'])
+static final Map<String,String> APP = Collections.unmodifiableMap([
+'com.google.code.gson:gson':'2.15.0', 'commons-io:commons-io':'2.22.0',
+'com.squareup.okio:okio':'3.18.2', 'com.squareup.okio:okio-jvm':'3.18.2'])
+static String minimum(String requested, String fixed) {
+if (!requested) return fixed
+def pattern = ~/^(\d{1,4}(?:\.\d{1,4}){1,3})(-jre)?$/
+def a = requested =~ pattern, b = fixed =~ pattern
+if (!a.matches() || !b.matches() || a.group(2) != b.group(2))
+throw new org.gradle.api.GradleException('ANDROID_SECURITY_VERSION_SELECTOR_UNREVIEWED')
+def left = a.group(1).tokenize('.').collect { it.toInteger() }
+def right = b.group(1).tokenize('.').collect { it.toInteger() }
+for (int i = 0; i < Math.max(left.size(), right.size()); i++) {
+int x = i < left.size() ? left[i] : 0, y = i < right.size() ? right[i] : 0
+if (x != y) return x < y ? fixed : null
+}
+return null
+}
+static String buildMinimum(String key, String requested, String fixed) {
+if (key == 'com.google.guava:guava' && fixed == '33.8.0-jre' && requested in ['18.0','23.0']) return fixed
+minimum(requested, fixed)
+}
+static void buildscript(def handler, boolean webview) {
+handler.configurations.configureEach { configuration ->
+if (configuration.name == 'classpath') configuration.resolutionStrategy.eachDependency { dependency ->
+String key = dependency.requested.group + ':' + dependency.requested.name
+String fixed = webview && key == 'com.android.tools.build:gradle' ? '9.2.1' : BUILD[key]
+if (fixed) {
+def v = buildMinimum(key, dependency.target.version, fixed)
+if (v) dependency.useVersion(v)
+}
+}
+}
+}
+}
+gradle.beforeSettings { settings ->
+CaseOpsAndroidDependencySecurity.buildscript(settings.buildscript, false)
+settings.pluginManagement.resolutionStrategy.eachPlugin { plugin ->
+if (plugin.requested.id.id in ['org.jetbrains.kotlin.jvm', 'org.jetbrains.kotlin.android',
+'org.jetbrains.kotlin.multiplatform', 'org.jetbrains.kotlin.kapt',
+'org.jetbrains.kotlin.plugin.serialization', 'org.jetbrains.kotlin.plugin.compose'] && plugin.requested.version) {
+def v = CaseOpsAndroidDependencySecurity.minimum(plugin.requested.version, '2.4.20')
+if (v) plugin.useVersion(v)
+}
+}
+}
+gradle.beforeProject { project ->
+CaseOpsAndroidDependencySecurity.buildscript(project.buildscript, project.path == ':react-native-webview')
+project.configurations.configureEach { configuration ->
+if (configuration.name ==~ /(?i).*(?:release|localAcceptance)(?:Compile|Runtime)Classpath/) configuration.resolutionStrategy.eachDependency { dependency ->
+String fixed = CaseOpsAndroidDependencySecurity.APP[dependency.requested.group + ':' + dependency.requested.name]
+if (fixed) {
+def v = CaseOpsAndroidDependencySecurity.minimum(dependency.target.version, fixed)
+if (v) dependency.useVersion(v)
+}
+}
+}
+}
+// END CASEOPS ANDROID DEPENDENCY SECURITY

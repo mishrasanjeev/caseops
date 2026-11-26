@@ -9,8 +9,8 @@ import { gunzipSync } from 'node:zlib';
 import { npmRegistryEntry, npmRegistryBootstrap } from './npm-registry.mjs';
 
 // This is a distinct local dependency rebundle. npm's own CLI remains 11.12.1.
-export const NPM_ARTIFACT = Object.freeze({ sha256: 'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b',
-  sizeBytes: 4067054, tarBytes: 17725440, members: 2154,
+export const NPM_ARTIFACT = Object.freeze({ sha256: '3b5af1e81a20ae19f3759a281ad2074564b0cca5392100c9c0043b4ac97c45cc',
+  sizeBytes: 4144718, tarBytes: 17991680, members: 2163,
   relative: 'apps/mobile/vendor/npm-11.12.1-caseops-security/npm-11.12.1-caseops-security.tgz' });
 const fields = ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs', 'uid', 'gid', 'mode', 'nlink'];
 const directoryFields = ['dev', 'ino', 'mode', 'uid', 'gid'];
@@ -179,7 +179,7 @@ function hardenCIPinnedArchive(end) {
 $clock=[Diagnostics.Stopwatch]::StartNew();function Check {if($clock.ElapsedMilliseconds -ge 3500){throw 'bounded'}}
 Check;$rights=[Security.AccessControl.FileSystemRights]::Read -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
 $f=[IO.FileStream]::new($env:CASEOPS_NPM_HARDEN_PATH,[IO.FileMode]::Open,$rights,[IO.FileShare]::Read,4096,[IO.FileOptions]::None)
-Check;if(!$f.CanRead -or !$f.CanSeek -or $f.Length -ne 4067054){throw 'extent'}
+Check;if(!$f.CanRead -or !$f.CanSeek -or $f.Length -ne 4144718){throw 'extent'}
 $assembly=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]::new('CaseOpsNpmArchiveHandle'),[Reflection.Emit.AssemblyBuilderAccess]::Run)
 $type=$assembly.DefineDynamicModule('Native').DefineType('CaseOpsNpmArchiveHandle.Native',[Reflection.TypeAttributes]::Public)
 $method=$type.DefinePInvokeMethod('GetFileInformationByHandle','kernel32.dll','GetFileInformationByHandle',[Reflection.MethodAttributes]'Public,Static,PinvokeImpl',[Reflection.CallingConventions]::Standard,[bool],[Type[]]@([IntPtr],[IntPtr]),[Runtime.InteropServices.CallingConvention]::Winapi,[Runtime.InteropServices.CharSet]::Unicode)
@@ -193,11 +193,11 @@ $mtime=([uint64][BitConverter]::ToUInt32($b,24) -shl 32) -bor [uint64][BitConver
 $size=([uint64][BitConverter]::ToUInt32($b,32) -shl 32) -bor [uint64][BitConverter]::ToUInt32($b,36)
 if(([BitConverter]::ToUInt32($b,0) -band 1040) -ne 0 -or [BitConverter]::ToUInt32($b,40) -ne 1 -or $birth -le 116444736000000000 -or $mtime -le 116444736000000000){throw 'identity'}
 $culture=[Globalization.CultureInfo]::InvariantCulture
-if($ino.ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_MTIME -or $size -ne 4067054 -or $f.Length -ne 4067054){throw 'identity'}
+if($ino.ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_INO -or [BitConverter]::ToUInt32($b,28).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_VOLUME -or (($birth-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_BIRTH -or (($mtime-[uint64]116444736000000000)*[uint64]100).ToString($culture) -cne $env:CASEOPS_NPM_HARDEN_MTIME -or $size -ne 4144718 -or $f.Length -ne 4144718){throw 'identity'}
 return ,$b
 }
 function Digest {$f.Position=0;$h=[Security.Cryptography.SHA256]::Create();try{return [BitConverter]::ToString($h.ComputeHash($f)).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}}
-$first=Identity;$before=Digest;if($before -cne 'f106297722b91e631bdfe4de9776d3ed1d901764e9371d2f5aa7e506cd22111b'){throw 'changed'}
+$first=Identity;$before=Digest;if($before -cne '3b5af1e81a20ae19f3759a281ad2074564b0cca5392100c9c0043b4ac97c45cc'){throw 'changed'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent();$u=$identity.User;$t=$identity.Owner
 if(!$u -or !$t -or $u.Value -in @('S-1-5-18','S-1-5-32-544')){throw 'owner'}
 $old=$f.GetAccessControl();$o=$old.GetOwner([Security.Principal.SecurityIdentifier]).Value
@@ -358,7 +358,7 @@ export function verifyInstalledNpm(root, rows, directories, end, uid) {
 }
 export function prepareNpm(options = {}) {
   const { parent = os.tmpdir(), archive = fileURLToPath(new URL('../../' + NPM_ARTIFACT.relative, import.meta.url)) } = options;
-  assert.ok(['22.23.4', '22.23.5', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(['22.23.4', '22.23.5', '24.15.0', '24.22.3'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
   const end = ciArchiveDeadlines.get(options) ?? performance.now() + 30000;
   const kept = readPinnedArchive(archive, end), tar = gunzipSync(kept, { maxOutputLength: 33554432 });
   assert.equal(tar.length, NPM_ARTIFACT.tarBytes, 'NPM_TOOLING_TAR_EXTENT');
@@ -427,7 +427,7 @@ export function npmAdvisoryInventory(rows) {
   assert.ok(identities.length === 146 && markers.length === 42 && manifests.length === 188, 'NPM_TOOLING_EXACT_MANIFEST_CLASSIFICATION');
   const provenance = rows.find(r => r.path === 'package/node_modules/glob/CASEOPS-BUNDLE-SOURCES.json');
   assert.ok(provenance, 'NPM_TOOLING_BUNDLED_PROVENANCE_REQUIRED'); const bundle = JSON.parse(provenance.bytes.toString('utf8'));
-  assert.ok(bundle.originalVersion === '14.0.2' && bundle.localVersion === '14.0.2-caseops.1'
+  assert.ok(bundle.originalVersion === '14.0.6' && bundle.localVersion === '14.0.6-caseops.2'
     && bundle.sourceArchives.length === 8, 'NPM_TOOLING_BUNDLED_PROVENANCE_REQUIRED');
   const embedded = bundle.sourceArchives.map(row => ({ name: row.name, version: row.version, sha256: row.reference.sha256,
     role: row.name === 'glob' ? 'explicit-upstream-mapping' : 'embedded-default-bundle' }));
@@ -471,7 +471,7 @@ export async function runNpm(args, options = {}) {
 /** CI invocation only: no arbitrary archive, environment, deadline or ACL target API. */
 export async function runCINpm(args) {
   const end = performance.now() + 30000;
-  assert.ok(['22.23.4', '22.23.5', '24.15.0'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
+  assert.ok(['22.23.4', '22.23.5', '24.15.0', '24.22.3'].includes(process.versions.node), 'NPM_TOOLING_PINNED_NODE_REQUIRED');
   assert.ok(Array.isArray(args) && args.every(arg => typeof arg === 'string'), 'NPM_TOOLING_CI_ARCHIVE_HARDEN_CONTEXT');
   const proof = hardenCIPinnedArchive(end);
   console.error(JSON.stringify(proof));

@@ -20,7 +20,7 @@ build_root="${CASEOPS_ANDROID_BUILD_ROOT:-$HOME/.cache/caseops-mobile/android-bu
 node - "$repo" "$build_root" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const [repo, output] = process.argv.slice(2);
-assert.equal(process.versions.node, '24.15.0', 'PINNED_NODE_24_15_REQUIRED');
+assert.equal(process.versions.node, '24.22.3', 'PINNED_NODE_24_22_3_REQUIRED');
 for (const value of [output, process.env.ANDROID_HOME, process.env.ANDROID_SDK_ROOT, process.env.JAVA_HOME,
   process.env.CASEOPS_ANDROID_JDK17_HOME, process.env.GRADLE_USER_HOME]) assert.ok(path.isAbsolute(value), 'ABSOLUTE_TOOL_AND_OUTPUT_PATHS_REQUIRED');
 assert.equal(fs.realpathSync(process.env.ANDROID_HOME), fs.realpathSync(process.env.ANDROID_SDK_ROOT), 'ONE_EXPLICIT_ANDROID_SDK_REQUIRED');
@@ -51,8 +51,8 @@ trap 'printf "Raw build evidence retained: %s\n" "$run"' EXIT
 node - "$run" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
 const root = process.argv[2];
-assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.12\.1\+1\b/, 'PINNED_TEMURIN_21_REQUIRED');
-assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.20\.1\+1\b/, 'PINNED_TEMURIN_17_REQUIRED');
+assert.match(fs.readFileSync(path.join(root, 'java21.log'), 'utf8'), /Temurin-21\.0\.13\.1\+2\b/, 'PINNED_TEMURIN_21_REQUIRED');
+assert.match(fs.readFileSync(path.join(root, 'java17.log'), 'utf8'), /Temurin-17\.0\.21\.1\+2\b/, 'PINNED_TEMURIN_17_REQUIRED');
 NODE
 if [[ -n "${CASEOPS_ANDROID_HOST_POLICY_FILE:-}" || -n "${CASEOPS_ANDROID_HOST_POLICY_SHA256:-}" ]]; then
   : "${CASEOPS_ANDROID_HOST_POLICY_FILE:?Supply the admitted Android role policy}"
@@ -76,8 +76,8 @@ node - "$PWD/android" "$run" <<'NODE'
 const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const [android, output] = process.argv.slice(2), file = path.join(android, 'gradle/wrapper/gradle-wrapper.properties');
 let body = fs.readFileSync(file, 'utf8');
-assert.equal(/^distributionUrl=(.+)$/m.exec(body)?.[1], 'https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip', 'PINNED_GRADLE_DISTRIBUTION_REQUIRED');
-const digest = '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
+assert.equal(/^distributionUrl=(.+)$/m.exec(body)?.[1], 'https\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip', 'PINNED_GRADLE_DISTRIBUTION_REQUIRED');
+const digest = '971fcd7150ca4ba04852c0b2ca0d2d0ab9468e14b03473eab19528809914c76b';
 const existing = /^distributionSha256Sum=(.*)$/m.exec(body);
 if (existing) assert.equal(existing[1], digest, 'PINNED_GRADLE_CHECKSUM_REQUIRED');
 else { body += `\ndistributionSha256Sum=${digest}\n`; fs.writeFileSync(file, body); }

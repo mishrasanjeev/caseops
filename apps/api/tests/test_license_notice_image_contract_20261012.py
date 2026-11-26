@@ -32,6 +32,40 @@ BUILD_TOOL_SOURCES = {
         "f08d9841fdd1e143095de28a772896efb62122bf416e6172c49ab04f309c63e2",
     "license-policy/upstream/picomatch_4.0.7-caseops.1/package.json":
         "6ca3e6f8fd2af0bbd7e9a84e7d28bada2be3431cea22bbf7033de9365c185424",
+    "license-policy/upstream/glob_14.0.6/LICENSE.md":
+        "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09",
+    "license-policy/upstream/glob_14.0.6/package.json":
+        "46065b223266140254eb17d347469ab824681beaa843516bc1e0008eec612157",
+    "license-policy/upstream/minimatch_11.0.8/LICENSE.md":
+        "2c7c5d22ed5a8ee968c64757710979afcd77438c48b4a265b94e615babd8a901",
+    "license-policy/upstream/minimatch_11.0.8/package.json":
+        "e041e4eea42d4e631dcc9ec8d3e0a1ee7a29a2873f6be55ad92b5567ef0d4177",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/LICENSE.md":
+        "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+    "license-policy/upstream/nonrecursive-glob-match_1.1.0/package.json":
+        "8c5a050303b8ac93b506cbd1e67cc8e1a77b331b8fb16309581f4e4c97b20f60",
+    "license-policy/upstream/brace-expansion_5.0.13/LICENSE":
+        "9c63a23124d68cd30cd316a94a1a0bca34f032786df6df69fc4b5f136bac8d2e",
+    "license-policy/upstream/brace-expansion_5.0.13/package.json":
+        "f3003567866767f2685b97136c99c47886a09be0b2d82ad9818b5b390cc38988",
+    "license-policy/upstream/brace-expansion_5.0.13/brace-expansion-5.0.13.tgz":
+        "015c8761629e59fc31f3a6e472a940f6d759fc8227e67882c399dfb9a703ae6e",
+    "license-policy/upstream/vite_8.2.6/package.json":
+        "f1102d5b963ba5120abb1efbaceee5ae0dea89b4b1ed3d965c6bc9e77c965606",
+    "license-policy/upstream/vite_8.2.6/LICENSE.md":
+        "387dd7baa307083401a27c58c362c30832f5ba1dba84f10cc22c33401523f45c",
+    "license-policy/upstream/rolldown_1.2.19/LICENSE":
+        "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+    "license-policy/upstream/rolldown_1.2.19/THIRD-PARTY-LICENSE":
+        "a877291d800ed43692f3f9ae09d8e01cc6f7293ad39d43896059c188ffbb8b7c",
+    "license-policy/upstream/rolldown_1.2.19/package.json":
+        "73ea5ca898ac22574e23d66e54dc9c5b3714f9d8c1be934412824d62f25e21fc",
+    "license-policy/upstream/undici_7.30.2/lib/web/fetch/LICENSE":
+        "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+    "license-policy/upstream/undici_7.30.2/LICENSE":
+        "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+    "license-policy/upstream/undici_7.30.2/package.json":
+        "f413840d65b1b99ea0993e161f31055b924bf5bc9a06d11e7a3fb1d1ba177bef",
 }
 
 
@@ -96,6 +130,23 @@ def test_runner_retains_public_notices_and_nonpublic_operator_materials():
     assert "FROM node:22.23.5-alpine AS trusted-base" in dockerfile
     runner = dockerfile.split("FROM trusted-base AS runner", 1)[1]
     copies = [shlex.split(line) for line in runner.splitlines() if line.startswith("COPY ")]
+    # npm can retain production dependencies beside the workspace manifest.
+    # Copy every locked production root, not only the hoisted root tree.
+    lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+    workspace_roots = {
+        location.split("/node_modules/", 1)[0] + "/node_modules"
+        for location, metadata in lock["packages"].items()
+        if "/node_modules/" in location and not location.startswith("node_modules/")
+        and metadata.get("dev") is not True
+    }
+    assert workspace_roots == {"apps/web/node_modules"}
+    dependency_copies = [tokens for tokens in copies if "--from=prod-deps" in tokens]
+    assert {tokens[-2]: tokens[-1] for tokens in dependency_copies} == {
+        "/app/node_modules": "/app/node_modules",
+        **{f"/app/{root}": "./node_modules" for root in workspace_roots},
+    }
+    assert len(dependency_copies) == len(workspace_roots) + 1
+    assert all("--chown=nextjs:nodejs" in tokens for tokens in dependency_copies)
     public = [tokens for tokens in copies if tokens[-2:] == ["/app/apps/web/public", "./public"]]
     assert len(public) == 1 and "--from=builder" in public[0]
     expected = {
@@ -148,11 +199,11 @@ def test_shipped_upstream_inventory_equals_hash_bound_review_materials():
         relative = path.relative_to(ROOT).as_posix()
         assert relative in expected, "Undeclared operator material must not enter the image"
         actual.add(relative)
-        assert len(actual) <= 64
+        assert len(actual) <= 79
         assert path.stat().st_size <= 1024 * 1024
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[relative]
     assert actual == set(expected)
-    assert len(actual) == 62
+    assert len(actual) == 79
     document_hash = hashlib.sha256((ROOT / REVIEW).read_bytes()).hexdigest()
     assert document_hash == record["review_document"]["sha256"]
 

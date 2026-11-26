@@ -6,7 +6,7 @@ import { test, expect } from 'vitest';
 test('real tiny worker retains inherited host-trust bootstrap',async()=>{
  const {assertHostNodeTrust}=await import(process.env.CASEOPS_VITEST_H_SOURCE_URI);
  const report=assertHostNodeTrust({policyRef:{path:process.env.CASEOPS_HOST_NODE_TRUST_POLICY_FILE,sha256:process.env.CASEOPS_HOST_NODE_TRUST_POLICY_SHA256}});
- const expectedDefaultCount={'22.14.0':148,'22.23.4':116,'24.15.0':144}[process.versions.node];
+ const expectedDefaultCount={'22.14.0':148,'22.23.4':116,'22.23.5':116,'24.15.0':144,'24.22.3':118}[process.versions.node];
  expect(expectedDefaultCount).toBeDefined();expect(report.expectedDefaultCount).toBe(expectedDefaultCount);
  expect(report.selectedStoreVerified).toBe(true);
  expect(7+5).toBe(12);

@@ -239,6 +239,7 @@ def test_callback_clock_window_and_elapsed_second_are_exact(
         (body(job_id="invented"), 422),
     ],
 )
+@pytest.mark.usefixtures("live_logs")
 def test_callback_body_is_bounded_strict_and_not_logged(
     worker_client, monkeypatch, caplog, payload, expected
 ):
@@ -327,6 +328,7 @@ def cloud_mode(monkeypatch):
 @pytest.mark.parametrize(
     "outcome", ["accepted", "denied", "lost-ack", "oversized-token", "invalid-token", "timeout"]
 )
+@pytest.mark.usefixtures("live_logs")
 def test_actual_dispatch_constructors_are_marked_bounded_nonretrying_and_outside_transaction(
     monkeypatch, outcome, caplog
 ):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -450,16 +449,14 @@ def test_postgres_notification_recovery_uses_parent_before_intent_without_deadlo
                 company_id=env["company_id"],
                 membership_id=env["owner_id"],
             )
-            return asyncio.run(
-                notification_routes.recover_notification_intent(
-                    original_id,
-                    notification_routes.NotificationRecoveryRequest(
-                        replacement_membership_id=env["owner_id"],
-                        recovery_action="PostgreSQL canonical lock-order recovery",
-                    ),
-                    context,
-                    worker,
-                )
+            return notification_routes.recover_notification_intent(
+                original_id,
+                notification_routes.NotificationRecoveryRequest(
+                    replacement_membership_id=env["owner_id"],
+                    recovery_action="PostgreSQL canonical lock-order recovery",
+                ),
+                context,
+                worker,
             )
 
     def run_parent_writer() -> None:

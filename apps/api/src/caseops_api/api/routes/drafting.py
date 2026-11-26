@@ -109,7 +109,7 @@ class CourtFormatProfilesResponse(BaseModel):
     response_model=DraftTemplatesListResponse,
     summary="List drafting templates (one per DraftTemplateType).",
 )
-async def list_drafting_templates(
+def list_drafting_templates(
     context: CurrentContext,
     session: DbSession,
 ) -> DraftTemplatesListResponse:
@@ -323,7 +323,7 @@ class DraftPreviewResponse(BaseModel):
     ),
 )
 @limiter.limit(ai_route_rate_limit, key_func=tenant_aware_key)
-async def post_drafting_preview(
+def post_drafting_preview(
     request: Request,
     payload: DraftPreviewRequest,
     context: CurrentContext,

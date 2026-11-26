@@ -48,7 +48,7 @@ CounselRecommender = Annotated[
     response_model=MatterCounselContextResponse,
     summary="Read bounded outside counsel and spend pages for one visible Matter",
 )
-async def get_current_matter_counsel_context(
+def get_current_matter_counsel_context(
     matter_id: str,
     context: CurrentContext,
     session: DbSession,
@@ -69,7 +69,7 @@ async def get_current_matter_counsel_context(
     response_model=OutsideCounselWorkspaceResponse,
     summary="Get outside counsel, spend, and portfolio analytics for the current company",
 )
-async def get_current_company_outside_counsel_workspace(
+def get_current_company_outside_counsel_workspace(
     context: CurrentContext,
     session: DbSession,
 ) -> OutsideCounselWorkspaceResponse:
@@ -81,7 +81,7 @@ async def get_current_company_outside_counsel_workspace(
     response_model=OutsideCounselRecord,
     summary="Create an outside counsel profile",
 )
-async def post_current_company_outside_counsel_profile(
+def post_current_company_outside_counsel_profile(
     payload: OutsideCounselCreateRequest,
     context: CounselManager,
     session: DbSession,
@@ -94,7 +94,7 @@ async def post_current_company_outside_counsel_profile(
     response_model=OutsideCounselRecord,
     summary="Update an outside counsel profile",
 )
-async def patch_current_company_outside_counsel_profile(
+def patch_current_company_outside_counsel_profile(
     counsel_id: str,
     payload: OutsideCounselUpdateRequest,
     context: CounselManager,
@@ -113,7 +113,7 @@ async def patch_current_company_outside_counsel_profile(
     response_model=OutsideCounselAssignmentRecord,
     summary="Link outside counsel to a matter",
 )
-async def post_current_company_outside_counsel_assignment(
+def post_current_company_outside_counsel_assignment(
     payload: OutsideCounselAssignmentCreateRequest,
     context: CounselManager,
     session: DbSession,
@@ -126,7 +126,7 @@ async def post_current_company_outside_counsel_assignment(
     response_model=OutsideCounselSpendRecord,
     summary="Record outside counsel spend against a matter",
 )
-async def post_current_company_outside_counsel_spend_record(
+def post_current_company_outside_counsel_spend_record(
     payload: OutsideCounselSpendRecordCreateRequest,
     context: CounselManager,
     session: DbSession,
@@ -139,7 +139,7 @@ async def post_current_company_outside_counsel_spend_record(
     response_model=OutsideCounselSpendRecord,
     summary="Update outside counsel spend/payment status",
 )
-async def patch_current_company_outside_counsel_spend_record(
+def patch_current_company_outside_counsel_spend_record(
     spend_record_id: str,
     payload: OutsideCounselSpendRecordUpdateRequest,
     context: CounselManager,
@@ -158,7 +158,7 @@ async def patch_current_company_outside_counsel_spend_record(
     response_model=OutsideCounselRecommendationResponse,
     summary="Rank outside counsel options for a matter",
 )
-async def post_current_company_outside_counsel_recommendations(
+def post_current_company_outside_counsel_recommendations(
     payload: OutsideCounselRecommendationRequest,
     context: CounselRecommender,
     session: DbSession,

@@ -269,7 +269,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Stream the tenant audit trail as JSONL or CSV */
+        /**
+         * Stream the tenant audit trail as JSONL or CSV
+         * @description Defaults to the last 30 days; an open `until` is pinned to the request time. One download holds at most 50000 rows: a wider window returns 422 `audit_export_row_cap_exceeded` with `row_cap`, and no partial file. A `limit` at or under the cap returns the first `limit` rows. Use `POST /api/admin/audit/export/async` for larger exports.
+         */
         get: operations["export_audit_trail_api_admin_audit_export_get"];
         put?: never;
         post?: never;

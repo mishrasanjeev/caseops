@@ -467,7 +467,7 @@ def post_portal_logout(
     response_model=PortalSessionResponse,
     summary="Current portal user + active matter grants",
 )
-async def get_portal_me(
+def get_portal_me(
     portal_user: CurrentPortalUser,
     session: DbSession,
 ) -> PortalSessionResponse:
@@ -530,7 +530,7 @@ def _hearing_record(hearing) -> PortalHearingRecord:
     response_model=PortalMatterListResponse,
     summary="List matters this portal user has been granted access to",
 )
-async def get_portal_matters(
+def get_portal_matters(
     portal_user: CurrentPortalUser,
     session: DbSession,
 ) -> PortalMatterListResponse:
@@ -549,7 +549,7 @@ async def get_portal_matters(
     response_model=PortalMatterRecord,
     summary="Detail of one matter the portal user has been granted",
 )
-async def get_portal_matter(
+def get_portal_matter(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -567,7 +567,7 @@ async def get_portal_matter(
     response_model=PortalCommunicationListResponse,
     summary="Communications visible to the portal user on this matter",
 )
-async def get_portal_matter_communications(
+def get_portal_matter_communications(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -588,7 +588,7 @@ async def get_portal_matter_communications(
     status_code=status.HTTP_201_CREATED,
     summary="Reply to the firm — lands in the internal Communications log",
 )
-async def post_portal_matter_reply(
+def post_portal_matter_reply(
     matter_id: str,
     payload: PortalReplyPayload,
     portal_user: CurrentPortalUser,
@@ -610,7 +610,7 @@ async def post_portal_matter_reply(
     response_model=PortalHearingListResponse,
     summary="Read-only list of hearings on this matter",
 )
-async def get_portal_matter_hearings(
+def get_portal_matter_hearings(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -630,7 +630,7 @@ async def get_portal_matter_hearings(
     response_model=PortalMatterClientListResponse,
     summary="List clients linked to this matter (for the KYC picker)",
 )
-async def get_portal_matter_clients(
+def get_portal_matter_clients(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -660,7 +660,7 @@ async def get_portal_matter_clients(
     status_code=status.HTTP_201_CREATED,
     summary="Submit KYC documents for the clients on this matter",
 )
-async def post_portal_matter_kyc(
+def post_portal_matter_kyc(
     matter_id: str,
     payload: PortalKycSubmitPayload,
     portal_user: CurrentPortalUser,
@@ -814,7 +814,7 @@ def _parse_iso_date(value: str, *, field: str):
     summary="List matters this outside-counsel portal user is assigned to",
     tags=["portal"],
 )
-async def get_oc_matters(
+def get_oc_matters(
     portal_user: CurrentPortalUser,
     session: DbSession,
 ) -> PortalMatterListResponse:
@@ -830,7 +830,7 @@ async def get_oc_matters(
     summary="Detail of one assigned matter",
     tags=["portal"],
 )
-async def get_oc_matter(
+def get_oc_matter(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -850,7 +850,7 @@ async def get_oc_matter(
     summary="Upload work product (virus-scanned, OC-isolated)",
     tags=["portal"],
 )
-async def post_oc_work_product(
+def post_oc_work_product(
     matter_id: str,
     file: Annotated[UploadFile, File(...)],
     portal_user: CurrentPortalUser,
@@ -875,7 +875,7 @@ async def post_oc_work_product(
     summary="List work product visible to this OC portal user",
     tags=["portal"],
 )
-async def get_oc_work_product(
+def get_oc_work_product(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -897,7 +897,7 @@ async def get_oc_work_product(
     summary="Submit an invoice (lands in firm billing inbox as needs_review)",
     tags=["portal"],
 )
-async def post_oc_invoice(
+def post_oc_invoice(
     matter_id: str,
     payload: PortalOcInvoiceSubmitPayload,
     portal_user: CurrentPortalUser,
@@ -927,7 +927,7 @@ async def post_oc_invoice(
     summary="List invoices visible to this OC portal user",
     tags=["portal"],
 )
-async def get_oc_invoices(
+def get_oc_invoices(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,
@@ -949,7 +949,7 @@ async def get_oc_invoices(
     summary="Submit a time entry (firm reviews + attaches to invoice later)",
     tags=["portal"],
 )
-async def post_oc_time_entry(
+def post_oc_time_entry(
     matter_id: str,
     payload: PortalOcTimeEntrySubmitPayload,
     portal_user: CurrentPortalUser,
@@ -978,7 +978,7 @@ async def post_oc_time_entry(
     summary="List time entries visible to this OC portal user",
     tags=["portal"],
 )
-async def get_oc_time_entries(
+def get_oc_time_entries(
     matter_id: str,
     portal_user: CurrentPortalUser,
     session: DbSession,

@@ -26,7 +26,7 @@ CauseListViewer = Annotated[SessionContext, Depends(require_capability("calendar
     response_model=CauseListPreviewResponse,
     summary="Preview a date-wise cause list for visible matters",
 )
-async def post_cause_list_preview(
+def post_cause_list_preview(
     payload: CauseListPreviewRequest,
     context: CauseListViewer,
     session: DbSession,
@@ -39,7 +39,7 @@ async def post_cause_list_preview(
     summary="Download a date-wise cause list PDF",
     responses={200: {"content": {"application/pdf": {}}}},
 )
-async def post_cause_list_download(
+def post_cause_list_download(
     payload: CauseListPreviewRequest,
     context: CauseListViewer,
     session: DbSession,

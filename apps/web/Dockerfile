@@ -68,6 +68,7 @@ COPY apps/web ./
 # check. Keep it in the builder context only; the runner copies no test files.
 COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
 COPY tests/fixtures/node-default-tls-probe.cjs /app/tests/fixtures/node-default-tls-probe.cjs
+COPY tests/fixtures/undici-loopback-redirect-probe.cjs /app/tests/fixtures/undici-loopback-redirect-probe.cjs
 COPY tests/fixtures/node-local-tls-certificates.cjs /app/tests/fixtures/node-local-tls-certificates.cjs
 COPY tests/fixtures/contract-preview-probe.ts /app/tests/fixtures/contract-preview-probe.ts
 # Colocated diagnostic units require their direct and transitive support imports.
@@ -147,6 +148,7 @@ COPY --chown=nextjs:nodejs license-policy/upstream/ /app/third-party-compliance/
 COPY --chown=nextjs:nodejs docs/security/js-license-compliance-review-2026-10-12.md /app/third-party-compliance/docs/security/js-license-compliance-review-2026-10-12.md
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public/third-party-notices /app/third-party-compliance/apps/web/public/third-party-notices
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
+COPY --from=prod-deps --chown=nextjs:nodejs /app/apps/web/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 
 ARG CASEOPS_RELEASE_SHA=unavailable

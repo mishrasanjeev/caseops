@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuditEvent, Matter
 from caseops_api.schemas.audit import MatterAuditEventRecord, MatterAuditListResponse
+from caseops_api.services.audit_exports import visible_ip_audit_events_filter
 from caseops_api.services.matter_access import assert_access
 from caseops_api.services.session_context import SessionContext
 
@@ -69,6 +70,7 @@ def matter_audit_event_dict(event: AuditEvent) -> dict[str, Any]:
 
 
 def _audit_filters(
+    session: Session,
     *,
     context: SessionContext,
     matter_id: str,
@@ -81,6 +83,10 @@ def _audit_filters(
     filters: list[Any] = [
         AuditEvent.company_id == context.company.id,
         AuditEvent.matter_id == matter_id,
+        # A Matter row can also name an IP docket (a Matter-IP link). Seeing the
+        # Matter does not grant the docket: the same IP ethical-wall filter as
+        # the tenant audit export applies.
+        visible_ip_audit_events_filter(session, context=context),
     ]
     if since is not None:
         filters.append(AuditEvent.created_at >= since)
@@ -127,6 +133,7 @@ def list_matter_audit_events(
     safe_limit = min(max(limit, 1), 200)
     safe_offset = max(offset, 0)
     filters = _audit_filters(
+        session,
         context=context,
         matter_id=matter.id,
         since=since,
@@ -169,6 +176,7 @@ def export_matter_audit_events(
     matter = _load_visible_matter(session, context=context, matter_id=matter_id)
     safe_limit = min(max(limit, 1), 10_000)
     filters = _audit_filters(
+        session,
         context=context,
         matter_id=matter.id,
         since=since,

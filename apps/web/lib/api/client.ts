@@ -13,6 +13,12 @@ import { localAcceptanceRequest } from "./local-acceptance";
 
 const REFRESH_PATH = "/api/auth/refresh";
 const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
+/**
+ * Whole-body downloads get the API's own request ceiling: Cloud Run ends any
+ * response at API_TIMEOUT_SECONDS=120 (scripts/deploy-prod.sh), so the client
+ * never abandons a download the server could still deliver. Keep the two equal.
+ */
+export const DOWNLOAD_REQUEST_TIMEOUT_MS = 120_000;
 const REFRESH_TIMEOUT_MS = 15_000;
 
 // EG-001 (2026-04-23): cookie name + header pair for the
@@ -421,22 +427,6 @@ export async function apiRequest<TResponse>(
   return parsed as TResponse;
 }
 
-/**
- * Authenticated binary response transport.
- *
- * Keep downloads on the same cookie, explicit-bearer, single-flight refresh,
- * one-retry, and unrecoverable sign-in redirect path as `apiRequest`. The
- * successful response is intentionally left unread so the caller can consume
- * its Blob and Content-Disposition headers.
- */
-export async function apiBlobRequest(
-  path: string,
-  init: Omit<ApiRequestInit, "body"> = {},
-  _retry = false,
-): Promise<Response> {
-  return authenticatedBinaryRequest(path, init, async (response) => response, _retry);
-}
-
 export type ApiBlobData = { blob: Blob; headers: Headers; status: number };
 export type ApiBlobDataInit = Omit<ApiRequestInit, "body"> & { maxBytes?: number };
 type BinaryResponseStatus = { status?: number };
@@ -486,10 +476,16 @@ async function binaryBody(response: Response, signal: AbortSignal, maxBytes: num
   }
 }
 
-/** Private binary data: one deadline includes authentication recovery and body consumption. */
+/**
+ * Private binary data on the `apiRequest` cookie, explicit-bearer, refresh and
+ * sign-in path: one deadline and the caller's signal cover authentication
+ * recovery and the complete body. `maxBytes: Infinity` leaves the size policy
+ * to the server for downloads that have no known client-side size.
+ */
 export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {}): Promise<ApiBlobData> {
   const { maxBytes = 32 * 1024 * 1024, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = init;
-  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+  const validMaxBytes = maxBytes === Number.POSITIVE_INFINITY || (Number.isSafeInteger(maxBytes) && maxBytes > 0);
+  if (!validMaxBytes || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError("Binary size and timeout limits must be positive.");
   }
   const controller = new AbortController();
@@ -515,6 +511,41 @@ export async function apiBlobDataRequest(path: string, init: ApiBlobDataInit = {
     clearTimeout(timer);
     init.signal?.removeEventListener("abort", cancel);
   }
+}
+
+/** A whole authenticated download whose size policy belongs to the server. */
+export function apiDownloadRequest(
+  path: string, init: Omit<ApiBlobDataInit, "maxBytes"> = {},
+): Promise<ApiBlobData> {
+  return apiBlobDataRequest(path, {
+    timeoutMs: DOWNLOAD_REQUEST_TIMEOUT_MS, ...init, maxBytes: Number.POSITIVE_INFINITY,
+  });
+}
+
+export type FetchedBlob = { ok: boolean; status: number; headers: Headers; blob: Blob };
+
+/**
+ * A download that keeps its caller's own auth and status handling: one deadline
+ * and the caller's signal cover the headers and the complete body of any
+ * status, with no client byte cap. Failures before headers match
+ * `fetchWithTimeout`; `onHeaders` lets a caller tell the two phases apart.
+ */
+export async function fetchBlobWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
+  onHeaders?: () => void,
+): Promise<FetchedBlob> {
+  return consumeResponseWithTimeout(input, init, timeoutMs, async (response, signal) => {
+    onHeaders?.();
+    try {
+      const blob = await binaryBody(response, signal, Number.POSITIVE_INFINITY);
+      return { ok: response.ok, status: response.status, headers: response.headers, blob };
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new NetworkError("The download was interrupted. Try again.", error);
+    }
+  });
 }
 
 async function authenticatedBinaryRequest<T>(
