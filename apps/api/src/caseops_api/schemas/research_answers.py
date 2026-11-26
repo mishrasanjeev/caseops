@@ -133,6 +133,10 @@ class ResearchSource(BaseModel):
     weight: str
     source_action: SourceActionRecord | None = None
     in_app_href: str | None = None
+    # For a judgment, against the question's focus provision: "cites" (its
+    # recorded citations include it), "names" (its retrieved text names it) or
+    # "context_only" (it does neither; kept only because nothing else did).
+    focus_engagement: Literal["cites", "names", "context_only"] | None = None
     treatment_signal: ResearchTreatmentSignal | None = None
     retrieved_at: datetime | None = None
 

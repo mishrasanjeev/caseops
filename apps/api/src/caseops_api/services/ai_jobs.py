@@ -64,10 +64,8 @@ def recover_stale_ai_jobs(*, limit: int) -> int:
     _require_batch_limit(limit)
     now = datetime.now(UTC)
     recovered = 0
-    stale_answer = (
-        ResearchAnswer.status.in_(("queued", "running")),
-        ResearchAnswer.created_at <= now - research_answers.STALE_AFTER,
-    )
+    # Queued rows by request time, running rows by claim time (RUN_LEASE).
+    stale_answer = (research_answers._stale_research_filter(now),)
     with get_session_factory()() as session:
         answer_ids = list(
             session.scalars(

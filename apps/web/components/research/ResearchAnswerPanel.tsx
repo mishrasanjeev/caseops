@@ -163,7 +163,9 @@ export function ResearchAnswerStatus({
               ? "Queued. Waiting to start the research run."
               : "Retrieving statutes and judgments, then drafting and verifying citations."}
           </span>
-          <span className="font-mono tabular-nums" data-testid="research-answer-elapsed" aria-label={`Elapsed ${formatElapsed(elapsed)}`}>
+          {/* Hidden from assistive technology: inside role=status a per-second
+              counter would be announced every second. */}
+          <span className="font-mono tabular-nums" data-testid="research-answer-elapsed" aria-hidden="true">
             {formatElapsed(elapsed)}
           </span>
         </p>

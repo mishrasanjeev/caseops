@@ -12,10 +12,12 @@
  *   instead of the old dead end, and the same words asked from a matter whose
  *   record describes a dishonoured cheque are answered on Section 138.
  *
- * The no-paid header routes the model to the deterministic offline provider,
- * so production proves retrieval, focus, verification, timing and UI without
- * paid spend. It never proves the paid model's prose: that stays a recorded
- * human check.
+ * The no-paid header routes both the embedding and the model to deterministic
+ * offline providers, so production proves source selection against the live
+ * corpus (focus, Act scoping, judgment engagement, identifiable titles),
+ * verification, de-duplication, timing and UI, without paid spend. It does not
+ * prove Voyage vector ranking or the paid model's prose: those need a run by a
+ * signed-in human on the deployed release, recorded with the exact question.
  */
 import { randomUUID } from "node:crypto";
 
@@ -35,7 +37,10 @@ const VAGUE_QUESTION = "Explain about this matter/case.";
 // The page promises "one to two minutes"; a run must finish inside that.
 const ANSWER_BOUND_MS = 120_000;
 
-type Source = { number: number; kind: "statute_section" | "judgment"; title: string; court: string | null };
+type Source = {
+  number: number; kind: "statute_section" | "judgment"; title: string; court: string | null;
+  focus_engagement: "cites" | "names" | "context_only" | null;
+};
 type Record_ = {
   id: string; status: string; error_code: string | null; message: string | null;
   answer: { question_focus: string[] } | null; sources: Source[]; suggestions: string[];
@@ -51,6 +56,11 @@ function expectSection138Sources(record: Record_) {
       .toContain("Negotiable Instruments Act");
   }
   expect(record.sources[0]?.kind, "a statutory source leads").toBe("statute_section");
+  // Titles alone could not catch a list of Section 482 quashing petitions with
+  // party-name titles: every judgment must cite or name Section 138 itself.
+  for (const source of record.sources.filter((item) => item.kind === "judgment")) {
+    expect(source.focus_engagement, `${source.title} deals with Section 138`).toMatch(/^(cites|names)$/);
+  }
 }
 
 /** No authority card is a page header, file name, court room or URL. */

@@ -108,6 +108,23 @@ function AuthorityCard({
           </span>
         </div>
         <h4 className="text-sm font-semibold text-[var(--color-ink)]">{source.title}</h4>
+        {source.kind === "judgment" && source.focus_engagement ? (
+          <p
+            className={
+              source.focus_engagement === "context_only"
+                ? "text-xs font-medium text-[var(--color-warn-700)]"
+                : "text-xs text-[var(--color-ink-2)]"
+            }
+            data-testid="research-focus-engagement"
+            data-engagement={source.focus_engagement}
+          >
+            {source.focus_engagement === "cites"
+              ? "Cites the provision researched"
+              : source.focus_engagement === "names"
+                ? "Names the provision researched in the retrieved text"
+                : "Related context only: does not cite the provision researched"}
+          </p>
+        ) : null}
         {facts.length ? <p className="text-[var(--color-ink-2)]">{facts.join(" · ")}</p> : null}
       </div>
       <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[10rem_1fr]">

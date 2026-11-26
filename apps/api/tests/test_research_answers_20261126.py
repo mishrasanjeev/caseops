@@ -453,7 +453,7 @@ def test_a_vague_question_without_a_matter_asks_for_detail_not_a_dead_end(
     assert "no indexed statute section or judgment" not in record["message"]
 
 
-def test_an_unsourced_provision_offers_answerable_rephrasings(
+def test_an_unsourced_provision_is_never_suggested_back(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token = bootstrap_company(client)["access_token"]
@@ -481,12 +481,43 @@ def test_an_unsourced_provision_offers_answerable_rephrasings(
     )
 
     assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+    # Suggesting Section 9 again would abstain again (review finding M4).
+    assert record["suggestions"] == []
+
+
+def test_suggestions_offer_the_matters_citable_provisions_without_its_name(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    section_id, _ = _seed_sources()
+    token = bootstrap_company(client)["access_token"]
+    matter_id = _matter(client, token, "RA-VAGUE-4", title="Confidential Client v. Bank")
+    with get_session_factory()() as session:
+        session.add(MatterStatuteReference(matter_id=matter_id, section_id=section_id))
+        session.commit()
+    monkeypatch.setattr(service, "_retrieve_judgments", lambda session, query: [])
+    _section(
+        "arbitration-1996", "A&C Act", "Arbitration and Conciliation Act, 1996", "Section 9",
+        "A party may apply to a court for interim measures.",
+    )
+    with get_session_factory()() as session:
+        row = session.scalar(
+            select(StatuteSection).where(StatuteSection.statute_id == "arbitration-1996")
+        )
+        row.verification_status = "unverified"
+        session.commit()
+
+    record = _ask(
+        client, token,
+        query="Explain interim relief under Section 9 of the Arbitration and Conciliation Act",
+        context_matter_id=matter_id,
+    )
+
+    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
     assert record["suggestions"] == [
-        "What are the essential ingredients, time limits and procedure under Section 9, "
-        "Arbitration and Conciliation Act, 1996?",
-        "How does Section 9, Arbitration and Conciliation Act, 1996 apply to the recorded "
-        "facts of Supplier cheque complaint?",
+        f"What are the essential ingredients, time limits and procedure under {FOCUS_138}?",
+        f"How does {FOCUS_138} apply to this matter's recorded facts?",
     ]
+    assert not any("Confidential Client" in item for item in record["suggestions"])
 
 
 # --------------------------------------------------------------------------- #
@@ -610,8 +641,9 @@ def test_a_judgment_whose_title_is_a_page_header_is_named_from_its_record(
     named_from_parties = _judgment(
         "HYD1", title="AT HYDERABAD", court="Telangana High Court",
         forum=MatterForumLevel.HIGH_COURT,
-        text="4. The complaint under Section 138 of the Negotiable Instruments Act was filed "
-        "after the demand notice for the cheque dishonoured for insufficient funds.",
+        text="K. Ramesh v. Sri Lakshmi Agencies. 4. The complaint under Section 138 of the "
+        "Negotiable Instruments Act was filed after the demand notice for the cheque "
+        "dishonoured for insufficient funds.",
         cited=["Section 138 NI Act"],
     )
     unnamed = _judgment(
@@ -670,3 +702,262 @@ def test_judgment_identity_rejects_headers_seen_in_production(title: str, named:
     assert is_named is named
     if not named:
         assert shown == "Case name not recorded: CRL.P. 1/2020, Telangana High Court, 2020-01-02"
+
+
+def test_extracted_party_names_absent_from_the_judgment_are_not_shown() -> None:
+    document = AuthorityDocument(
+        title="AT HYDERABAD", court_name="Telangana High Court", case_reference="CRL.P. 7/2021",
+        decision_date=date(2021, 1, 2), document_text="The petition concerns Section 138.",
+        parties_json=json.dumps({"appellant": "Invented Person", "respondents": ["Other"]}),
+    )
+    shown, named = service._judgment_identity(document)
+    assert named is False
+    assert "Invented Person" not in shown
+
+
+# --------------------------------------------------------------------------- #
+# Independent review findings (B1, B2, M1, M2, M3, M5): each reproduced on
+# this branch before the fix.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Does Section 138 of the NI Act shift the burden of proof under the Evidence Act?",
+         [("ni-act-1881", "Section 138")]),
+        ("Is a Section 138 NI Act complaint barred by the Limitation Act?",
+         [("ni-act-1881", "Section 138")]),
+        ("What is proviso (b) to Section 138(b) of the NI Act?",
+         [("ni-act-1881", "Section 138")]),
+        ("My cheque of 5 lakh bounced. What is the remedy under the NI Act?", []),
+        ("Sections 138 and 141 of NI Act",
+         [("ni-act-1881", "Section 138"), ("ni-act-1881", "Section 141")]),
+        ("Article 21 and Section 482 CrPC",
+         [("constitution-india", "Article 21"), ("crpc-1973", "Section 482")]),
+        ("complaint under Section 200 CrPC for Section 138 NI Act",
+         [("crpc-1973", "Section 200"), ("ni-act-1881", "Section 138")]),
+    ],
+)
+def test_each_section_binds_to_its_own_act(text: str, expected: list) -> None:
+    from caseops_api.services.statute_resolver import parse_section_references
+
+    assert parse_section_references(text) == expected
+
+
+def test_a_sub_section_question_is_answered_on_its_section(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = _seed_mixed_corpus()
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token, query="What is proviso (b) to Section 138(b) of the NI Act?")
+
+    assert record["status"] == "answered", (record["error_code"], record["message"])
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    assert manifest[0]["title"].startswith("Section 138, Negotiable Instruments Act")
+    judgments = {item["id"] for item in manifest if item["kind"] == "judgment"}
+    assert judgments and judgments <= {ids["sc_138"], ids["quash_138"], ids["hc_138"]}
+    assert {item["focus_engagement"] for item in manifest if item["kind"] == "judgment"} <= {
+        "cites", "names"
+    }
+
+
+def test_an_amount_in_lakh_without_rs_is_not_section_5(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_mixed_corpus()
+    section_5 = _section(
+        "ni-act-1881", "NI Act", "Negotiable Instruments Act, 1881", "Section 5",
+        "A bill of exchange is an instrument in writing containing an unconditional order.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(
+        client, token, query="My cheque of 5 lakh bounced. What is the remedy under the NI Act?"
+    )
+
+    with get_session_factory()() as session:
+        manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
+    assert section_5 not in {item["id"] for item in manifest}
+    assert record["answer"]["question_focus"][0] == FOCUS_138
+
+
+def test_no_judgment_on_the_focus_keeps_the_best_ones_labelled_as_context(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A BNS question over a corpus that cites the IPC must not answer with no judgment."""
+    _seed_mixed_corpus()
+    _section(
+        "bns-2023", "BNS", "Bharatiya Nyaya Sanhita, 2023", "Section 318",
+        "Whoever cheats shall be punished.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(
+        client, token,
+        query="Is a bounced cheque given with dishonest intent cheating under Section 318 BNS?",
+    )
+
+    assert record["status"] == "answered"
+    prompt = _prompt_input(provider.prompts[0])
+    judgments = [s for s in prompt["sources"] if s["kind"] == "judgment"]
+    assert 0 < len(judgments) <= service.CONTEXT_ONLY_JUDGMENTS
+    assert {s["focus_engagement"] for s in judgments} == {"context_only"}
+    assert "context_only" in provider.prompts[0].split("RESEARCH_INPUT")[0]
+
+
+def test_a_bare_section_from_a_matter_is_not_replaced_by_the_matters_statutes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding B2: the Mehani matter records only BNSS 8."""
+    _seed_mixed_corpus()
+    bnss_8 = _section(
+        "bnss-2023", "BNSS", "Bharatiya Nagarik Suraksha Sanhita, 2023", "Section 8",
+        "There shall be a Court of Session for every sessions division.",
+    )
+    token = bootstrap_company(client)["access_token"]
+    matter_id = _matter(client, token, "RA-MEHANI-2")
+    with get_session_factory()() as session:
+        session.add(MatterStatuteReference(matter_id=matter_id, section_id=bnss_8))
+        session.commit()
+    provider = _Scripted(_answer())
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token, query="explain the section 138?", context_matter_id=matter_id)
+
+    assert record["answer"]["question_focus"] == [FOCUS_138]
+    assert bnss_8 not in {source["id"] for source in record["sources"]}
+
+
+def test_naming_the_procedure_with_the_focus_is_not_drift(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding M5: each false drift costs a second full generation."""
+    _seed_mixed_corpus()
+    token = bootstrap_company(client)["access_token"]
+    procedural = _answer(
+        short_answer=(
+            "A Section 138 NI Act complaint is filed before the Magistrate under Section 200 "
+            "CrPC (Section 223 BNSS) once the payment period lapses [1]."
+        )
+    )
+    provider = _Scripted(procedural)
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token)
+
+    assert record["status"] == "answered"
+    assert len(provider.prompts) == 1
+
+
+def test_coverage_gaps_are_fixed_topics_not_model_text(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding M3: free model text was shown as an uncited legal claim."""
+    _seed_sources()
+    token = bootstrap_company(client)["access_token"]
+    draft = _answer()
+    draft["coverage_gaps"] = ["Limitation is one month under Section 142(1)(b) of the NI Act."]
+    provider = _Scripted(draft)
+    monkeypatch.setattr(service, "build_provider", lambda **_: provider)
+
+    record = _ask(client, token)
+
+    gaps = record["answer"]["coverage_gaps"]
+    assert "Limitation is one month" not in json.dumps(gaps)
+    assert set(gaps) <= {service.SECTION_TITLES[key] for key in service.CORE_PROVISION_SECTIONS}
+    # The scripted draft has applicable_law and issues only.
+    assert service.SECTION_TITLES["jurisdiction"] in gaps
+    assert service.SECTION_TITLES["applicable_law"] not in gaps
+
+
+ANSWER_ROUTE = "caseops_api.api.routes.research_answers.run_research_answer_job"
+
+
+def test_a_human_never_receives_an_automated_runs_answer(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding M1: same words, one automated (offline) run in flight."""
+    runs: list[str] = []
+    monkeypatch.setattr(ANSWER_ROUTE, runs.append)
+    token = bootstrap_company(client)["access_token"]
+    automated = client.post(
+        "/api/research/answers",
+        headers={**auth_headers(token), "X-CaseOps-Automated-Test": "no-paid-providers"},
+        json={"query": RAM_BENCHMARK},
+    ).json()
+    human = client.post(
+        "/api/research/answers", headers=auth_headers(token), json={"query": RAM_BENCHMARK}
+    ).json()
+    assert human["id"] != automated["id"]
+    assert runs == [automated["id"], human["id"]]
+
+
+def test_a_run_claimed_late_is_not_settled_under_it_and_a_late_finish_never_overwrites(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review finding M2: a row went failed/timed_out and then answered."""
+    monkeypatch.setattr(ANSWER_ROUTE, lambda _id: None)
+    token = bootstrap_company(client)["access_token"]
+    created = client.post(
+        "/api/research/answers", headers=auth_headers(token), json={"query": RAM_BENCHMARK}
+    ).json()
+    url = f"/api/research/answers/{created['id']}"
+    with get_session_factory()() as session:
+        row = session.get(ResearchAnswer, created["id"])
+        # Asked 10.5 minutes ago, claimed by an executor just now.
+        row.created_at = row.created_at - datetime.timedelta(minutes=10, seconds=30)
+        row.status = "running"
+        session.commit()
+    assert client.get(url, headers=auth_headers(token)).json()["status"] == "running"
+
+    with get_session_factory()() as session:
+        row = session.get(ResearchAnswer, created["id"])
+        row.updated_at = row.updated_at - datetime.timedelta(minutes=12)  # the lease lapsed
+        session.commit()
+    settled = client.get(url, headers=auth_headers(token)).json()
+    assert (settled["status"], settled["error_code"]) == ("failed", "timed_out")
+
+    with get_session_factory()() as session:
+        row = session.get(ResearchAnswer, created["id"])
+        assert service._finish(session, row, state="answered") is False
+    assert client.get(url, headers=auth_headers(token)).json()["status"] == "failed"
+
+
+def test_the_worker_rechecks_matter_access_before_running(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wall or removal after submission stops the run before matter facts are used."""
+    from caseops_api.db.models import CompanyMembership
+
+    monkeypatch.setattr(ANSWER_ROUTE, lambda _id: None)
+    _seed_sources()
+    token = bootstrap_company(client)["access_token"]
+    matter_id = _matter(client, token, "RA-WALL-1")
+    created = client.post(
+        "/api/research/answers",
+        headers=auth_headers(token),
+        json={"query": VAGUE_QUERY, "context_matter_id": matter_id},
+    ).json()
+
+    def refuse(**_):
+        raise AssertionError("no model call after access was revoked")
+
+    monkeypatch.setattr(service, "build_provider", refuse)
+    with get_session_factory()() as session:
+        row = session.get(ResearchAnswer, created["id"])
+        session.get(CompanyMembership, row.created_by_membership_id).is_active = False
+        session.commit()
+
+    assert service.run_research_answer_job(created["id"]) is True
+    with get_session_factory()() as session:
+        row = session.get(ResearchAnswer, created["id"])
+        assert (row.status, row.error_code) == ("failed", "matter_access_revoked")

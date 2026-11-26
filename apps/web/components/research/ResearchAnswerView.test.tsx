@@ -82,8 +82,8 @@ function answered(overrides: Partial<ResearchAnswerRecord> = {}): ResearchAnswer
       disclaimer: "Source-bounded research support, not legal advice.",
     },
     sources: [
-      { number: 1, kind: "statute_section", id: "sec-138", title: "Section 138, Negotiable Instruments Act, 1881", citation: "NI Act, Section 138", court: null, bench: null, decision_date: null, weight: "Statutory provision (verified text)", source_action: { ...action, target_type: "statute_section", target_id: "sec-138" }, in_app_href: "/app/statutes/ni-act-1881/sections/Section%20138", treatment_signal: null, retrieved_at: null },
-      { number: 2, kind: "judgment", id: "doc-1", title: "Cheque dishonour <notice> limitation", citation: "2026:DHC:1380", court: "High Court of Delhi", bench: "Justice A. Rao", decision_date: "2026-05-01", weight: "Binding within High Court of Delhi's jurisdiction; persuasive elsewhere", source_action: action, in_app_href: null, treatment_signal: { worst_treatment: "distinguished", adverse_count: 2 }, retrieved_at: "2026-11-01T00:00:00Z" },
+      { number: 1, kind: "statute_section", id: "sec-138", title: "Section 138, Negotiable Instruments Act, 1881", citation: "NI Act, Section 138", court: null, bench: null, decision_date: null, weight: "Statutory provision (verified text)", source_action: { ...action, target_type: "statute_section", target_id: "sec-138" }, in_app_href: "/app/statutes/ni-act-1881/sections/Section%20138", focus_engagement: null, treatment_signal: null, retrieved_at: null },
+      { number: 2, kind: "judgment", id: "doc-1", title: "Cheque dishonour <notice> limitation", citation: "2026:DHC:1380", court: "High Court of Delhi", bench: "Justice A. Rao", decision_date: "2026-05-01", weight: "Binding within High Court of Delhi's jurisdiction; persuasive elsewhere", source_action: action, in_app_href: null, focus_engagement: "cites", treatment_signal: { worst_treatment: "distinguished", adverse_count: 2 }, retrieved_at: "2026-11-01T00:00:00Z" },
     ],
     suggestions: [],
     ...overrides,
@@ -358,5 +358,21 @@ describe("Nov 26 focus, coverage and abstention guidance", () => {
     expect(screen.getByRole("link", { name: "How does Section 9 apply?" })).toHaveAttribute(
       "href", "/app/research?tab=answer&q=How%20does%20Section%209%20apply%3F&matter=m-1",
     );
+  });
+});
+
+describe("focus engagement on authority cards", () => {
+  it("says whether each judgment cites the provision researched, and flags context-only ones", () => {
+    const record = answered();
+    record.sources[1] = { ...record.sources[1], focus_engagement: "context_only" };
+    render(<ResearchAnswerView record={record} />);
+    const badge = screen.getByTestId("research-focus-engagement");
+    expect(badge).toHaveAttribute("data-engagement", "context_only");
+    expect(badge).toHaveTextContent("Related context only: does not cite the provision researched");
+  });
+
+  it("keeps the elapsed counter out of the screen-reader status announcements", () => {
+    render(<ResearchAnswerStatus record={answered({ status: "running", answer: null, sources: [] })} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveAttribute("aria-hidden", "true");
   });
 });

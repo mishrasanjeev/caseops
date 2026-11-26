@@ -205,7 +205,11 @@ _YEAR_LIKE_RE = re.compile(r"^(?:1[6-9][0-9]{2}|20[0-9]{2})$")
 # "₹5 lakh". Removed before any section number is read.
 _MONEY_RE = re.compile(
     r"(?:₹|\bRs\.?|\bINR)\s*[0-9][0-9,]*(?:\.[0-9]+)?(?:\s*/-)?"
-    r"(?:\s*(?:lakhs?|lacs?|crores?|cr\.?|thousand)\b)?",
+    r"(?:\s*(?:lakhs?|lacs?|crores?|cr\.?|thousand)\b)?"
+    # Amounts written without a currency marker: "a cheque of 5 lakh",
+    # "2.5 crore", "50,000 rupees", "10,000/-".
+    r"|\b[0-9][0-9,]*(?:\.[0-9]+)?\s*(?:lakhs?|lacs?|crores?)\b"
+    r"|\b[0-9][0-9,]*(?:\.[0-9]+)?\s*(?:rupees|/-)",
     re.IGNORECASE,
 )
 _SECTION_SYMBOL_RE = re.compile(r"§\s*([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))?)")
@@ -295,64 +299,126 @@ def parse_section_string(text: str) -> tuple[str, str] | None:
     return None
 
 
-_REFERENCE_SPLIT_RE = re.compile(r"(?=\b(?:Sections?|Secs?\.?|Ss?\.|u/s)\s*[0-9])", re.IGNORECASE)
+# "Sections 138 and 141", "Sections 9, 34 and 37": further numbers after the first.
+_SECTION_LIST_TAIL_RE = re.compile(
+    r"\s*(?:,|\band\b|&|\bor\b|/)\s*(?:Sections?\s*|Secs?\.?\s*|Ss?\.\s*)?"
+    r"([0-9]+[A-Za-z]*(?:\([0-9a-z]+\))*)",
+    re.IGNORECASE,
+)
+_BASE_SECTION_RE = re.compile(r"[0-9]+[A-Za-z]?")
+# An Act this far after a section marker still names that section's Act
+# ("Section 138 of the Negotiable Instruments Act, 1881").
+_FOLLOWING_ACT_WINDOW = 80
+
+
+def base_section(number: str) -> str:
+    """'Section 138(1)(b)' -> 'Section 138'; 'Section 498a' -> 'Section 498A'.
+
+    Statute catalogues and judgment metadata key provisions by the base
+    section, so a question about a sub-section must match its section.
+    """
+    raw = number.removeprefix("Section ").strip()
+    match = _BASE_SECTION_RE.match(raw)
+    return f"Section {match.group(0).upper()}" if match else number
+
+
+def _act_spans(text: str) -> list[tuple[int, int, str]]:
+    """Every Act mention as (start, end, statute_id), the longest token winning an overlap."""
+    spans: list[tuple[int, int, str]] = []
+    for pattern, statute_id in _ACT_PATTERNS:
+        spans.extend((m.start(), m.end(), statute_id) for m in pattern.finditer(text))
+    spans.sort(key=lambda span: (span[0], -(span[1] - span[0])))
+    kept: list[tuple[int, int, str]] = []
+    for span in spans:
+        if kept and span[0] < kept[-1][1]:
+            continue
+        kept.append(span)
+    return kept
 
 
 def bare_section_numbers(text: str) -> list[str]:
-    """Section numbers a text names without any Act ("explain the section 138?").
+    """Base section numbers a text names without any Act ("explain the section 138?").
 
     Empty when the text names an Act: then ``parse_section_references`` owns it.
     """
     if not text or not isinstance(text, str):
         return []
-    cleaned = _MONEY_RE.sub(" ", text)
-    if _detect_act(cleaned) is not None:
+    cleaned = _ACT_YEAR_RE.sub(r"\1", _MONEY_RE.sub(" ", text))
+    if _act_spans(cleaned):
         return []
     numbers: list[str] = []
-    for match in _SECTION_RE.finditer(_ACT_YEAR_RE.sub(r"\1", cleaned)):
-        number = f"Section {match.group(1)}"
-        if number not in numbers:
-            numbers.append(number)
+    for match in _SECTION_RE.finditer(cleaned):
+        for number in _numbers_from(cleaned, match):
+            if number not in numbers:
+                numbers.append(number)
+    return numbers
+
+
+def _numbers_from(text: str, match: re.Match[str]) -> list[str]:
+    numbers = [base_section(f"Section {match.group(1)}")]
+    position = match.end()
+    while tail := _SECTION_LIST_TAIL_RE.match(text, position):
+        numbers.append(base_section(f"Section {tail.group(1)}"))
+        position = tail.end()
     return numbers
 
 
 def parse_section_references(text: str) -> list[tuple[str, str]]:
-    """Every (statute_id, section) a free-text question names, in order.
+    """Every (statute_id, base section) a free-text question names, in order.
 
-    ``parse_section_string`` stops at the first reference, so "Section 138 of
-    the NI Act and Section 482 CrPC" loses the second provision. Each section
-    marker starts a fragment; a fragment that names no Act takes the Act the
-    whole text names, when the text names exactly one ("Under the NI Act,
-    what does Section 138 require?").
+    Each section binds to the Act named right after it ("Section 138 of the NI
+    Act"), else to the nearest Act named before it ("Under the NI Act, what
+    does Section 138 require?"). The longest-token rule ``parse_section_string``
+    uses for a single citation string would read "Section 138 of the NI Act
+    ... under the Evidence Act" as Evidence Act s.138. Lists ("Sections 138
+    and 141") keep every number; sub-sections reduce to their section; rupee
+    amounts are never sections.
     """
     if not text or not isinstance(text, str):
         return []
-    text = _MONEY_RE.sub(" ", text)
-    whole_act = _detect_act(text)
-    whole_act_token = _act_token(text) if whole_act else None
-    found: list[tuple[str, str]] = []
-    for fragment in _REFERENCE_SPLIT_RE.split(text):
-        # Only a fragment that carries its own section or article marker names
-        # a provision; the bare-number fallback would read "5" in "a cheque of
-        # 5 lakh" as a section.
-        if not any(
-            pattern.search(fragment) for pattern in (_SECTION_RE, _SECTION_SYMBOL_RE, _ARTICLE_RE)
-        ):
+    cleaned = _ACT_YEAR_RE.sub(r"\1", _MONEY_RE.sub(" ", text))
+    acts = _act_spans(cleaned)
+    markers = sorted(
+        [m for pattern in (_SECTION_RE, _SECTION_SYMBOL_RE) for m in pattern.finditer(cleaned)],
+        key=lambda m: m.start(),
+    )
+    positioned: list[tuple[int, tuple[str, str]]] = []
+    for index, match in enumerate(markers):
+        numbers = _numbers_from(cleaned, match)
+        tail_end = match.end()
+        while tail := _SECTION_LIST_TAIL_RE.match(cleaned, tail_end):
+            tail_end = tail.end()
+        next_marker = markers[index + 1].start() if index + 1 < len(markers) else len(cleaned)
+        following = [
+            span for span in acts
+            if tail_end <= span[0] < min(next_marker, tail_end + _FOLLOWING_ACT_WINDOW)
+        ]
+        preceding = [span for span in acts if span[1] <= match.start()]
+        if following:
+            statute_id = following[0][2]
+        elif preceding:
+            statute_id = preceding[-1][2]
+        else:
             continue
-        parsed = parse_section_string(fragment)
-        if (
-            parsed is None
-            and whole_act_token
-            and whole_act != "constitution-india"
-            and _detect_act(fragment) is None
-        ):
-            parsed = parse_section_string(f"{fragment} {whole_act_token}")
-        if parsed is not None and parsed not in found:
-            found.append(parsed)
-    if not found:
+        if statute_id == "constitution-india":
+            continue
+        positioned.extend((match.start(), (statute_id, number)) for number in numbers)
+    for match in _ARTICLE_RE.finditer(cleaned):
+        stop = min(
+            [m.start() for m in markers if m.start() >= match.end()] + [match.end() + 40]
+        )
+        nearby = [span for span in acts if match.end() <= span[0] < stop]
+        if not nearby or nearby[0][2] == "constitution-india":
+            positioned.append((match.start(), ("constitution-india", f"Article {match.group(1)}")))
+    found: list[tuple[str, str]] = []
+    for _position, ref in sorted(positioned, key=lambda item: item[0]):
+        if ref not in found:
+            found.append(ref)
+    if not found and not markers:
+        # "BNSS 483": an unambiguous Act with a bare number and no marker.
         parsed = parse_section_string(text)
         if parsed is not None:
-            found.append(parsed)
+            found.append((parsed[0], base_section(parsed[1])))
     return found
 
 

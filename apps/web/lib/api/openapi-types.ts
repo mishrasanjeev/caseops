@@ -49347,6 +49347,8 @@ export interface components {
             court?: string | null;
             /** Decision Date */
             decision_date?: string | null;
+            /** Focus Engagement */
+            focus_engagement?: ("cites" | "names" | "context_only") | null;
             /** Id */
             id: string;
             /** In App Href */
