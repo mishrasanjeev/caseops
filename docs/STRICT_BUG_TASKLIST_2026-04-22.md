@@ -34,9 +34,35 @@ Triage (all three reproduce on production release 1ed725ce2 and on main):
   cited facts with a Research hand-off, and "Hindu Marriage Act, 1955" no
   longer parsed as "Section 1955". New tests: 65 failed on the old code.
 
-Verdicts (recorded after production verification): rows 1-3 Inconclusive until
-`nov25-prod-*` passes on the deployed release and row 3 is repeated with the
-real model on the reporting tester's MAT-003.
+Verdicts (production release e492d6472, PR #668, API caseops-api-00538-7p7,
+web caseops-web-00514-k4g). The `nov25-prod-*` journeys passed 6/6 as the
+nova-legal tester:
+
+- Row 1: **Partially fixed.** Constitution Article 21 attaches on desktop and
+  phone. The Income-tax Act, 1961 is still unattachable in production; its
+  official 2026 consolidated edition (Income Tax Department PDF, pinned
+  GitHub release asset) is compiled in PR #670, which is not yet released.
+- Row 2: **Properly fixed.** A client is linked from the Matter and from the
+  client profile, and the link shows on both sides.
+- Row 3: **Properly fixed.** The nine workbook questions were rerun in a
+  2026-11-26 session as the tester on MAT-003 with the production model
+  (openai gpt-5.1). Parties, pending actions, documents, key facts and
+  chronology are answered with Matter-record citations. The Hindu Marriage Act
+  question gets the factual reply that no HMA section is linked to MAT-003,
+  plus a hand-off to Research. Interpreting statutes from the assistant is out
+  of scope by design. Tester note: the answer still calls the 2026-11-21
+  hearing the "next hearing", because the record has no outcome entered.
+
+Adjacent defect, found in prod-verify 45856740774 on the same release (it
+predates #668): the Section 138 research answer phone case ended
+`failed/internal_error`. The answer job runs as a BackgroundTask after the 202
+response. caseops-api runs with `cpu-throttling=true` and concurrency 1, and
+only 5 of the 29 polls reached the job's instance, so retrieval was starved of
+CPU. PostgreSQL then killed its read transaction at the 60 s
+idle-in-transaction limit. Owner decision: rerun the failed job and close the
+release as GO with caveat. The retrieval fix is PR #675 (reads on an
+autocommit connection). CPU allocation for background work stays open under
+EH-RA-01.
 
 Adjacent defect, found while compiling the Income-tax Act, 1961 for row 1:
 retained repealed-law editions (CrPC 1973, IPC, Evidence Act, and the

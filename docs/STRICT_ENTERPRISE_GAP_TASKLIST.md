@@ -6640,6 +6640,23 @@ until the owner-run enablement in
   Deployed 2026-11-25 in `bce18d1d2` (API `caseops-api-00535-8qh`,
   prod-verify 45513817072 passed); no production completion time has been
   measured yet.
+- **First production failure (2026-11-26):** this happened in prod-verify
+  45856740774 on release e492d6472 (API `caseops-api-00538-7p7`).
+  - Desktop: answer `6878684f` was answered in 44 s.
+  - Phone: answer `bce768a9` started at 17:17:53Z and ended
+    `failed/internal_error` at 17:18:57Z. PostgreSQL killed its connection
+    mid-retrieval at the 60 s idle-in-transaction limit; the error is in
+    `_build_sources`.
+  - Why: the job's instance received only 5 of the 29 polls for that answer,
+    and the rest went to three other instances. Under request-based billing
+    and concurrency 1, the instance therefore had almost no CPU after the 202
+    response.
+  - Fix: PR #675 reads retrieval on an autocommit connection, so a starved
+    job finishes slowly instead of failing. It does not give background work
+    CPU. Until that is decided (instance-based billing, or a worker or durable
+    workflow), a starved run can still reach the 10-minute `timed_out`
+    settle.
+  - Status stays Partially implemented.
 
 ### EH-RA-02 - Model output cannot introduce an authority
 
