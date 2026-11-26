@@ -6945,6 +6945,8 @@ export async function createMatter(input: {
   forum_level?: string;
   court_id?: string | null;
   client_name?: string;
+  /** An existing active client to link as the primary client. */
+  client_id?: string;
   opposing_party?: string;
   case_number?: string;
   temporary_e_case_number?: string;
@@ -7396,24 +7398,29 @@ export type MatterClientAssignRecord = {
   role: string | null;
   is_primary: boolean;
   created_at: string;
+  /** Matter.client_name after the write: a primary link copies the client's name. */
+  matter_client_name?: string | null;
 };
 
+/**
+ * Link (or re-link) a client to a Matter.
+ *
+ * Omitted fields are not sent: the API then keeps an existing link's role
+ * and primary flag, and makes a new link primary only when the Matter has
+ * no primary client yet. `isPrimary: true` demotes the current primary.
+ */
 export async function assignClientToMatter(input: {
   matterId: string;
   clientId: string;
   role?: string | null;
   isPrimary?: boolean;
 }): Promise<MatterClientAssignRecord> {
+  const body: Record<string, unknown> = { client_id: input.clientId };
+  if (input.role !== undefined) body.role = input.role;
+  if (input.isPrimary !== undefined) body.is_primary = input.isPrimary;
   return apiRequest<MatterClientAssignRecord>(
     `/api/matters/${input.matterId}/clients`,
-    {
-      method: "POST",
-      body: {
-        client_id: input.clientId,
-        role: input.role ?? null,
-        is_primary: input.isPrimary ?? true,
-      },
-    },
+    { method: "POST", body },
   );
 }
 
@@ -7431,6 +7438,8 @@ export type MatterClientVerificationRecord = {
   client_id: string;
   client_name: string;
   client_type: ClientType;
+  /** False once the client is archived; it stays linked but cannot be re-linked. */
+  client_is_active: boolean;
   role: string | null;
   is_primary: boolean;
   status: ClientKycStatus;

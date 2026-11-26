@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { ClientPicker } from "@/components/clients/ClientPicker";
 import { Button } from "@/components/ui/Button";
 import {
   Dialog,
@@ -39,6 +40,7 @@ import {
 } from "@/components/matters/ForumSelector";
 import { apiErrorMessage } from "@/lib/api/config";
 import { createMatter, fetchForumCatalog } from "@/lib/api/endpoints";
+import { useCapability } from "@/lib/capabilities";
 import {
   MATTER_CODE_MESSAGE,
   normalizeMatterCodeInput,
@@ -83,6 +85,10 @@ export function NewMatterDialog() {
   const [forumSelection, setForumSelection] = useState<ForumSelection>(
     EMPTY_FORUM_SELECTION,
   );
+  // An existing client to link as the primary client (same validation as
+  // linking from the Matter overview); empty keeps the typed name.
+  const [linkClientId, setLinkClientId] = useState("");
+  const canLinkClients = useCapability("clients:edit");
   const queryClient = useQueryClient();
   const forumCatalogQuery = useQuery({
     queryKey: ["courts", "forum-catalog"],
@@ -167,7 +173,9 @@ export function NewMatterDialog() {
       createMatter({
         title: values.title.trim(),
         matter_code: normalizeMatterCodeInput(values.matter_code),
-        client_name: values.client_name?.trim() || undefined,
+        ...(linkClientId
+          ? { client_id: linkClientId }
+          : { client_name: values.client_name?.trim() || undefined }),
         opposing_party: values.opposing_party?.trim() || undefined,
         case_number: values.case_number?.trim() || undefined,
         temporary_e_case_number:
@@ -189,9 +197,11 @@ export function NewMatterDialog() {
     onSuccess: () => {
       toast.success("Matter created");
       form.reset();
+      setLinkClientId("");
       setForumSelection(EMPTY_FORUM_SELECTION);
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["matters"] });
+      if (linkClientId) void queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
     onError: (err) => {
       const message = apiErrorMessage(err, "Could not create matter.");
@@ -273,6 +283,8 @@ export function NewMatterDialog() {
                 aria-invalid={invalid || undefined}
                 aria-describedby={errorId}
                 placeholder="Rao Family Office"
+                disabled={Boolean(linkClientId)}
+                data-testid="new-matter-client-name"
                 {...form.register("client_name")}
               />
             )}
@@ -291,6 +303,20 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
+          {canLinkClients ? (
+            <ClientPicker
+              className="md:col-span-2"
+              id="new-matter-client-link"
+              label="Or link an existing client"
+              emptyOptionLabel="None — use the typed client name"
+              value={linkClientId}
+              enabled={open}
+              onChange={(clientId, client) => {
+                setLinkClientId(clientId);
+                form.setValue("client_name", client ? client.name : "");
+              }}
+            />
+          ) : null}
           <Field
             label="Temporary E-Case number"
             error={form.formState.errors.temporary_e_case_number?.message}
@@ -406,6 +432,7 @@ export function NewMatterDialog() {
               variant="outline"
               onClick={() => {
                 form.reset();
+                setLinkClientId("");
                 setOpen(false);
               }}
             >

@@ -42,6 +42,13 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchNotificationPreferences: vi.fn().mockResolvedValue({ tenant: { channels: {} } }),
   fetchMatterIpLinks: fetchMatterIpLinksMock,
   fetchMatterNextAction: fetchMatterNextActionMock,
+  // The Clients card and the edit form read the Matter's linked clients.
+  fetchMatterClientVerification: vi
+    .fn()
+    .mockResolvedValue({ matter_id: "m-1", clients: [] }),
+  listClients: vi.fn().mockResolvedValue({ clients: [], next_cursor: null }),
+  assignClientToMatter: vi.fn(),
+  unassignClientFromMatter: vi.fn(),
   fetchForumCatalog: vi.fn(),
   listConflictChecks: listConflictChecksMock,
   resolveConflictCheck: vi.fn(),
