@@ -60,6 +60,38 @@ AI = Executor(
 )
 EXECUTORS = {"document": DOCUMENT, "court": COURT, "ai": AI}
 
+# Settings the AI job reads for research retrieval and model calls. The API
+# keeps them on its service and the job has its own copy in the scheduler
+# inventory, so a change to one side alone would silently degrade the other: an
+# unreranked or lexical-only answer, another model, other database timeouts.
+AI_PARITY_VALUES = (
+    "CASEOPS_RERANK_ENABLED",
+    "CASEOPS_RERANK_BACKEND",
+    "CASEOPS_EMBEDDING_PROVIDER",
+    "CASEOPS_EMBEDDING_MODEL",
+    "CASEOPS_EMBEDDING_DIMENSIONS",
+    "CASEOPS_LLM_PROVIDER",
+    "CASEOPS_LLM_MODEL",
+    "CASEOPS_LLM_MODEL_RECOMMENDATIONS",
+    "CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS",
+    "CASEOPS_DB_STATEMENT_TIMEOUT_MS",
+    "CASEOPS_DB_LOCK_TIMEOUT_MS",
+    "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS",
+    "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
+    "CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED",
+)
+# Secret-backed: both sides must carry the key (values are never read here).
+AI_PARITY_SECRETS = ("CASEOPS_EMBEDDING_API_KEY", "CASEOPS_LLM_API_KEY")
+
+
+def _require_ai_parity(api_env: dict, worker_env: dict) -> None:
+    differing = [key for key in AI_PARITY_VALUES if api_env.get(key) != worker_env.get(key)]
+    differing += [key for key in AI_PARITY_SECRETS if (key in api_env) != (key in worker_env)]
+    if differing:
+        raise inventory.InventoryError(
+            "AI job research settings differ from the API revision: " + ", ".join(differing)
+        )
+
 
 def _call(arguments: list[str], *, project: str, region: str, json_result=True, timeout=90):
     return inventory.run_gcloud(
@@ -382,6 +414,8 @@ def activate(
         raise inventory.InventoryError(
             "replacement document worker is not disabled at the exact image"
         )
+    if executor is AI:
+        _require_ai_parity(env, worker_env)
     prior = state.get("prior_revision", "")
     if prior == current and state.get("legacy_api_executor") is True:
         raise inventory.InventoryError("captured legacy executor is still serving")
