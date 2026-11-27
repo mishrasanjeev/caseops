@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-RenditionLanguage = Literal["en", "hi", "mr"]
+RenditionLanguage = Literal["en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od"]
 RenditionKindLiteral = Literal["ocr", "translation"]
 RenditionStatusLiteral = Literal[
     "queued",
@@ -21,17 +21,23 @@ RenditionStatusLiteral = Literal[
 ]
 RenditionReviewStatusLiteral = Literal["unreviewed", "reviewed", "needs_correction"]
 
-# Translation LLM supports these directions; others stay off until added here.
+# Languages Google's Translation LLM officially supports to and from English
+# (Cloud Translation language table, checked 2026-11-27). Odia is OCR-only:
+# Google lists its Translation LLM support as experimental. Others stay off
+# until added here.
+TRANSLATION_LANGUAGES: tuple[str, ...] = ("hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa")
 SUPPORTED_TRANSLATION_PAIRS: frozenset[tuple[str, str]] = frozenset(
-    {("hi", "en"), ("en", "hi"), ("mr", "en"), ("en", "mr")}
+    {(language, "en") for language in TRANSLATION_LANGUAGES}
+    | {("en", language) for language in TRANSLATION_LANGUAGES}
 )
 
 
 def _assert_pair(source: str, target: str) -> None:
     if (source, target) not in SUPPORTED_TRANSLATION_PAIRS:
         raise ValueError(
-            f"Translation from {source} to {target} is not supported. Supported pairs: "
-            "Hindi to English, English to Hindi, Marathi to English, English to Marathi."
+            f"Translation from {source} to {target} is not supported. Translation runs "
+            "between English and Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, "
+            "Bengali, Malayalam or Punjabi; Odia is OCR only."
         )
 
 

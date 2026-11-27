@@ -37918,12 +37918,12 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "en" | "hi" | "mr";
+            source: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
             /**
              * Target
              * @enum {string}
              */
-            target: "en" | "hi" | "mr";
+            target: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
         };
         /** LayoutApplication */
         LayoutApplication: {
@@ -48311,7 +48311,7 @@ export interface components {
         /** ProviderReadiness */
         ProviderReadiness: {
             /** Ocr Languages */
-            ocr_languages: ("en" | "hi" | "mr")[];
+            ocr_languages: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od")[];
             /** Ocr Provider Available */
             ocr_provider_available: boolean;
             /** Ocr Unavailable Reason */
@@ -48911,9 +48911,9 @@ export interface components {
              * Source Language
              * @enum {string}
              */
-            source_language: "en" | "hi" | "mr";
+            source_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
             /** Target Language */
-            target_language?: ("en" | "hi" | "mr") | null;
+            target_language?: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od") | null;
         };
         /** RenditionDetail */
         RenditionDetail: {
@@ -48922,7 +48922,7 @@ export interface components {
             /** Attachment Id */
             attachment_id: string;
             /** Chain Target Language */
-            chain_target_language: ("en" | "hi" | "mr") | null;
+            chain_target_language: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od") | null;
             /** Company Id */
             company_id: string;
             /** Completed At */
@@ -48986,7 +48986,7 @@ export interface components {
              * Source Language
              * @enum {string}
              */
-            source_language: "en" | "hi" | "mr";
+            source_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
             /** Source Rendition Id */
             source_rendition_id: string | null;
             /**
@@ -48995,7 +48995,7 @@ export interface components {
              */
             status: "queued" | "inspecting" | "ocr_processing" | "ocr_completed" | "translation_processing" | "translation_completed" | "review_required" | "failed";
             /** Target Language */
-            target_language: ("en" | "hi" | "mr") | null;
+            target_language: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od") | null;
             /**
              * Updated At
              * Format: date-time
@@ -49081,7 +49081,7 @@ export interface components {
             /** Attachment Id */
             attachment_id: string;
             /** Chain Target Language */
-            chain_target_language: ("en" | "hi" | "mr") | null;
+            chain_target_language: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od") | null;
             /** Company Id */
             company_id: string;
             /** Completed At */
@@ -49139,7 +49139,7 @@ export interface components {
              * Source Language
              * @enum {string}
              */
-            source_language: "en" | "hi" | "mr";
+            source_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
             /** Source Rendition Id */
             source_rendition_id: string | null;
             /**
@@ -49148,7 +49148,7 @@ export interface components {
              */
             status: "queued" | "inspecting" | "ocr_processing" | "ocr_completed" | "translation_processing" | "translation_completed" | "review_required" | "failed";
             /** Target Language */
-            target_language: ("en" | "hi" | "mr") | null;
+            target_language: ("en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od") | null;
             /**
              * Updated At
              * Format: date-time
@@ -52602,7 +52602,7 @@ export interface components {
              * Target Language
              * @enum {string}
              */
-            target_language: "en" | "hi" | "mr";
+            target_language: "en" | "hi" | "mr" | "gu" | "ta" | "te" | "kn" | "bn" | "ml" | "pa" | "od";
         };
         /** TrialStartRequest */
         TrialStartRequest: {

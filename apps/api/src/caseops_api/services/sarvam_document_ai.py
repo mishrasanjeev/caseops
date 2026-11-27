@@ -32,8 +32,21 @@ PROVIDER_LABEL = "Sarvam Document AI"
 MODEL_LABEL = "sarvam-document-ai/parse"
 MAX_PAGES_PER_JOB = 20
 TERMINAL_STATUSES = frozenset({"completed", "partially_completed", "failed", "rejected"})
-# CaseOps language code -> Sarvam BCP-47 code.
-LANGUAGE_CODES = {"en": "en-IN", "hi": "hi-IN", "mr": "mr-IN"}
+# CaseOps language code -> Sarvam BCP-47 code (Sarvam Document Intelligence
+# languages page, checked 2026-11-27; Odia is "od-IN", not "or-IN").
+LANGUAGE_CODES = {
+    "en": "en-IN",
+    "hi": "hi-IN",
+    "mr": "mr-IN",
+    "gu": "gu-IN",
+    "ta": "ta-IN",
+    "te": "te-IN",
+    "kn": "kn-IN",
+    "bn": "bn-IN",
+    "ml": "ml-IN",
+    "pa": "pa-IN",
+    "od": "od-IN",
+}
 MAX_OUTPUT_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_OUTPUT_MEMBER_BYTES = 50 * 1024 * 1024
 MAX_OUTPUT_TOTAL_BYTES = 400 * 1024 * 1024

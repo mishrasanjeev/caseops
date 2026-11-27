@@ -15,8 +15,12 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-# Devanagari (U+0966-096F) and other Indic digit forms -> ASCII.
-_DIGIT_MAP = str.maketrans({chr(0x0966 + i): str(i) for i in range(10)})
+# Indic digit forms -> ASCII: Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+# Tamil, Telugu, Kannada and Malayalam zero points.
+INDIC_DIGIT_ZEROS = (0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66, 0x0CE6, 0x0D66)
+_DIGIT_MAP = str.maketrans(
+    {chr(zero + i): str(i) for zero in INDIC_DIGIT_ZEROS for i in range(10)}
+)
 # Digits glued after letters belong to an identifier (checked separately).
 _NUMBER = re.compile(r"(?<![A-Za-z0-9])\d+(?:,\d{2,3})*")
 _IDENTIFIER = re.compile(r"\b(?=[A-Za-z0-9]*[A-Za-z])(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{5,}\b")

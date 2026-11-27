@@ -121,6 +121,64 @@ describe("OcrTranslateDialog", () => {
     expect(target).toHaveValue("none");
   });
 
+  // Ram BUG-005 (2026-11-26): only three source languages were offered.
+  it("offers every language the server reads, by name, and only English pairs", async () => {
+    const all = ["en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od"];
+    const translatable = ["hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa"];
+    listMock.mockResolvedValue({
+      attachment_id: "a1",
+      providers: providers({
+        ocr_languages: all,
+        // The API sends pairs sorted by code, as sorted() returns them.
+        translation_pairs: translatable
+          .flatMap((code) => [
+            { source: code, target: "en" },
+            { source: "en", target: code },
+          ])
+          .sort((a, b) => `${a.source}${a.target}`.localeCompare(`${b.source}${b.target}`)),
+      }),
+      renditions: [],
+    });
+    const user = userEvent.setup();
+    renderDialog();
+    const source = await screen.findByLabelText("Source language");
+    const target = screen.getByLabelText("Translate to");
+    expect(optionLabels(source)).toEqual([
+      "Choose the language of the document",
+      "English",
+      "Hindi",
+      "Marathi",
+      "Gujarati",
+      "Tamil",
+      "Telugu",
+      "Kannada",
+      "Bengali",
+      "Malayalam",
+      "Punjabi",
+      "Odia",
+    ]);
+    await user.selectOptions(source, "ta");
+    expect(optionLabels(target)).toEqual(["No translation — OCR only", "English"]);
+    await user.selectOptions(source, "en");
+    expect(optionLabels(target)).toEqual([
+      "No translation — OCR only",
+      "Hindi",
+      "Marathi",
+      "Gujarati",
+      "Tamil",
+      "Telugu",
+      "Kannada",
+      "Bengali",
+      "Malayalam",
+      "Punjabi",
+    ]);
+    await user.selectOptions(source, "od");
+    expect(optionLabels(target)).toEqual(["No translation — OCR only"]);
+    expect(screen.getByTestId("ocr-target-language-hint")).toHaveTextContent(
+      "No translation is offered from Odia.",
+    );
+  });
+
   it("disables translation with the plain reason when it is unavailable", async () => {
     listMock.mockResolvedValue({
       attachment_id: "a1",
