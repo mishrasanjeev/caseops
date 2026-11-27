@@ -530,10 +530,15 @@ def test_postgres_month_lock_has_one_directed_admission_winner(
                 return exc
 
         future = pool.submit(attempt)
-        assert entered.wait(timeout=1)
-        deadline = time.monotonic() + 1
+        # Wait for the lock state itself, not a one-second window: on a loaded
+        # runner the worker can take longer than that to issue its query. The
+        # waiter has no lock timeout, so it stays blocked until the holder
+        # commits; an unblocked waiter finishes and fails the assertion below.
+        # The thirty-second bound only stops a hang.
+        assert entered.wait(timeout=30)
+        deadline = time.monotonic() + 30
         blockers: list[int] = []
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and not future.done():
             blockers = observer.scalar(text("SELECT pg_blocking_pids(:pid)"), {"pid": worker_pid})
             if holder_pid in blockers:
                 timeline["directed_wait_monotonic"] = time.monotonic()

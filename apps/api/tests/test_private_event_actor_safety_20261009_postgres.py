@@ -215,7 +215,9 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
 
     def writer():
         with CaseOpsSession(engine) as session:
-            session.execute(text("SET LOCAL lock_timeout = '2s'"))
+            # The login rollback below releases this writer; the lock timeout
+            # only stops a hang and must outlast a slow runner's first poll.
+            session.execute(text("SET LOCAL lock_timeout = '30s'"))
             pids.append(session.scalar(text("SELECT pg_backend_pid()")))
             started.set()
             # No explicit FOR UPDATE: prove the real non-key UPDATE conflicts.
@@ -235,10 +237,13 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
         login_pid = login.scalar(text("SELECT pg_backend_pid()"))
         pending = pool.submit(writer)
         try:
-            assert started.wait(1)
-            deadline = monotonic() + 1
+            # Wait for the lock state itself, not a one-second window: on a
+            # loaded runner the writer can take longer than that to issue its
+            # UPDATE. An unblocked writer finishes and fails the assertion.
+            assert started.wait(30)
+            deadline = monotonic() + 30
             blockers = []
-            while monotonic() < deadline:
+            while monotonic() < deadline and not pending.done():
                 blockers = observer.scalar(
                     text("SELECT pg_blocking_pids(:pid)"), {"pid": pids[0]}
                 )
@@ -248,7 +253,7 @@ def test_review_no_key_update_still_serializes_non_key_identity_changes(review_o
             assert login_pid in blockers
         finally:
             login.rollback()
-        pending.result(timeout=3)
+        pending.result(timeout=30)
     with CaseOpsSession(engine) as after:
         with pytest.raises(HTTPException) as denial:
             issue_auth_session_under_fence(

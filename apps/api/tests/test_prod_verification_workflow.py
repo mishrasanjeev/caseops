@@ -2075,7 +2075,7 @@ def _assert_app_project_workflow(workflow):
     }
     assert aggregate["name"] == "Playwright app suite"
     assert aggregate["needs"] == ["api", "web", "postgres-validation", "e2e-projects"]
-    assert aggregate["if"] == "always() && !cancelled()"
+    assert aggregate["if"] == "github.event_name != 'push' && always() && !cancelled()"
     assert aggregate["timeout-minutes"] == 5
     assert "continue-on-error" not in aggregate
     required = aggregate["steps"][0]
