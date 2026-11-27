@@ -5,6 +5,7 @@ import {
   isRenditionActive,
   isRenditionEligible,
   latestRendition,
+  ocrOnlyLanguagesPhrase,
   pageReasonLabel,
   pageSourceLabel,
   pageStatusLabel,
@@ -104,5 +105,26 @@ describe("rendition labels", () => {
     expect(latestRendition([older, newer])?.id).toBe("t");
     expect(latestRendition([newer, older])?.id).toBe("t");
     expect(latestRendition([])).toBeNull();
+  });
+
+  it("names the OCR languages no translation pair uses, in list order", () => {
+    const base = {
+      ocr_provider_available: true,
+      ocr_unavailable_reason: null,
+      translation_available: true,
+      translation_unavailable_reason: null,
+      third_party_processing_permitted: true,
+    };
+    const pairs = [
+      { source: "hi" as const, target: "en" as const },
+      { source: "en" as const, target: "hi" as const },
+    ];
+    const phrase = (ocr_languages: Array<"en" | "hi" | "od" | "ur" | "as">) =>
+      ocrOnlyLanguagesPhrase({ ...base, ocr_languages, translation_pairs: pairs });
+    expect(phrase(["en", "hi"])).toBe("");
+    expect(phrase(["en", "hi", "ur"])).toBe("Urdu");
+    expect(phrase(["en", "hi", "as", "od"])).toBe("Odia and Assamese");
+    expect(phrase(["en", "hi", "od", "ur", "as"])).toBe("Odia, Urdu and Assamese");
+    expect(ocrOnlyLanguagesPhrase(undefined)).toBe("");
   });
 });

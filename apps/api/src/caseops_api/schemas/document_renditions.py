@@ -7,7 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-RenditionLanguage = Literal["en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od"]
+RenditionLanguage = Literal[
+    "en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od", "ur", "as"
+]
 RenditionKindLiteral = Literal["ocr", "translation"]
 RenditionStatusLiteral = Literal[
     "queued",
@@ -22,9 +24,10 @@ RenditionStatusLiteral = Literal[
 RenditionReviewStatusLiteral = Literal["unreviewed", "reviewed", "needs_correction"]
 
 # Languages Google's Translation LLM officially supports to and from English
-# (Cloud Translation language table, checked 2026-11-27). Odia is OCR-only:
-# Google lists its Translation LLM support as experimental. Others stay off
-# until added here.
+# (Cloud Translation language table, checked 2026-11-27). Odia, Urdu and
+# Assamese are OCR-only: Google lists Odia as experimental and Assamese as
+# unsupported for the Translation LLM, and an Urdu translation PDF needs a
+# right-to-left font CaseOps does not ship yet. Others stay off until added here.
 TRANSLATION_LANGUAGES: tuple[str, ...] = ("hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa")
 SUPPORTED_TRANSLATION_PAIRS: frozenset[tuple[str, str]] = frozenset(
     {(language, "en") for language in TRANSLATION_LANGUAGES}
@@ -37,7 +40,7 @@ def _assert_pair(source: str, target: str) -> None:
         raise ValueError(
             f"Translation from {source} to {target} is not supported. Translation runs "
             "between English and Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, "
-            "Bengali, Malayalam or Punjabi; Odia is OCR only."
+            "Bengali, Malayalam or Punjabi; Odia, Urdu and Assamese are OCR only."
         )
 
 

@@ -46,6 +46,8 @@ LANGUAGE_CODES = {
     "ml": "ml-IN",
     "pa": "pa-IN",
     "od": "od-IN",
+    "ur": "ur-IN",
+    "as": "as-IN",
 }
 MAX_OUTPUT_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_OUTPUT_MEMBER_BYTES = 50 * 1024 * 1024

@@ -123,7 +123,7 @@ describe("OcrTranslateDialog", () => {
 
   // Ram BUG-005 (2026-11-26): only three source languages were offered.
   it("offers every language the server reads, by name, and only English pairs", async () => {
-    const all = ["en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od"];
+    const all = ["en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od", "ur", "as"];
     const translatable = ["hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa"];
     listMock.mockResolvedValue({
       attachment_id: "a1",
@@ -156,6 +156,8 @@ describe("OcrTranslateDialog", () => {
       "Malayalam",
       "Punjabi",
       "Odia",
+      "Urdu",
+      "Assamese",
     ]);
     await user.selectOptions(source, "ta");
     expect(optionLabels(target)).toEqual(["No translation — OCR only", "English"]);
@@ -172,11 +174,21 @@ describe("OcrTranslateDialog", () => {
       "Malayalam",
       "Punjabi",
     ]);
-    await user.selectOptions(source, "od");
-    expect(optionLabels(target)).toEqual(["No translation — OCR only"]);
+    // Ram BUG-002 (2026-11-27): a language that cannot be a target is named, not dropped.
     expect(screen.getByTestId("ocr-target-language-hint")).toHaveTextContent(
-      "No translation is offered from Odia.",
+      "Odia, Urdu and Assamese text can be read but not translated.",
     );
+    for (const [code, name] of [
+      ["od", "Odia"],
+      ["ur", "Urdu"],
+      ["as", "Assamese"],
+    ]) {
+      await user.selectOptions(source, code);
+      expect(optionLabels(target)).toEqual(["No translation — OCR only"]);
+      expect(screen.getByTestId("ocr-target-language-hint")).toHaveTextContent(
+        `No translation is offered from ${name}.`,
+      );
+    }
   });
 
   it("disables translation with the plain reason when it is unavailable", async () => {

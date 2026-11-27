@@ -66,7 +66,7 @@ from caseops_api.services.session_context import SessionContext
 OCR_TARGET_TYPE = DocumentProcessingTargetType.MATTER_ATTACHMENT_OCR.value
 TRANSLATION_TARGET_TYPE = DocumentProcessingTargetType.MATTER_ATTACHMENT_TRANSLATION.value
 RENDITION_TARGET_TYPES = frozenset({OCR_TARGET_TYPE, TRANSLATION_TARGET_TYPE})
-OCR_LANGUAGES = ("en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od")
+OCR_LANGUAGES = ("en", "hi", "mr", "gu", "ta", "te", "kn", "bn", "ml", "pa", "od", "ur", "as")
 TRANSLATION_COST_CATEGORY = ProviderCostCategory.TRANSLATION_CHARACTERS
 LANGUAGE_NAMES = {
     "en": "English",
@@ -80,6 +80,8 @@ LANGUAGE_NAMES = {
     "ml": "Malayalam",
     "pa": "Punjabi",
     "od": "Odia",
+    "ur": "Urdu",
+    "as": "Assamese",
 }
 # Extension -> accepted declared content types (images and PDFs only).
 SUPPORTED_SOURCE_TYPES: dict[str, frozenset[str]] = {

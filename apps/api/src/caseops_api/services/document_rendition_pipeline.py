@@ -190,6 +190,7 @@ SCRIPT_BLOCKS: dict[str, tuple[int, int]] = {
     "hi": (0x0900, 0x097F),  # Devanagari
     "mr": (0x0900, 0x097F),  # Devanagari
     "bn": (0x0980, 0x09FF),  # Bengali
+    "as": (0x0980, 0x09FF),  # Bengali script (Assamese)
     "pa": (0x0A00, 0x0A7F),  # Gurmukhi
     "gu": (0x0A80, 0x0AFF),  # Gujarati
     "od": (0x0B00, 0x0B7F),  # Oriya
@@ -197,6 +198,7 @@ SCRIPT_BLOCKS: dict[str, tuple[int, int]] = {
     "te": (0x0C00, 0x0C7F),  # Telugu
     "kn": (0x0C80, 0x0CFF),  # Kannada
     "ml": (0x0D00, 0x0D7F),  # Malayalam
+    "ur": (0x0600, 0x06FF),  # Arabic script (Urdu)
 }
 
 

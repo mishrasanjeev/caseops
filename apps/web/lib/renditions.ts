@@ -19,6 +19,8 @@ export const RENDITION_LANGUAGES: Array<{ value: RenditionLanguage; label: strin
   { value: "ml", label: "Malayalam" },
   { value: "pa", label: "Punjabi" },
   { value: "od", label: "Odia" },
+  { value: "ur", label: "Urdu" },
+  { value: "as", label: "Assamese" },
 ];
 
 export function languageLabel(code: string | null | undefined): string {
@@ -146,6 +148,20 @@ export function translationTargets(
     .filter((pair) => pair.source === source)
     .map((pair) => pair.target)
     .sort((a, b) => order(a) - order(b));
+}
+
+/**
+ * OCR languages that no translation pair uses, as one phrase for the dialog
+ * ("Odia, Urdu and Assamese"); empty when every OCR language translates.
+ */
+export function ocrOnlyLanguagesPhrase(providers: RenditionProviderReadiness | undefined): string {
+  if (!providers) return "";
+  const translated = new Set(providers.translation_pairs.flatMap((pair) => [pair.source, pair.target]));
+  const labels = RENDITION_LANGUAGES.filter(
+    (item) => item.value !== "en" && providers.ocr_languages.includes(item.value) && !translated.has(item.value),
+  ).map((item) => item.label);
+  if (labels.length <= 1) return labels.join("");
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
 const PAGE_REASONS: Record<string, string> = {
