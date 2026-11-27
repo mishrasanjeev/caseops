@@ -136,6 +136,12 @@ on its next revision. Revocation: set `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=false`
    - category `translation_characters`, provider `google-translation`,
      unit = INR minor units per 1,000 source characters, same evidence rules.
    Without these, readiness reports `cost_not_verified` and no paid call is made.
+   The provider must be exactly `sarvam` or `google-translation`. Enter the unit
+   amount as a whole number of paise (INR 1.50 is `150`). A leading currency
+   sign makes the save fail with `unit_amount_minor or unit_amount_bps is
+   required`, and a decimal is silently cut to its whole part (`1.50` saves as
+   `1`), so check the saved amount in the list. Saving needs a platform
+   admin with MFA and a fresh step-up code (`/account/security`).
 2. Confirm workspace provider budgets in Billing. OCR and translation reserve
    against the shared paid-provider budget scope.
 
@@ -157,6 +163,9 @@ Automated or no-paid requests are blocked by design.
 4. Record the Sarvam job id from `provider_jobs_json`, the Google model string
    on the version, the provider spend rows (settled), and the matching audit
    events (`matter_attachment.ocr_*`, `matter_attachment.translation_*`).
+
+The first live run (2026-11-26, fictional image-only Hindi sample) is recorded
+under EH-OCRT in `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`.
 
 Until a real successful call has been recorded this way, the live integration
 is unverified. This holds even though mocked contract tests pass. The Sarvam
