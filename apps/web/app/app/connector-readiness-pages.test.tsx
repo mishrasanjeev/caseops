@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -241,6 +241,18 @@ describe("connector readiness pages", () => {
       last_tested_at: null,
       last_error_redacted: null,
       readiness: "blocked_pending_admin_configuration",
+      registration_model: "customer_entra_app_registration",
+      expected_redirect_uri: "https://api.caseops.ai/api/calendar/connections/outlook/callback",
+      callback_path: "/api/calendar/connections/outlook/callback",
+      saved_redirect_uri: null,
+      redirect_uri_matches_expected: false,
+      client_id: null,
+      tenant_id: null,
+      secret_saved: false,
+      required_permissions: [
+        { scope: "offline_access", kind: "delegated", purpose: "Keep the connection working." },
+        { scope: "Calendars.ReadWrite", kind: "delegated", purpose: "Write hearings." },
+      ],
     });
     updateMicrosoft365TenantConfigurationMock.mockResolvedValue({});
     testMicrosoft365TenantConfigurationMock.mockResolvedValue({
@@ -385,23 +397,91 @@ describe("connector readiness pages", () => {
     renderWithQuery(<Microsoft365AdminPage />);
 
     expect(await screen.findByText("setup needed")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Client id"), {
-      target: { value: "graph-client" },
+    fireEvent.change(screen.getByLabelText("Application (client) ID"), {
+      target: { value: "0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b" },
     });
     fireEvent.change(screen.getByLabelText("Client secret"), {
       target: { value: "graph-secret" },
+    });
+    fireEvent.change(screen.getByLabelText("Directory (tenant) ID"), {
+      target: { value: "72f988bf-86f1-41af-91ab-2d7cd011db47" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(updateMicrosoft365TenantConfigurationMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          clientId: "graph-client",
+          clientId: "0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b",
           clientSecret: "graph-secret",
+          tenantId: "72f988bf-86f1-41af-91ab-2d7cd011db47",
+          // Saved from the server-computed value, never typed.
+          redirectUri: "https://api.caseops.ai/api/calendar/connections/outlook/callback",
         }),
       );
     });
     expect(screen.queryByText("graph-secret")).not.toBeInTheDocument();
+  });
+
+  it("Nov 27 row 8: shows the exact redirect URI, permissions and tenant ID errors", async () => {
+    renderWithQuery(<Microsoft365AdminPage />);
+
+    const redirect = await screen.findByLabelText("Redirect URI");
+    expect(redirect).toHaveValue(
+      "https://api.caseops.ai/api/calendar/connections/outlook/callback",
+    );
+    expect(redirect).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Copy Redirect URI" })).toBeInTheDocument();
+    expect(screen.getByTestId("m365-permissions")).toHaveTextContent("Calendars.ReadWrite");
+    expect(screen.getByTestId("m365-setup-steps")).toHaveTextContent("Directory (tenant) ID");
+
+    fireEvent.change(screen.getByLabelText("Directory (tenant) ID"), {
+      target: { value: "common" },
+    });
+    expect(await screen.findByText(/is a sign-in mode, not your directory/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByLabelText("Directory (tenant) ID")).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Test setup" }));
+    const results = await screen.findByTestId("m365-test-results");
+    expect(results).toHaveTextContent("Values or approvals missing");
+  });
+
+  it("Nov 27 row 8 review: says what saving and testing do, and where Outlook Calendar connects", async () => {
+    testMicrosoft365TenantConfigurationMock.mockResolvedValueOnce({
+      provider: "microsoft_365",
+      status: "passed",
+      checks: [],
+      readiness: "ready_for_review_first_workflows",
+      tested_at: new Date().toISOString(),
+    });
+    renderWithQuery(<Microsoft365AdminPage />);
+
+    const note = await screen.findByTestId("m365-scope-note");
+    // No Microsoft sign-in reads this configuration (only connector health
+    // does), so the page must not promise a connection it cannot make.
+    expect(note).toHaveTextContent("Test setup checks them in CaseOps without calling Microsoft");
+    expect(note).toHaveTextContent("used only for the Microsoft 365 readiness shown on Integrations");
+    expect(note).toHaveTextContent("No CaseOps sign-in reads them yet");
+    expect(within(note).getByRole("link", { name: "Outlook calendar" })).toHaveAttribute(
+      "href",
+      "/app/admin/outlook",
+    );
+    expect(within(note).getByRole("link", { name: "Integrations" })).toHaveAttribute(
+      "href",
+      "/app/admin/integrations",
+    );
+    expect(screen.queryByText(/^Connect Outlook Mail/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/completed by the Outlook callback/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Test setup" }));
+    const results = await screen.findByTestId("m365-test-results");
+    expect(results).toHaveTextContent("All values and approvals saved");
+    expect(results).toHaveTextContent("Nothing is connected by this test");
+    expect(results).not.toHaveTextContent("Setup complete");
+    expect(within(results).getByRole("link", { name: "Outlook calendar" })).toHaveAttribute(
+      "href",
+      "/app/admin/outlook",
+    );
   });
 
   it("renders inbound aliases and toggles disabled aliases explicitly", async () => {

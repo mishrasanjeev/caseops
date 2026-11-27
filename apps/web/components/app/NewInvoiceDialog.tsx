@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { createMatterInvoice } from "@/lib/api/endpoints";
 
@@ -52,7 +53,11 @@ const schema = z.object({
       }),
     )
     .max(40, "Too many manual items."),
-});
+}).refine(
+  // Mirrors InvoiceCreateRequest: a due date before the issue date is refused.
+  (values) => !values.due_on || values.due_on >= values.issued_on,
+  { path: ["due_on"], message: "Due date cannot be earlier than the issue date." },
+);
 
 type FormValues = z.infer<typeof schema>;
 
@@ -271,15 +276,14 @@ export function NewInvoiceDialog({ matterId }: { matterId: string }) {
                     aria-label={`Line ${idx + 1} amount`}
                     {...form.register(`manual_items.${idx}.amount_rupees` as const)}
                   />
-                  <Button
+                  <IconButton label={`Remove line ${idx + 1}`}
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => manualItems.remove(idx)}
-                    aria-label={`Remove line ${idx + 1}`}
                   >
                     <X className="h-4 w-4" aria-hidden />
-                  </Button>
+                  </IconButton>
                 </div>
               ))}
             </div>

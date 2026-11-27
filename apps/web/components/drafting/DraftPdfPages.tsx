@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
-import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
@@ -26,15 +26,15 @@ export default function DraftPdfPages({ file }: { file: Blob }) {
   }, []);
   return <div className="min-w-0" data-testid="draft-pdf-preview">
     <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="PDF pages">
-      <Button variant="ghost" size="sm" title="Previous PDF page" aria-label="Previous PDF page"
-        disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" aria-hidden /></Button>
+      <IconButton label="Previous PDF page" variant="ghost" size="sm"
+        disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" aria-hidden /></IconButton>
       <span role="status" className="text-sm tabular-nums" data-testid="draft-pdf-pagination">Page {page} of {total || "..."}</span>
-      <Button variant="ghost" size="sm" title="Next PDF page" aria-label="Next PDF page"
-        disabled={!total || page >= total} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" aria-hidden /></Button>
-      <Button variant="ghost" size="sm" title="Zoom out" aria-label="Zoom out PDF"
-        disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.25))}><ZoomOut className="h-4 w-4" aria-hidden /></Button>
-      <Button variant="ghost" size="sm" title="Zoom in" aria-label="Zoom in PDF"
-        disabled={zoom >= 2} onClick={() => setZoom(Math.min(2, zoom + 0.25))}><ZoomIn className="h-4 w-4" aria-hidden /></Button>
+      <IconButton label="Next PDF page" variant="ghost" size="sm"
+        disabled={!total || page >= total} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" aria-hidden /></IconButton>
+      <IconButton label="Zoom out PDF" variant="ghost" size="sm"
+        disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - 0.25))}><ZoomOut className="h-4 w-4" aria-hidden /></IconButton>
+      <IconButton label="Zoom in PDF" variant="ghost" size="sm"
+        disabled={zoom >= 2} onClick={() => setZoom(Math.min(2, zoom + 0.25))}><ZoomIn className="h-4 w-4" aria-hidden /></IconButton>
       <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
     </div>
     <div ref={container} className="relative min-w-0 overflow-x-auto bg-[var(--color-bg)]"

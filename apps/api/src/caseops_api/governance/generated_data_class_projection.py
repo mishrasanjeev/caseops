@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "fa3469bc1cc4a01505661d418ade2e875bc9f1cb6d79dd759b3117d2766ace00"
-MAP_SCHEMA_FINGERPRINT = "0aebc778b9ef508e62715da03375f858b0253aa76659d52a58fbe8eb7e2258f6"
+MAP_DOCUMENT_FINGERPRINT = "74b44d2aa2a0c49ba256d95beb93406cc5e393e01d9d5c1376c0964b01acdcb4"
+MAP_SCHEMA_FINGERPRINT = "a605132f30480e36798ee2b7c0d0419c93d77fbef8badc70c95897cef96b0d78"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "388448de055440309233ca3bbe7844aee20c4fb3d9737b5c634d536e8c5af88a"
+ORM_SCHEMA_FINGERPRINT = "8f6d2ad37b6f9860901ddc551eca6bf2406e78e4e74c850d229148630d2a94e2"
 
-PROJECTION_ID = "b96a141eed51a2a6bee6611e12a16d5c10f9a43734690092642458d30a5c3797"
+PROJECTION_ID = "a88516001a0d57eeadf78020403007e4ed2492c0c3e7539ee5cc115daf8d574d"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -83,6 +83,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "billing_coupons",
         "billing_credit_ledger",
         "billing_credit_notes",
+        "billing_document_verifications",
         "billing_enrollments",
         "billing_manual_invoices",
         "billing_margin_simulations",
@@ -110,9 +111,11 @@ INVENTORIED_SQL_TABLES = frozenset(
         "calendar_projection_reconciliation_candidates",
         "case_tracking_support_matrix",
         "cause_list_exports",
+        "client_kyc_documents",
         "clients",
         "communications",
         "companies",
+        "company_document_brandings",
         "company_ip_rule_policies",
         "company_memberships",
         "company_notice_ip_links",

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 
 import { MatterPicker, OPERATIONAL_MATTER_STATUSES } from "@/components/app/MatterPicker";
 import { ClientContactEditor } from "@/components/clients/ClientContactEditor";
+import { ClientKycPanel } from "@/components/clients/ClientKycPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -33,11 +34,8 @@ import {
   archiveClient,
   assignClientToMatter,
   fetchClient,
-  rejectClientKyc,
-  submitClientKyc,
   unarchiveClient,
   unassignClientFromMatter,
-  verifyClientKyc,
   type ClientMatterLink,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
@@ -67,41 +65,6 @@ export default function ClientProfilePage() {
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not archive."));
     },
-  });
-
-  // Phase B M11 slice 3 — KYC lifecycle mutations.
-  const kycInvalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["clients"] });
-    await queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
-  };
-  const kycSubmitMutation = useMutation({
-    mutationFn: (documents: { name: string }[]) =>
-      submitClientKyc({ clientId, documents }),
-    onSuccess: async () => {
-      toast.success("KYC submitted for review.");
-      await kycInvalidate();
-    },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not submit KYC.")),
-  });
-  const kycVerifyMutation = useMutation({
-    mutationFn: () => verifyClientKyc(clientId),
-    onSuccess: async () => {
-      toast.success("KYC verified.");
-      await kycInvalidate();
-    },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not verify KYC.")),
-  });
-  const kycRejectMutation = useMutation({
-    mutationFn: (reason: string) =>
-      rejectClientKyc({ clientId, reason }),
-    onSuccess: async () => {
-      toast.success("KYC rejected.");
-      await kycInvalidate();
-    },
-    onError: (err) =>
-      toast.error(apiErrorMessage(err, "Could not reject KYC.")),
   });
 
   // Phase B / BUG-025: archive is now reversible. The button only
@@ -315,17 +278,7 @@ export default function ClientProfilePage() {
         </CardContent>
       </Card>
 
-      <KycPanel
-        client={c}
-        canSubmit={canSubmitKyc}
-        canReview={canReviewKyc}
-        submitting={kycSubmitMutation.isPending}
-        verifying={kycVerifyMutation.isPending}
-        rejecting={kycRejectMutation.isPending}
-        onSubmit={(docs) => kycSubmitMutation.mutate(docs)}
-        onVerify={() => kycVerifyMutation.mutate()}
-        onReject={(reason) => kycRejectMutation.mutate(reason)}
-      />
+      <ClientKycPanel client={c} canSubmit={canSubmitKyc} canReview={canReviewKyc} />
 
       <ClientMattersCard
         clientId={c.id}
@@ -349,301 +302,6 @@ export default function ClientProfilePage() {
         </Card>
       ) : null}
     </div>
-  );
-}
-
-// Phase B M11 slice 3 — KYC card with submit / verify / reject
-// actions. The state machine is enforced server-side; the UI just
-// hides actions that don't make sense for the current status.
-type KycPanelClient = {
-  kyc_status:
-    | "not_required"
-    | "required"
-    | "requested"
-    | "submitted"
-    | "under_review"
-    | "verified"
-    | "rejected"
-    | "expired";
-  kyc_submitted_at: string | null;
-  kyc_verified_at: string | null;
-  kyc_rejection_reason: string | null;
-  kyc_documents: {
-    name: string;
-    document_type?: string | null;
-    status: string;
-    note: string | null;
-    attachment_id?: string | null;
-    expires_on?: string | null;
-  }[];
-};
-
-function KycPanel({
-  client,
-  canSubmit,
-  canReview,
-  submitting,
-  verifying,
-  rejecting,
-  onSubmit,
-  onVerify,
-  onReject,
-}: {
-  client: KycPanelClient;
-  canSubmit: boolean;
-  canReview: boolean;
-  submitting: boolean;
-  verifying: boolean;
-  rejecting: boolean;
-  onSubmit: (documents: { name: string }[]) => void;
-  onVerify: () => void;
-  onReject: (reason: string) => void;
-}) {
-  const [docsInput, setDocsInput] = useState(
-    "PAN\nAadhaar / address proof\nBoard resolution / authorisation",
-  );
-  const [showSubmit, setShowSubmit] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [showReject, setShowReject] = useState(false);
-
-  const formatLocal = (iso: string | null): string =>
-    iso
-      ? new Date(iso).toLocaleString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "—";
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle as="h2" className="text-base">
-          KYC verification
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Badge
-              tone={
-                client.kyc_status === "verified"
-                  ? "success"
-                  : client.kyc_status === "rejected" ||
-                      client.kyc_status === "expired" ||
-                      client.kyc_status === "required"
-                    ? "warning"
-                    : client.kyc_status === "submitted" ||
-                        client.kyc_status === "under_review" ||
-                        client.kyc_status === "requested"
-                      ? "brand"
-                      : "neutral"
-              }
-            >
-              {client.kyc_status.replace("_", " ")}
-            </Badge>
-            {client.kyc_status === "verified" ? (
-              <ShieldCheck
-                className="h-4 w-4 text-[var(--color-brand-600)]"
-                aria-hidden
-              />
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {canSubmit &&
-            (client.kyc_status === "not_required" ||
-              client.kyc_status === "required" ||
-              client.kyc_status === "requested" ||
-              client.kyc_status === "rejected" ||
-              client.kyc_status === "expired") ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setShowSubmit((s) => !s)}
-                data-testid="kyc-submit-toggle"
-              >
-                <Upload className="h-4 w-4" aria-hidden />
-                {client.kyc_status === "rejected"
-                  ? "Re-submit verification"
-                  : "Submit KYC"}
-              </Button>
-            ) : null}
-            {canReview &&
-            (client.kyc_status === "submitted" ||
-              client.kyc_status === "under_review") ? (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowReject((s) => !s)}
-                  data-testid="kyc-reject-toggle"
-                >
-                  <XCircle className="h-4 w-4" aria-hidden /> Reject
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={verifying}
-                  onClick={() => onVerify()}
-                  data-testid="kyc-verify"
-                >
-                  <CheckCircle2 className="h-4 w-4" aria-hidden /> Verify
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        {client.kyc_submitted_at ? (
-          <div className="mt-3 grid gap-2 text-xs text-[var(--color-mute)] sm:grid-cols-2">
-            <div>
-              <span className="font-medium text-[var(--color-ink)]">
-                Submitted
-              </span>
-              {" — "}
-              {formatLocal(client.kyc_submitted_at)}
-            </div>
-            {client.kyc_verified_at ? (
-              <div>
-                <span className="font-medium text-[var(--color-ink)]">
-                  Verified
-                </span>
-                {" — "}
-                {formatLocal(client.kyc_verified_at)}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {client.kyc_status === "rejected" && client.kyc_rejection_reason ? (
-          <div className="mt-3 rounded-md border border-[var(--color-warning-500)]/40 bg-[var(--color-warning-500)]/10 p-3 text-xs">
-            <div className="font-medium text-[var(--color-ink)]">
-              Rejection reason
-            </div>
-            <p className="mt-1 whitespace-pre-wrap text-[var(--color-ink-2)]">
-              {client.kyc_rejection_reason}
-            </p>
-          </div>
-        ) : null}
-
-        {client.kyc_documents.length > 0 ? (
-          <div className="mt-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-mute)]">
-              Documents on file
-            </div>
-            <ul className="mt-1 list-disc pl-5 text-xs text-[var(--color-ink-2)]">
-              {client.kyc_documents.map((d, i) => (
-                <li key={`${d.name}-${i}`}>
-                  {d.name}
-                  {d.status && d.status !== "received" ? (
-                    <span className="ml-1 text-[var(--color-mute)]">
-                      ({d.status})
-                    </span>
-                  ) : null}
-                  {d.note ? (
-                    <span className="ml-1 text-[var(--color-mute)]">
-                      — {d.note}
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {showSubmit ? (
-          <form
-            className="mt-4 flex flex-col gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const docs = docsInput
-                .split(/\r?\n/)
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((name) => ({ name }));
-              onSubmit(docs);
-              setShowSubmit(false);
-            }}
-          >
-            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-ink)]">
-              Documents collected (one per line)
-              <textarea
-                value={docsInput}
-                onChange={(e) => setDocsInput(e.target.value)}
-                rows={4}
-                className="rounded-md border border-[var(--color-line)] px-2 py-1 text-sm font-mono"
-                data-testid="kyc-submit-docs"
-              />
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSubmit(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={submitting}
-                data-testid="kyc-submit"
-              >
-                Submit for review
-              </Button>
-            </div>
-          </form>
-        ) : null}
-
-        {showReject ? (
-          <form
-            className="mt-4 flex flex-col gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-line-1)]/40 p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (rejectReason.trim().length < 4) return;
-              onReject(rejectReason.trim());
-              setShowReject(false);
-              setRejectReason("");
-            }}
-          >
-            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--color-ink)]">
-              Rejection reason (visible to the lawyer who submitted)
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                required
-                placeholder="e.g. Address proof missing — please attach a recent utility bill."
-                className="rounded-md border border-[var(--color-line)] px-2 py-1 text-sm"
-                data-testid="kyc-reject-reason"
-              />
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowReject(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={rejecting || rejectReason.trim().length < 4}
-                data-testid="kyc-reject"
-              >
-                Send rejection
-              </Button>
-            </div>
-          </form>
-        ) : null}
-      </CardContent>
-    </Card>
   );
 }
 

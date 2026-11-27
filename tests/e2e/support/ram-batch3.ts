@@ -91,6 +91,37 @@ export async function batch3LocalWrite<T>(runtime: Batch3ClientRuntime, path: st
   }), "Local synthetic QA admission");
 }
 
+// BUG-003: a KYC submission is the client's uploaded files. The loopback
+// fixture uploads two synthetic stub files (never a real identity document)
+// to the exact admitted client, then submits, opens each one as the reviewer
+// (the API refuses to approve a file the reviewer has not opened), and
+// approves them.
+const SYNTHETIC_PDF = Buffer.from("%PDF-1.4\n% Synthetic QA stub, not identity evidence\n%%EOF\n");
+const SYNTHETIC_PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
+
+async function batch3LocalKycUpload(runtime: Batch3ClientRuntime, clientId: string,
+  documentType: "pan" | "aadhaar_masked", file: { name: string; mimeType: string; buffer: Buffer }): Promise<string> {
+  requireLocalBatch3(runtime);
+  if (!uuid.test(clientId)) throw new Error("Operation is outside the local batch 3 fixture boundary.");
+  await runtime.release();
+  const body = await batch3Json<{ id: string }>(await batch3Request(runtime.http,
+    `${runtime.api.origin}/api/clients/${clientId}/kyc/documents`, {
+      method: "POST", headers: runtime.headers, multipart: { document_type: documentType, file },
+    }), "Local synthetic QA KYC stub upload", 201);
+  return body.id;
+}
+
+async function batch3LocalKycOpen(runtime: Batch3ClientRuntime, clientId: string, documentId: string): Promise<void> {
+  requireLocalBatch3(runtime);
+  if (!uuid.test(clientId) || !uuid.test(documentId)) throw new Error("Operation is outside the local batch 3 fixture boundary.");
+  await runtime.release();
+  const response = await batch3Request(runtime.http,
+    `${runtime.api.origin}/api/clients/${clientId}/kyc/documents/${documentId}/download`, {
+      method: "GET", headers: runtime.headers, params: { inline: "true" },
+    });
+  expect(response.status(), "Local synthetic QA KYC stub open").toBe(200);
+}
+
 async function assertActor(runtime: Batch3ClientRuntime): Promise<void> {
   const current = await batch3Read<Actor>(runtime, "/api/auth/me");
   expect(current.company.id === runtime.actor.company.id && current.company.slug === runtime.credentials.company_slug,
@@ -262,12 +293,20 @@ export async function batch3ClientFixture(runtime: Batch3ClientRuntime): Promise
     matterId = matter.id;
     await batch3LocalWrite(runtime, `/api/matters/${matterId}/clients`, { client_id: clientId, role: "QA fixture", is_primary: true });
     const verificationPath = `/api/matters/${matterId}/client-verification/${clientId}`;
+    const kycFileIds = [
+      await batch3LocalKycUpload(runtime, clientId, "pan",
+        { name: "synthetic-qa-stub.pdf", mimeType: "application/pdf", buffer: SYNTHETIC_PDF }),
+      await batch3LocalKycUpload(runtime, clientId, "aadhaar_masked",
+        { name: "synthetic-qa-stub.png", mimeType: "image/png", buffer: SYNTHETIC_PNG }),
+    ];
     // Loopback synthetic state-machine acceptance only, not certification of a legal identity.
     await batch3LocalWrite(runtime, verificationPath, { status: "submitted", documents: [{
       name: "Synthetic QA stub only - no legal identity verified", document_type: "synthetic_qa_only",
       status: "submitted", note: "Offline UI regression fixture, not identity evidence",
     }] }, "PATCH");
-    await batch3LocalWrite(runtime, verificationPath, { status: "verified" }, "PATCH");
+    for (const documentId of kycFileIds) await batch3LocalKycOpen(runtime, clientId, documentId);
+    await batch3LocalWrite(runtime, verificationPath,
+      { status: "verified", reviewed_document_ids: kycFileIds }, "PATCH");
   } else {
     clientId = required("CASEOPS_RAM_BATCH3_QA_CLIENT_ID");
     matterId = required("CASEOPS_RAM_BATCH3_QA_MATTER_ID");

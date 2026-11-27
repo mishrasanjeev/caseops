@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 BillingModeLiteral = Literal["hourly", "fixed_fee", "milestone", "mixed"]
 BillingRateScopeLiteral = Literal["user", "role", "practice_area", "default"]
@@ -26,6 +26,18 @@ class MatterBillingRateCreateRequest(BaseModel):
         if isinstance(value, str):
             return value.strip().upper()
         return value
+
+    @model_validator(mode="after")
+    def window_not_reversed(self) -> MatterBillingRateCreateRequest:
+        # A reversed window can never match the rate lookup, so the rate would
+        # be stored and silently never used.
+        if (
+            self.effective_from is not None
+            and self.effective_to is not None
+            and self.effective_to < self.effective_from
+        ):
+            raise ValueError("Rate end date cannot be earlier than its start date.")
+        return self
 
 
 class MatterBillingProfileCreateRequest(BaseModel):

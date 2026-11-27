@@ -120,6 +120,8 @@ test.describe("Notice module workflows", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', receivedNoticePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     const receivedResponse = await receivedUploadResponse;
     expect(receivedResponse.status()).toBe(200);
 
@@ -177,6 +179,8 @@ test.describe("Notice module workflows", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', sentNoticePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     const sentResponse = await sentUploadResponse;
     expect(sentResponse.status()).toBe(200);
 

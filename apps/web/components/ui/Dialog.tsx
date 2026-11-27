@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ElementRef, HTMLAttributes } from "react";
 
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 
 export const Dialog = DialogPrimitive.Root;
@@ -55,10 +56,11 @@ export const DialogContent = forwardRef<
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
+        <Tooltip label="Close">
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]">
+            <X className="h-4 w-4" aria-hidden />
+          </DialogPrimitive.Close>
+        </Tooltip>
       </DialogPrimitive.Content>
     </DialogPortal>
   );

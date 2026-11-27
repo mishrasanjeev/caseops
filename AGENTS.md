@@ -3325,6 +3325,33 @@ requirements when using the fallback.
   with its pytest mirror, and `test_batch5_release_wiring.py`. Prove the
   checker against the real `--list` inventory, with the previous checker as
   the failing control.
+- A rule added by a fix must hold on every writer of that state, through the
+  API, not only on the form the tester used. The Nov 27 batch shipped seven
+  fixes whose new tests all failed on old code, and an independent review still
+  found the same gap six times: "open each KYC file before approving" lived in
+  the panel only; the duplicate-notice rule ran on create but not on either
+  PATCH or across the two notice stores; due-before-issue skipped the
+  outside-counsel invoice; one status transition skipped the KYC pack check; a
+  draft verified as "Genuine" because "issued" was defined twice; a readiness
+  gate offered "run" only when never analysed. List every create, update,
+  bulk/import, portal and service writer, and every reader that decides on the
+  rule, before calling a row fixed; keep status sets in one constant; and run an
+  independent review of the integrated diff before release.
+- Prove rendered content, not element presence. The KYC PDF preview e2e
+  asserted the iframe was visible while the app Content-Security-Policy blocked
+  it, so reviewers saw a blocked icon. Assert canvas, text or pixels.
+- A seed migration must fail on a missing parent row, and its test must assert
+  the exact expected rows. Bench seeding skipped absent courts and the test
+  built its expected set from whatever courts existed, so Allahabad was
+  silently never seeded and no test could fail.
+- A browser date control completes a half-typed year ("023020" becomes 0020)
+  and rolls an impossible day forward; a typed invalid date reaches the form as
+  empty or as a valid but absurd year. Validate a plausible date window on the
+  API and read the control's invalid-input flag on submit.
+- A test double shaped from our own reading of a provider cannot catch a naming
+  bug the provider's real output triggers. Route new inputs through the archive
+  path a real provider run has already proved, and keep the verdict
+  Inconclusive until a signed-in run on the reported file succeeds.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

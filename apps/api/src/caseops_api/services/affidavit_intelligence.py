@@ -21,6 +21,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
+    MatterDocumentType,
     MatterProceedingConfidence,
 )
 from caseops_api.schemas.affidavit_intelligence import (
@@ -35,6 +36,13 @@ from caseops_api.services.matter_operational_guard import require_operational_ma
 from caseops_api.services.session_context import SessionContext
 
 PARSER_VERSION = "caseops-affidavit-deterministic-v1"
+# Document types the matter documents page marks as affidavits. The mock
+# hearing readiness check reads the same tuple.
+AFFIDAVIT_DOCUMENT_TYPES: tuple[str, ...] = (
+    MatterDocumentType.AFFIDAVIT.value,
+    MatterDocumentType.CHIEF_AFFIDAVIT.value,
+    MatterDocumentType.COUNTER_AFFIDAVIT.value,
+)
 MIN_SOURCE_TEXT_CHARS = 80
 DISCLAIMER = (
     "Affidavit intelligence is source-backed hearing-preparation decision support. "
@@ -183,7 +191,7 @@ def analyze_affidavit_attachment(
         return _response(matter_id=matter.id, runs=_load_runs(session, matter.id))
 
     source_text = " ".join(chunk.content for chunk in usable)
-    source_hash = hashlib.sha256(_normalize_space(source_text).encode("utf-8")).hexdigest()
+    source_hash = _usable_text_hash(usable)
     sentences = _source_sentences(usable)
     statements = _extract_statements(sentences)
     questions = _questions_for_statements(statements)
@@ -291,6 +299,23 @@ def _load_runs(session: Session, matter_id: str) -> list[AffidavitIntelligenceRu
             )
         )
     )
+
+
+def usable_source_text_hash(chunks: list[MatterAttachmentChunk]) -> str | None:
+    """The ``source_hash`` a run over these chunks would record now.
+
+    ``None`` when the text is not usable, i.e. a run would end
+    ``insufficient_source_text``. Readiness compares it with the latest run's
+    hash to tell whether re-running can produce a different result.
+    """
+
+    usable = _usable_source_chunks(chunks)
+    return _usable_text_hash(usable) if usable else None
+
+
+def _usable_text_hash(usable: list[MatterAttachmentChunk]) -> str:
+    source_text = " ".join(chunk.content for chunk in usable)
+    return hashlib.sha256(_normalize_space(source_text).encode("utf-8")).hexdigest()
 
 
 def _usable_source_chunks(

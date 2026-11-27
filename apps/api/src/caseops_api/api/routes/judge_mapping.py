@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, require_capability
-from caseops_api.db.models import AuthorityDocument, Bench, Court, Judge, JudgeMappingReview
+from caseops_api.db.models import AuthorityDocument, Court, Judge, JudgeMappingReview
 from caseops_api.schemas.judge_mapping import (
     AuthorityRemapResponse,
     BenchAliasCreateRequest,
     BenchCatalogListResponse,
+    BenchIdentityRecord,
     CatalogAliasRecord,
+    CourtWithoutBenchesRecord,
     JudgeAliasCreateRequest,
     JudgeCatalogListResponse,
     JudgeIdentityRecord,
@@ -27,6 +29,8 @@ from caseops_api.services.judge_mapping import (
     JudgeMappingError,
     add_bench_alias,
     add_judge_alias,
+    list_curatable_benches,
+    list_curatable_judges,
     merge_duplicate_judges,
     rebuild_authority_mapping,
     resolve_mapping_review,
@@ -193,11 +197,6 @@ def list_mapping_reviews_by_id(
     )
 
 
-def _escaped_contains(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 @router.get(
     "/catalog/judges",
     response_model=JudgeCatalogListResponse,
@@ -211,17 +210,19 @@ def list_curator_judges(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> JudgeCatalogListResponse:
     del context
-    stmt = select(Judge).where(Judge.is_active.is_(True), Judge.merged_into_judge_id.is_(None))
-    if court_id:
-        stmt = stmt.where(Judge.court_id == court_id)
-    if q and q.strip():
-        stmt = stmt.where(Judge.full_name.ilike(_escaped_contains(q.strip()), escape="\\"))
-    rows = list(session.scalars(stmt.order_by(Judge.full_name, Judge.id).limit(limit + 1)))
+    page = list_curatable_judges(session, court_id=court_id, q=q, limit=limit)
+    judges = [
+        JudgeIdentityRecord.model_validate(judge).model_copy(
+            update={"court_name": court.name, "court_short_name": court.short_name}
+        )
+        for judge, court in page.rows
+    ]
     return JudgeCatalogListResponse(
-        judges=rows[:limit],
-        returned_count=min(len(rows), limit),
+        judges=judges,
+        returned_count=len(judges),
+        total_count=page.total_count,
         limit=limit,
-        has_more=len(rows) > limit,
+        has_more=page.has_more,
     )
 
 
@@ -238,17 +239,33 @@ def list_curator_benches(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
 ) -> BenchCatalogListResponse:
     del context
-    stmt = select(Bench)
-    if court_id:
-        stmt = stmt.where(Bench.court_id == court_id)
-    if q and q.strip():
-        stmt = stmt.where(Bench.name.ilike(_escaped_contains(q.strip()), escape="\\"))
-    rows = list(session.scalars(stmt.order_by(Bench.name, Bench.id).limit(limit + 1)))
+    page = list_curatable_benches(session, court_id=court_id, q=q, limit=limit)
+    benches = [
+        BenchIdentityRecord(
+            id=bench.id,
+            court_id=bench.court_id,
+            court_name=court.name,
+            court_short_name=court.short_name,
+            name=bench.name,
+            seat_city=bench.seat_city,
+            source_name=bench.source_name,
+            source_url=bench.source_url,
+            source_reference=bench.source_reference,
+            record_version=bench.record_version,
+        )
+        for bench, court in page.rows
+    ]
     return BenchCatalogListResponse(
-        benches=rows[:limit],
-        returned_count=min(len(rows), limit),
+        benches=benches,
+        returned_count=len(benches),
+        total_count=page.total_count,
         limit=limit,
-        has_more=len(rows) > limit,
+        has_more=page.has_more,
+        courts_without_benches=[
+            CourtWithoutBenchesRecord(id=court.id, name=court.name, short_name=court.short_name)
+            for court in page.courts_without_benches
+        ],
+        courts_without_benches_total=page.courts_without_benches_total,
     )
 
 

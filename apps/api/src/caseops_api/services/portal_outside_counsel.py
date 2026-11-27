@@ -64,6 +64,7 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.file_security import verify_upload
+from caseops_api.services.matter_billing import linked_outside_counsel
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.matter_write_fence import (
     lock_matter_private_authority,
@@ -414,6 +415,10 @@ def submit_oc_invoice(
     currency: str,
     line_items: list[dict],
     notes: str | None = None,
+    counsel_firm_name: str | None = None,
+    counsel_address: str | None = None,
+    counsel_gstin: str | None = None,
+    counsel_pan: str | None = None,
     request_ip: str | None = None,
 ) -> MatterInvoice:
     """Create a MatterInvoice + line items submitted by the OC.
@@ -449,6 +454,14 @@ def submit_oc_invoice(
             )
         subtotal += amount
 
+    # ENH-001: snapshot the supplier (the counsel) onto the invoice, as for a
+    # firm invoice. The PDF printed only the portal user's personal name.
+    counsel = linked_outside_counsel(
+        session,
+        company_id=portal_user.company_id,
+        matter_id=matter.id,
+        email=portal_user.email,
+    )
     invoice = MatterInvoice(
         company_id=portal_user.company_id,
         matter_id=matter.id,
@@ -469,6 +482,11 @@ def submit_oc_invoice(
         issued_on=issued_on,
         due_on=due_on,
         notes=notes,
+        firm_legal_name=counsel_firm_name
+        or (counsel.name if counsel is not None else portal_user.full_name),
+        firm_address=counsel_address or (counsel.firm_city if counsel is not None else None),
+        firm_gstin=counsel_gstin.upper() if counsel_gstin else None,
+        firm_pan=counsel_pan.upper() if counsel_pan else None,
     )
     session.add(invoice)
     session.flush()

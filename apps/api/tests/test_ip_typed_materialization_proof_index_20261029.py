@@ -42,8 +42,8 @@ PATH = (
     / "alembic/versions/20261029_0002_audit_typed_source_proof_seek.py"
 )
 
-# Current head 20261126_0101 (statute section embeddings) refuses downgrade first.
-HEAD_REFUSAL = "Statute section embeddings are retained; restore-forward only."
+# Current head 20261127_0007 (forum official websites) refuses downgrade first.
+HEAD_REFUSAL = "Forum official websites are public reference data; restore-forward only."
 STAMP = datetime(2026, 10, 29, 1, 2, 3, 123456, tzinfo=UTC)
 
 
@@ -266,7 +266,7 @@ def test_actual_current_head_typed_source_proof_index_and_complete_index_health(
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current_head = ScriptDirectory.from_config(config).get_current_head()
-        assert current_head == "20261126_0101"
+        assert current_head == "20261127_0007"
         command.upgrade(config, "head")
         require_revision(engine, current_head)
         shape(engine)

@@ -35,6 +35,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { API_FORM_ERROR_KEY, apiErrorMessage, apiFieldErrors, isApiErrorShape } from "@/lib/api/config";
 import {
   createIpRegistryLink,
@@ -206,7 +207,7 @@ export default function IpRegistryPage() {
   });
   const bookmarks = useQuery({
     queryKey: ["case-tracking", "bookmarks"],
-    queryFn: listCaseTrackingBookmarks,
+    queryFn: () => listCaseTrackingBookmarks(),
     enabled: canRead && Boolean(nationalDocket),
   });
   const readiness = useQuery({
@@ -274,13 +275,14 @@ export default function IpRegistryPage() {
         description="Match registry identities, preserve source snapshots, review changes, and reference court tracking."
         actions={
           <>
-            <a
-              href="#registry-ipindia-sources"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"
-              aria-label="IP India official references" title="IP India official references"
-            >
-              <BookOpen className="h-4 w-4" aria-hidden />
-            </a>
+            <Tooltip label="IP India official references">
+              <a
+                href="#registry-ipindia-sources"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"
+              >
+                <BookOpen className="h-4 w-4" aria-hidden />
+              </a>
+            </Tooltip>
             <Button href="/app/ip/official-search" variant="outline" size="sm">
               Official search
             </Button>
@@ -850,7 +852,7 @@ function RegistryWorkspace({
 
       <Card>
         <CardHeader><CardTitle as="h3">Evidence history</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-2"><div><h4 className="text-sm font-semibold">Snapshots</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.snapshots.length ? workspace.snapshots.map((snapshot) => <div className="py-3 text-sm" key={snapshot.id}><div className="flex items-center justify-between gap-2"><strong>{stamp(snapshot.source_retrieved_at)}</strong><a href={snapshot.source_url} target="_blank" rel="noreferrer" className="text-[var(--color-brand-700)]" aria-label="Open snapshot source"><ArrowUpRight className="h-4 w-4" /></a></div><div className="mt-1 text-xs text-[var(--color-mute)]">From {sourceHost(snapshot.source_url)}</div><details className="mt-1 text-xs text-[var(--color-mute)]"><summary className="cursor-pointer">Technical detail</summary><span className="block break-all font-mono">Fingerprint {snapshot.normalized_sha256}</span></details>{snapshot.supersedes_snapshot_id ? <div className="mt-2 text-xs">Corrects the entry {correctedEntryLabel(workspace.snapshots, snapshot.supersedes_snapshot_id)} · {snapshot.correction_reason}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No snapshots recorded.</p>}</div></div><div><h4 className="text-sm font-semibold">Attempts</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.attempts.length ? workspace.attempts.map((attempt) => <div className="py-3 text-sm" key={attempt.id}><div className="flex items-center justify-between gap-2"><span><Badge tone={statusTone(attempt.status)}>{attempt.status}</Badge> <span className="ml-2">{attempt.operation_kind}</span></span><span className="text-xs text-[var(--color-mute)]">{stamp(attempt.started_at)}</span></div><div className="mt-2 text-xs text-[var(--color-mute)]">{attempt.external_call ? "External call" : "No external call"} · {attempt.response_class}</div>{attempt.error_redacted ? <div className="mt-2 text-xs text-amber-800">{attempt.error_redacted}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No attempts recorded.</p>}</div></div></CardContent>
+        <CardContent className="grid gap-4 lg:grid-cols-2"><div><h4 className="text-sm font-semibold">Snapshots</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.snapshots.length ? workspace.snapshots.map((snapshot) => <div className="py-3 text-sm" key={snapshot.id}><div className="flex items-center justify-between gap-2"><strong>{stamp(snapshot.source_retrieved_at)}</strong><Tooltip label="Open snapshot source"><a href={snapshot.source_url} target="_blank" rel="noreferrer" className="text-[var(--color-brand-700)]"><ArrowUpRight className="h-4 w-4" /></a></Tooltip></div><div className="mt-1 text-xs text-[var(--color-mute)]">From {sourceHost(snapshot.source_url)}</div><details className="mt-1 text-xs text-[var(--color-mute)]"><summary className="cursor-pointer">Technical detail</summary><span className="block break-all font-mono">Fingerprint {snapshot.normalized_sha256}</span></details>{snapshot.supersedes_snapshot_id ? <div className="mt-2 text-xs">Corrects the entry {correctedEntryLabel(workspace.snapshots, snapshot.supersedes_snapshot_id)} · {snapshot.correction_reason}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No snapshots recorded.</p>}</div></div><div><h4 className="text-sm font-semibold">Attempts</h4><div className="mt-3 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">{workspace.attempts.length ? workspace.attempts.map((attempt) => <div className="py-3 text-sm" key={attempt.id}><div className="flex items-center justify-between gap-2"><span><Badge tone={statusTone(attempt.status)}>{attempt.status}</Badge> <span className="ml-2">{attempt.operation_kind}</span></span><span className="text-xs text-[var(--color-mute)]">{stamp(attempt.started_at)}</span></div><div className="mt-2 text-xs text-[var(--color-mute)]">{attempt.external_call ? "External call" : "No external call"} · {attempt.response_class}</div>{attempt.error_redacted ? <div className="mt-2 text-xs text-amber-800">{attempt.error_redacted}</div> : null}</div>) : <p className="py-3 text-sm text-[var(--color-mute)]">No attempts recorded.</p>}</div></div></CardContent>
       </Card>
 
       {canSync ? (

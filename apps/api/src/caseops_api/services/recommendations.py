@@ -79,6 +79,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.statute_selection import selectable_statute_section_sql
 
 logger = logging.getLogger(__name__)
 
@@ -1183,7 +1184,13 @@ def _build_matter_intelligence_context(session: Session, matter: Matter) -> str:
             select(MatterStatuteReference, StatuteSection, Statute)
             .join(StatuteSection, StatuteSection.id == MatterStatuteReference.section_id)
             .join(Statute, Statute.id == StatuteSection.statute_id)
-            .where(MatterStatuteReference.matter_id == matter.id)
+            # A linked provision whose source verification lapsed after it was
+            # attached must not be quoted; drafting and strategy read the same
+            # canonical predicate.
+            .where(
+                MatterStatuteReference.matter_id == matter.id,
+                selectable_statute_section_sql(),
+            )
             .order_by(
                 Statute.short_name,
                 StatuteSection.ordinal,

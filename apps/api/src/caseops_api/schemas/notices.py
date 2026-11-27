@@ -155,6 +155,9 @@ class NoticeCreateRequest(BaseModel):
     dispute_amount_minor: int | None = Field(default=None, ge=0, le=_MAX_BIGINT)
     recovered_amount_minor: int | None = Field(default=None, ge=0, le=_MAX_BIGINT)
     matter_ids: list[str] = Field(default_factory=list, max_length=100)
+    # Record a notice whose direction, date, subject and counterparty match an
+    # existing visible notice. Identical file bytes are never overridable.
+    allow_duplicate: bool = False
 
     @field_validator("subject", "status", mode="before")
     @classmethod
@@ -244,6 +247,9 @@ class NoticeUpdateRequest(BaseModel):
     dispute_amount_minor: int | None = Field(default=None, ge=0, le=_MAX_BIGINT)
     recovered_amount_minor: int | None = Field(default=None, ge=0, le=_MAX_BIGINT)
     matter_ids: list[str] | None = Field(default=None, max_length=100)
+    # Keep an edit whose new direction, date, subject or counterparty match
+    # another visible notice, as on create; the override is audited.
+    allow_duplicate: bool = False
 
     @field_validator("subject", "status", mode="before")
     @classmethod

@@ -325,6 +325,34 @@ def unicode_pdf_class() -> type:
     return UnicodePDF
 
 
+UNPRINTABLE_TEXT_MESSAGE = (
+    "Some characters cannot be printed on billing PDFs (for example emoji, or a script "
+    "the PDF fonts do not cover). Remove them and save again."
+)
+
+
+def pdf_text_supported(text: str) -> bool:
+    """True when the pinned fonts can print every character of ``text``.
+
+    Settings that are printed on every later PDF (the firm's signatory and
+    watermark, an outside counsel's supplier name) are checked when they are
+    saved, so one unsupported character cannot make every later download fail.
+    Raises the 503 of ``unicode_pdf_class`` when the font stack is unavailable.
+    """
+    from fastapi import HTTPException
+
+    pdf = unicode_pdf_class()(unit="pt", format=(10, 10))
+    try:
+        for style in ("", "B"):
+            pdf.set_font("Helvetica", style, 10)
+            pdf.normalize_text(text)
+    except HTTPException as exc:
+        if exc.status_code == 422:
+            return False
+        raise
+    return True
+
+
 def verify_package() -> dict[str, Any]:
     """Native build/install proof: parse every packaged face from pinned bytes."""
     unicode_pdf_class()  # Exact supported SDKs and complete original OFL notices.

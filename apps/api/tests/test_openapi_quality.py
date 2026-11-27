@@ -82,10 +82,14 @@ def test_every_api_route_returns_json_or_file(client: TestClient) -> None:
     # Meta's webhook verification handshake must echo hub.challenge as plain
     # text; only that GET may answer text/plain. Its POST stays JSON.
     plain_text_routes = {("GET", "/api/webhooks/whatsapp")}
+    # ENH-001: only the admin preview of the stored, re-encoded logo/signature
+    # may answer image/png.
+    png_routes = {("GET", "/api/admin/document-branding/{kind}")}
     for path, method, op in _iter_operations(schema):
         if not path.startswith("/api/") or path in EXEMPT_PATHS:
             continue
         allowed = acceptable | ({"text/plain"} if (method, path) in plain_text_routes else set())
+        allowed |= {"image/png"} if (method, path) in png_routes else set()
         responses = op.get("responses") or {}
         for status_code, body in responses.items():
             if not isinstance(body, dict):

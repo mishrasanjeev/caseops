@@ -13,6 +13,9 @@ class StorageUploadPolicy(BaseModel):
     quota_bytes: int | None
     remaining_bytes: int | None
     max_upload_size_bytes: int
+    # The upload allow-list every file surface enforces (file_security). Web
+    # file pickers and pre-submit checks read these instead of a copy.
+    allowed_upload_extensions: list[str]
     state: StorageQuotaState
     warning_threshold_percent: int
 

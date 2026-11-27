@@ -6,9 +6,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditResult,
+    ClientKycDocument,
     Company,
     CompanyNotice,
     IpDocumentVersion,
@@ -25,6 +25,10 @@ from caseops_api.schemas.storage_governance import (
     StorageUploadPolicy,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.file_security import (
+    allowed_upload_extensions,
+    effective_max_upload_bytes,
+)
 from caseops_api.services.matter_access import visible_matters_filter
 from caseops_api.services.session_context import SessionContext
 
@@ -133,11 +137,19 @@ def _used_bytes(session: Session, *, company_id: str) -> int:
             MatterAttachmentRendition.company_id == company_id
         )
     )
+    # Client KYC files (BUG-003), retired evidence included: each row owns
+    # a distinct stored object until the client is deleted.
+    client_kyc_bytes = session.scalar(
+        select(func.coalesce(func.sum(ClientKycDocument.size_bytes), 0)).where(
+            ClientKycDocument.company_id == company_id
+        )
+    )
     return (
         int(matter_attachment_bytes or 0)
         + int(standalone_notice_bytes or 0)
         + int(ip_document_bytes or 0)
         + int(rendition_output_bytes or 0)
+        + int(client_kyc_bytes or 0)
     )
 
 
@@ -153,7 +165,8 @@ def _base_policy(session: Session, *, company: Company) -> StorageUploadPolicy:
         used_bytes=used_bytes,
         quota_bytes=quota_bytes,
         remaining_bytes=_remaining_bytes(used_bytes, quota_bytes),
-        max_upload_size_bytes=get_settings().max_attachment_size_bytes,
+        max_upload_size_bytes=effective_max_upload_bytes(),
+        allowed_upload_extensions=allowed_upload_extensions(),
         state=_quota_state(used_bytes, quota_bytes),
         warning_threshold_percent=WARNING_THRESHOLD_PERCENT,
     )

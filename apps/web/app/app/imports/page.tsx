@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   downloadBulkImportErrors,
@@ -187,34 +188,28 @@ export default function ImportActivityPage() {
                     <td data-label="Created" className="whitespace-nowrap px-4 py-3">{formatDate(job.created_at)}</td>
                     <td data-label="Actions" className="px-4 py-3">
                       <div className="flex justify-end gap-1 @max-[840px]:justify-start">
-                        <Button
+                        <IconButton label={`View manifest for ${job.filename}`}
                           variant="ghost"
                           size="sm"
-                          aria-label={`View manifest for ${job.filename}`}
-                          title="View manifest"
                           onClick={() => setSelectedJob(job)}
                         >
                           <FileSearch className="h-4 w-4" aria-hidden />
-                        </Button>
-                        <Button
+                        </IconButton>
+                        <IconButton label={`Download errors for ${job.filename}`}
                           variant="ghost"
                           size="sm"
-                          aria-label={`Download errors for ${job.filename}`}
-                          title="Download error report"
                           disabled={downloadingKey === downloadKey}
                           onClick={() => void downloadErrors(job)}
                         >
                           <Download className="h-4 w-4" aria-hidden />
-                        </Button>
-                        <Button
+                        </IconButton>
+                        <IconButton label={`Open ${DOMAIN_LABELS[job.domain]} import workflow`}
                           href={WORKFLOW_LINKS[job.domain]}
                           variant="ghost"
                           size="sm"
-                          aria-label={`Open ${DOMAIN_LABELS[job.domain]} import workflow`}
-                          title="Open import workflow"
                         >
                           <ArrowUpRight className="h-4 w-4" aria-hidden />
-                        </Button>
+                        </IconButton>
                       </div>
                     </td>
                   </tr>

@@ -8,12 +8,14 @@ import type { WorkspaceMatter } from "@/lib/api/workspace-types";
 
 const {
   fetchForumCatalogMock,
+  fetchMatterWorkspaceMock,
   updateMatterMock,
   useCapabilityMock,
   toastSuccess,
   toastError,
 } = vi.hoisted(() => ({
   fetchForumCatalogMock: vi.fn(),
+  fetchMatterWorkspaceMock: vi.fn(),
   updateMatterMock: vi.fn(),
   useCapabilityMock: vi.fn(),
   toastSuccess: vi.fn(),
@@ -22,6 +24,7 @@ const {
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchForumCatalog: fetchForumCatalogMock,
+  fetchMatterWorkspace: fetchMatterWorkspaceMock,
   updateMatter: updateMatterMock,
 }));
 
@@ -33,7 +36,9 @@ vi.mock("sonner", () => ({
   toast: { success: toastSuccess, error: toastError },
 }));
 
+import { CourtName } from "@/components/matters/CourtName";
 import { MatterForumCard } from "@/components/matters/MatterForumCard";
+import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -159,6 +164,80 @@ describe("MatterForumCard", () => {
     );
     toastSuccess.mockReset();
     toastError.mockReset();
+  });
+
+  it("Nov 27 row 5 review: the court link survives a forum edit because the workspace is refetched", async () => {
+    // The update response carries no court website (no badge renders it); the
+    // header reads the workspace query, which the save invalidates and refetches.
+    const base = {
+      id: "m-1",
+      matter_code: "CW-REFETCH",
+      title: "Court link after edit",
+      status: "active",
+      practice_area: "Commercial",
+      forum_level: "high_court",
+      created_at: "2026-11-27T00:00:00Z",
+      lifecycle_version: 0,
+      updated_at: "2026-11-27T10:00:00Z",
+    };
+    fetchMatterWorkspaceMock
+      .mockResolvedValueOnce({
+        matter: {
+          ...base,
+          court_id: "delhi-hc",
+          court_name: "Delhi High Court",
+          forum_catalog_entry_id: "hc:delhi",
+          forum_state: "Delhi",
+          court_website_url: "https://delhihighcourt.nic.in/",
+        },
+      })
+      .mockResolvedValue({
+        matter: {
+          ...base,
+          court_id: "karnataka-hc",
+          court_name: "Karnataka High Court",
+          forum_catalog_entry_id: "hc:karnataka",
+          forum_state: "Karnataka",
+          updated_at: "2026-11-27T10:05:00Z",
+          court_website_url: "https://karnatakajudiciary.kar.nic.in/",
+        },
+      });
+    updateMatterMock.mockResolvedValue({ ...base, court_website_url: null });
+    function WorkspaceHarness() {
+      const { data } = useMatterWorkspace("m-1");
+      if (!data) return null;
+      return (
+        <>
+          <CourtName
+            name={data.matter.court_name}
+            websiteUrl={data.matter.court_website_url}
+            variant="badge"
+            testId="matter-court-badge"
+          />
+          <MatterForumCard matter={data.matter} />
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(withClient(<WorkspaceHarness />));
+
+    const badge = await screen.findByTestId("matter-court-badge");
+    expect(badge).toHaveAttribute("href", "https://delhihighcourt.nic.in/");
+    await user.click(screen.getByTestId("matter-forum-edit"));
+    await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
+    await user.selectOptions(screen.getByTestId("matter-edit-forum-state"), "Karnataka");
+    await user.click(screen.getByTestId("matter-forum-save"));
+
+    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
+    // Refetched after the save (both the workspace and the "matters" prefix are invalidated).
+    await waitFor(() => expect(fetchMatterWorkspaceMock.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() =>
+      expect(screen.getByTestId("matter-court-badge")).toHaveAttribute(
+        "href",
+        "https://karnatakajudiciary.kar.nic.in/",
+      ),
+    );
+    expect(screen.getByTestId("matter-court-badge")).toHaveAttribute("data-court-link", "official");
   });
 
   it("updates a legacy matter to a structured forum selection", async () => {

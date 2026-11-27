@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -84,6 +84,7 @@ import {
   renditionStatusLabel,
   renditionStatusTone,
 } from "@/lib/renditions";
+import { acceptAttribute, validateNoticeFile } from "@/lib/notice-rules";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 import type {
   WorkspaceAttachment,
@@ -108,6 +109,17 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: MatterDocumentType; label: string }>
   { value: "billing", label: "Billing" },
   { value: "other", label: "Other" },
 ];
+
+// A notice needs its direction, date, subject and type, which only the Notices
+// tab collects; the API refuses a bare "notice" upload or reclassification.
+// Offer it here only for a document that already is one.
+const UPLOAD_DOCUMENT_TYPE_OPTIONS = DOCUMENT_TYPE_OPTIONS.filter(
+  (option) => option.value !== "notice",
+);
+
+function reclassifyOptions(current: string | null | undefined) {
+  return current === "notice" ? DOCUMENT_TYPE_OPTIONS : UPLOAD_DOCUMENT_TYPE_OPTIONS;
+}
 
 const LIFECYCLE_STAGE_OPTIONS: Array<{ value: MatterLifecycleStage; label: string }> = [
   { value: "initiation", label: "Initiation" },
@@ -706,6 +718,28 @@ export default function MatterDocumentsPage() {
         })
       : null;
 
+  // Nov 27 row 7: the mock hearing checklist links here with
+  // ?affidavit=upload (affidavit type preselected, type control focused) or
+  // ?affidavit=mark (the affidavit section focused). Runs once per landing.
+  const affidavitLandingHandled = useRef(false);
+  useEffect(() => {
+    if (affidavitLandingHandled.current) return;
+    const step = new URLSearchParams(window.location.search).get("affidavit");
+    if (step !== "upload" && step !== "mark") return;
+    if (step === "upload") {
+      if (!canUpload) return;
+      handleUploadDocumentType("affidavit");
+    }
+    const target = document.getElementById(
+      step === "upload" ? "upload-document-type" : "affidavit-intelligence-title",
+    );
+    if (!target) return;
+    affidavitLandingHandled.current = true;
+    target.scrollIntoView({ block: "center" });
+    target.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUpload, Boolean(data)]);
+
   if (!data) return null;
   const attachments = data.attachments;
   const courtOrders = data.court_orders ?? [];
@@ -776,7 +810,15 @@ export default function MatterDocumentsPage() {
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
-    if (selected) uploadMutation.mutate(selected);
+    if (!selected) return;
+    // The API's allow-list and cap (StorageUploadPolicy), checked before upload.
+    const fileError = validateNoticeFile(selected, storagePolicy ?? null);
+    if (fileError) {
+      toast.error(fileError);
+      event.target.value = "";
+      return;
+    }
+    uploadMutation.mutate(selected);
   }
 
   function handleUploadDocumentType(value: MatterDocumentType) {
@@ -830,13 +872,25 @@ export default function MatterDocumentsPage() {
               handleUploadDocumentType(event.target.value as MatterDocumentType)
             }
             data-testid="matter-attachment-document-type"
+            aria-describedby="upload-document-type-hint"
           >
-            {DOCUMENT_TYPE_OPTIONS.map((option) => (
+            {UPLOAD_DOCUMENT_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
+          <p id="upload-document-type-hint" className="mt-1 text-xs text-[var(--color-mute)]">
+            Record notices from the{" "}
+            <Link
+              href={`/app/matters/${matterId}/notices`}
+              className="underline underline-offset-2"
+              data-testid="matter-attachment-notices-link"
+            >
+              Notices tab
+            </Link>
+            .
+          </p>
         </div>
         <div>
           <Label htmlFor="upload-lifecycle-stage">Lifecycle</Label>
@@ -968,7 +1022,7 @@ export default function MatterDocumentsPage() {
             type="file"
             className="sr-only"
             data-testid="matter-attachment-file-input"
-            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg"
+            accept={acceptAttribute(storagePolicy ?? null)}
             onChange={handleFileChange}
           />
           <Button
@@ -1393,7 +1447,7 @@ export default function MatterDocumentsPage() {
                                     }}
                                   >
                                     <option value={UNCLASSIFIED}>Unclassified</option>
-                                    {DOCUMENT_TYPE_OPTIONS.map((option) => (
+                                    {reclassifyOptions(doc.document_type).map((option) => (
                                       <option key={option.value} value={option.value}>
                                         {option.label}
                                       </option>
@@ -2268,7 +2322,11 @@ function AffidavitIntelligenceSection({
               ) : null}
               <Badge tone="neutral">Review required</Badge>
             </div>
-            <h2 className="mt-2 text-base font-semibold text-[var(--color-ink)]">
+            <h2
+              id="affidavit-intelligence-title"
+              tabIndex={-1}
+              className="mt-2 text-base font-semibold text-[var(--color-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
+            >
               Source-grounded hearing prep
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-[var(--color-mute)]">
@@ -2302,7 +2360,8 @@ function AffidavitIntelligenceSection({
                 className="px-3 py-4 text-sm text-[var(--color-mute)]"
                 data-testid="affidavit-intelligence-empty"
               >
-                Mark a document as chief affidavit, affidavit, or counter affidavit.
+                Mark a document as chief affidavit, affidavit, or counter affidavit: use
+                Edit on the document in the list above and set its document type.
               </div>
             ) : (
               <div className="divide-y divide-[var(--color-line-2)]">

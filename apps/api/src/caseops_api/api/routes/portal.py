@@ -24,13 +24,16 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
     status,
 )
-from pydantic import BaseModel, EmailStr, Field
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator, model_validator
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -49,7 +52,24 @@ from caseops_api.core.security import (
 )
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import AuditActorType, AuditResult, PortalUser
+from caseops_api.schemas.clients import (
+    ClientKycDocumentListResponse,
+    ClientKycDocumentRecord,
+    KycDocumentTypeLiteral,
+)
+from caseops_api.services.aadhaar_privacy import reject_full_aadhaar
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.client_kyc_documents import (
+    KYC_FILE_RESPONSE_HEADERS,
+    get_portal_kyc_document_download,
+    kyc_display_filename,
+    list_portal_kyc_documents,
+    remove_portal_kyc_document,
+    upload_portal_kyc_document,
+)
+from caseops_api.services.forum_catalog import matter_court_website_url
+from caseops_api.services.matter_billing import normalise_gstin, normalise_pan
+from caseops_api.services.pdf_fonts import UNPRINTABLE_TEXT_MESSAGE, pdf_text_supported
 from caseops_api.services.portal_auth import (
     invite_portal_user,
     list_active_grants,
@@ -186,6 +206,7 @@ class PortalMatterRecord(BaseModel):
     practice_area: str | None
     forum_level: str | None
     court_name: str | None
+    court_website_url: str | None = None
     next_hearing_on: str | None
 
 
@@ -229,6 +250,9 @@ class PortalHearingListResponse(BaseModel):
 class PortalKycDocument(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     note: str | None = Field(default=None, max_length=400)
+
+    # BUG-003: never store a full Aadhaar number typed into a note.
+    _text_holds_no_aadhaar = field_validator("name", "note")(reject_full_aadhaar)
 
 
 class PortalKycSubmitPayload(BaseModel):
@@ -486,7 +510,9 @@ def get_portal_me(
 # ---------- C-2 (MOD-TS-015) — client portal matter surface ----------
 
 
-def _matter_record(matter) -> PortalMatterRecord:
+def _matter_record(matter, *, court_website_url: str | None = None) -> PortalMatterRecord:
+    # Lists never render the court badge, so only the detail routes pass the
+    # resolved website (one batched catalogue lookup, never one per row).
     return PortalMatterRecord(
         id=matter.id,
         title=matter.title,
@@ -495,6 +521,7 @@ def _matter_record(matter) -> PortalMatterRecord:
         practice_area=matter.practice_area,
         forum_level=matter.forum_level,
         court_name=matter.court_name,
+        court_website_url=court_website_url,
         next_hearing_on=(matter.next_hearing_on.isoformat() if matter.next_hearing_on else None),
     )
 
@@ -559,7 +586,9 @@ def get_portal_matter(
         portal_user=portal_user,
         matter_id=matter_id,
     )
-    return _matter_record(matter)
+    return _matter_record(
+        matter, court_website_url=matter_court_website_url(session, matter)
+    )
 
 
 @router.get(
@@ -682,6 +711,113 @@ def post_portal_matter_kyc(
     )
 
 
+# BUG-003: KYC files from the client portal. Same validation, scan, storage
+# and pack rules as the firm's /api/clients/{id}/kyc/documents; a portal
+# user lists, opens and removes only the files they uploaded.
+
+
+@router.get(
+    "/matters/{matter_id}/kyc/documents",
+    response_model=ClientKycDocumentListResponse,
+    summary="List the KYC files this portal user uploaded for a client on this matter",
+)
+def get_portal_matter_kyc_documents(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    session: DbSession,
+    client_id: Annotated[str, Query(min_length=10, max_length=64)],
+) -> ClientKycDocumentListResponse:
+    return list_portal_kyc_documents(
+        session, portal_user=portal_user, matter_id=matter_id, client_id=client_id,
+    )
+
+
+@router.post(
+    "/matters/{matter_id}/kyc/documents",
+    response_model=ClientKycDocumentRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a KYC file (PDF or image, virus-scanned) for a client on this matter",
+)
+def post_portal_matter_kyc_document(
+    matter_id: str,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+    client_id: Annotated[str, Form(min_length=10, max_length=64)],
+    document_type: Annotated[KycDocumentTypeLiteral, Form()],
+    file: Annotated[UploadFile, File(...)],
+    label: Annotated[str | None, Form(max_length=120)] = None,
+) -> ClientKycDocumentRecord:
+    return upload_portal_kyc_document(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        client_id=client_id,
+        document_type=document_type,
+        label=label,
+        filename=file.filename or "document",
+        content_type=file.content_type,
+        stream=file.file,
+        request_ip=request.client.host if request.client else None,
+    )
+
+
+@router.get(
+    "/matters/{matter_id}/kyc/documents/{document_id}/download",
+    response_class=FileResponse,
+    summary="Open a KYC file this portal user uploaded",
+)
+def download_portal_matter_kyc_document(
+    matter_id: str,
+    document_id: str,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+    client_id: Annotated[str, Query(min_length=10, max_length=64)],
+    inline: bool = Query(default=False),
+) -> FileResponse:
+    doc, path, media_type, disposition = get_portal_kyc_document_download(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        client_id=client_id,
+        document_id=document_id,
+        inline=inline,
+        request_ip=request.client.host if request.client else None,
+    )
+    return FileResponse(
+        path=path,
+        media_type=media_type,
+        filename=kyc_display_filename(doc),
+        content_disposition_type=disposition,
+        headers=dict(KYC_FILE_RESPONSE_HEADERS),
+    )
+
+
+@router.delete(
+    "/matters/{matter_id}/kyc/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a KYC file this portal user uploaded",
+)
+def delete_portal_matter_kyc_document(
+    matter_id: str,
+    document_id: str,
+    portal_user: CurrentPortalUser,
+    request: Request,
+    session: DbSession,
+    client_id: Annotated[str, Query(min_length=10, max_length=64)],
+) -> Response:
+    remove_portal_kyc_document(
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        client_id=client_id,
+        document_id=document_id,
+        request_ip=request.client.host if request.client else None,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ---------- Phase C-3 (MOD-TS-016) outside-counsel routes ----------
 
 
@@ -710,6 +846,60 @@ class PortalOcInvoiceSubmitPayload(BaseModel):
     currency: str = Field(default="INR", max_length=8)
     line_items: list[PortalOcInvoiceLineItemPayload] = Field(min_length=1)
     notes: str | None = None
+    # ENH-001: the counsel is the supplier on its own invoice. Omitted fields
+    # fall back to the firm's counsel profile linked by contact email.
+    counsel_firm_name: str | None = Field(default=None, max_length=255)
+    counsel_address: str | None = Field(default=None, max_length=1000)
+    counsel_gstin: str | None = Field(default=None, max_length=32)
+    counsel_pan: str | None = Field(default=None, max_length=16)
+
+    @field_validator(
+        "counsel_firm_name", "counsel_address", "counsel_gstin", "counsel_pan", mode="before"
+    )
+    @classmethod
+    def _blank_is_none(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    # ENH-001: these print as the supplier on the PDF the firm downloads.
+    # Text the PDF fonts cannot print is refused now rather than failing every
+    # later download; the GSTIN and PAN formats are checked, and the portal
+    # form shows the same messages inline before submit.
+    @field_validator("counsel_firm_name", "counsel_address")
+    @classmethod
+    def _printable(cls, value: str | None) -> str | None:
+        if value is not None and not pdf_text_supported(value):
+            raise ValueError(UNPRINTABLE_TEXT_MESSAGE)
+        return value
+
+    @field_validator("counsel_gstin")
+    @classmethod
+    def _gstin_format(cls, value: str | None) -> str | None:
+        return normalise_gstin(value) if value is not None else None
+
+    @field_validator("counsel_pan")
+    @classmethod
+    def _pan_format(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        return normalise_pan(value, gstin=info.data.get("counsel_gstin"))
+
+    @model_validator(mode="after")
+    def _due_not_before_issue(self) -> PortalOcInvoiceSubmitPayload:
+        # Same rule and wording as InvoiceCreateRequest. An unparsable date is
+        # left to the route's ISO-date refusal.
+        from datetime import date as _date
+
+        try:
+            issued = _date.fromisoformat(self.issued_on)
+            due = _date.fromisoformat(self.due_on) if self.due_on else None
+        except ValueError:
+            return self
+        if due is not None and due < issued:
+            raise ValueError("Due date cannot be earlier than the issue date.")
+        return self
 
 
 class PortalOcInvoiceRecord(BaseModel):
@@ -723,6 +913,10 @@ class PortalOcInvoiceRecord(BaseModel):
     due_on: str | None = None
     submitted_by_portal_user_id: str | None = None
     created_at: str
+    counsel_firm_name: str | None = None
+    counsel_address: str | None = None
+    counsel_gstin: str | None = None
+    counsel_pan: str | None = None
 
 
 class PortalOcInvoiceListResponse(BaseModel):
@@ -778,6 +972,10 @@ def _oc_invoice_record(inv) -> PortalOcInvoiceRecord:
         due_on=inv.due_on.isoformat() if inv.due_on else None,
         submitted_by_portal_user_id=inv.submitted_by_portal_user_id,
         created_at=inv.created_at.isoformat(),
+        counsel_firm_name=inv.firm_legal_name,
+        counsel_address=inv.firm_address,
+        counsel_gstin=inv.firm_gstin,
+        counsel_pan=inv.firm_pan,
     )
 
 
@@ -840,7 +1038,9 @@ def get_oc_matter(
         portal_user=portal_user,
         matter_id=matter_id,
     )
-    return _matter_record(matter)
+    return _matter_record(
+        matter, court_website_url=matter_court_website_url(session, matter)
+    )
 
 
 @router.post(
@@ -916,6 +1116,10 @@ def post_oc_invoice(
         currency=payload.currency,
         line_items=[li.model_dump() for li in payload.line_items],
         notes=payload.notes,
+        counsel_firm_name=payload.counsel_firm_name,
+        counsel_address=payload.counsel_address,
+        counsel_gstin=payload.counsel_gstin,
+        counsel_pan=payload.counsel_pan,
         request_ip=request.client.host if request.client else None,
     )
     return _oc_invoice_record(invoice)

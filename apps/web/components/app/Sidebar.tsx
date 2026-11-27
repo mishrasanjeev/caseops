@@ -211,7 +211,13 @@ export function SidebarBody({
       <div className="flex h-16 items-center border-b border-[var(--color-line)] px-5">
         <Logo />
       </div>
-      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-6">
+      {/* min-h-0 lets the nav shrink inside the fixed-height column so it,
+          not the page, scrolls; overscroll-contain stops a scroll that
+          reaches the end of the nav from moving the main content. */}
+      <nav
+        data-testid="sidebar-nav-scroller"
+        className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-3 py-6"
+      >
         {grouped.map((group) => {
           const expanded = !collapsed.includes(group.key);
           const listId = `${idPrefix}-nav-${group.key}`;
@@ -266,12 +272,19 @@ export function SidebarBody({
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside
-      aria-label="Primary navigation"
-      className="hidden w-64 shrink-0 flex-col border-r border-[var(--color-line)] bg-white md:flex"
-    >
-      <SidebarBody pathname={pathname} />
-    </aside>
+    <>
+      {/* Holds the sidebar's width in the shell row; the sidebar itself is
+          fixed to the viewport. A stretched or sticky sidebar moved with the
+          page (sticky yields to the site footer below the shell). */}
+      <div aria-hidden className="hidden w-64 shrink-0 md:block" data-testid="app-sidebar-spacer" />
+      <aside
+        aria-label="Primary navigation"
+        data-testid="app-sidebar"
+        className="fixed inset-y-0 left-0 z-30 hidden h-dvh w-64 flex-col border-r border-[var(--color-line)] bg-white md:flex"
+      >
+        <SidebarBody pathname={pathname} />
+      </aside>
+    </>
   );
 }
 

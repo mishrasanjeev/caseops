@@ -12,14 +12,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.db.models import (
     AffidavitIntelligenceRun,
     AffidavitIntelligenceRunStatus,
     AffidavitQuestion,
+    DocumentProcessingStatus,
     Matter,
+    MatterAttachment,
     MockHearingQuestion,
     MockHearingQuestionStatus,
     MockHearingResponse,
@@ -28,17 +30,28 @@ from caseops_api.db.models import (
     MockHearingSessionStatus,
 )
 from caseops_api.schemas.mock_hearing import (
+    MockHearingAffidavitSource,
     MockHearingListResponse,
     MockHearingQuestionRecord,
+    MockHearingReadinessCheck,
+    MockHearingReadinessResponse,
     MockHearingResponseCreateRequest,
     MockHearingResponseRecord,
     MockHearingScorecard,
     MockHearingSessionRecord,
     MockHearingStartRequest,
 )
+from caseops_api.services.affidavit_intelligence import (
+    AFFIDAVIT_DOCUMENT_TYPES,
+    PARSER_VERSION,
+    usable_source_text_hash,
+)
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access
-from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.matter_operational_guard import (
+    matter_is_operational,
+    require_operational_matter,
+)
 from caseops_api.services.session_context import SessionContext
 
 DISCLAIMER = (
@@ -242,6 +255,258 @@ def start_mock_hearing(
     )
 
 
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
+def _affidavit_run_reason(
+    latest: AffidavitIntelligenceRun | None, *, current_hash: str | None
+) -> str | None:
+    """Why analysing this affidavit now can change what Start session sees.
+
+    Analysis is deterministic over (parser version, usable text), so a run is
+    offered whenever no run has seen the current readable text: never run,
+    run before the text could be read (OCR or indexing still pending), or run
+    on text or a parser that has since changed. ``None`` means a run would
+    only repeat the latest result.
+    """
+
+    if current_hash is None:
+        return None
+    if latest is None:
+        return "never_run"
+    if latest.status == AffidavitIntelligenceRunStatus.INSUFFICIENT_SOURCE_TEXT:
+        return "text_now_readable"
+    if latest.source_hash != current_hash or latest.parser_version != PARSER_VERSION:
+        return "text_changed"
+    return None
+
+
+def _run_detail(source: MockHearingAffidavitSource, reason: str) -> str:
+    name = source.filename
+    if reason == "text_now_readable":
+        return (
+            f"{name} was analysed before its text could be read. The text is readable "
+            "now: re-run affidavit intelligence on it to build the question bank, then "
+            "start the session."
+        )
+    if reason == "text_changed":
+        return (
+            f"The text of {name} has changed since affidavit intelligence last ran. "
+            "Re-run it to rebuild the question bank, then start the session."
+        )
+    return (
+        f"Run affidavit intelligence on {name} to build the question bank, then start "
+        "the session."
+    )
+
+
+def mock_hearing_readiness(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+) -> MockHearingReadinessResponse:
+    """Start-session prerequisites, read with the start path's own predicates.
+
+    ``ready`` is exactly the start path's condition (open matter, latest
+    completed affidavit run, at least one source-backed question). Read-only:
+    no audit row and no write, so the hearings page can re-read it freely.
+    """
+
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    operational = matter_is_operational(matter)
+    run = _latest_completed_affidavit_run(session, matter)
+    questions = _source_backed_questions(run) if run is not None else []
+
+    attachments = list(
+        session.scalars(
+            select(MatterAttachment)
+            .options(selectinload(MatterAttachment.chunks))
+            .where(
+                MatterAttachment.matter_id == matter.id,
+                MatterAttachment.document_type.in_(AFFIDAVIT_DOCUMENT_TYPES),
+            )
+            .order_by(MatterAttachment.created_at.desc(), MatterAttachment.id.desc())
+        )
+    )
+    other_documents = session.scalar(
+        select(func.count())
+        .select_from(MatterAttachment)
+        .where(
+            MatterAttachment.matter_id == matter.id,
+            or_(
+                MatterAttachment.document_type.is_(None),
+                MatterAttachment.document_type.not_in(AFFIDAVIT_DOCUMENT_TYPES),
+            ),
+        )
+    ) or 0
+    latest_run_by_attachment: dict[str, AffidavitIntelligenceRun] = {}
+    for prior in session.scalars(
+        select(AffidavitIntelligenceRun)
+        .options(selectinload(AffidavitIntelligenceRun.questions))
+        .where(
+            AffidavitIntelligenceRun.company_id == matter.company_id,
+            AffidavitIntelligenceRun.matter_id == matter.id,
+        )
+        .order_by(
+            AffidavitIntelligenceRun.created_at.desc(),
+            AffidavitIntelligenceRun.id.desc(),
+        )
+    ):
+        latest_run_by_attachment.setdefault(prior.attachment_id, prior)
+
+    sources: list[MockHearingAffidavitSource] = []
+    run_reasons: dict[str, str] = {}
+    for attachment in attachments:
+        latest = latest_run_by_attachment.get(attachment.id)
+        current_hash = usable_source_text_hash(list(attachment.chunks))
+        reason = _affidavit_run_reason(latest, current_hash=current_hash)
+        if reason is not None:
+            run_reasons[attachment.id] = reason
+        sources.append(
+            MockHearingAffidavitSource(
+                attachment_id=attachment.id,
+                filename=attachment.original_filename,
+                document_type=str(attachment.document_type),
+                processing_status=str(attachment.processing_status),
+                has_usable_text=current_hash is not None,
+                latest_run_status=(
+                    str(latest.status) if latest is not None else None  # type: ignore[arg-type]
+                ),
+                latest_run_question_count=(
+                    len(_source_backed_questions(latest)) if latest is not None else 0
+                ),
+            )
+        )
+
+    ready = operational and bool(questions)
+    runnable = [s for s in sources if s.attachment_id in run_reasons]
+    processing = [
+        s
+        for s in sources
+        if not s.has_usable_text and s.processing_status == DocumentProcessingStatus.PENDING
+    ]
+
+    next_attachment: str | None = None
+    if not operational:
+        next_action = "none"
+        detail = "This matter is disposed, so mock hearing sessions cannot start."
+    elif ready:
+        next_action = "start_session"
+        detail = (
+            f"{_plural(len(questions), 'source-backed question')} ready from the latest "
+            "affidavit intelligence run."
+        )
+    elif runnable:
+        next_action = "run_affidavit_intelligence"
+        target = runnable[0]
+        next_attachment = target.attachment_id
+        detail = _run_detail(target, run_reasons[target.attachment_id])
+    elif processing:
+        next_action = "wait_for_processing"
+        next_attachment = processing[0].attachment_id
+        detail = (
+            f"{processing[0].filename} is still being processed and its text cannot "
+            "be read yet. Check again once processing finishes."
+        )
+    elif sources:
+        next_action = "upload_affidavit"
+        # Every readable affidavit here was analysed with its current text, so
+        # a re-run would only repeat the result.
+        reason = (
+            "The marked affidavits produced no source-backed questions"
+            if any(s.has_usable_text for s in sources)
+            else "No text could be read from the marked affidavits"
+        )
+        detail = (
+            f"{reason}. Upload a text-searchable copy of the affidavit, mark it as an "
+            "affidavit, then run affidavit intelligence."
+        )
+    elif other_documents:
+        next_action = "mark_affidavit"
+        detail = (
+            "No document on this matter is marked as an affidavit. Set the affidavit's "
+            "document type to Affidavit, Chief affidavit or Counter affidavit."
+        )
+    else:
+        next_action = "upload_affidavit"
+        detail = (
+            "Upload the affidavit to this matter's documents and mark it as an "
+            "affidavit; mock hearing questions are built from its text."
+        )
+
+    has_document = bool(sources) or run is not None
+    has_text = run is not None or any(s.has_usable_text for s in sources)
+    checks = [
+        MockHearingReadinessCheck(
+            key="matter_operational",
+            label="Matter is open",
+            status="met" if operational else "blocked",
+            detail="Open matter." if operational else "Disposed matters cannot start sessions.",
+        ),
+        MockHearingReadinessCheck(
+            key="affidavit_document",
+            label="Affidavit uploaded and marked",
+            status="met" if has_document else "missing",
+            detail=(
+                f"{_plural(len(sources), 'marked affidavit')}."
+                if sources
+                else (
+                    "Analysed earlier."
+                    if run is not None
+                    else "No document is marked as an affidavit."
+                )
+            ),
+        ),
+        MockHearingReadinessCheck(
+            key="affidavit_text",
+            label="Affidavit text readable",
+            status="met" if has_text else ("pending" if processing else "missing"),
+            detail=(
+                "Searchable text is available."
+                if has_text
+                else ("Waiting for document processing." if processing else "No readable text.")
+            ),
+        ),
+        MockHearingReadinessCheck(
+            key="affidavit_run",
+            label="Affidavit intelligence run completed",
+            status="met" if run is not None else "missing",
+            detail=(
+                "Latest analysis completed."
+                if run is not None
+                else "No completed affidavit intelligence run yet."
+            ),
+        ),
+        MockHearingReadinessCheck(
+            key="question_bank",
+            label="Source-backed questions available",
+            status="met" if questions else "missing",
+            detail=(
+                f"{_plural(len(questions), 'question')}."
+                if questions
+                else "No source-backed questions yet."
+            ),
+        ),
+    ]
+    return MockHearingReadinessResponse(
+        matter_id=matter.id,
+        ready=ready,
+        checks=checks,
+        next_action=next_action,  # type: ignore[arg-type]
+        next_action_attachment_id=next_attachment,
+        next_action_detail=detail,
+        affidavit_document_types=list(AFFIDAVIT_DOCUMENT_TYPES),
+        affidavit_sources=sources,
+        latest_completed_run_id=run.id if run is not None else None,
+        available_question_count=len(questions),
+        available_question_categories=sorted(  # type: ignore[arg-type]
+            {question.category for question in questions}
+        ),
+    )
+
+
 def record_mock_hearing_response(
     session: Session,
     *,
@@ -442,8 +707,10 @@ def _load_session(
     return mock_session
 
 
-def _latest_affidavit_run(session: Session, matter: Matter) -> AffidavitIntelligenceRun:
-    run = session.scalar(
+def _latest_completed_affidavit_run(
+    session: Session, matter: Matter
+) -> AffidavitIntelligenceRun | None:
+    return session.scalar(
         select(AffidavitIntelligenceRun)
         .options(selectinload(AffidavitIntelligenceRun.questions))
         .where(
@@ -456,12 +723,25 @@ def _latest_affidavit_run(session: Session, matter: Matter) -> AffidavitIntellig
             AffidavitIntelligenceRun.id.desc(),
         )
     )
+
+
+def _latest_affidavit_run(session: Session, matter: Matter) -> AffidavitIntelligenceRun:
+    run = _latest_completed_affidavit_run(session, matter)
     if run is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No completed affidavit intelligence run is available for this matter.",
         )
     return run
+
+
+def _source_backed_questions(run: AffidavitIntelligenceRun) -> list[AffidavitQuestion]:
+    # The one question-bank predicate: start and readiness both read it.
+    return [
+        question
+        for question in sorted(run.questions, key=lambda row: (row.created_at, row.id))
+        if question.source_quote.strip() and question.question_text.strip()
+    ]
 
 
 def _select_source_questions(
@@ -471,10 +751,8 @@ def _select_source_questions(
     categories = set(payload.categories or [])
     questions = [
         question
-        for question in sorted(run.questions, key=lambda row: (row.created_at, row.id))
-        if question.source_quote.strip()
-        and question.question_text.strip()
-        and (not categories or question.category in categories)
+        for question in _source_backed_questions(run)
+        if not categories or question.category in categories
     ]
     return questions[: min(payload.max_questions, MAX_SOURCE_QUESTIONS)]
 

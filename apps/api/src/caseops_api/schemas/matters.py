@@ -442,6 +442,9 @@ class MatterRecord(BaseModel):
     forum_level: MatterForumLevelLiteral
     court_id: str | None = None
     court_name: str | None
+    # Official website of the matter's court, resolved from its catalogue
+    # identity on the server; null renders the court as plain text.
+    court_website_url: str | None = None
     court_forum_number: str | None = None
     forum_catalog_entry_id: str | None = None
     forum_state: str | None = None
@@ -1184,6 +1187,9 @@ class MatterAttachmentMetadataUpdateRequest(BaseModel):
     sequence_index: int | None = Field(default=None, ge=0)
     linked_court_order_id: str | None = Field(default=None, max_length=36)
     hearing_id: str | None = Field(default=None, max_length=36)
+    # Keep an edit whose new notice details match another notice on this
+    # matter, as on upload; the override is audited. Never overrides same file.
+    allow_duplicate: bool = False
 
 
 class MatterWorkspaceResponse(BaseModel):

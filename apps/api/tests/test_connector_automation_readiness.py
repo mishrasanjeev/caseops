@@ -123,10 +123,10 @@ def test_microsoft365_configuration_masks_secret_and_reports_blocked_readiness(
         "/api/admin/microsoft365-configuration",
         headers=_auth(token),
         json={
-            "client_id": "graph-client-id",
+            "client_id": "0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b",
             "client_secret": "graph-client-secret",
-            "tenant_id": "graph-tenant-id",
-            "redirect_uri": "https://api.caseops.test/auth/microsoft/callback",
+            "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+            "redirect_uri": "https://api.caseops.test/api/calendar/connections/outlook/callback",
             "scopes": ["User.Read", "Mail.Read", "Calendars.ReadWrite", "Files.Read.All"],
             "admin_consent_approved": False,
             "scopes_approved": True,

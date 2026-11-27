@@ -41,6 +41,17 @@ from caseops_api.services.document_storage import (
 )
 from caseops_api.services.file_security import verify_upload
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.notice_rules import (
+    NoticeDuplicateKey,
+    NoticeState,
+    attachment_notice_duplicate_key,
+    lock_notice_duplicate_key,
+    new_notice_violations,
+    notice_duplicate_conflict,
+    notice_rule_violations,
+    raise_notice_violations,
+    register_notice_duplicate_key,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -920,6 +931,203 @@ def _audit_matter_id(notice: CompanyNotice) -> str | None:
     return matter_ids[0] if len(matter_ids) == 1 else None
 
 
+def _standalone_state(notice: CompanyNotice | NoticeCreateRequest) -> NoticeState:
+    return NoticeState(
+        direction=notice.direction,
+        subject=notice.subject,
+        notice_type=(
+            notice.type if isinstance(notice, NoticeCreateRequest) else notice.notice_type
+        ),
+        received_on=notice.received_on,
+        sent_on=notice.sent_on,
+        reply_required=bool(notice.reply_required),
+        reply_sent=bool(notice.reply_sent),
+        reply_due_on=notice.reply_due_on,
+        reply_sent_on=notice.reply_sent_on,
+        amount_minor=notice.amount_minor,
+        dispute_amount_minor=notice.dispute_amount_minor,
+        recovered_amount_minor=notice.recovered_amount_minor,
+    )
+
+
+def _standalone_duplicate_conflict(kind: str, notice: CompanyNotice) -> HTTPException:
+    return notice_duplicate_conflict(
+        kind=kind,
+        existing_id=notice.id,
+        existing_subject=notice.subject,
+        existing_direction=notice.direction,
+        existing_date=notice.sent_on if notice.direction == "sent" else notice.received_on,
+        existing_filename=notice.original_filename,
+        scope="the notice register",
+        existing_source_kind="standalone",
+    )
+
+
+def register_notice_duplicate_conflict(notice: CompanyNotice) -> HTTPException:
+    """The same-details 409 for a register notice, for the matter writers."""
+
+    return _standalone_duplicate_conflict("same_details", notice)
+
+
+def _attachment_duplicate_conflict(attachment: MatterAttachment) -> HTTPException:
+    sent = attachment.notice_direction == "sent"
+    return notice_duplicate_conflict(
+        kind="same_details",
+        existing_id=attachment.id,
+        existing_subject=attachment.notice_subject,
+        existing_direction="sent" if sent else "received",
+        existing_date=attachment.notice_sent_on if sent else attachment.notice_received_on,
+        existing_filename=attachment.original_filename,
+        existing_source_kind="legacy_attachment",
+        existing_matter_id=attachment.matter_id,
+    )
+
+
+def _visible_register_candidates(session: Session, *criteria, context: SessionContext):
+    """Standalone notices the caller may see; a walled notice is never disclosed."""
+
+    return session.scalars(
+        select(CompanyNotice)
+        .where(
+            CompanyNotice.company_id == context.company.id,
+            ~_hidden_notice_link_exists(session, context=context),
+            *criteria,
+        )
+        .order_by(CompanyNotice.created_at.asc(), CompanyNotice.id.asc())
+    )
+
+
+def _register_key_criteria(key: NoticeDuplicateKey, *, exclude_id: str | None) -> list[object]:
+    direction, business_date, _subject, _counterparty = key
+    date_column = CompanyNotice.sent_on if direction == "sent" else CompanyNotice.received_on
+    criteria: list[object] = [
+        CompanyNotice.direction == direction,
+        date_column.is_(None) if business_date is None else date_column == business_date,
+    ]
+    if exclude_id is not None:
+        criteria.append(CompanyNotice.id != exclude_id)
+    return criteria
+
+
+def register_notice_duplicate_on_matter(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    key: NoticeDuplicateKey,
+) -> CompanyNotice | None:
+    """A visible register notice linked to ``matter_id`` with the same details.
+
+    The matter Notices view lists these beside the matter's own notices, so the
+    matter writers compare against them.  Register writers that link a matter
+    lock it first, so this read is serialized with them by the Matter lock.
+    """
+
+    for row in _visible_register_candidates(
+        session,
+        *_register_key_criteria(key, exclude_id=None),
+        exists(
+            select(CompanyNoticeMatterLink.id).where(
+                CompanyNoticeMatterLink.notice_id == CompanyNotice.id,
+                CompanyNoticeMatterLink.company_id == context.company.id,
+                CompanyNoticeMatterLink.matter_id == matter_id,
+            )
+        ),
+        context=context,
+    ):
+        if register_notice_duplicate_key(row) == key:
+            return row
+    return None
+
+
+def _matter_notice_duplicate_in_company(
+    session: Session,
+    *,
+    context: SessionContext,
+    key: NoticeDuplicateKey,
+) -> MatterAttachment | None:
+    """A visible primary notice on any matter with the same details.
+
+    The register lists matter notices beside its own rows, so a register write
+    is compared against both stores.  A notice on a matter the caller cannot see
+    is never disclosed.
+    """
+
+    direction, business_date, _subject, _counterparty = key
+    sent = direction == "sent"
+    date_column = MatterAttachment.notice_sent_on if sent else MatterAttachment.notice_received_on
+    rows = session.scalars(
+        select(MatterAttachment)
+        .join(Matter, Matter.id == MatterAttachment.matter_id)
+        .where(
+            Matter.company_id == context.company.id,
+            MatterAttachment.document_type == "notice",
+            _legacy_primary_filter(),
+            visible_matters_filter(session, context=context),
+            _legacy_direction_expression() == direction,
+            date_column.is_(None) if business_date is None else date_column == business_date,
+        )
+        .order_by(MatterAttachment.created_at.asc(), MatterAttachment.id.asc())
+    )
+    for row in rows:
+        if attachment_notice_duplicate_key(row) == key:
+            return row
+    return None
+
+
+def _assert_register_details_not_duplicate(
+    session: Session,
+    *,
+    context: SessionContext,
+    key: NoticeDuplicateKey,
+    allow_duplicate: bool,
+    exclude_id: str | None,
+) -> str | None:
+    """Refuse a register notice whose details match a visible notice.
+
+    Returns the matched notice ID when the caller overrode the match.  Callers
+    hold the duplicate-key lock and every linked Matter lock, so a concurrent
+    identical register or matter write has either committed (and is seen here)
+    or waits for this transaction.
+    """
+
+    match: CompanyNotice | MatterAttachment | None = None
+    for row in _visible_register_candidates(
+        session, *_register_key_criteria(key, exclude_id=exclude_id), context=context,
+    ):
+        if register_notice_duplicate_key(row) == key:
+            match = row
+            break
+    if match is None:
+        match = _matter_notice_duplicate_in_company(session, context=context, key=key)
+    if match is None:
+        return None
+    if allow_duplicate:
+        return match.id
+    conflict = (
+        _standalone_duplicate_conflict("same_details", match)
+        if isinstance(match, CompanyNotice)
+        else _attachment_duplicate_conflict(match)
+    )
+    # Discard the caller's flushed, uncommitted write and release its locks.
+    session.rollback()
+    raise conflict
+
+
+def _lock_linked_matters(session: Session, *, context: SessionContext, matter_ids) -> None:
+    """Take the Matter lock the matter notice writers take, in a stable order."""
+
+    ordered = sorted(set(matter_ids))
+    if not ordered:
+        return
+    session.execute(
+        select(Matter.id)
+        .where(Matter.company_id == context.company.id, Matter.id.in_(ordered))
+        .order_by(Matter.id)
+        .with_for_update(of=Matter)
+    ).all()
+
+
 def create_notice(
     session: Session,
     *,
@@ -941,6 +1149,10 @@ def create_notice(
         context=context,
         membership_id=payload.owner_membership_id,
     )
+    # Scope and permission refusals come first; then the shared notice rules.
+    raise_notice_violations(notice_rule_violations(_standalone_state(payload)))
+    duplicate_key = register_notice_duplicate_key(payload)
+    lock_notice_duplicate_key(session, company_id=context.company.id, key=duplicate_key)
     notice = CompanyNotice(
         company_id=context.company.id,
         owner_membership_id=owner.id if owner is not None else None,
@@ -971,7 +1183,17 @@ def create_notice(
         recovered_amount_minor=payload.recovered_amount_minor,
     )
     session.add(notice)
+    # Flush before the Matter locks so this writer already holds its
+    # membership key-share locks, as matter writers do before their Matter.
     session.flush()
+    _lock_linked_matters(session, context=context, matter_ids=[matter.id for matter in matters])
+    overridden_notice_id = _assert_register_details_not_duplicate(
+        session,
+        context=context,
+        key=duplicate_key,
+        allow_duplicate=payload.allow_duplicate,
+        exclude_id=notice.id,
+    )
     for matter in matters:
         session.add(
             CompanyNoticeMatterLink(
@@ -989,7 +1211,10 @@ def create_notice(
         target_type="company_notice",
         target_id=notice.id,
         matter_id=matters[0].id if len(matters) == 1 else None,
-        metadata={"after": _notice_audit_snapshot(notice)},
+        metadata={
+            "after": _notice_audit_snapshot(notice),
+            "duplicate_override_of": overridden_notice_id,
+        },
     )
     session.commit()
     refreshed = _reload_notice(session, notice.id)
@@ -1137,9 +1362,12 @@ def update_notice(
     )
     updates = payload.model_dump(exclude_unset=True)
     expected_updated_at = updates.pop("expected_updated_at")
+    allow_duplicate = bool(updates.pop("allow_duplicate", False))
     _assert_expected_notice_version(notice, expected_updated_at)
     _validate_patch_direction_state(notice, updates)
     before = _notice_audit_snapshot(notice)
+    state_before = _standalone_state(notice)
+    key_before = register_notice_duplicate_key(notice)
 
     if "owner_membership_id" in updates:
         owner = _validate_owner_membership(
@@ -1165,6 +1393,37 @@ def update_notice(
             changed_fields.add(api_field)
 
     _normalize_notice_state(notice, changed_fields=changed_fields)
+    # Same rules as create, on the merged record; a legacy row that predates a
+    # rule can still take edits that do not introduce a new violation.
+    introduced = new_notice_violations(state_before, _standalone_state(notice))
+    if introduced:
+        session.rollback()
+        raise_notice_violations(introduced)
+
+    # The create-path duplicate rule, judged only when this edit changes the
+    # details it compares: a legacy or overridden pair still takes unrelated
+    # edits, but an edit cannot turn a notice into a copy of another.
+    overridden_notice_id: str | None = None
+    duplicate_key = register_notice_duplicate_key(notice)
+    if duplicate_key != key_before:
+        session.flush()
+        lock_notice_duplicate_key(session, company_id=context.company.id, key=duplicate_key)
+        _lock_linked_matters(
+            session,
+            context=context,
+            matter_ids=(
+                [matter.id for matter in matters]
+                if matters is not None
+                else [link.matter_id for link in notice.matter_links]
+            ),
+        )
+        overridden_notice_id = _assert_register_details_not_duplicate(
+            session,
+            context=context,
+            key=duplicate_key,
+            allow_duplicate=allow_duplicate,
+            exclude_id=notice.id,
+        )
 
     if matters is not None:
         existing_by_matter_id = {link.matter_id: link for link in notice.matter_links}
@@ -1200,6 +1459,11 @@ def update_notice(
                 "changed_fields": sorted(changed_fields),
                 "before": before,
                 "after": after,
+                **(
+                    {"duplicate_override_of": overridden_notice_id}
+                    if overridden_notice_id is not None
+                    else {}
+                ),
             },
         )
         session.commit()
@@ -1305,6 +1569,19 @@ def upload_notice_file(
             ),
         )
         context, notice, visible_ids = admit()
+        same_file = next(
+            iter(
+                _visible_register_candidates(
+                    session,
+                    CompanyNotice.id != notice.id,
+                    CompanyNotice.sha256_hex == stored.sha256_hex,
+                    context=context,
+                )
+            ),
+            None,
+        )
+        if same_file is not None:
+            raise _standalone_duplicate_conflict("same_file", same_file)
         assert_storage_quota_allows_upload(
             session, company_id=company_id, matter_id=matter_id,
             incoming_size_bytes=stored.size_bytes, replaced_size_bytes=old_size_bytes,

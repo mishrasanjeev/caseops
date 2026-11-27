@@ -25,6 +25,64 @@ MockHearingQuestionCategoryLiteral = Literal[
 MockHearingCompletenessLiteral = Literal["low", "medium", "high"]
 
 
+MockHearingReadinessCheckKeyLiteral = Literal[
+    "matter_operational",
+    "affidavit_document",
+    "affidavit_text",
+    "affidavit_run",
+    "question_bank",
+]
+MockHearingReadinessCheckStatusLiteral = Literal["met", "missing", "pending", "blocked"]
+MockHearingNextActionLiteral = Literal[
+    "start_session",
+    "run_affidavit_intelligence",
+    "wait_for_processing",
+    "mark_affidavit",
+    "upload_affidavit",
+    "none",
+]
+AffidavitRunStatusLiteral = Literal["completed", "insufficient_source_text", "no_findings"]
+
+
+class MockHearingReadinessCheck(BaseModel):
+    key: MockHearingReadinessCheckKeyLiteral
+    label: str
+    status: MockHearingReadinessCheckStatusLiteral
+    detail: str
+
+
+class MockHearingAffidavitSource(BaseModel):
+    attachment_id: str
+    filename: str
+    document_type: str
+    processing_status: str
+    has_usable_text: bool
+    latest_run_status: AffidavitRunStatusLiteral | None = None
+    latest_run_question_count: int = Field(default=0, ge=0)
+
+
+class MockHearingReadinessResponse(BaseModel):
+    """What Start session needs, evaluated with the start path's own predicates.
+
+    ``ready`` is true exactly when POST /mock-hearings would find a completed
+    affidavit intelligence run with at least one source-backed question.
+    """
+
+    matter_id: str
+    ready: bool
+    checks: list[MockHearingReadinessCheck]
+    next_action: MockHearingNextActionLiteral
+    next_action_attachment_id: str | None = None
+    next_action_detail: str
+    affidavit_document_types: list[str]
+    affidavit_sources: list[MockHearingAffidavitSource]
+    latest_completed_run_id: str | None = None
+    available_question_count: int = Field(ge=0)
+    available_question_categories: list[MockHearingQuestionCategoryLiteral] = Field(
+        default_factory=list
+    )
+
+
 class MockHearingStartRequest(BaseModel):
     mode: MockHearingModeLiteral = "client_preparation"
     participant_label: str | None = Field(default=None, max_length=120)

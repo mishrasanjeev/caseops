@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
 import {
@@ -198,7 +199,7 @@ function PatentWorkForm({ application, area, sequence, predecessor, onSaved, onC
             {patentDocumentKinds.filter((value) => value !== "filing_package").map((value) => <option key={value} value={value}>{label(value)}</option>)}
           </select></div>
           <div className="min-w-0 flex-1 basis-64"><Label htmlFor={`manifest-source-${index}`}>Exact version {index + 1}</Label><select id={`manifest-source-${index}`} className={selectClass} value={item.version} required disabled={noSource} aria-describedby={noSource ? "patent-work-source-empty" : undefined} onChange={(event) => setDocuments(documents.map((row, ordinal) => ordinal === index ? { ...row, version: event.target.value } : row))}>{sourceOptions}</select></div>
-          {documents.length > 1 && <Button type="button" variant="ghost" aria-label={`Remove document ${index + 1}`} title={`Remove document ${index + 1}`} onClick={() => { setDocuments(documents.filter((_, ordinal) => ordinal !== index)); invalidateReview(); }}><Trash2 size={16} /></Button>}
+          {documents.length > 1 && <IconButton label={`Remove document ${index + 1}`} type="button" variant="ghost" onClick={() => { setDocuments(documents.filter((_, ordinal) => ordinal !== index)); invalidateReview(); }}><Trash2 size={16} /></IconButton>}
         </div>)}
         {kind === "filing_package" && documents.length < 20 && <Button type="button" variant="ghost" onClick={() => { setDocuments([...documents, { kind: "claims", version: "" }]); invalidateReview(); }}><Plus size={16} />Add document</Button>}
       </> : <>

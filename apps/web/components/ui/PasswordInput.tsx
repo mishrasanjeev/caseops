@@ -5,6 +5,7 @@ import { forwardRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * Password input with a show/hide eye toggle. Drop-in replacement for
@@ -30,20 +31,21 @@ export const PasswordInput = forwardRef<
         )}
         {...props}
       />
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-mute)] hover:text-[var(--color-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-1 rounded-r-md"
-        aria-label={visible ? "Hide password" : "Show password"}
-        aria-pressed={visible}
-        tabIndex={0}
-      >
-        {visible ? (
-          <EyeOff className="h-4 w-4" aria-hidden />
-        ) : (
-          <Eye className="h-4 w-4" aria-hidden />
-        )}
-      </button>
+      <Tooltip label={visible ? "Hide password" : "Show password"}>
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-mute)] hover:text-[var(--color-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-1 rounded-r-md"
+          aria-pressed={visible}
+          tabIndex={0}
+        >
+          {visible ? (
+            <EyeOff className="h-4 w-4" aria-hidden />
+          ) : (
+            <Eye className="h-4 w-4" aria-hidden />
+          )}
+        </button>
+      </Tooltip>
     </div>
   );
 });

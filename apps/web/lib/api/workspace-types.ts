@@ -9,6 +9,7 @@ export type WorkspaceMatter = {
   forum_level?: string | null;
   court_id?: string | null;
   court_name?: string | null;
+  court_website_url?: string | null;
   court_forum_number?: string | null;
   forum_catalog_entry_id?: string | null;
   forum_state?: string | null;
@@ -121,6 +122,8 @@ export type WorkspaceStorageGovernance = {
   quota_bytes: number | null;
   remaining_bytes: number | null;
   max_upload_size_bytes: number;
+  /** The API allow-list (file_security); pickers read this, never a copy. */
+  allowed_upload_extensions: string[];
   state: "unlimited" | "ok" | "warning" | "hard_limit";
   warning_threshold_percent: number;
 };

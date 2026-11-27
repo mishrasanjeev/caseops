@@ -22,9 +22,10 @@ from caseops_api.db.models import (
     MatterTag,
     MatterTagAssignment,
 )
-from caseops_api.schemas.matters import MatterUpdateRequest
+from caseops_api.schemas.matters import MatterRecord, MatterUpdateRequest
 from caseops_api.services import matters
 from tests.test_matter_response_reload_20261029_postgres import (
+    _DERIVED,
     _assert_record,
     _stored_values,
 )
@@ -444,6 +445,12 @@ def test_metadata_first_transaction_loads_only_record_graph(
         _assert_profile(receipt, mode)
         assert old_tag.name == "Beta profile" and old_order.stay_status == "none"
         scalars = _database_scalars(session, seed, fresh["scalars"])
+        # Field oracle: every DTO field is a stored scalar or a named derived
+        # field. The court website is derived but never resolved on a mutation
+        # response (no badge renders it), so the graph above has no catalogue
+        # query and the value is explicitly null.
+        assert set(MatterRecord.model_fields) - set(scalars) == _DERIVED
+        assert response.court_website_url is None
         _assert_record(
             response, {"scalars": scalars, "tags": fresh["tags"]}, has_stay=False, has_interim=False
         )

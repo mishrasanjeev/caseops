@@ -78,6 +78,17 @@ from caseops_api.schemas.saas_billing import (
 )
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.billing_demo import admit_demo
+from caseops_api.services.billing_document_layout import (
+    BillingDocument,
+    DocumentIssuer,
+    RenderedBillingDocument,
+    render_billing_document,
+)
+from caseops_api.services.billing_document_verification import (
+    SOURCE_SAAS_INVOICE,
+    issue_verification,
+    record_pdf_fingerprint,
+)
 from caseops_api.services.billing_entitlements import (
     ACTIVE_SUBSCRIPTION_STATUSES,
     _coerce_int,
@@ -90,6 +101,7 @@ from caseops_api.services.billing_entitlements import (
     trial_has_ended,
 )
 from caseops_api.services.csv_security import csv_bytes
+from caseops_api.services.matter_billing import format_money_minor
 from caseops_api.services.pine_labs import (
     PineLabsGatewayClient,
     PineLabsPaymentStatusResult,
@@ -1980,31 +1992,57 @@ def _ascii_pdf_text(value: object) -> str:
     return pdf_text(value)
 
 
-def _pdf_bytes(title: str, rows: Iterable[tuple[str, object]]) -> bytes:
-    from caseops_api.services.pdf_layout import safe_pdf_class
+def _pdf_bytes(title: str, rows: Iterable[tuple[str, object]], **options: object) -> bytes:
+    return _render_saas_pdf(title, rows, **options).body  # type: ignore[arg-type]
 
-    pdf_class = safe_pdf_class()
 
-    pdf = pdf_class(format="A4", unit="mm")
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Helvetica", style="B", size=16)
-    pdf.cell(0, 10, _ascii_pdf_text(title), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(
-        0,
-        7,
-        _ascii_pdf_text(f"CaseOps GSTIN: {get_settings().billing_company_gstin}"),
-        new_x="LMARGIN",
-        new_y="NEXT",
+def _status_label(status: str | None) -> str:
+    return (status or "").replace("_", " ").capitalize()
+
+
+def _render_saas_pdf(
+    title: str,
+    rows: Iterable[tuple[str, object]],
+    *,
+    document_number: str = "",
+    recipient: str | None = None,
+    watermark_text: str | None = "CaseOps",
+    verification_url: str | None = None,
+) -> RenderedBillingDocument:
+    """ENH-001: CaseOps's own billing PDFs use the shared branded layout.
+
+    CaseOps is the issuer here, so the letterhead is CaseOps and its GSTIN; the
+    tenant's firm branding never appears on an invoice CaseOps issues to it.
+    """
+    from caseops_api.services.pdf_layout import write_wrapped_table
+
+    entries = [(label, value) for label, value in rows]
+
+    def body(pdf) -> None:
+        if recipient:
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.multi_cell(0, 5, f"Bill to: {recipient}", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+        write_wrapped_table(
+            pdf,
+            headings=("Item", "Detail"),
+            rows=[(_ascii_pdf_text(label), _ascii_pdf_text(value)) for label, value in entries],
+            weights=(32, 68),
+            font_size=9,
+        )
+
+    document = BillingDocument(
+        title=title,
+        document_number=document_number,
+        issuer=DocumentIssuer(
+            name="CaseOps",
+            detail_lines=(f"GSTIN: {get_settings().billing_company_gstin}",),
+        ),
+        author="CaseOps",
+        watermark_text=watermark_text,
+        verification_url=verification_url,
     )
-    pdf.ln(3)
-    for label, value in rows:
-        pdf.set_font("Helvetica", style="B", size=10)
-        pdf.cell(48, 7, _ascii_pdf_text(label), border=0)
-        pdf.set_font("Helvetica", size=10)
-        pdf.multi_cell(0, 7, _ascii_pdf_text(value), new_x="LMARGIN", new_y="NEXT")
-    return bytes(pdf.output())
+    return render_billing_document(document, body)
 
 
 def _invoice_for_tenant(
@@ -2067,26 +2105,46 @@ def invoice_download_pdf(
     invoice_id: str,
 ) -> bytes:
     invoice = _invoice_for_tenant(session, context=context, invoice_id=invoice_id)
-    return _pdf_bytes(
+    total = invoice.amount_minor + invoice.tax_amount_minor
+    verification = issue_verification(
+        session,
+        company_id=context.company.id,
+        document_kind="saas_invoice",
+        source_type=SOURCE_SAAS_INVOICE,
+        source_id=invoice.id,
+        matter_id=None,
+        document_number=invoice.invoice_number,
+        issued_on=invoice.issued_on,
+        issuer_name="CaseOps",
+        amount_minor=total,
+        currency=invoice.currency,
+        document_status=invoice.status,
+        generated_by_membership_id=context.membership.id,
+    )
+    rendered = _render_saas_pdf(
         "CaseOps Billing Invoice",
         [
             ("Invoice", invoice.invoice_number),
             ("Customer", context.company.name),
             ("Issued", invoice.issued_on.isoformat() if invoice.issued_on else ""),
             ("Due", invoice.due_on.isoformat() if invoice.due_on else ""),
-            ("Status", invoice.status),
-            ("Amount minor", f"{invoice.amount_minor} {invoice.currency}"),
-            ("GST/tax minor", f"{invoice.tax_amount_minor} {invoice.currency}"),
-            (
-                "Total minor",
-                f"{invoice.amount_minor + invoice.tax_amount_minor} {invoice.currency}",
-            ),
-            ("Received minor", f"{invoice.amount_received_minor} {invoice.currency}"),
-            ("TDS deducted minor", f"{invoice.tds_deducted_minor} {invoice.currency}"),
+            ("Status", _status_label(invoice.status)),
+            # ENH-001: money is printed as currency, never as minor units.
+            ("Amount", format_money_minor(invoice.amount_minor, invoice.currency)),
+            ("GST/tax", format_money_minor(invoice.tax_amount_minor, invoice.currency)),
+            ("Total", format_money_minor(total, invoice.currency)),
+            ("Received", format_money_minor(invoice.amount_received_minor, invoice.currency)),
+            ("TDS deducted", format_money_minor(invoice.tds_deducted_minor, invoice.currency)),
             ("PO number", invoice.po_number or ""),
             ("Payment reference", invoice.payment_reference or ""),
         ],
+        document_number=invoice.invoice_number,
+        recipient=context.company.name,
+        watermark_text="PAID" if invoice.status == "paid" else "CaseOps",
+        verification_url=verification.url,
     )
+    record_pdf_fingerprint(verification, rendered.sha256)
+    return rendered.body
 
 
 def statement_pdf(session: Session, *, context: SessionContext) -> bytes:
@@ -2104,7 +2162,8 @@ def statement_pdf(session: Session, *, context: SessionContext) -> bytes:
         rows.append(
             (
                 f"Invoice {invoice.invoice_number}",
-                f"{invoice.status} | total minor {invoice.total_amount_minor} {invoice.currency}",
+                f"{_status_label(invoice.status)} | total "
+                f"{format_money_minor(invoice.total_amount_minor, invoice.currency)}",
             )
         )
     for row in ledger:
@@ -2114,7 +2173,14 @@ def statement_pdf(session: Session, *, context: SessionContext) -> bytes:
                 f"{row.event_type} | delta {row.delta} | balance {row.balance_after}",
             )
         )
-    return _pdf_bytes("CaseOps Billing Statement", rows)
+    # A statement is a point-in-time account summary, not an issued document,
+    # so it carries the letterhead and watermark but no verification code.
+    return _pdf_bytes(
+        "CaseOps Billing Statement",
+        rows,
+        document_number=f"Statement {_now().date().isoformat()}",
+        recipient=context.company.name,
+    )
 
 
 def cancel_subscription(session: Session, *, context: SessionContext) -> BillingSubscriptionRecord:

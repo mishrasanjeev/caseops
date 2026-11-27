@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   dismissIpOfficialSearchImport,
@@ -87,15 +88,14 @@ function SearchSteps({ kind, query }: { kind: OfficialSearchKind; query: Officia
                 <code className="rounded-[var(--radius-sm)] border border-[var(--color-line)] bg-[var(--color-bg-2)] px-1.5 py-0.5 font-mono text-[0.8125rem] tabular-nums">
                   {step.value}
                 </code>
-                <Button
+                <IconButton label={`Copy ${step.label.toLowerCase()}`}
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Copy ${step.label.toLowerCase()}`}
                   onClick={() => void copyValue(step.value ?? "")}
                 >
                   <Copy className="h-4 w-4" aria-hidden />
-                </Button>
+                </IconButton>
               </span>
             ) : null}
           </li>

@@ -12,6 +12,7 @@ import {
   isLegacyForumSelection,
   type ForumSelection,
 } from "@/components/matters/ForumSelector";
+import { CourtName } from "@/components/matters/CourtName";
 import { Button } from "@/components/ui/Button";
 import {
   Card,
@@ -259,7 +260,12 @@ export function MatterForumCard({ matter }: { matter: WorkspaceMatter }) {
         ) : (
           <div className="flex flex-col gap-2">
             <div className="text-sm font-semibold text-[var(--color-ink)]">
-              {matter.court_name ?? "No court selected"}
+              <CourtName
+                name={matter.court_name}
+                websiteUrl={matter.court_website_url}
+                fallback="No court selected"
+                testId="matter-forum-court"
+              />
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-[var(--color-mute)]">
               <span className="rounded-full border border-[var(--color-line)] bg-[var(--color-bg)] px-2 py-0.5">

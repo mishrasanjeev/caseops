@@ -100,6 +100,8 @@ export type CreateNoticeInput = {
   internal_spoc?: string | null;
   internal_remarks?: string | null;
   matter_ids: string[];
+  /** Record a notice whose details match an existing one (audited). */
+  allow_duplicate?: boolean;
 };
 
 export type UpdateNoticeFields = Partial<
@@ -131,6 +133,7 @@ export type UpdateNoticeFields = Partial<
     | "internal_spoc"
     | "internal_remarks"
     | "matter_ids"
+    | "allow_duplicate"
   >
 >;
 
@@ -157,6 +160,16 @@ export async function listNotices(
   return options.signal
     ? apiRequest<NoticeListResponse>(path, { signal: options.signal })
     : apiRequest<NoticeListResponse>(path);
+}
+
+/** The upload allow-list and size cap the API enforces for notice files. */
+export type NoticeUploadPolicy = {
+  allowed_upload_extensions: string[];
+  max_upload_size_bytes: number;
+};
+
+export async function getNoticeUploadPolicy(): Promise<NoticeUploadPolicy> {
+  return apiRequest<NoticeUploadPolicy>("/api/notices/upload-policy");
 }
 
 export async function listNoticeOwners(): Promise<NoticeOwnerOption[]> {

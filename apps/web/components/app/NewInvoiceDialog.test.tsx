@@ -48,6 +48,21 @@ describe("NewInvoiceDialog", () => {
     expect(createInvoiceMock).not.toHaveBeenCalled();
   });
 
+  it("refuses a due date earlier than the issue date inline, as the API does", async () => {
+    const user = userEvent.setup();
+    render(withClient(<NewInvoiceDialog matterId="m1" />));
+    await user.click(screen.getByTestId("new-invoice-trigger"));
+    const issued = await screen.findByLabelText(/Invoice date/i);
+    await user.clear(issued);
+    await user.type(issued, "2026-11-20");
+    await user.type(screen.getByLabelText(/Due on/i), "2026-11-19");
+    await user.click(screen.getByTestId("new-invoice-submit"));
+    expect(
+      await screen.findByText("Due date cannot be earlier than the issue date."),
+    ).toBeInTheDocument();
+    expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
   it("disables submit when no billable source is selected (Ram-BUG-008)", async () => {
     // The user opens the dialog, clears manual items, and unchecks
     // "Include uninvoiced time entries". The Issue button must be

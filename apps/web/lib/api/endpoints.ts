@@ -81,6 +81,7 @@ import {
   type MatterHearingPortfolio,
   type LitigationIntelligenceReviewResponse,
   type MockHearingListResponse,
+  type MockHearingReadinessResponse,
   type MockHearingSession,
   type ProceedingIntelligenceResponse,
   type MatterStrategyEntry,
@@ -154,6 +155,7 @@ import {
   type InboundEmailAliasRecord,
   type InboundEmailEventListResponse,
   type MailboxMessageReviewResponse,
+  type Microsoft365ReadinessTestResponse,
   type Microsoft365TenantConfigurationResponse,
   type NotificationPreferenceResponse,
   type PhoneChannel,
@@ -230,6 +232,7 @@ import {
   mattersList,
   nextHearingHistoryResponse,
   mockHearingListResponse,
+  mockHearingReadinessResponse,
   mockHearingSession,
   notificationRuleListResponse,
   notificationRuleRecord,
@@ -287,6 +290,7 @@ import {
   inboundEmailAliasRecord,
   inboundEmailEventListResponse,
   mailboxMessageReviewResponse,
+  microsoft365ReadinessTestResponse,
   microsoft365TenantConfigurationResponse,
   notificationPreferenceResponse,
   phoneChannelAdminResponse,
@@ -917,6 +921,14 @@ export async function fetchMockHearings(input: {
   return mockHearingListResponse.parse(data);
 }
 
+export async function fetchMockHearingReadiness(input: {
+  matterId: string;
+}): Promise<MockHearingReadinessResponse> {
+  const matterId = encodeURIComponent(input.matterId);
+  const data = await apiRequest<unknown>(`/api/matters/${matterId}/mock-hearing-readiness`);
+  return mockHearingReadinessResponse.parse(data);
+}
+
 export async function startMockHearing(input: {
   matterId: string;
   mode?: "client_preparation" | "counsel_practice" | "witness_preparation";
@@ -1267,6 +1279,8 @@ export type StorageUploadPolicy = {
   quota_bytes: number | null;
   remaining_bytes: number | null;
   max_upload_size_bytes: number;
+  /** The API allow-list (file_security); pickers read this, never a copy. */
+  allowed_upload_extensions: string[];
   state: StorageQuotaState;
   warning_threshold_percent: number;
 };
@@ -2938,6 +2952,8 @@ export async function uploadMatterAttachment(input: {
   sequenceIndex?: number | null;
   linkedCourtOrderId?: string | null;
   hearingId?: string | null;
+  /** Record a primary notice whose details match an existing one (audited). */
+  allowDuplicate?: boolean;
 }): Promise<MatterAttachmentRecord> {
   const body = new FormData();
   body.append("file", input.file);
@@ -3002,6 +3018,7 @@ export async function uploadMatterAttachment(input: {
   if (input.hearingId) {
     body.append("hearing_id", input.hearingId);
   }
+  if (input.allowDuplicate) body.append("allow_duplicate", "true");
   const data = await apiRequest<unknown>(
     `/api/matters/${input.matterId}/attachments`,
     { method: "POST", body },
@@ -4536,6 +4553,8 @@ export type CaseTrackingBookmarkRecord = {
   tracked_case_id: string;
   created_by_membership_id: string;
   matter_id: string | null;
+  /** Linked Matter's code; null when unlinked or no longer visible to the reader. */
+  matter_code?: string | null;
   name: string | null;
   notification_enabled: boolean;
   is_archived: boolean;
@@ -4548,6 +4567,10 @@ export type CaseTrackingBookmarkRecord = {
 
 export type CaseTrackingBookmarkListResponse = {
   bookmarks: CaseTrackingBookmarkRecord[];
+  /** Present on a paged read when more matches follow. */
+  next_cursor?: string | null;
+  /** Server count of every match; only when include_total was requested. */
+  total_count?: number | null;
 };
 
 export type CaseTrackingBookmarkInput = {
@@ -4627,8 +4650,24 @@ export async function createCaseTrackingBookmark(
   });
 }
 
-export async function listCaseTrackingBookmarks(): Promise<CaseTrackingBookmarkListResponse> {
-  return apiRequest("/api/case-tracking/bookmarks");
+/**
+ * Without params: every active bookmark (complete list). With `limit` or
+ * `cursor`: one server page; `q` searches Matter code, CNR, case number,
+ * title, bookmark name and parties on the server, across every page.
+ */
+export async function listCaseTrackingBookmarks(params?: {
+  q?: string;
+  limit?: number;
+  cursor?: string | null;
+  include_total?: boolean;
+}): Promise<CaseTrackingBookmarkListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.cursor) qs.set("cursor", params.cursor);
+  if (params?.include_total) qs.set("include_total", "true");
+  const query = qs.toString();
+  return apiRequest(query ? `/api/case-tracking/bookmarks?${query}` : "/api/case-tracking/bookmarks");
 }
 
 export async function updateCaseTrackingBookmark(
@@ -4771,16 +4810,29 @@ export type JudgeIdentityRecord = {
   record_version: number;
   merged_into_judge_id: string | null;
   is_active: boolean;
+  /** Present on catalogue listings so the picker can name the court. */
+  court_name?: string | null;
+  court_short_name?: string | null;
 };
 
 export type BenchIdentityRecord = {
   id: string;
   court_id: string;
+  court_name: string;
+  court_short_name: string;
   name: string;
+  seat_city: string | null;
   source_name: string | null;
   source_url: string | null;
   source_reference: string | null;
   record_version: number;
+};
+
+// An active court the bench search names that has no catalogued seat yet.
+export type CourtWithoutBenchesRecord = {
+  id: string;
+  name: string;
+  short_name: string;
 };
 
 export async function listJudgeMappingReviews(
@@ -4803,6 +4855,7 @@ export async function listCuratorJudges(params: {
 } = {}): Promise<{
   judges: JudgeIdentityRecord[];
   returned_count: number;
+  total_count: number;
   limit: number;
   has_more: boolean;
 }> {
@@ -4820,8 +4873,11 @@ export async function listCuratorBenches(params: {
 } = {}): Promise<{
   benches: BenchIdentityRecord[];
   returned_count: number;
+  total_count: number;
   limit: number;
   has_more: boolean;
+  courts_without_benches: CourtWithoutBenchesRecord[];
+  courts_without_benches_total: number;
 }> {
   const query = new URLSearchParams();
   if (params.courtId) query.set("court_id", params.courtId);
@@ -7946,12 +8002,12 @@ export async function updateMicrosoft365TenantConfiguration(
   return microsoft365TenantConfigurationResponse.parse(data);
 }
 
-export async function testMicrosoft365TenantConfiguration(): Promise<Microsoft365TenantConfigurationResponse> {
-  await apiRequest<unknown>("/api/admin/microsoft365-configuration/test", {
+export async function testMicrosoft365TenantConfiguration(): Promise<Microsoft365ReadinessTestResponse> {
+  const data = await apiRequest<unknown>("/api/admin/microsoft365-configuration/test", {
     method: "POST",
     body: {},
   });
-  return fetchMicrosoft365TenantConfiguration();
+  return microsoft365ReadinessTestResponse.parse(data);
 }
 
 export async function listProviderOperations(input?: {
@@ -8643,20 +8699,89 @@ export async function submitClientKyc(input: {
   );
 }
 
-export async function verifyClientKyc(clientId: string): Promise<unknown> {
+/**
+ * Approve a submitted KYC pack. `reviewedDocumentIds` must name every file in
+ * the client's current pack; the API refuses an approval of a pack that
+ * changed after the reviewer loaded it (BUG-003).
+ */
+export async function verifyClientKyc(input: {
+  clientId: string;
+  reviewedDocumentIds: string[];
+}): Promise<unknown> {
   return apiRequest<unknown>(
-    `/api/clients/${clientId}/kyc/verify`, { method: "POST" },
+    `/api/clients/${input.clientId}/kyc/verify`,
+    { method: "POST", body: { reviewed_document_ids: input.reviewedDocumentIds } },
   );
 }
 
 export async function rejectClientKyc(input: {
   clientId: string;
   reason: string;
+  reviewedDocumentIds?: string[];
 }): Promise<unknown> {
   return apiRequest<unknown>(
     `/api/clients/${input.clientId}/kyc/reject`,
-    { method: "POST", body: { reason: input.reason } },
+    {
+      method: "POST",
+      body: { reason: input.reason, reviewed_document_ids: input.reviewedDocumentIds ?? [] },
+    },
   );
+}
+
+// BUG-003 — uploaded KYC files. Types, requirements, accepted extensions and
+// the size cap all come from the API so the form offers only what the
+// validator accepts.
+export type KycDocumentType = components["schemas"]["KycDocumentTypeOption"]["value"];
+export type ClientKycDocument = components["schemas"]["ClientKycDocumentRecord"];
+export type ClientKycDocumentList = components["schemas"]["ClientKycDocumentListResponse"];
+export type KycRequirement = components["schemas"]["KycRequirementRecord"];
+export type KycDocumentTypeOption = components["schemas"]["KycDocumentTypeOption"];
+
+function clientKycDocumentsPath(clientId: string): string {
+  return `/api/clients/${encodeURIComponent(clientId)}/kyc/documents`;
+}
+
+export async function listClientKycDocuments(clientId: string): Promise<ClientKycDocumentList> {
+  return apiRequest<ClientKycDocumentList>(clientKycDocumentsPath(clientId));
+}
+
+export async function uploadClientKycDocument(input: {
+  clientId: string;
+  documentType: KycDocumentType;
+  label?: string | null;
+  file: File;
+}): Promise<ClientKycDocument> {
+  const body = new FormData();
+  body.append("document_type", input.documentType);
+  if (input.label && input.label.trim()) body.append("label", input.label.trim());
+  body.append("file", input.file);
+  return apiRequest<ClientKycDocument>(clientKycDocumentsPath(input.clientId), {
+    method: "POST",
+    body,
+  });
+}
+
+export async function removeClientKycDocument(input: {
+  clientId: string;
+  documentId: string;
+}): Promise<void> {
+  await apiRequest<void>(
+    `${clientKycDocumentsPath(input.clientId)}/${encodeURIComponent(input.documentId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function fetchClientKycDocumentBlob(input: {
+  clientId: string;
+  documentId: string;
+  inline?: boolean;
+  signal?: AbortSignal;
+}): Promise<Blob> {
+  const path = `${clientKycDocumentsPath(input.clientId)}/${encodeURIComponent(
+    input.documentId,
+  )}/download${input.inline ? "?inline=true" : ""}`;
+  const { blob } = await apiDownloadRequest(path, { signal: input.signal });
+  return blob;
 }
 
 // SaaS billing, checkout, tenant usage, and founder-only platform admin.

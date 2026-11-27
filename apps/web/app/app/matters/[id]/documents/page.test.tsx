@@ -282,6 +282,41 @@ describe("MatterDocumentsPage", () => {
     expect(toastSuccess).toHaveBeenCalled();
   });
 
+  // A bare "notice" upload is refused by the API (notice_rules), so the
+  // Documents picker must not offer it; the picker accept list and the
+  // pre-upload check come from the API policy, never a hard-coded copy.
+  it("offers no Notice upload type and checks files against the API allow-list", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
+    const workspace = workspaceData.current as { storage_governance: Record<string, unknown> };
+    const original = workspace.storage_governance;
+    workspace.storage_governance = {
+      ...original,
+      allowed_upload_extensions: [".pdf", ".txt"],
+      max_upload_size_bytes: 8,
+    };
+    try {
+      render(withClient(<MatterDocumentsPage />));
+      const typePicker = screen.getByTestId("matter-attachment-document-type");
+      const values = Array.from(typePicker.querySelectorAll("option")).map((option) => option.value);
+      expect(values).not.toContain("notice");
+      expect(values).toContain("order_judgment");
+      expect(screen.getByTestId("matter-attachment-notices-link")).toHaveAttribute(
+        "href",
+        "/app/matters/m1/notices",
+      );
+      const input = screen.getByTestId("matter-attachment-file-input") as HTMLInputElement;
+      expect(input).toHaveAttribute("accept", ".pdf,.txt");
+      const user = userEvent.setup({ applyAccept: false });
+      await user.upload(input, new File(["MZ"], "tool.exe", { type: "application/octet-stream" }));
+      await user.upload(input, new File(["123456789"], "big.pdf", { type: "application/pdf" }));
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining(".exe files are not supported."));
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining("larger than the"));
+    } finally {
+      workspace.storage_governance = original;
+    }
+  });
+
   it("lets document uploaders list and revoke their own Google Drive metadata safely", async () => {
     useCapabilityMock.mockImplementation((cap: string) => cap === "documents:upload");
     fetchGoogleDriveStatusMock.mockResolvedValue({

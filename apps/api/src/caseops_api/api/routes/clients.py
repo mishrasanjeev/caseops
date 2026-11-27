@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -12,16 +13,28 @@ from caseops_api.api.dependencies import (
 )
 from caseops_api.schemas.clients import (
     ClientCreateRequest,
+    ClientKycDocumentListResponse,
+    ClientKycDocumentRecord,
     ClientListResponse,
     ClientRecord,
     ClientUpdateRequest,
     ClientVerificationUpdateRequest,
+    KycDocumentTypeLiteral,
     KycRejectRequest,
     KycSubmitRequest,
+    KycVerifyRequest,
     MatterClientAssignmentRecord,
     MatterClientAssignRequest,
     MatterClientVerificationListResponse,
     MatterClientVerificationRecord,
+)
+from caseops_api.services.client_kyc_documents import (
+    KYC_FILE_RESPONSE_HEADERS,
+    get_client_kyc_document_download,
+    kyc_display_filename,
+    list_client_kyc_documents,
+    remove_client_kyc_document,
+    upload_client_kyc_document,
 )
 from caseops_api.services.clients import (
     archive_client,
@@ -156,10 +169,13 @@ def submit_current_company_client_kyc(
 )
 def verify_current_company_client_kyc(
     client_id: str,
+    payload: KycVerifyRequest,
     context: KycReviewer,
     session: DbSession,
 ) -> ClientRecord:
-    return verify_client_kyc(session, context=context, client_id=client_id)
+    return verify_client_kyc(
+        session, context=context, client_id=client_id, payload=payload,
+    )
 
 
 @router.post(
@@ -176,6 +192,95 @@ def reject_current_company_client_kyc(
     return reject_client_kyc(
         session, context=context, client_id=client_id, payload=payload,
     )
+
+
+# BUG-003: uploaded KYC files. Upload / remove need clients:kyc_submit;
+# listing and opening need clients:kyc_submit or clients:kyc_review
+# (checked in the service). Every miss across tenant or client is a 404.
+
+
+@router.get(
+    "/{client_id}/kyc/documents",
+    response_model=ClientKycDocumentListResponse,
+    summary="List a client's current KYC files and the KYC requirements they meet",
+)
+def get_current_company_client_kyc_documents(
+    client_id: str,
+    context: ClientViewer,
+    session: DbSession,
+) -> ClientKycDocumentListResponse:
+    return list_client_kyc_documents(session, context=context, client_id=client_id)
+
+
+@router.post(
+    "/{client_id}/kyc/documents",
+    response_model=ClientKycDocumentRecord,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a KYC file (PDF or image, virus-scanned) for a client",
+)
+def post_current_company_client_kyc_document(
+    client_id: str,
+    context: KycSubmitter,
+    session: DbSession,
+    document_type: Annotated[KycDocumentTypeLiteral, Form()],
+    file: Annotated[UploadFile, File(...)],
+    label: Annotated[str | None, Form(max_length=120)] = None,
+) -> ClientKycDocumentRecord:
+    return upload_client_kyc_document(
+        session,
+        context=context,
+        client_id=client_id,
+        document_type=document_type,
+        label=label,
+        filename=file.filename or "document",
+        content_type=file.content_type,
+        stream=file.file,
+    )
+
+
+@router.get(
+    "/{client_id}/kyc/documents/{document_id}/download",
+    response_class=FileResponse,
+    summary="Open or download a client KYC file (audited)",
+)
+def download_current_company_client_kyc_document(
+    client_id: str,
+    document_id: str,
+    context: ClientViewer,
+    session: DbSession,
+    inline: bool = Query(default=False),
+) -> FileResponse:
+    doc, path, media_type, disposition = get_client_kyc_document_download(
+        session,
+        context=context,
+        client_id=client_id,
+        document_id=document_id,
+        inline=inline,
+    )
+    return FileResponse(
+        path=path,
+        media_type=media_type,
+        filename=kyc_display_filename(doc),
+        content_disposition_type=disposition,
+        headers=dict(KYC_FILE_RESPONSE_HEADERS),
+    )
+
+
+@router.delete(
+    "/{client_id}/kyc/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a KYC file from the client's current pack",
+)
+def delete_current_company_client_kyc_document(
+    client_id: str,
+    document_id: str,
+    context: KycSubmitter,
+    session: DbSession,
+) -> Response:
+    remove_client_kyc_document(
+        session, context=context, client_id=client_id, document_id=document_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------

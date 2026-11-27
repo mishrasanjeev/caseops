@@ -3,8 +3,10 @@
 The Outlook and Microsoft 365 tenant settings stored the redirect URI as free
 text, the same defect fixed for Google Workspace in PR #473. Outlook drives a
 real OAuth flow from one served callback, so its path is pinned. Microsoft 365
-is registration and readiness only, with no callback route yet, so only the
-rules every redirect must meet apply there; no path is invented.
+first accepted any https path because it had no callback of its own; the Nov 27
+workbook (row 8) showed that left admins guessing an address CaseOps never
+serves. Since then the Microsoft 365 registration must name the one Microsoft
+callback CaseOps serves, the Outlook callback, and its path is pinned too.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
 
 HOST = "https://api.tenant.example"
 OUTLOOK_URI = f"{HOST}{OUTLOOK_OAUTH_CALLBACK_PATH}"
-M365_PATH = "/auth/microsoft/callback"
+M365_PATH = OUTLOOK_OAUTH_CALLBACK_PATH
 
 # Rules every redirect must meet regardless of which callback path it names.
 STRUCTURAL_CASES = [
@@ -57,9 +59,9 @@ def _outlook_payload(**overrides: object) -> dict[str, object]:
 
 def _microsoft365_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "client_id": "graph-client-id",
+        "client_id": "0b6f2a4e-1c3d-4e5f-8a9b-0c1d2e3f4a5b",
         "client_secret": "graph-client-secret",
-        "tenant_id": "graph-tenant-id",
+        "tenant_id": "72f988bf-86f1-41af-91ab-2d7cd011db47",
         "redirect_uri": f"https://api.caseops.test{M365_PATH}",
         "scopes": ["User.Read", "Mail.Read", "Calendars.ReadWrite", "Files.Read.All"],
         "admin_consent_approved": True,
@@ -211,10 +213,19 @@ def test_microsoft365_rejects_a_structurally_unusable_redirect_uri(
     assert "graph-client-secret" not in response.text
 
 
-def test_microsoft365_does_not_invent_a_callback_path(client: TestClient) -> None:
-    """No Microsoft 365 callback route exists, so any well-formed https path saves."""
+def test_microsoft365_requires_the_microsoft_callback_caseops_serves(
+    client: TestClient,
+) -> None:
+    """Superseded 2026-11-27: an invented path is refused, the served one saves."""
 
     token = _company(client, "m365-valid")
+    invented = client.patch(
+        "/api/admin/microsoft365-configuration",
+        headers=_auth(token),
+        json=_microsoft365_payload(redirect_uri="https://api.caseops.test/auth/microsoft/callback"),
+    )
+    assert invented.status_code == 422, invented.text
+    assert OUTLOOK_OAUTH_CALLBACK_PATH in invented.text
     saved = client.patch(
         "/api/admin/microsoft365-configuration",
         headers=_auth(token),

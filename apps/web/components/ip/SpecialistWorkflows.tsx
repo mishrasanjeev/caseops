@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
 import { isSpecialistSourceDocument } from "@/lib/ip/document-sources";
@@ -176,8 +177,8 @@ export function WorkflowForm({ record: currentRecord, kind, initial: serverIniti
   return <form aria-label={initial ? "Revise domain workflow" : "New domain workflow"} className="min-w-0 space-y-4 border-y border-line py-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit) save.mutate(); }}>
     {kind !== "source_set" && <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" aria-label="Workflow reference pages">
       <h3 className="text-sm font-medium">Reference choices</h3><div className="flex shrink-0 gap-2">
-        <Button type="button" variant="ghost" title="First reference page" aria-label="First reference page" disabled={!referenceCursor || references.isFetching || save.isPending} onClick={() => setReferenceCursor(undefined)}><ArrowLeft size={16} /></Button>
-        <Button type="button" variant="ghost" title="Next reference page" aria-label="Next reference page" disabled={!references.data?.next_cursor || references.isFetching || save.isPending} onClick={() => setReferenceCursor(references.data!.next_cursor!)}><ArrowRight size={16} /></Button>
+        <IconButton label="First reference page" type="button" variant="ghost" disabled={!referenceCursor || references.isFetching || save.isPending} onClick={() => setReferenceCursor(undefined)}><ArrowLeft size={16} /></IconButton>
+        <IconButton label="Next reference page" type="button" variant="ghost" disabled={!references.data?.next_cursor || references.isFetching || save.isPending} onClick={() => setReferenceCursor(references.data!.next_cursor!)}><ArrowRight size={16} /></IconButton>
       </div></div>}
     {kind !== "source_set" && references.isPending && <p role="status">Loading reference choices...</p>}
     {kind !== "source_set" && references.isError && <QueryErrorState title="Could not load reference choices" error={references.error} onRetry={references.refetch} />}
@@ -188,7 +189,7 @@ export function WorkflowForm({ record: currentRecord, kind, initial: serverIniti
         {members.map((member, index) => <div className="min-w-0 space-y-3 border-b border-line py-3" key={index}>
           <FieldInput prefix={`member-${index}`} field={{ key: "role" }} value={member.role} set={(role) => setMembers((old) => old.map((m, i) => i === index ? { ...m, role: String(role ?? "") } : m))} />
           <SourcePicker prefix={`member-${index}`} options={options} value={member.source} onChange={(source) => setMembers((old) => old.map((m, i) => i === index ? { ...m, source } : m))} />
-          <Button variant="ghost" type="button" title="Remove source member" aria-label={`Remove member ${index + 1}`} disabled={members.length === 1} onClick={() => setMembers((old) => old.filter((_, i) => i !== index))}><Trash2 size={16} /></Button></div>)}
+          <IconButton label={`Remove member ${index + 1}`} variant="ghost" type="button" disabled={members.length === 1} onClick={() => setMembers((old) => old.filter((_, i) => i !== index))}><Trash2 size={16} /></IconButton></div>)}
         <Button type="button" variant="ghost" disabled={members.length >= 25} onClick={() => setMembers((old) => [...old, { role: "" }])}><Plus size={16} />Add source member</Button>
         <FieldInput field={{ key: "confidentiality", options: (values.purpose === "layout_deposit" || (!values.purpose && record.facts.details.domain === "semiconductor_layout")) ? ["restricted"] : ["restricted", "publication_authorized"] }} value={values.confidentiality} set={(v) => set("confidentiality", v)} />
         <FieldInput field={{ key: "publication_instruction", kind: "note", optional: values.confidentiality !== "publication_authorized" }} value={values.publication_instruction} set={(v) => set("publication_instruction", v)} />
@@ -220,7 +221,7 @@ export function WorkflowForm({ record: currentRecord, kind, initial: serverIniti
           <h3 className="text-base font-semibold">Term review issues</h3>{issues.map((issue, index) => <div key={index} className="min-w-0 space-y-3 border-y border-line py-3">
             {(["clause", "question", "resolution"] as const).map((name) => <FieldInput key={name} prefix={`issue-${index}`} field={{ key: name, kind: name === "clause" ? undefined : "note", optional: name === "resolution" }} value={issue[name]} set={(v) => setIssues((old) => old.map((row, i) => i === index ? { ...row, [name]: v } : row))} />)}
             <SourcePicker prefix={`issue-${index}`} options={options} value={issue.source} onChange={(source) => setIssues((old) => old.map((row, i) => i === index ? { ...row, source } : row))} />
-            <Button type="button" variant="ghost" title="Remove draft issue" aria-label={`Remove issue ${index + 1}`} onClick={() => setIssues((old) => old.filter((_, i) => i !== index))}><Trash2 size={16} /></Button></div>)}
+            <IconButton label={`Remove issue ${index + 1}`} type="button" variant="ghost" onClick={() => setIssues((old) => old.filter((_, i) => i !== index))}><Trash2 size={16} /></IconButton></div>)}
           <Button type="button" variant="ghost" disabled={issues.length >= 25} onClick={() => setIssues((old) => [...old, {}])}><Plus size={16} />Add review issue</Button>
           <h3 className="text-base font-semibold">Confidential financial terms</h3>
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">{([{ key: "currency", optional: true }, { key: "royalty", kind: "note", optional: true },
@@ -356,8 +357,8 @@ function CostPicker({ record, workflow, prefix, value, set }: { record: Speciali
       {options.data?.records.map((row) => <option key={row.id} value={row.id}>{row.description}</option>)}
     </select>
     {options.isError && <QueryErrorState title="Could not load cost evidence" error={options.error} onRetry={options.refetch} />}
-    <div className="flex flex-wrap justify-between gap-3"><Button type="button" variant="ghost" title="First cost options" aria-label={`${prefix}: first cost options`} disabled={!cursor} onClick={() => setCursor(undefined)}><ArrowLeft size={16} /></Button>
-      <Button type="button" variant="ghost" title="Next cost options" aria-label={`${prefix}: next cost options`} disabled={!options.data?.next_cursor} onClick={() => setCursor(options.data!.next_cursor!)}><ArrowRight size={16} /></Button></div>
+    <div className="flex flex-wrap justify-between gap-3"><IconButton label={`${prefix}: first cost options`} type="button" variant="ghost" disabled={!cursor} onClick={() => setCursor(undefined)}><ArrowLeft size={16} /></IconButton>
+      <IconButton label={`${prefix}: next cost options`} type="button" variant="ghost" disabled={!options.data?.next_cursor} onClick={() => setCursor(options.data!.next_cursor!)}><ArrowRight size={16} /></IconButton></div>
   </div>;
 }
 

@@ -38,6 +38,7 @@ import { useCapability } from "@/lib/capabilities";
 
 const SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm text-[var(--color-ink)]";
+const FORUM_OPTION_CAP = 150;
 
 const ALIAS_TYPES: Array<{ value: ForumCatalogAliasType; label: string }> = [
   { value: "court_complex", label: "Court complex" },
@@ -102,17 +103,29 @@ export default function PlatformForumAliasesPage() {
     staleTime: 5 * 60_000,
   });
 
-  const catalogOptions = useMemo(() => {
+  const catalogMatches = useMemo(() => {
     const normalizedSearch = catalogSearch.trim().toLocaleLowerCase("en-IN");
-    return (catalogQuery.data?.entries ?? [])
-      .filter((entry) => {
-        if (!normalizedSearch) return true;
-        return [entry.name, entry.lineage, entry.state, entry.district]
-          .filter(Boolean)
-          .some((value) => value!.toLocaleLowerCase("en-IN").includes(normalizedSearch));
-      })
-      .slice(0, 150);
+    return (catalogQuery.data?.entries ?? []).filter((entry) => {
+      if (!normalizedSearch) return true;
+      return [entry.name, entry.lineage, entry.state, entry.district]
+        .filter(Boolean)
+        .some((value) => value!.toLocaleLowerCase("en-IN").includes(normalizedSearch));
+    });
   }, [catalogQuery.data?.entries, catalogSearch]);
+  // The select renders a bounded window of the complete active catalogue; the
+  // status line states the cap and the match count so no forum is silently hidden.
+  const catalogOptions = catalogMatches.slice(0, FORUM_OPTION_CAP);
+  const catalogStatus = catalogQuery.isPending
+    ? "Loading the active forum catalogue…"
+    : catalogQuery.isError
+      ? "The forum catalogue could not be loaded."
+      : catalogMatches.length === 0
+        ? catalogSearch.trim()
+          ? `No active forum matches “${catalogSearch.trim()}”. Search by court, state, district or lineage.`
+          : "No active forum is catalogued."
+        : catalogMatches.length > catalogOptions.length
+          ? `Showing ${catalogOptions.length} of ${catalogMatches.length} matching forums. Refine the search to reach the rest.`
+          : `${catalogMatches.length} matching ${catalogMatches.length === 1 ? "forum" : "forums"}.`;
 
   const resetForm = () => {
     setEditing(null);
@@ -257,6 +270,7 @@ export default function PlatformForumAliasesPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, forumCatalogEntryId: event.target.value }))
               }
+              aria-describedby="forum-catalog-entry-status"
             >
               <option value="">Select one active catalog entry</option>
               {catalogOptions.map((entry) => (
@@ -265,6 +279,30 @@ export default function PlatformForumAliasesPage() {
                 </option>
               ))}
             </select>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+              <p
+                id="forum-catalog-entry-status"
+                role="status"
+                data-testid="forum-catalog-entry-status"
+                className={`min-w-0 text-xs ${
+                  catalogQuery.isError
+                    ? "text-[var(--color-danger-700)]"
+                    : "text-[var(--color-mute)]"
+                }`}
+              >
+                {catalogStatus}
+              </p>
+              {catalogQuery.isError ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void catalogQuery.refetch()}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Retry
+                </Button>
+              ) : null}
+            </div>
           </div>
           <div className="min-w-0">
             <Label htmlFor="forum-alias">Alias</Label>

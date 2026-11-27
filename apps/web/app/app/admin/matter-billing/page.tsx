@@ -5,6 +5,7 @@ import { CreditCard, Loader2, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { DocumentBrandingCard, documentBrandingKey } from "@/components/billing/DocumentBrandingCard";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -197,6 +198,8 @@ export default function AdminMatterBillingPage() {
       await queryClient.invalidateQueries({
         queryKey: ["admin", "matter-billing", "invoice-preview"],
       });
+      // ENH-001: the letterhead printed on invoices is read from this profile.
+      await queryClient.invalidateQueries({ queryKey: documentBrandingKey, exact: true });
       toast.success("Matter billing profile saved.");
     },
     onError: (err) => {
@@ -379,6 +382,8 @@ export default function AdminMatterBillingPage() {
           </CardContent>
         </Card>
       </section>
+
+      <DocumentBrandingCard enabled={canAdmin} />
 
       <Card>
         <CardHeader>

@@ -5,7 +5,9 @@ and join both Futures, then finish the captured current-head upgrade. No later
 concurrent-index migration runs behind the intentionally retained old snapshot.
 """
 
+import importlib.util
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Event
 
 import pytest
@@ -103,6 +105,56 @@ def without_current_head_catalog_seed(engine, rows):
         index = [c["name"] for c in schema.get_columns(table)].index(column)
         result[table] = [row for row in rows[table] if row[index] not in seeded]
     return result
+
+
+# Migration 20261127_0006 inserts the canonical court benches, and 20261127_0007
+# adds two official-website columns to forum_catalog_entries and fills them
+# (touching updated_at) on the catalogued forums. Those are the only other
+# original-table changes allowed after the named head; every other value of
+# every retained row must still match.
+_VERSIONS = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+_WEBSITE_COLUMNS = ("official_website_url", "official_website_source_url")
+
+
+def _migration(name):
+    spec = importlib.util.spec_from_file_location(name, _VERSIONS / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def without_current_head_reference_seeds(engine, rows, named):
+    result = without_current_head_catalog_seed(engine, rows)
+    schema = inspect(engine)
+    benches = _migration("20261127_0006_seed_official_court_benches")
+    seeded = {benches.bench_id(court, name) for court, name, *_ in benches.OFFICIAL_BENCHES}
+    assert seeded, "Current head must carry the 20261127_0006 bench seed"
+    bench_id = [c["name"] for c in schema.get_columns("benches")].index("id")
+    result["benches"] = [row for row in rows["benches"] if row[bench_id] not in seeded]
+    columns = [c["name"] for c in schema.get_columns("forum_catalog_entries")]
+    url, entry_id, updated = (
+        columns.index(name) for name in ("official_website_url", "id", "updated_at")
+    )
+    touched = {row[entry_id] for row in rows["forum_catalog_entries"] if row[url] is not None}
+    assert touched, "Current head must carry the 20261127_0007 official websites"
+    keep = [i for i, name in enumerate(columns) if name not in _WEBSITE_COLUMNS]
+    named_columns = [name for name in columns if name not in _WEBSITE_COLUMNS]
+    named_updated = named_columns.index("updated_at")
+
+    result["forum_catalog_entries"] = [
+        tuple(None if i == updated and row[entry_id] in touched else row[i] for i in keep)
+        for row in rows["forum_catalog_entries"]
+    ]
+    named_id = named_columns.index("id")
+    named = dict(named)
+    named["forum_catalog_entries"] = [
+        tuple(
+            None if i == named_updated and row[named_id] in touched else value
+            for i, value in enumerate(row)
+        )
+        for row in named["forum_catalog_entries"]
+    ]
+    return result, named
 
 
 def preserved_catalog(before, after):
@@ -305,7 +357,8 @@ def test_named_0008_waits_for_acknowledged_historical_source_writer_before_curre
         # Current-head work starts only after both historical Futures returned.
         command.upgrade(config, captured_head)
         current_rows, current_catalog = _rows(engine, original_names), _catalog(engine)
-        assert without_current_head_catalog_seed(engine, current_rows) == after
+        current_view, named_view = without_current_head_reference_seeds(engine, current_rows, after)
+        assert current_view == named_view
         actual_outboxes = _rows(engine, OUTBOXES)
         assert actual_outboxes == outboxes
         require_physical(engine, scope, rows)

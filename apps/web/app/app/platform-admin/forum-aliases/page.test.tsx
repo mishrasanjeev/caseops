@@ -224,4 +224,50 @@ describe("PlatformForumAliasesPage", () => {
       expect(mocks.fetchForumCatalog).toHaveBeenCalledTimes(2);
     });
   });
+
+  it("states the cap, a search with no match and a failed read under the canonical forum picker", async () => {
+    // Nov 27 row 1 sibling: 400 active forums, the option window holds 150.
+    const entries = Array.from({ length: 400 }, (_, index) => ({
+      ...CATALOG_ENTRY,
+      id: `district:test:${index}`,
+      name: `District Court ${String(index).padStart(3, "0")}`,
+      district: `District ${String(index).padStart(3, "0")}`,
+      lineage: `District Court > Test > District ${String(index).padStart(3, "0")}`,
+    }));
+    mocks.fetchForumCatalog.mockResolvedValue({ entries });
+    const user = userEvent.setup();
+    const page = renderAliasPage();
+    const status = await page.findByTestId("forum-catalog-entry-status");
+    await waitFor(() =>
+      expect(status).toHaveTextContent(
+        "Showing 150 of 400 matching forums. Refine the search to reach the rest.",
+      ),
+    );
+    expect(page.getByLabelText("Canonical forum")).toHaveAccessibleDescription(/150 of 400/);
+    // The last forum is outside the window until the search reaches it.
+    expect(page.queryByRole("option", { name: /District 399$/ })).toBeNull();
+    await enterText(user, page.getByLabelText("Find canonical forum"), "District 399");
+    await waitFor(() => expect(status).toHaveTextContent("1 matching forum."));
+    expect(page.getByRole("option", { name: /District 399$/ })).toBeInTheDocument();
+
+    await user.clear(page.getByLabelText("Find canonical forum"));
+    await enterText(user, page.getByLabelText("Find canonical forum"), "Atlantis");
+    await waitFor(() =>
+      expect(status).toHaveTextContent(
+        "No active forum matches “Atlantis”. Search by court, state, district or lineage.",
+      ),
+    );
+  });
+
+  it("shows a failed forum catalogue read with a working retry", async () => {
+    mocks.fetchForumCatalog.mockRejectedValueOnce(new Error("network"));
+    const user = userEvent.setup();
+    const page = renderAliasPage();
+    const status = await page.findByTestId("forum-catalog-entry-status");
+    await waitFor(() =>
+      expect(status).toHaveTextContent("The forum catalogue could not be loaded."),
+    );
+    await user.click(page.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(status).toHaveTextContent("1 matching forum."));
+  });
 });

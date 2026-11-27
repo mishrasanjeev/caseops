@@ -27,6 +27,7 @@ import { OAuthCallbackNotice } from "@/components/app/OAuthCallbackNotice";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   fetchCalendarEvents,
   fetchCalendarSummary,
@@ -508,30 +509,32 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
-            aria-label="Previous"
-            data-testid="calendar-prev-month"
-          >
-            <ChevronLeft className="h-4 w-4" aria-hidden />
-          </button>
+          <Tooltip label="Previous">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
+              data-testid="calendar-prev-month"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </button>
+          </Tooltip>
           <div
             className="min-w-[12rem] text-center text-sm font-medium text-[var(--color-ink)]"
             data-testid="calendar-month-label"
           >
             {label}
           </div>
-          <button
-            type="button"
-            onClick={() => navigate(1)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
-            aria-label="Next"
-            data-testid="calendar-next-month"
-          >
-            <ChevronRight className="h-4 w-4" aria-hidden />
-          </button>
+          <Tooltip label="Next">
+            <button
+              type="button"
+              onClick={() => navigate(1)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line-2)] text-[var(--color-mute)] hover:text-[var(--color-ink)]"
+              data-testid="calendar-next-month"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          </Tooltip>
           <button
             type="button"
             onClick={() => setCursor(new Date())}

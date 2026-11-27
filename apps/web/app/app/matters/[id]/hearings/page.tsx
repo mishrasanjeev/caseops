@@ -24,6 +24,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { HearingPackDialog } from "@/components/app/HearingPackDialog";
+import { MockHearingReadinessPanel } from "@/components/matters/MockHearingReadinessPanel";
 import { OrderBadges } from "@/components/matters/OrderBadges";
 import { AddCourtOrderDialog } from "@/components/matters/AddCourtOrderDialog";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
@@ -36,10 +37,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage, isApiErrorShape } from "@/lib/api/config";
 import {
+  analyzeAffidavitIntelligence,
   completeMockHearing,
   fetchCalendarSyncStatus,
   fetchMatterCompliance,
   fetchHearingCoach,
+  fetchMockHearingReadiness,
   fetchMockHearings,
   fetchNextHearingHistory,
   fetchProceedingIntelligence,
@@ -65,6 +68,7 @@ import type {
   MatterComplianceListResponse,
   MockHearingListResponse,
   MockHearingQuestion,
+  MockHearingReadinessResponse,
   MockHearingSession,
   NextHearingHistoryResponse,
   ProceedingIntelligenceResponse,
@@ -154,6 +158,13 @@ export default function MatterHearingsPage() {
   const mockHearingQuery = useQuery({
     queryKey: ["matters", matterId, "mock-hearings"],
     queryFn: () => fetchMockHearings({ matterId }),
+    enabled: Boolean(matterId),
+  });
+  // Nov 27 row 7: Start session is enabled only when the server says the
+  // start path's prerequisites hold; the panel offers the next action.
+  const mockReadinessQuery = useQuery({
+    queryKey: ["matters", matterId, "mock-hearing-readiness"],
+    queryFn: () => fetchMockHearingReadiness({ matterId }),
     enabled: Boolean(matterId),
   });
   const hearingCoachQuery = useQuery({
@@ -258,6 +269,27 @@ export default function MatterHearingsPage() {
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not start mock hearing."));
+      // The prerequisites changed under us (another user, disposal): re-read.
+      void mockReadinessQuery.refetch();
+    },
+  });
+  const runAffidavitMutation = useMutation({
+    mutationFn: (attachmentId: string) =>
+      analyzeAffidavitIntelligence({ matterId, attachmentId }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["matters", matterId, "mock-hearing-readiness"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["matters", matterId, "affidavit-intelligence"],
+        }),
+      ]);
+      toast.success("Affidavit intelligence completed.");
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err, "Could not run affidavit intelligence."));
+      void mockReadinessQuery.refetch();
     },
   });
   const submitMockResponseMutation = useMutation({
@@ -805,6 +837,13 @@ export default function MatterHearingsPage() {
         response={mockHearingQuery.data}
         isLoading={mockHearingQuery.isPending}
         isError={mockHearingQuery.isError}
+        readiness={mockReadinessQuery.data}
+        readinessLoading={mockReadinessQuery.isPending}
+        readinessError={mockReadinessQuery.isError}
+        readinessRefreshing={mockReadinessQuery.isFetching}
+        onRefreshReadiness={() => void mockReadinessQuery.refetch()}
+        isRunningAffidavit={runAffidavitMutation.isPending}
+        onRunAffidavit={(attachmentId) => runAffidavitMutation.mutate(attachmentId)}
         canRun={canRunMockHearing}
         responseDraft={mockResponseDraft}
         isStarting={startMockMutation.isPending}
@@ -1741,6 +1780,13 @@ function MockHearingSection({
   response,
   isLoading,
   isError,
+  readiness,
+  readinessLoading,
+  readinessError,
+  readinessRefreshing,
+  onRefreshReadiness,
+  isRunningAffidavit,
+  onRunAffidavit,
   canRun,
   responseDraft,
   isStarting,
@@ -1755,6 +1801,13 @@ function MockHearingSection({
   response: MockHearingListResponse | undefined;
   isLoading: boolean;
   isError: boolean;
+  readiness: MockHearingReadinessResponse | undefined;
+  readinessLoading: boolean;
+  readinessError: boolean;
+  readinessRefreshing: boolean;
+  onRefreshReadiness: () => void;
+  isRunningAffidavit: boolean;
+  onRunAffidavit: (attachmentId: string) => void;
   canRun: boolean;
   responseDraft: string;
   isStarting: boolean;
@@ -1769,6 +1822,25 @@ function MockHearingSection({
   const question = currentMockQuestion(session);
   const latestResponse = latestMockResponse(session);
   const scorecard = session?.scorecard;
+  const ready = readiness?.ready === true;
+  const readinessPanel = readiness ? (
+    <MockHearingReadinessPanel
+      matterId={matterId}
+      readiness={readiness}
+      canRun={canRun}
+      isRunning={isRunningAffidavit}
+      isRefreshing={readinessRefreshing}
+      onRunAffidavitIntelligence={onRunAffidavit}
+      onRefresh={onRefreshReadiness}
+    />
+  ) : readinessError ? (
+    <p role="alert" className="text-sm text-[var(--color-danger-600)]">
+      Mock hearing prerequisites could not be checked.{" "}
+      <button type="button" className="underline" onClick={onRefreshReadiness}>
+        Retry
+      </button>
+    </p>
+  ) : null;
   return (
     <Card className="lg:col-span-2" data-testid="mock-hearing-section">
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -1783,7 +1855,16 @@ function MockHearingSection({
           <Button
             type="button"
             size="sm"
-            disabled={isStarting}
+            // Impossible until the server confirms the question bank exists.
+            disabled={isStarting || !ready}
+            aria-describedby={readiness && !ready ? "mock-hearing-readiness-detail" : undefined}
+            title={
+              readinessLoading
+                ? "Checking prerequisites"
+                : !ready
+                  ? readiness?.next_action_detail
+                  : undefined
+            }
             onClick={onStart}
             data-testid="mock-hearing-start"
           >
@@ -1808,11 +1889,23 @@ function MockHearingSection({
             Mock hearing sessions could not be loaded.
           </p>
         ) : !session ? (
-          <EmptyState
-            icon={HelpCircle}
-            title="No mock hearing sessions"
-            description="Generate affidavit intelligence first, then start a text practice session from the source-backed question bank."
-          />
+          readiness && !ready ? (
+            readinessPanel
+          ) : (
+            <div className="grid gap-3">
+              {readinessError ? readinessPanel : null}
+              <EmptyState
+                icon={HelpCircle}
+                title="No mock hearing sessions"
+                description={
+                  ready
+                    ? (readiness?.next_action_detail ?? "") +
+                      " Start a text practice session when you are ready."
+                    : "Checking what a mock hearing session needs."
+                }
+              />
+            </div>
+          )
         ) : (
           <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
             <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg)] p-4">

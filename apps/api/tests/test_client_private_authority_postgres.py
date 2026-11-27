@@ -21,6 +21,7 @@ from sqlalchemy.pool import NullPool
 from caseops_api.db.models import (
     AuditEvent,
     Client,
+    ClientKycDocument,
     CompanyMembership,
     Matter,
     MatterClientAssignment,
@@ -36,6 +37,7 @@ from caseops_api.schemas.clients import (
     ClientVerificationUpdateRequest,
     KycRejectRequest,
     KycSubmitRequest,
+    KycVerifyRequest,
     MatterClientAssignRequest,
 )
 from caseops_api.schemas.employees import EmployeeOffboardingRequest
@@ -102,6 +104,34 @@ def _fixture(engine, writer, *, indexed=True):
             granted_by_label_snapshot="Fixture inviter",
         )
         session.add_all([grant, MatterClientAssignment(matter_id=matter_id, client_id=client.id)])
+        # BUG-003: a submit or approval needs the client's uploaded KYC files.
+        kyc_documents = [
+            ClientKycDocument(
+                company_id=company_id,
+                client_id=client.id,
+                document_type=document_type,
+                original_filename=f"{document_type}.pdf",
+                content_type="application/pdf",
+                size_bytes=128,
+                sha256_hex="b" * 64,
+                storage_key=f"{company_id}/client-kyc/{client.id}/{uuid4()}.pdf",
+                uploaded_by_membership_id=actor_id,
+            )
+            for document_type in ("pan", "aadhaar_masked")
+        ]
+        session.add_all(kyc_documents)
+        session.flush()
+        # An approval names only files its reviewer opened after upload.
+        session.add_all([
+            AuditEvent(
+                company_id=company_id, actor_type="human", actor_membership_id=actor_id,
+                action="client.kyc_document_viewed", target_type="client",
+                target_id=client.id, result="success",
+                metadata_json=json.dumps({"document_id": doc.id}),
+                created_at=doc.created_at + timedelta(seconds=1),
+            )
+            for doc in kyc_documents
+        ])
         if indexed:
             ensure_active_private_generation(session, company_id=company_id)
         session.commit()
@@ -113,6 +143,7 @@ def _fixture(engine, writer, *, indexed=True):
             client_id=client.id,
             portal_id=portal.id,
             grant_id=grant.id,
+            kyc_document_ids=[doc.id for doc in kyc_documents],
         )
 
 
@@ -144,7 +175,11 @@ def _write(session, fixture, writer, *, dirty_source=False, context=None):
     if writer == "submit":
         return clients.submit_client_kyc(session, **kwargs, payload=KycSubmitRequest(documents=[]))
     if writer == "verify":
-        return clients.verify_client_kyc(session, **kwargs)
+        return clients.verify_client_kyc(
+            session,
+            **kwargs,
+            payload=KycVerifyRequest(reviewed_document_ids=fixture["kyc_document_ids"]),
+        )
     if writer == "reject":
         return clients.reject_client_kyc(
             session,
@@ -158,7 +193,9 @@ def _write(session, fixture, writer, *, dirty_source=False, context=None):
             session,
             **kwargs,
             matter_id=fixture["matter_id"],
-            payload=ClientVerificationUpdateRequest(status="verified"),
+            payload=ClientVerificationUpdateRequest(
+                status="verified", reviewed_document_ids=fixture["kyc_document_ids"],
+            ),
         )
     if writer == "assign":
         return clients.assign_client_to_matter(

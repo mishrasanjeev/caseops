@@ -316,7 +316,7 @@ describe("MatterStatutesPage", () => {
       expect.stringContaining("Pending third Act"),
     ]);
     const pendingActs = within(acts).getByRole("group", {
-      name: "Verification pending — cannot be attached yet",
+      name: "Not attachable until official text is verified",
     });
     expect(within(pendingActs).getAllByRole("option")).toHaveLength(2);
     for (const option of within(pendingActs).getAllByRole("option")) {
@@ -337,7 +337,7 @@ describe("MatterStatutesPage", () => {
       "First Schedule — First Schedule — not attachable",
     ]);
     const pending = within(sections).getByRole("group", {
-      name: "Verification pending — cannot be attached yet",
+      name: "Not attachable until official text is verified",
     });
     expect(within(pending).getByRole("option", { name: /Article 15/ })).toHaveAttribute(
       "aria-disabled", "true",
@@ -845,5 +845,86 @@ describe("MatterStatutesPage", () => {
     expect(screen.queryByTestId("matter-statute-no-selectable-acts")).not.toBeInTheDocument();
     expect(listStatutesMock).toHaveBeenCalledTimes(2);
     expect(listStatuteSectionsMock).not.toHaveBeenCalled();
+  });
+
+  describe("Nov 27 row 4: an unverified Act says why it is disabled", () => {
+    function rowFourCatalog() {
+      listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+      listStatutesMock.mockResolvedValue({
+        statutes: [
+          { id: "constitution-india", short_name: "Constitution", long_name: "The Constitution of India", section_count: 2, catalog_section_count: 4 },
+          { id: "income-tax-1961", short_name: "Income Tax Act", long_name: "Income-tax Act 1961", section_count: 0, catalog_section_count: 298 },
+        ],
+        total_section_count: 2,
+        total_catalog_section_count: 302,
+      });
+      const verified = (id: string, number: string) => ({
+        id, section_number: number, section_label: "Verified", selection_state: "verified_selectable",
+      });
+      listStatuteSectionsMock.mockResolvedValue({
+        statute: {},
+        sections: [verified("a-14", "Article 14"), verified("a-21", "Article 21")],
+        catalog_sections: [
+          verified("a-14", "Article 14"),
+          { id: "a-15", section_number: "Article 15", section_label: "Pending", selection_state: "verification_pending" },
+          verified("a-21", "Article 21"),
+          { id: "a-31", section_number: "Article 31", section_label: "[Omitted.]", selection_state: "retired" },
+        ],
+        verified_section_count: 2,
+        catalog_section_count: 4,
+      });
+    }
+
+    it("explains the disabled Income Tax Act outside the list and to assistive technology", async () => {
+      rowFourCatalog();
+      const user = userEvent.setup();
+      render(withClient(<MatterStatutesPage />));
+      await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+
+      // Visible without opening the list, so the reason is not a hover or a guess.
+      const note = await screen.findByTestId("matter-statute-pending-acts-note");
+      expect(note).toHaveTextContent("Why some Acts are disabled.");
+      expect(note).toHaveTextContent(
+        "1 of 2 Acts (Income Tax Act) has no provision whose text has been verified against an official edition yet. This is intentional",
+      );
+      expect(note).toHaveTextContent("becomes selectable automatically once the official text is verified");
+      expect(screen.getByTestId("matter-statute-catalog-coverage")).toHaveTextContent(
+        "2 verified of 302 catalogued sections across 2 Acts. 1 attachable Act is listed first.",
+      );
+
+      const acts = await openOptions("Act");
+      const incomeTax = within(acts).getByRole("option", { name: /^Income Tax Act — / });
+      expect(incomeTax).toHaveAttribute("aria-disabled", "true");
+      expect(incomeTax).toHaveTextContent(
+        "Income Tax Act — Income-tax Act 1961 (0 verified of 298 catalogued; not attachable until verified)",
+      );
+      expect(incomeTax).toHaveAccessibleDescription(/This is intentional: CaseOps attaches, quotes and cites only verified statutory text/);
+      const pendingGroup = within(acts).getByRole("group", { name: "Not attachable until official text is verified" });
+      expect(within(pendingGroup).getByTestId("matter-statute-act-group-pending-reason")).toHaveTextContent(
+        "Disabled on purpose: no provision of these Acts has verified official text yet.",
+      );
+      // Selecting the disabled Act does nothing and leaves submission blocked.
+      fireEvent.click(incomeTax);
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeDisabled();
+      expect(listStatuteSectionsMock).not.toHaveBeenCalled();
+
+      // The verified sections of a partially verified Act stay attachable.
+      fireEvent.click(within(acts).getByRole("option", { name: /^Constitution — / }));
+      const sections = await openOptions("Section");
+      const pendingSection = within(sections).getByRole("option", { name: /Article 15/ });
+      expect(pendingSection).toHaveAttribute("aria-disabled", "true");
+      expect(pendingSection).toHaveAccessibleDescription(/Disabled provisions are intentional/);
+      fireEvent.click(within(sections).getByRole("option", { name: /Article 21/ }));
+      expect(screen.getByTestId("matter-statute-add-submit")).toBeEnabled();
+    });
+
+    it("shows no disabled-Act explanation when every Act is attachable", async () => {
+      recoveryCatalog();
+      const user = userEvent.setup();
+      render(withClient(<MatterStatutesPage />));
+      await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+      await waitFor(() => expect(screen.getByRole("combobox", { name: "Act" })).toBeEnabled());
+      expect(screen.queryByTestId("matter-statute-pending-acts-note")).toBeNull();
+    });
   });
 });

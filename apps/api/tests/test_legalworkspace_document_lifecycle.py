@@ -389,16 +389,16 @@ def test_lw_s3_metadata_patch_respects_team_scoping(client: TestClient) -> None:
     denied = client.patch(
         f"/api/matters/{matter_id}/attachments/{attachment_id}/metadata",
         headers=_auth(blocked_token),
-        json={"document_type": "notice"},
+        json={"document_type": "complaint_petition"},
     )
     assert denied.status_code == 404, denied.text
 
     allowed = client.patch(
         f"/api/matters/{matter_id}/attachments/{attachment_id}/metadata",
         headers=_auth(allowed_token),
-        json={"document_type": "notice"},
+        json={"document_type": "complaint_petition"},
     )
     assert allowed.status_code == 200, allowed.text
-    assert allowed.json()["document_type"] == "notice"
+    assert allowed.json()["document_type"] == "complaint_petition"
     assert allowed.json()["lifecycle_stage"] == "initiation"
     assert blocked_mid != allowed_mid

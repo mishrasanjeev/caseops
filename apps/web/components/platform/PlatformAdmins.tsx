@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { ConsoleError, consoleErrorMessage, platformApi } from "@/lib/platform/client";
 import type { ConsoleManagedAdmin } from "@/lib/platform/schemas";
 import { usePlatformSession } from "@/lib/platform/session";
@@ -84,7 +85,7 @@ function AdminDirectory() {
   return <div className="min-w-0 space-y-6">
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
       <h1 className="text-2xl font-bold">Report administrators</h1>
-      <Button type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 px-0" title="Reload administrators" aria-label="Reload administrators" disabled={pending || result.pending} onClick={() => { setSelected(null); setReason(""); result.reload(); }}><RefreshCw className="h-4 w-4" aria-hidden /></Button>
+      <IconButton label="Reload administrators" type="button" variant="outline" size="sm" className="h-9 w-9 shrink-0 px-0" disabled={pending || result.pending} onClick={() => { setSelected(null); setReason(""); result.reload(); }}><RefreshCw className="h-4 w-4" aria-hidden /></IconButton>
     </div>
     <form onSubmit={invite} aria-label="Invite report administrator" className="grid min-w-0 gap-4 border-y border-[var(--color-line)] py-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
       <div className="space-y-2"><Label htmlFor="admin-invite-name">Full name</Label><Input id="admin-invite-name" autoComplete="off" maxLength={255} required value={name} onChange={(event) => setName(event.target.value)} disabled={pending} /></div>
@@ -100,10 +101,10 @@ function AdminDirectory() {
       <tbody>{result.data.items.map((row) => <tr key={row.id} className="border-b border-[var(--color-line)]">
         <td className="max-w-56 break-words p-3">{row.full_name}</td><td className="max-w-64 break-all p-3">{row.email}</td><td className="p-3">{row.role}</td><td className="p-3">{row.status}</td>
         <td className="p-3"><div className="flex min-w-0 flex-wrap gap-2">
-          {row.status === "pending" ? <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" title="Resend invitation" aria-label={`Resend invitation for ${row.full_name}`} disabled={pending || !row.can_manage || row.role !== "viewer" || row.id === session.auth?.admin?.id} onClick={() => void resend(row)}><Mail className="h-4 w-4" aria-hidden /></Button> : null}
-          {row.status === "revoked" && row.role === "viewer" ? <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" title="Invite again" aria-label={`Invite ${row.full_name} again`} disabled={pending || !row.can_manage || row.id === session.auth?.admin?.id} onClick={() => prepareInvitation(row)}><UserPlus className="h-4 w-4" aria-hidden /></Button> : null}
+          {row.status === "pending" ? <IconButton label={`Resend invitation for ${row.full_name}`} type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" disabled={pending || !row.can_manage || row.role !== "viewer" || row.id === session.auth?.admin?.id} onClick={() => void resend(row)}><Mail className="h-4 w-4" aria-hidden /></IconButton> : null}
+          {row.status === "revoked" && row.role === "viewer" ? <IconButton label={`Invite ${row.full_name} again`} type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" disabled={pending || !row.can_manage || row.id === session.auth?.admin?.id} onClick={() => prepareInvitation(row)}><UserPlus className="h-4 w-4" aria-hidden /></IconButton> : null}
           <Button type="button" variant="outline" size="sm" disabled={pending || !row.can_manage || row.role !== "viewer" || row.status === "revoked" || row.id === session.auth?.admin?.id} onClick={() => { setSelected({ admin: row, action: "revoke" }); setReason(""); }}><UserMinus className="h-4 w-4" aria-hidden />Revoke</Button>
-          <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" title="Delete report access" aria-label={`Delete report access for ${row.full_name}`} disabled={pending || !row.can_manage || row.role !== "viewer" || row.id === session.auth?.admin?.id} onClick={() => { setSelected({ admin: row, action: "remove" }); setReason(""); }}><Trash2 className="h-4 w-4" aria-hidden /></Button>
+          <IconButton label={`Delete report access for ${row.full_name}`} type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 px-0" disabled={pending || !row.can_manage || row.role !== "viewer" || row.id === session.auth?.admin?.id} onClick={() => { setSelected({ admin: row, action: "remove" }); setReason(""); }}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>
         </div></td>
       </tr>)}{!result.data.items.length ? <tr><td colSpan={5} className="p-6 text-[var(--color-mute)]">No administrators on this page.</td></tr> : null}</tbody>
     </table></div> : null}

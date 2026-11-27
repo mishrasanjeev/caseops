@@ -21,6 +21,7 @@ from caseops_api.api.routes import (
     contracts,
     courts,
     data_governance,
+    document_branding,
     drafting,
     drive,
     email_templates,
@@ -145,6 +146,14 @@ def register_api_routes(application: FastAPI) -> None:
         tags=["product-guide"],
     )
     application.include_router(drafting.router, prefix="/api/drafting", tags=["drafting"])
+    application.include_router(
+        document_branding.router,
+        prefix="/api/admin/document-branding",
+        tags=["document-branding"],
+    )
+    application.include_router(
+        document_branding.public_router, prefix="/api/verify", tags=["document-verification"]
+    )
     application.include_router(contracts.router, prefix="/api/contracts", tags=["contracts"])
     application.include_router(
         outside_counsel.router,

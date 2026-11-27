@@ -153,6 +153,11 @@ test.describe("Hari 2026-07-02 deployed fixes", () => {
         page.getByRole("heading", { name: "Notices", exact: true }),
       ).toBeVisible();
 
+      // Notice details are required since the 2026-11-27 validation fix.
+      await page.getByTestId("matter-notice-received-on").fill("2026-07-02");
+      await page.getByTestId("matter-notice-type").fill("Legal demand");
+      await page.getByTestId("matter-notice-subject").fill("Section 138 demand notice");
+      await page.getByTestId("matter-notice-reply-due-on").fill("2026-07-17");
       const fixtureDir = path.join(process.cwd(), ".e2e", "prod-upload-fixtures");
       fs.mkdirSync(fixtureDir, { recursive: true });
       const filename = `${matterCode.toLowerCase()}-demand-notice.txt`;
@@ -170,6 +175,8 @@ test.describe("Hari 2026-07-02 deployed fixes", () => {
         { timeout: 90_000 },
       );
       await page.setInputFiles('[data-testid="matter-notice-file-input"]', filePath);
+      // Choosing the file no longer uploads; the complete form is submitted.
+      await page.getByTestId("matter-notice-upload").click();
       const response = await uploadResponse;
       expect(
         response.status(),

@@ -270,6 +270,87 @@ def build_batch_pdf(path: str, pages: list[int]) -> bytes:
             source.close()
 
 
+# Image formats sent to Sarvam Parse as they are (PIL format -> name suffix, type).
+_SARVAM_IMAGE_TYPES = {"PNG": ("png", "image/png"), "JPEG": ("jpg", "image/jpeg")}
+_EXIF_ORIENTATION = 0x0112
+
+
+def _open_image(data: bytes) -> Any:
+    from PIL import Image
+
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()
+    except Image.DecompressionBombError as exc:
+        raise RenditionFailure(
+            "image_too_large",
+            "The image has too many pixels to OCR. Save it at 300 DPI or less and "
+            "upload it again.",
+        ) from exc
+    except (OSError, SyntaxError, ValueError) as exc:
+        raise RenditionFailure(
+            "image_unreadable",
+            "The image could not be opened; it may be damaged. Re-save it as PNG or "
+            "JPEG and upload it again.",
+        ) from exc
+    return image
+
+
+def _flatten_for_ocr(image: Any) -> Any:
+    """Return an RGB or L copy: transparency on white, 16-bit scaled, not clipped."""
+
+    from PIL import Image
+
+    if image.mode in {"RGBA", "LA", "PA", "La", "RGBa"} or "transparency" in image.info:
+        rgba = image.convert("RGBA")
+        ground = Image.new("RGB", rgba.size, "white")
+        ground.paste(rgba, mask=rgba.getchannel("A"))
+        return ground
+    if image.mode.startswith("I"):
+        # Pillow clips 16-bit values to 255 on convert("L"), turning a scan white.
+        peak = 65535 if image.mode.startswith("I;16") else (image.getextrema()[1] or 1)
+        return image.convert("I").point(lambda value: value * 255 / peak).convert("L")
+    if image.mode in {"1", "L", "RGB"}:
+        return image.convert("L") if image.mode == "1" else image.copy()
+    return image.convert("RGB")
+
+
+def build_image_upload(path: str) -> tuple[bytes, str, str]:
+    """Return ``(bytes, suffix, media type)`` that Sarvam reads as the page shown.
+
+    A plain upright PNG or JPEG is sent byte for byte. A phone photo with an
+    EXIF rotation, a transparent PNG (dark text on a transparent ground), a
+    CMYK JPEG or a multi-picture (MPO) camera JPEG is turned upright,
+    flattened on white and re-encoded from its first frame.
+    """
+
+    from PIL import ImageOps
+
+    with open(path, "rb") as handle:
+        data = handle.read()
+    with _open_image(data) as image:
+        source_format = image.format or ""
+        orientation = image.getexif().get(_EXIF_ORIENTATION, 1)
+        if (
+            source_format in _SARVAM_IMAGE_TYPES
+            and orientation not in range(2, 9)
+            and getattr(image, "n_frames", 1) == 1
+            and image.mode not in {"RGBA", "LA", "PA", "La", "RGBa", "CMYK", "YCbCr"}
+            and "transparency" not in image.info
+        ):
+            suffix, media_type = _SARVAM_IMAGE_TYPES[source_format]
+            return data, suffix, media_type
+        upright = _flatten_for_ocr(ImageOps.exif_transpose(image))
+    target = "JPEG" if source_format in {"JPEG", "MPO"} else "PNG"
+    buffer = io.BytesIO()
+    if target == "JPEG":
+        upright.save(buffer, format="JPEG", quality=95, subsampling=0)
+    else:
+        upright.save(buffer, format="PNG")
+    suffix, media_type = _SARVAM_IMAGE_TYPES[target]
+    return buffer.getvalue(), suffix, media_type
+
+
 def _file_sha256(path: str) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -710,6 +791,7 @@ def _run_ocr(
         if fmt == "pdf":
             inspected = inspect_pdf(path, language=language)
         else:
+            build_image_upload(path)  # refuse an undecodable image before any spend
             inspected = [(1, None, "image")]
         pages = []
         for number, native_text, reason in inspected:
@@ -822,11 +904,12 @@ def _run_ocr(
 
 def _content_for_batch(path: str, fmt: str, numbers: list[int], filename: str,
                        content_type: str) -> tuple[str, bytes, str]:
+    # Sarvam names its output after the upload, so every batch gets the same
+    # neutral ``pages-<first>-<last>`` stem; the type comes from the bytes, never
+    # from the declared (possibly octet-stream) content type.
     if fmt == "image":
-        with open(path, "rb") as handle:
-            data = handle.read()
-        suffix = filename.rsplit(".", 1)[-1].lower()
-        return f"page-1.{suffix}", data, content_type or "image/jpeg"
+        data, suffix, media_type = build_image_upload(path)
+        return f"pages-{numbers[0]}-{numbers[-1]}.{suffix}", data, media_type
     return (
         f"pages-{numbers[0]}-{numbers[-1]}.pdf",
         build_batch_pdf(path, numbers),
@@ -886,6 +969,8 @@ def _run_sarvam(
     for position, numbers in enumerate(batches):
         if _monotonic() >= deadline:
             break
+        # Built before the hold: a local failure here must not strand a reservation.
+        name, content, media_type = _content_for_batch(path, fmt, numbers, filename, content_type)
         try:
             reservation_id = _reserve(
                 company_id=company_id,
@@ -898,7 +983,6 @@ def _run_sarvam(
             for remaining in batches[position:]:
                 fail(remaining, failure.code)
             break
-        name, content, media_type = _content_for_batch(path, fmt, numbers, filename, content_type)
         # Commit the intent before any byte leaves: if the worker dies after
         # Sarvam accepts the file, recovery sees this entry and does not pay
         # for the same pages again.
@@ -1169,6 +1253,31 @@ def _ocr_failure_message(code: str) -> str:
         ),
         "provider_budget_exhausted": (
             "The workspace paid-provider budget is exhausted; no OCR request was made."
+        ),
+        "provider_page_missing": (
+            "Sarvam OCR finished but returned no text for these pages. Check that the scan is "
+            "sharp, upright and at least 300 DPI, then retry or upload a clearer copy."
+        ),
+        "provider_failed": (
+            "Sarvam OCR could not process the file. Retry; if it fails again, upload a "
+            "clearer scan as PDF, PNG or JPEG."
+        ),
+        "provider_rejected": (
+            "Sarvam OCR rejected the job before reading it (file validation or account "
+            "entitlement). Re-save the file as PDF, PNG or JPEG and retry; if it is "
+            "rejected again, ask your administrator to check the OCR service."
+        ),
+        "provider_invalid_request": (
+            "Sarvam OCR rejected the request. If the file is not a plain PDF, PNG or JPEG, "
+            "re-save it in one of those formats and upload it again."
+        ),
+        "provider_invalid_file": (
+            "Sarvam OCR could not open the file; it may be damaged. Re-save it as PDF, "
+            "PNG or JPEG and upload it again."
+        ),
+        "provider_file_too_large": (
+            "The file is larger than Sarvam OCR accepts (100 MB). Split it or reduce "
+            "its resolution, then upload it again."
         ),
     }
     if code in messages:

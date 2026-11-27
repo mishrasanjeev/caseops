@@ -259,7 +259,8 @@ def test_bug016_outside_counsel_submission_reconciles_and_prints_review_copy(
     rendered = assert_legible(pdf.content)
     assert "OUTSIDE COUNSEL INVOICE - SUBMITTED FOR REVIEW" in rendered.text
     assert "Tax Invoice" not in rendered.text
-    assert "OC Counsel (outside counsel)" in rendered.text
+    # ENH-001: the counsel is the supplier (letterhead), the firm is billed.
+    assert compact("Outside counsel | OC Counsel | oc@portal.example") in compact(rendered.text)
     assert compact("Taxable value INR 1,000.00") in compact(rendered.text)
     # A free-text portal invoice number must not break the page footer.
     assert compact("REVIEW COPY | OC-{BUG016}-1 | Page 1 of 1") in compact(rendered.text)
@@ -539,7 +540,7 @@ def test_bug016_stored_outside_counsel_row_with_zero_taxable_value_prints_subtot
     assert compact("Taxable value INR 1,000.00") in text
     assert compact("Grand total INR 1,000.00") in text
     assert "OUTSIDE COUNSEL INVOICE - SUBMITTED FOR REVIEW" in rendered.text
-    assert "OC Counsel (outside counsel)" in rendered.text
+    assert compact("Outside counsel | OC Counsel | oc@portal.example") in text
     assert compact("Appearance before the DRT") in text
 
 

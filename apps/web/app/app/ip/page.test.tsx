@@ -1846,7 +1846,8 @@ describe("IpDocketPage", () => {
     });
     render(withClient(<IpDocketPage />));
     const action = await screen.findByRole("button", { name: "Workspace configuration" });
-    expect(action).toHaveAttribute("title", "Workspace configuration");
+    // Named by the shared Tooltip (hover and keyboard focus), not a native title.
+    expect(action).not.toHaveAttribute("title");
     expect(action).toHaveAttribute("aria-expanded", "false");
     expect(action).toHaveAttribute("aria-controls", "ip-workspace-configuration-panel");
     expect(screen.queryByTestId("ip-workspace-configuration")).not.toBeInTheDocument();

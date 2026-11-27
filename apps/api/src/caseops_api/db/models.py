@@ -7131,6 +7131,112 @@ class MatterInvoiceExport(Base):
     generated_by_membership: Mapped[CompanyMembership | None] = relationship()
 
 
+class CompanyDocumentBranding(Base):
+    """ENH-001: the firm's letterhead assets for every billing PDF.
+
+    One row per company. Images are stored re-encoded as PNG in document
+    storage (never the uploaded bytes); the SHA-256 lets the renderer refuse a
+    stored object that no longer matches what the admin uploaded.
+    """
+
+    __tablename__ = "company_document_brandings"
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_company_document_branding_company"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    signatory_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    signatory_designation: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    watermark_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
+    watermark_text: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    logo_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    logo_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    logo_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    logo_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    signature_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    signature_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+
+class BillingDocumentVerification(Base):
+    """ENH-001: one row per generated billing PDF, behind its QR code.
+
+    Only the SHA-256 of the verification token is stored, so the table cannot
+    be used to rebuild a working link. ``pdf_sha256`` is the digest of the exact
+    bytes served, so a verifier can detect an altered copy.
+    """
+
+    __tablename__ = "billing_document_verifications"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_billing_document_verification_token"),
+        Index(
+            "ix_billing_document_verifications_source",
+            "company_id",
+            "source_type",
+            "source_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    document_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    document_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    document_issued_on: Mapped[date] = mapped_column(Date, nullable=False)
+    issuer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    status_at_generation: Mapped[str] = mapped_column(String(32), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class CauseListExport(Base):
     __tablename__ = "cause_list_exports"
 
@@ -12656,6 +12762,14 @@ class ForumCatalogEntry(Base):
     consumer_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
     source_name: Mapped[str] = mapped_column(String(160), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # The court or tribunal's own official website, opened from every court
+    # badge. Only an https address on a government domain, recorded with the
+    # government directory or official page that confirmed it; null means the
+    # badge renders as plain text rather than a guessed link.
+    official_website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    official_website_source_url: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
     lineage: Mapped[str] = mapped_column(String(500), nullable=False)
     aliases_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -22929,5 +23043,9 @@ event.listen(
 from caseops_api.db import document_rendition_models as _rendition_models  # noqa: E402
 
 MatterAttachmentRendition = _rendition_models.MatterAttachmentRendition
+
+from caseops_api.db import client_kyc_document_models as _client_kyc_models  # noqa: E402
+
+ClientKycDocument = _client_kyc_models.ClientKycDocument
 
 ensure_foreign_key_indexes(Base.metadata)

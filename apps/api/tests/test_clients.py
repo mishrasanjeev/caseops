@@ -18,6 +18,11 @@ from sqlalchemy import select
 
 from caseops_api.db.models import Client, Matter, MatterClientAssignment
 from caseops_api.db.session import get_session_factory
+from tests.kyc_test_support import (
+    open_kyc_documents,
+    upload_complete_kyc_pack,
+    verify_kyc,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -205,6 +210,7 @@ def test_contact_edit_preserves_verified_kyc_identity_audit_and_matter_links(
     )
     assert assignment.status_code == 200, assignment.text
     attachment_id = _seed_verification_attachment(matter["id"])
+    pack_ids = upload_complete_kyc_pack(client, token, cid)
     submitted = client.patch(
         f"/api/matters/{matter['id']}/client-verification/{cid}",
         headers=auth_headers(token),
@@ -215,9 +221,11 @@ def test_contact_edit_preserves_verified_kyc_identity_audit_and_matter_links(
         }]},
     )
     assert submitted.status_code == 200, submitted.text
+    open_kyc_documents(client, token, cid, pack_ids)
     verified = client.patch(
         f"/api/matters/{matter['id']}/client-verification/{cid}",
-        headers=auth_headers(token), json={"status": "verified"},
+        headers=auth_headers(token),
+        json={"status": "verified", "reviewed_document_ids": pack_ids},
     )
     assert verified.status_code == 200, verified.text
     if editor_role != "owner":
@@ -397,6 +405,7 @@ def test_client_generic_update_rejects_review_decision_status(
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]
+    upload_complete_kyc_pack(client, token, cid)
     submit = client.post(
         f"/api/clients/{cid}/kyc/submit",
         headers=auth_headers(token),
@@ -818,6 +827,7 @@ def test_kyc_submit_then_verify_round_trip(client: TestClient) -> None:
     Status, audit columns, and document list all populate."""
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]
+    upload_complete_kyc_pack(client, token, cid)
 
     submitted = client.post(
         f"/api/clients/{cid}/kyc/submit",
@@ -833,9 +843,7 @@ def test_kyc_submit_then_verify_round_trip(client: TestClient) -> None:
     assert body["kyc_submitted_at"] is not None
     assert len(body["kyc_documents"]) == 2
 
-    verified = client.post(
-        f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
-    )
+    verified = verify_kyc(client, token, cid)
     assert verified.status_code == 200
     body = verified.json()
     assert body["kyc_status"] == "verified"
@@ -852,12 +860,14 @@ def test_kyc_reject_records_reason_then_resubmit_clears_it(
     is not biased by the previous rejection."""
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]
+    upload_complete_kyc_pack(client, token, cid)
 
-    client.post(
+    first = client.post(
         f"/api/clients/{cid}/kyc/submit",
         headers=auth_headers(token),
         json={"documents": [{"name": "PAN"}]},
     )
+    assert first.status_code == 200, first.text
     rejected = client.post(
         f"/api/clients/{cid}/kyc/reject",
         headers=auth_headers(token),
@@ -888,6 +898,7 @@ def test_kyc_verify_refuses_when_not_pending_409(client: TestClient) -> None:
     cid = _mk_client(client, token).json()["id"]
     resp = client.post(
         f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
+        json={"reviewed_document_ids": upload_complete_kyc_pack(client, token, cid)},
     )
     assert resp.status_code == 409
     assert "submit" in resp.json()["detail"].lower()
@@ -899,6 +910,7 @@ def test_kyc_review_requires_staff_capability_403(client: TestClient) -> None:
     who collected docs and the partner who approves them."""
     token = _bootstrap_with_role(client, "para", "paralegal")
     cid = _mk_client(client, token).json()["id"]
+    pack_ids = upload_complete_kyc_pack(client, token, cid)
 
     submitted = client.post(
         f"/api/clients/{cid}/kyc/submit",
@@ -909,6 +921,7 @@ def test_kyc_review_requires_staff_capability_403(client: TestClient) -> None:
 
     verify = client.post(
         f"/api/clients/{cid}/kyc/verify", headers=auth_headers(token),
+        json={"reviewed_document_ids": pack_ids},
     )
     assert verify.status_code == 403
     reject = client.post(
@@ -1011,6 +1024,7 @@ def test_matter_client_verification_workflow_links_attachment_and_audits_redacte
     )
     assert listing.status_code == 200, listing.text
     assert listing.json()["clients"][0]["status"] == "not_required"
+    pack_ids = upload_complete_kyc_pack(client, token, cid)
 
     submitted = client.patch(
         f"/api/matters/{matter['id']}/client-verification/{cid}",
@@ -1033,10 +1047,11 @@ def test_matter_client_verification_workflow_links_attachment_and_audits_redacte
     assert body["documents"][0]["attachment_id"] == attachment_id
     assert "storage_key" not in json.dumps(body).lower()
 
+    open_kyc_documents(client, token, cid, pack_ids)
     reviewed = client.patch(
         f"/api/matters/{matter['id']}/client-verification/{cid}",
         headers=auth_headers(token),
-        json={"status": "verified"},
+        json={"status": "verified", "reviewed_document_ids": pack_ids},
     )
     assert reviewed.status_code == 200, reviewed.text
     body = reviewed.json()
@@ -1073,6 +1088,7 @@ def test_client_verification_reject_records_reviewer_and_redacts_reason_audit(
 
     token = str(bootstrap_company(client)["access_token"])
     cid = _mk_client(client, token).json()["id"]
+    upload_complete_kyc_pack(client, token, cid)
     submit = client.post(
         f"/api/clients/{cid}/kyc/submit",
         headers=auth_headers(token),

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
     ForumCatalogAlias,
     ForumCatalogEntry,
+    Matter,
     PlatformAdminMembership,
 )
 from caseops_api.schemas.forum_catalog import ForumCatalogAliasRecord
@@ -45,6 +48,171 @@ def forum_entry_identity_keys(entry: ForumCatalogEntry) -> set[str]:
         for value in (entry.name, *active_verified_aliases(entry))
         if value
     }
+
+
+def active_entries_matching_name(
+    session: Session,
+    court_name: str | None,
+) -> list[ForumCatalogEntry]:
+    """Active catalogue rows whose canonical name or reviewed alias is ``court_name``.
+
+    The one predicate both the matter write path (resolving typed text to a
+    catalogue row) and the court-website read path use, so a badge never links
+    a court the write path would not have resolved.
+    """
+
+    normalized = normalize_forum_catalog_value(court_name)
+    if not normalized:
+        return []
+    return [
+        candidate
+        for candidate in session.scalars(
+            select(ForumCatalogEntry)
+            .options(selectinload(ForumCatalogEntry.aliases))
+            .where(
+                ForumCatalogEntry.is_active.is_(True),
+                or_(
+                    ForumCatalogEntry.normalized_name == normalized,
+                    ForumCatalogEntry.id.in_(
+                        select(ForumCatalogAlias.forum_catalog_entry_id).where(
+                            ForumCatalogAlias.normalized_alias == normalized,
+                            ForumCatalogAlias.is_active.is_(True),
+                            ForumCatalogAlias.verification_status == "verified",
+                        )
+                    ),
+                ),
+            )
+            .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
+        )
+        if normalized in forum_entry_identity_keys(candidate)
+    ]
+
+
+# Court badges link only to government-run sites. A catalogue value outside
+# these domains (or not https) is treated as absent: plain text, no link.
+OFFICIAL_WEBSITE_DOMAIN_SUFFIXES = (".gov.in", ".nic.in")
+
+
+def official_website_or_none(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        parts = urlsplit(value.strip())
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return None
+    if (
+        parts.scheme != "https"
+        or parts.username
+        or parts.password
+        or parts.query
+        or parts.fragment
+        or not host.endswith(OFFICIAL_WEBSITE_DOMAIN_SUFFIXES)
+    ):
+        return None
+    return value.strip()
+
+
+def matter_court_website_urls(
+    session: Session | None, matters: Iterable[Matter]
+) -> dict[str, str | None]:
+    """Official court websites for many matters, keyed by matter id.
+
+    Resolution follows each matter's canonical identity, never its display
+    text: the selected catalogue row first; else the master Court row's
+    catalogue entry (exactly one active row); else, for a legacy free-text
+    court, the same canonical name/reviewed-alias predicate the write path
+    applies (``active_entries_matching_name``), at the matter's forum level,
+    and only when exactly one row matches. A selected catalogue row without a
+    website is final: it never falls back to another row.
+
+    At most two queries for any number of matters: the catalogue rows, plus
+    their aliases only when a legacy free-text name must be confirmed; none
+    when no matter carries a court identity. Only read paths that render the
+    court badge call this.
+    """
+
+    rows = list(matters)
+    urls: dict[str, str | None] = {row.id: None for row in rows}
+    if session is None or not rows:
+        return urls
+    entry_ids: set[str] = set()
+    court_ids: set[str] = set()
+    names: set[str] = set()
+    for row in rows:
+        if row.forum_catalog_entry_id:
+            entry_ids.add(row.forum_catalog_entry_id)
+        elif row.court_id:
+            court_ids.add(row.court_id)
+        else:
+            normalized = normalize_forum_catalog_value(row.court_name)
+            if normalized:
+                names.add(normalized)
+    clauses = []
+    if entry_ids:
+        clauses.append(ForumCatalogEntry.id.in_(entry_ids))
+    if court_ids:
+        clauses.append(ForumCatalogEntry.court_id.in_(court_ids))
+    if names:
+        clauses.append(ForumCatalogEntry.normalized_name.in_(names))
+        clauses.append(
+            ForumCatalogEntry.id.in_(
+                select(ForumCatalogAlias.forum_catalog_entry_id).where(
+                    ForumCatalogAlias.normalized_alias.in_(names),
+                    ForumCatalogAlias.is_active.is_(True),
+                    ForumCatalogAlias.verification_status == "verified",
+                )
+            )
+        )
+    if not clauses:
+        return urls
+    stmt = select(ForumCatalogEntry).where(ForumCatalogEntry.is_active.is_(True), or_(*clauses))
+    if names:
+        # Aliases are read only to confirm a legacy free-text name match.
+        stmt = stmt.options(selectinload(ForumCatalogEntry.aliases))
+    entries = list(session.scalars(stmt))
+    by_id = {entry.id: entry for entry in entries}
+    by_court: dict[str, list[ForumCatalogEntry]] = {}
+    by_name: dict[str, list[ForumCatalogEntry]] = {}
+    for entry in entries:
+        if entry.court_id in court_ids:
+            by_court.setdefault(entry.court_id, []).append(entry)
+        if not names:
+            continue
+        # The same two-step predicate as active_entries_matching_name: the
+        # stored key matched in SQL, and the entry's own identity keys agree.
+        matched = {entry.normalized_name} | {
+            alias.normalized_alias
+            for alias in entry.aliases
+            if alias.is_active and alias.verification_status == "verified"
+        }
+        for name in (matched & names) & forum_entry_identity_keys(entry):
+            by_name.setdefault(name, []).append(entry)
+    for row in rows:
+        if row.forum_catalog_entry_id:
+            entry = by_id.get(row.forum_catalog_entry_id)
+            url = entry.official_website_url if entry is not None else None
+        elif row.court_id:
+            linked = by_court.get(row.court_id, [])
+            url = linked[0].official_website_url if len(linked) == 1 else None
+        else:
+            forum_level = row.forum_level or ""
+            candidates = [
+                candidate
+                for candidate in by_name.get(
+                    normalize_forum_catalog_value(row.court_name), []
+                )
+                if not forum_level or candidate.forum_level == forum_level
+            ]
+            url = candidates[0].official_website_url if len(candidates) == 1 else None
+        urls[row.id] = official_website_or_none(url)
+    return urls
+
+
+def matter_court_website_url(session: Session | None, matter: Matter) -> str | None:
+    """One matter's official court website; see ``matter_court_website_urls``."""
+
+    return matter_court_website_urls(session, [matter])[matter.id]
 
 
 class ForumCatalogAliasError(ValueError):

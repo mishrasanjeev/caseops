@@ -9,6 +9,7 @@ const {
   createNoticeMock,
   downloadNoticeFileMock,
   getNoticeMock,
+  getNoticeUploadPolicyMock,
   getStoredContextMock,
   listNoticeOwnersMock,
   listMattersMock,
@@ -22,6 +23,11 @@ const {
   createNoticeMock: vi.fn(),
   downloadNoticeFileMock: vi.fn(),
   getNoticeMock: vi.fn(),
+  // The API's allow-list and cap, as GET /api/notices/upload-policy returns them.
+  getNoticeUploadPolicyMock: vi.fn(async () => ({
+    allowed_upload_extensions: [".doc", ".docx", ".jpeg", ".jpg", ".pdf", ".png", ".txt"],
+    max_upload_size_bytes: 26214400,
+  })),
   getStoredContextMock: vi.fn(),
   listNoticeOwnersMock: vi.fn(),
   listMattersMock: vi.fn(),
@@ -37,6 +43,7 @@ vi.mock("@/lib/api/notices", () => ({
   createNotice: createNoticeMock,
   downloadNoticeFile: downloadNoticeFileMock,
   getNotice: getNoticeMock,
+  getNoticeUploadPolicy: getNoticeUploadPolicyMock,
   listNotices: listNoticesMock,
   listNoticeOwners: listNoticeOwnersMock,
   updateNotice: updateNoticeMock,
@@ -236,6 +243,10 @@ describe("centralized notice management", () => {
     fireEvent.change(within(dialog).getByLabelText("Subject"), {
       target: { value: "Standalone regulator notice" },
     });
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
     await waitFor(() => expect(createNoticeMock).toHaveBeenCalledTimes(1));
@@ -270,6 +281,10 @@ describe("centralized notice management", () => {
     // Reconciliation can be materially slower than the successful mutation in
     // a production-shaped register. A committed record must still be visible.
     listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
     expect(await screen.findByText(created.subject)).toBeInTheDocument();
@@ -330,6 +345,10 @@ describe("centralized notice management", () => {
     const dialog = await screen.findByTestId("create-notice-dialog");
     fireEvent.change(within(dialog).getByLabelText("Subject"), {
       target: { value: created.subject },
+    });
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
@@ -392,6 +411,10 @@ describe("centralized notice management", () => {
 
     const listCallsBeforeCreate = listNoticesMock.mock.calls.length;
     listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
     await waitFor(() => expect(uploadNoticeFileMock).toHaveBeenCalledTimes(1));
@@ -443,6 +466,10 @@ describe("centralized notice management", () => {
     });
 
     listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
     const row = await screen.findByTestId(`notice-row-${created.id}`);
@@ -477,6 +504,10 @@ describe("centralized notice management", () => {
     });
     fireEvent.click(await within(dialog).findByRole("checkbox", { name: /MAT-001/ }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-002/ }));
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
     await waitFor(() => expect(createNoticeMock).toHaveBeenCalledTimes(1));
@@ -512,6 +543,10 @@ describe("centralized notice management", () => {
     const file = new File(["test"], "demand.pdf", { type: "application/pdf" });
     fireEvent.change(within(dialog).getByLabelText("Notice document (optional)"), {
       target: { files: [file] },
+    });
+    // A notice needs its type (notice_rules); the date defaults to today.
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), {
+      target: { value: "Legal notice" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
 
@@ -763,6 +798,9 @@ describe("centralized notice management", () => {
     });
     fireEvent.change(within(dialog).getByLabelText("Notice type"), {
       target: { value: "Tax" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Received on"), {
+      target: { value: "2026-07-15" },
     });
     fireEvent.change(within(dialog).getByLabelText("Mode"), {
       target: { value: "Portal" },
@@ -1103,4 +1141,188 @@ describe("centralized notice management", () => {
       expect.objectContaining({ signal: expect.anything() }),
     );
   });
+  // Aishwarya 2026-11-27 rows 2/3: the register is the second notice writer and
+  // must refuse the same incomplete or contradictory notices inline.
+  it("refuses an incomplete register notice inline and focuses the first problem", async () => {
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Received on"), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByLabelText("Reply required"));
+    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "-10" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    const date = within(dialog).getByLabelText("Received on");
+    await waitFor(() => expect(date).toHaveFocus());
+    expect(date).toHaveAttribute("aria-invalid", "true");
+    expect(date).toHaveAttribute("aria-describedby", "new-notice-date-error");
+    expect(within(dialog).getByTestId("new-notice-date-error")).toHaveTextContent("Enter the date of receipt.");
+    expect(within(dialog).getByTestId("new-notice-subject-error")).toHaveTextContent("Enter the notice subject.");
+    expect(within(dialog).getByTestId("new-notice-type-error")).toHaveTextContent("Enter the type of notice.");
+    expect(within(dialog).getByTestId("new-notice-amount-error")).toHaveTextContent("Amount cannot be negative.");
+    expect(within(dialog).getByTestId("new-notice-reply-due-error")).toHaveTextContent(
+      "Enter the reply due date, or clear Reply required.",
+    );
+    expect(within(dialog).getByTestId("notice-form-error")).toBeInTheDocument();
+    expect(createNoticeMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses sent recovered above dispute, a future date and an unsupported file", async () => {
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Direction"), { target: { value: "sent" } });
+    fireEvent.change(within(dialog).getByLabelText("Subject"), { target: { value: "Recovery" } });
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), { target: { value: "Recovery notice" } });
+    fireEvent.change(within(dialog).getByLabelText("Sent on"), { target: { value: "2099-01-01" } });
+    fireEvent.change(within(dialog).getByLabelText("Dispute amount"), { target: { value: "100" } });
+    fireEvent.change(within(dialog).getByLabelText("Recovered amount"), { target: { value: "100.01" } });
+    await waitFor(() => expect(getNoticeUploadPolicyMock).toHaveBeenCalled());
+    const picker = within(dialog).getByLabelText("Notice document (optional)");
+    await waitFor(() => expect(picker).toHaveAttribute("accept", ".doc,.docx,.jpeg,.jpg,.pdf,.png,.txt"));
+    fireEvent.change(picker, {
+      target: { files: [new File(["MZ"], "notice.exe", { type: "application/octet-stream" })] },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    expect(await within(dialog).findByTestId("new-notice-date-error")).toHaveTextContent(
+      "Notice sent date cannot be in the future.",
+    );
+    expect(within(dialog).getByTestId("new-notice-recovered-amount-error")).toHaveTextContent(
+      "Recovered amount cannot exceed the dispute amount.",
+    );
+    expect(within(dialog).getByTestId("new-notice-file-error")).toHaveTextContent(
+      ".exe files are not supported.",
+    );
+    expect(createNoticeMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a duplicate refusal with the existing notice and saves anyway only on request", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    createNoticeMock
+      .mockRejectedValueOnce(
+        new ApiError(409, "A notice with the same direction, date, subject and counterparty already exists.", {
+          duplicate_kind: "same_details",
+          override_allowed: true,
+          existing_notice: { id: "existing-1", subject: "Tax demand", direction: "received", notice_date: "2026-07-10", filename: null },
+        }),
+      )
+      .mockResolvedValueOnce(notice({ id: "second", subject: "Tax demand" }));
+    getNoticeMock.mockResolvedValue(notice({ id: "existing-1", subject: "Tax demand" }));
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), { target: { value: "Tax demand" } });
+    fireEvent.change(within(dialog).getByLabelText("Notice type"), { target: { value: "Tax" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    const panel = await within(dialog).findByTestId("notice-duplicate");
+    expect(panel).toHaveTextContent("Existing notice: Tax demand");
+    expect(createNoticeMock.mock.calls[0][0].allow_duplicate).toBeUndefined();
+    fireEvent.click(within(panel).getByTestId("notice-duplicate-create-anyway"));
+    await waitFor(() => expect(createNoticeMock).toHaveBeenCalledTimes(2));
+    expect(createNoticeMock.mock.calls[1][0].allow_duplicate).toBe(true);
+  });
+
+  it("lets a legacy notice without a date take an unrelated edit, but not a new violation", async () => {
+    const legacy = notice({ id: "legacy-1", received_on: null, type: null, reply_required: false, reply_due_on: null });
+    mockNoticeRegister([legacy]);
+    updateNoticeMock.mockResolvedValue({ ...legacy, status: "Closed" });
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage details & links" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "-1" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    expect(await within(dialog).findByTestId("new-notice-amount-error")).toHaveTextContent(
+      "Amount cannot be negative.",
+    );
+    expect(within(dialog).queryByTestId("new-notice-date-error")).toBeNull();
+    expect(updateNoticeMock).not.toHaveBeenCalled();
+
+    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps an edit that duplicates another notice open with the match named, and saves anyway only on request", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    const editing = notice({ id: "second", subject: "Second demand" });
+    mockNoticeRegister([editing]);
+    updateNoticeMock
+      .mockRejectedValueOnce(
+        new ApiError(409, "A notice with the same direction, date, subject and counterparty already exists.", {
+          duplicate_kind: "same_details",
+          override_allowed: true,
+          existing_notice: { id: "existing-1", subject: "Income tax demand", direction: "received", notice_date: "2026-07-10", filename: null, source_kind: "standalone", matter_id: null },
+        }),
+      )
+      .mockResolvedValueOnce({ ...editing, subject: "Income tax demand" });
+    getNoticeMock.mockResolvedValue(notice({ id: "existing-1" }));
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage details & links" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), { target: { value: "Income tax demand" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    // The refusal stays in the dialog with the user's edit, not as a toast.
+    const panel = await within(dialog).findByTestId("notice-duplicate");
+    expect(panel).toHaveTextContent("A notice with the same direction, date, subject and counterparty already exists.");
+    expect(panel).toHaveTextContent("Existing notice: Income tax demand");
+    expect(within(dialog).getByLabelText("Subject")).toHaveValue("Income tax demand");
+    expect(updateNoticeMock.mock.calls[0][1].allow_duplicate).toBeUndefined();
+    expect(updateNoticeMock.mock.calls[0][1].expected_updated_at).toBe(editing.updated_at);
+    expect(getNoticeMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Save changes anyway" }));
+    await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(2));
+    expect(updateNoticeMock.mock.calls[1][0]).toBe("second");
+    expect(updateNoticeMock.mock.calls[1][1]).toMatchObject({ subject: "Income tax demand", allow_duplicate: true });
+    await waitFor(() => expect(screen.queryByTestId("create-notice-dialog")).toBeNull());
+  });
+
+  it("opens the notice named by ?notice= (the matter Notices duplicate link)", async () => {
+    window.history.pushState({}, "", "/app/notices?notice=existing-1");
+    try {
+      mockNoticeRegister([]);
+      getNoticeMock.mockResolvedValue(notice({ id: "existing-1", subject: "Linked register notice" }));
+      render(withClient(<NoticesPage />));
+      const dialog = await screen.findByTestId("create-notice-dialog");
+      expect(getNoticeMock).toHaveBeenCalledWith("existing-1");
+      expect(within(dialog).getByLabelText("Subject")).toHaveValue("Linked register notice");
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+
+  it("opens a matched register notice in place and a matched matter notice on its matter", async () => {
+    const { ApiError } = await import("@/lib/api/config");
+    const editing = notice({ id: "second", subject: "Second demand" });
+    mockNoticeRegister([editing]);
+    const refusal = (existing: Record<string, unknown>) =>
+      new ApiError(409, "A notice with the same direction, date, subject and counterparty already exists.", {
+        duplicate_kind: "same_details",
+        override_allowed: true,
+        existing_notice: { subject: "Income tax demand", direction: "received", notice_date: "2026-07-10", filename: "n.pdf", ...existing },
+      });
+    updateNoticeMock
+      .mockRejectedValueOnce(refusal({ id: "attachment-9", source_kind: "legacy_attachment", matter_id: "matter-7" }))
+      .mockRejectedValueOnce(refusal({ id: "existing-1", source_kind: "standalone", matter_id: null }));
+    getNoticeMock.mockResolvedValue(notice({ id: "existing-1", subject: "Income tax demand" }));
+    render(withClient(<NoticesPage />));
+    fireEvent.click(await screen.findByRole("button", { name: "Manage details & links" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), { target: { value: "Income tax demand" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    const legacyOpen = await within(dialog).findByTestId("notice-duplicate-open");
+    expect(legacyOpen).toHaveAttribute("href", "/app/matters/matter-7/documents/attachment-9/view");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateNoticeMock).toHaveBeenCalledTimes(2));
+    const registerOpen = await within(dialog).findByRole("button", { name: "Open the existing notice" });
+    fireEvent.click(registerOpen);
+    await waitFor(() => expect(getNoticeMock).toHaveBeenCalledWith("existing-1"));
+    await waitFor(() => expect(within(screen.getByTestId("create-notice-dialog")).getByLabelText("Subject")).toHaveValue("Income tax demand"));
+  });
 });
+

@@ -17,7 +17,9 @@ const {
   updateClientMock,
   verifyClientKycMock,
   useCapabilityMock,
+  listClientKycDocumentsMock,
 } = vi.hoisted(() => ({
+  listClientKycDocumentsMock: vi.fn(),
   archiveClientMock: vi.fn(),
   fetchClientMock: vi.fn(),
   rejectClientKycMock: vi.fn(),
@@ -44,6 +46,10 @@ vi.mock("@/lib/capabilities", () => ({
 vi.mock("@/lib/api/endpoints", () => ({
   archiveClient: archiveClientMock,
   fetchClient: fetchClientMock,
+  fetchClientKycDocumentBlob: vi.fn(),
+  listClientKycDocuments: listClientKycDocumentsMock,
+  removeClientKycDocument: vi.fn(),
+  uploadClientKycDocument: vi.fn(),
   rejectClientKyc: rejectClientKycMock,
   submitClientKyc: submitClientKycMock,
   unarchiveClient: unarchiveClientMock,
@@ -58,6 +64,50 @@ function withClient(children: ReactNode) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function kycList(types: string[], status = "submitted") {
+  const documents = types.map((type, index) => ({
+    id: `doc-${index}`,
+    client_id: "client-1",
+    document_type: type,
+    label: null,
+    original_filename: `${type}.pdf`,
+    content_type: "application/pdf",
+    size_bytes: 1024,
+    uploaded_by_membership_id: "m-1",
+    uploaded_by_name: "Owner",
+    uploaded_by_portal: false,
+    review_decision: null,
+    reviewed_at: null,
+    reviewed_by_membership_id: null,
+    previewable: true,
+    created_at: "2026-11-27T10:00:00Z",
+  }));
+  const has = (values: string[]) => values.some((v) => types.includes(v));
+  const requirements = [
+    { key: "pan", label: "PAN card", satisfied_by: ["pan"], satisfied: has(["pan"]) },
+    {
+      key: "identity_address_proof",
+      label: "Masked Aadhaar, passport or another address proof",
+      satisfied_by: ["aadhaar_masked", "passport", "address_proof"],
+      satisfied: has(["aadhaar_masked", "passport", "address_proof"]),
+    },
+  ];
+  return {
+    client_id: "client-1",
+    kyc_status: status,
+    documents,
+    requirements,
+    requirements_met: requirements.every((r) => r.satisfied),
+    upload_allowed: true,
+    document_types: [
+      { value: "pan", label: "PAN card", hint: "PAN.", requires_label: false },
+      { value: "aadhaar_masked", label: "Aadhaar (masked)", hint: "Masked.", requires_label: false },
+    ],
+    accepted_extensions: [".pdf", ".png", ".jpg", ".jpeg"],
+    max_upload_bytes: 1024 * 1024,
+  };
 }
 
 function clientRecord(overrides: Partial<ClientRecord> = {}): ClientRecord {
@@ -116,9 +166,11 @@ describe("ClientProfilePage verification workflow", () => {
     useCapabilityMock.mockImplementation((capability: string) =>
       ["clients:kyc_submit", "clients:kyc_review"].includes(capability),
     );
+    listClientKycDocumentsMock.mockReset();
+    listClientKycDocumentsMock.mockImplementation(async () => kycList([]));
   });
 
-  it("shows submitted verification as reviewable", async () => {
+  it("shows submitted verification as reviewable, with Approve gated on the uploaded files", async () => {
     fetchClientMock.mockResolvedValue(clientRecord());
     render(withClient(<ClientProfilePage />));
 
@@ -126,6 +178,9 @@ describe("ClientProfilePage verification workflow", () => {
     expect(screen.getAllByText("submitted").length).toBeGreaterThan(0);
     expect(screen.getByTestId("kyc-verify")).toBeInTheDocument();
     expect(screen.getByTestId("kyc-reject-toggle")).toBeInTheDocument();
+    await waitFor(() => expect(listClientKycDocumentsMock).toHaveBeenCalledWith("client-1"));
+    // A pack without the required files cannot be approved (BUG-003).
+    await waitFor(() => expect(screen.getByTestId("kyc-verify")).toBeDisabled());
   });
 
   it("offers prefilled contact editing after KYC verification", async () => {
@@ -142,7 +197,7 @@ describe("ClientProfilePage verification workflow", () => {
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
-  it("submits verification documents from not-required state", async () => {
+  it("submits the uploaded KYC files from not-required state, never a typed list of names", async () => {
     fetchClientMock.mockResolvedValue(
       clientRecord({
         kyc_status: "not_required",
@@ -150,17 +205,22 @@ describe("ClientProfilePage verification workflow", () => {
         kyc_documents: [],
       }),
     );
+    listClientKycDocumentsMock.mockImplementation(async () =>
+      kycList(["pan", "aadhaar_masked"], "not_required"),
+    );
     submitClientKycMock.mockResolvedValue(clientRecord({ kyc_status: "submitted" }));
     const user = userEvent.setup();
     render(withClient(<ClientProfilePage />));
 
     await screen.findByText("Aster Client");
-    await user.click(screen.getByTestId("kyc-submit-toggle"));
+    await user.click(await screen.findByTestId("kyc-submit-toggle"));
+    expect(screen.queryByTestId("kyc-submit-docs")).not.toBeInTheDocument();
+    expect(screen.getByTestId("kyc-upload-file")).toHaveAttribute("type", "file");
+    await waitFor(() => expect(screen.getByTestId("kyc-submit")).toBeEnabled());
     await user.click(screen.getByTestId("kyc-submit"));
 
     await waitFor(() => expect(submitClientKycMock).toHaveBeenCalled());
-    expect(submitClientKycMock.mock.calls[0][0].clientId).toBe("client-1");
-    expect(submitClientKycMock.mock.calls[0][0].documents.length).toBeGreaterThan(0);
+    expect(submitClientKycMock.mock.calls[0][0]).toEqual({ clientId: "client-1", documents: [] });
   });
 });
 

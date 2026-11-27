@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 
 from caseops_api.api.dependencies import DbSession, require_capability
@@ -23,6 +23,8 @@ from caseops_api.schemas.case_tracking import (
 )
 from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatrixResponse
 from caseops_api.services.case_tracking import (
+    BOOKMARK_PAGE_MAX_SIZE,
+    BOOKMARK_SEARCH_MAX_LENGTH,
     create_bookmark,
     download_case_tracking_source,
     link_matter_case,
@@ -142,8 +144,19 @@ def post_case_tracking_bookmark(
 def get_case_tracking_bookmarks(
     context: CaseTrackingUser,
     session: DbSession,
+    q: Annotated[str | None, Query(max_length=BOOKMARK_SEARCH_MAX_LENGTH)] = None,
+    limit: Annotated[int | None, Query(ge=1, le=BOOKMARK_PAGE_MAX_SIZE)] = None,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    include_total: bool = False,
 ) -> CaseTrackingBookmarkListResponse:
-    return list_bookmarks(session, context=context)
+    return list_bookmarks(
+        session,
+        context=context,
+        q=q,
+        limit=limit,
+        cursor=cursor,
+        include_total=include_total,
+    )
 
 
 @router.patch(

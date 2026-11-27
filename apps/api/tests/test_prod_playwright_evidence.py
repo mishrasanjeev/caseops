@@ -1942,7 +1942,7 @@ def _nov15_fixture_rows():
 
 def test_nov15_requires_both_independent_literal_format_identities():
     assert evidence.NOV15_APP_CASES == NOV15_REVIEWED_CASES
-    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 767, "app-mobile": 70}
+    assert evidence.APP_PROJECT_COUNTS == {"app-chromium": 792, "app-mobile": 74}
     assert len(evidence._nov15_rows(_nov15_fixture_rows(), execution=True)) == 2
 
 
@@ -3083,7 +3083,7 @@ def test_non_oct13_generic_binding_stays_unpartitioned(capture, invocation, conf
 
 
 APP_ROLES = {"ci-app-chromium": "app-chromium", "ci-app-mobile": "app-mobile"}
-APP_COUNTS = {"app-chromium": 750, "app-mobile": 60}
+APP_COUNTS = {"app-chromium": 775, "app-mobile": 64}
 COMPACT_MATTER_CASES = (
     ("app-chromium", "matter-compact-cards.spec.ts", (
         "matter-compact-cards.spec.ts", "BUG-016 compact Matter cards",
@@ -3132,6 +3132,16 @@ NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
 NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
 NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
+NOV27_OCR_FILE = "ram-2026-11-27-ocr-images.spec.ts"
+NOV27_BENCH_STATUTES_FILE = "bugs7-2026-11-27-bench-statutes.spec.ts"
+# November 27 workbook Case Tracking rows 6 and 10 (read-only as test-legal).
+NOV27_TRACKING_FILE = "ram-2026-11-27-case-tracking.spec.ts"
+NOV27_NOTICE_FILE = "notice-validation-2026-11-27.spec.ts"
+# November 27 workbook ENH-001 (branded, verifiable billing PDFs).
+NOV27_INVOICE_FILE = "ram-2026-11-27-invoice-branding.spec.ts"
+NOV27_MATTER_FILE = "nova-2026-11-27-matter.spec.ts"
+# November 27 workbook BUG-003 (test-legal): KYC documents are uploaded files.
+NOV27_KYC_FILE = "ram-2026-11-27-kyc-documents.spec.ts"
 APP_REQUIRED_NATIVE_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -3258,6 +3268,119 @@ APP_REQUIRED_NATIVE_CASES = (
     )),
     ("app-mobile", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded JPG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded JPEG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded PNG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "row 1 the Canonical bench picker offers the searched court's benches",
+    )),
+    ("app-chromium", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "row 4 a disabled Act says why, and a verified provision still attaches",
+    )),
+    ("app-mobile", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "[mobile] row 1 the Canonical bench picker offers the searched court's benches",
+    )),
+    ("app-mobile", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "[mobile] row 4 a disabled Act says why, and a verified provision still attaches",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE, "row 6 bookmark search finds a Matter Code on an unloaded page",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE,
+        "row 10 delete bookmark icon shows its tooltip on hover and keyboard focus",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE, "[local-only] row 10 delete bookmark still deletes the bookmark",
+    )),
+    ("app-chromium", NOV27_NOTICE_FILE, (
+        NOV27_NOTICE_FILE,
+        "row 2 Notice Received refuses incomplete details and creates nothing",
+    )),
+    ("app-chromium", NOV27_NOTICE_FILE, (
+        NOV27_NOTICE_FILE,
+        "row 3 Notice Sent refuses invalid details and files, and handles duplicates",
+    )),
+    ("app-chromium", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 [local-only] admin uploads a logo and signature and the issued invoice carries "
+        "both with a verifiable QR code",
+    )),
+    ("app-chromium", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 draft invoice PDF carries the letterhead, DRAFT watermark and a QR code that "
+        "verifies until voided",
+    )),
+    ("app-mobile", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 [mobile] draft invoice QR code verifies and the verification page fits a phone",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 5 court badge opens the official court website in a new tab",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 5 a court without a verified website is plain text, not a dead link",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 7 mock hearing shows its prerequisites, runs affidavit intelligence, then starts",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 8 Microsoft 365 setup shows the redirect URI the flow uses and tenant ID guidance",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 8 [local-only] saving valid values and Test reports a complete setup",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366x768",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1280x720",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1920x1080",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 80%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 125%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 150%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 full-height pages keep the sidebar fixed without horizontal overflow",
+    )),
+    ("app-mobile", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "[mobile] row 9 the phone navigation drawer still opens and scrolls to its last item",
+    )),
+    ("app-chromium", NOV27_KYC_FILE, (
+        NOV27_KYC_FILE,
+        "BUG-003 upload PAN and masked Aadhaar, re-submit, open each document and approve",
     )),
 )
 
@@ -3560,13 +3683,13 @@ def app_envelopes(app_capture):
     return state
 
 
-def test_app_capture_and_union_bind_all810_native_json_xml_progress_and_preserved21_skips(
+def test_app_capture_and_union_bind_all839_native_json_xml_progress_and_preserved21_skips(
     app_envelopes,
 ):
     state = app_envelopes
     receipt = evidence.validate_app_project_union(state.root, list(APP_ROLES), BASE)
     counts = _app_reviewed_counts()
-    assert sum(APP_COUNTS.values()) == 810
+    assert sum(APP_COUNTS.values()) == 839
     assert receipt["completed"] and receipt["test_count"] == sum(counts.values())
     assert receipt["expected_skip_count"] == 21
     assert [(r["invocation"], r["project"], r["test_count"]) for r in receipt["roles"]] == [

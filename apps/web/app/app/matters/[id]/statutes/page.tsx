@@ -57,6 +57,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   addMatterStatuteReference,
   deleteMatterStatuteReference,
@@ -76,9 +77,31 @@ const RELEVANCE_TONE: Record<Relevance, "brand" | "warning" | "neutral"> = {
 
 // Disabled rows stay listed so coverage is honest, but they follow every
 // attachable row under their own label instead of interleaving with it.
-const PENDING_GROUP_LABEL = "Verification pending — cannot be attached yet";
+// The disabled state is deliberate (citation-grounded outputs only quote text
+// matched to an official edition), so every disabled row is described by a
+// visible explanation that says why and what happens next; testers read an
+// unexplained disabled Act as a defect (Nov 26 row 1, re-reported Nov 27 row 4).
+const PENDING_GROUP_LABEL = "Not attachable until official text is verified";
 const WITHDRAWN_GROUP_LABEL = "Omitted or withheld — cannot be attached";
 const GROUP_DIVIDER = "mt-1 border-t border-[var(--color-line)]";
+const PENDING_ACT_NAMES_SHOWN = 5;
+
+function pendingActsExplanation(names: string[], total: number): string {
+  const shown = names.slice(0, PENDING_ACT_NAMES_SHOWN).join(", ");
+  const more = names.length > PENDING_ACT_NAMES_SHOWN
+    ? ` and ${names.length - PENDING_ACT_NAMES_SHOWN} more`
+    : "";
+  const count = names.length === 1 ? "1 of" : `${names.length} of`;
+  return (
+    `${count} ${total} Acts (${shown}${more}) ${names.length === 1 ? "has" : "have"} no ` +
+    "provision whose text has been verified against an official edition yet. This is " +
+    "intentional: CaseOps attaches, quotes and cites only verified statutory text, so " +
+    `${names.length === 1 ? "this Act is" : "these Acts are"} listed but disabled. ` +
+    `${names.length === 1 ? "It becomes" : "They become"} selectable automatically once the ` +
+    "official text is verified; nothing is needed from you. To rely on one meanwhile, " +
+    "cite it in your own drafting text; CaseOps will not quote unverified text."
+  );
+}
 
 function sourceHost(url: string): string {
   try {
@@ -207,21 +230,22 @@ function RefRow({
           </a>
         ) : null}
       </div>
-      <Button
+      <IconButton label={`Remove ${ref.statute_short_name} ${ref.section_number}`}
         variant="ghost"
         size="sm"
         onClick={onDelete}
         disabled={disabled}
-        aria-label={`Remove ${ref.statute_short_name} ${ref.section_number}`}
       >
         <Trash2 className="h-4 w-4" aria-hidden />
-      </Button>
+      </IconButton>
     </li>
   );
 }
 
 function AddReferenceDialog({ matterId }: { matterId: string }) {
   const fieldId = useId();
+  const pendingActsNoteId = `${fieldId}-pending-acts-note`;
+  const sectionCoverageId = `${fieldId}-section-coverage`;
   const [open, setOpen] = useState(false);
   const [statuteId, setStatuteId] = useState<string>("");
   const [sectionId, setSectionId] = useState<string>("");
@@ -384,16 +408,26 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                           {group.label}
                         </SelectLabel>
                       ) : null}
+                      {group.key === "pending" ? (
+                        <p
+                          className="px-2 pb-1 text-xs text-[var(--color-mute)]"
+                          data-testid="matter-statute-act-group-pending-reason"
+                        >
+                          Disabled on purpose: no provision of these Acts has verified
+                          official text yet. They become selectable once it is verified.
+                        </p>
+                      ) : null}
                       {group.items.map((s) => (
                         <SelectItem
                           key={s.id}
                           value={s.id}
                           data-value={s.id}
                           disabled={s.section_count === 0}
+                          aria-describedby={s.section_count === 0 ? pendingActsNoteId : undefined}
                         >
                           {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
                           {s.catalog_section_count ?? s.section_count} catalogued
-                          {s.section_count === 0 ? "; verification pending" : ""})
+                          {s.section_count === 0 ? "; not attachable until verified" : ""})
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -408,10 +442,26 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
               >
                 {statutesQuery.data?.total_section_count ?? 0} verified of{" "}
                 {statutesQuery.data?.total_catalog_section_count ?? 0}{" "}
-                catalogued sections across {allStatutes.length} Acts. Attachable
-                Acts are listed first; Acts awaiting complete source
-                verification are grouped below and disabled.
+                catalogued sections across {allStatutes.length} Acts.{" "}
+                {selectableStatutes.length} attachable{" "}
+                {selectableStatutes.length === 1 ? "Act is" : "Acts are"} listed first.
               </span>
+            ) : null}
+            {catalogReady && pendingStatutes.length > 0 ? (
+              <p
+                id={pendingActsNoteId}
+                role="note"
+                className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-ink-2)]"
+                data-testid="matter-statute-pending-acts-note"
+              >
+                <span className="font-semibold text-[var(--color-ink)]">
+                  Why some Acts are disabled.
+                </span>{" "}
+                {pendingActsExplanation(
+                  pendingStatutes.map((statute) => statute.short_name),
+                  allStatutes.length,
+                )}
+              </p>
             ) : null}
             {statutesQuery.isPaused ? (
               <span role="status" className="text-xs text-[var(--color-mute)]" data-testid="matter-statute-catalog-paused">
@@ -479,6 +529,9 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                           value={sec.id}
                           data-value={sec.id}
                           disabled={group.key !== "attachable"}
+                          aria-describedby={
+                            group.key !== "attachable" ? sectionCoverageId : undefined
+                          }
                         >
                           {sec.section_number}
                           {sec.section_label ? ` — ${sec.section_label}` : ""}
@@ -498,6 +551,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
             </Select>
             {statuteId && sectionsReady ? (
               <span
+                id={sectionCoverageId}
                 className="text-xs text-[var(--color-mute)]"
                 data-testid="matter-statute-section-coverage"
               >
@@ -507,6 +561,9 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                   catalogSections.length}{" "}
                 catalogued sections. Unverified provisions cannot be attached
                 through the UI or API.
+                {sectionGroups[1].items.length + sectionGroups[2].items.length > 0
+                  ? " Disabled provisions are intentional: pending ones have no verified official text yet and become attachable once verified; omitted, repealed-by-omission or withheld ones (such as unreconciled tables) are never attachable."
+                  : ""}
               </span>
             ) : null}
             {statuteId && sectionsQuery.isPaused ? (

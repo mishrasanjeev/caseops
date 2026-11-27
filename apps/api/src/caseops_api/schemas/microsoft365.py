@@ -1,11 +1,54 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from caseops_api.schemas.calendar import OUTLOOK_OAUTH_CALLBACK_PATH
 from caseops_api.schemas.oauth_redirect import oauth_redirect_error
+
+# The only Microsoft OAuth callback CaseOps serves: the Outlook Calendar
+# sign-in. No sign-in reads the Microsoft 365 configuration yet; pinning its
+# Redirect URI here keeps one Entra app registration valid for both pages.
+MICROSOFT365_OAUTH_CALLBACK_PATH = OUTLOOK_OAUTH_CALLBACK_PATH
+
+_GUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_DOMAIN = re.compile(
+    r"^(?=.{4,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
+)
+_MULTI_TENANT_MODES = {"common", "organizations", "consumers"}
+
+
+def microsoft365_tenant_id_error(value: str) -> str | None:
+    """Directory (tenant) ID: the firm's own Entra directory, as a GUID or domain."""
+
+    if value.casefold() in _MULTI_TENANT_MODES:
+        return (
+            f"'{value}' is a sign-in mode, not your directory. Enter the Directory "
+            "(tenant) ID from the Overview page of your app registration in the "
+            "Microsoft Entra admin center, or a verified domain such as "
+            "yourfirm.onmicrosoft.com."
+        )
+    if _GUID.match(value) or _DOMAIN.match(value):
+        return None
+    return (
+        "The Directory (tenant) ID must be a GUID such as "
+        "72f988bf-86f1-41af-91ab-2d7cd011db47, or a verified domain such as "
+        "yourfirm.onmicrosoft.com. Copy it from the Overview page of your app "
+        "registration in the Microsoft Entra admin center."
+    )
+
+
+def microsoft365_client_id_error(value: str) -> str | None:
+    if _GUID.match(value):
+        return None
+    return (
+        "The Application (client) ID must be a GUID such as "
+        "00000000-1111-2222-3333-444444444444. Copy it from the Overview page of "
+        "your app registration in the Microsoft Entra admin center."
+    )
 
 Microsoft365ReadinessStatusLiteral = Literal["passed", "blocked", "not_run"]
 Microsoft365ReadinessLiteral = Literal[
@@ -25,7 +68,21 @@ class Microsoft365ApprovalItemStatus(BaseModel):
     approved: bool
 
 
+class Microsoft365GraphPermission(BaseModel):
+    scope: str
+    kind: Literal["delegated"] = "delegated"
+    purpose: str
+
+
 class Microsoft365TenantConfigurationResponse(BaseModel):
+    """The workspace's saved Microsoft 365 app-registration values and approvals.
+
+    Saving or testing them calls no Microsoft service and connects no account.
+    Today only connector health reads them (Microsoft 365 readiness); Outlook
+    Calendar is connected through the Outlook configuration and its sign-in,
+    and Outlook Mail and OneDrive/SharePoint have no sign-in yet.
+    """
+
     provider: Literal["microsoft_365"] = "microsoft_365"
     configured: bool
     enabled: bool
@@ -43,17 +100,30 @@ class Microsoft365TenantConfigurationResponse(BaseModel):
     last_tested_at: datetime | None = None
     last_error_redacted: str | None = None
     readiness: Microsoft365ReadinessLiteral
+    # Setup guidance, all computed on the server. The redirect URI is the exact
+    # address the Outlook Calendar sign-in on this deployment sends and serves.
+    registration_model: Literal["customer_entra_app_registration"] = (
+        "customer_entra_app_registration"
+    )
+    expected_redirect_uri: str
+    callback_path: str = MICROSOFT365_OAUTH_CALLBACK_PATH
+    saved_redirect_uri: str | None = None
+    redirect_uri_matches_expected: bool = False
+    client_id: str | None = None
+    tenant_id: str | None = None
+    secret_saved: bool = False
+    required_permissions: list[Microsoft365GraphPermission] = Field(default_factory=list)
 
 
 def microsoft365_oauth_redirect_error(value: str) -> str | None:
-    # No Microsoft 365 callback route exists yet: this registration is stored
-    # and reported for readiness only. Apply the rules every redirect must meet,
-    # but do not invent a path that CaseOps does not serve.
+    # No Microsoft 365 sign-in exists; the one Microsoft callback CaseOps
+    # serves is Outlook Calendar's, so a registration recorded here must list
+    # it to be reusable on the Outlook calendar page.
     return oauth_redirect_error(
         value,
         label="Microsoft 365",
         provider="Microsoft",
-        expected_path=None,
+        expected_path=MICROSOFT365_OAUTH_CALLBACK_PATH,
     )
 
 
@@ -92,6 +162,26 @@ class Microsoft365TenantConfigurationUpdateRequest(BaseModel):
             raise ValueError(problem)
         return value
 
+    @field_validator("tenant_id")
+    @classmethod
+    def usable_microsoft365_tenant(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        problem = microsoft365_tenant_id_error(value)
+        if problem:
+            raise ValueError(problem)
+        return value
+
+    @field_validator("client_id")
+    @classmethod
+    def usable_microsoft365_client(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        problem = microsoft365_client_id_error(value)
+        if problem:
+            raise ValueError(problem)
+        return value
+
 
 class Microsoft365ReadinessCheckResult(BaseModel):
     key: str
@@ -101,6 +191,13 @@ class Microsoft365ReadinessCheckResult(BaseModel):
 
 
 class Microsoft365ReadinessTestResponse(BaseModel):
+    """Whether every Microsoft 365 value and approval is saved and well formed.
+
+    Checked in CaseOps only: no Microsoft call is made, so a wrong secret or
+    consent not granted in Microsoft Entra is not detected, and no account is
+    connected.
+    """
+
     provider: Literal["microsoft_365"] = "microsoft_365"
     status: Microsoft365ReadinessStatusLiteral
     checks: list[Microsoft365ReadinessCheckResult]

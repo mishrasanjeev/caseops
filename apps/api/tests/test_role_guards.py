@@ -126,6 +126,12 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # exercised by tests/test_portal_matters.py.
     ("POST", "/api/portal/matters/{matter_id}/communications"),
     ("POST", "/api/portal/matters/{matter_id}/kyc"),
+    # BUG-003 KYC files: same portal principal + client grant boundary;
+    # the service admits the client only through a granted Matter it is
+    # linked to and lets a portal user remove only their own files
+    # (tests/test_client_kyc_documents.py).
+    ("POST", "/api/portal/matters/{matter_id}/kyc/documents"),
+    ("DELETE", "/api/portal/matters/{matter_id}/kyc/documents/{document_id}"),
     # IPLF-055 client instructions use the same portal principal boundary:
     # get_current_portal_user authenticates the cookie, while the service
     # requires an active matching grant, a visible non-stale publication,

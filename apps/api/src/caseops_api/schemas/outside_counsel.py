@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 OutsideCounselPanelStatusLiteral = Literal["active", "preferred", "inactive"]
 OutsideCounselAssignmentStatusLiteral = Literal["proposed", "approved", "active", "closed"]
@@ -70,6 +70,14 @@ class OutsideCounselSpendRecordCreateRequest(BaseModel):
     due_on: date | None = None
     paid_on: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def due_not_before_billed(self) -> OutsideCounselSpendRecordCreateRequest:
+        # Same rule and wording as InvoiceCreateRequest; the update service
+        # applies it to the merged record.
+        if self.billed_on and self.due_on and self.due_on < self.billed_on:
+            raise ValueError("Due date cannot be earlier than the issue date.")
+        return self
 
 
 class OutsideCounselSpendRecordUpdateRequest(BaseModel):

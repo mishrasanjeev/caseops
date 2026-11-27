@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { CourtName } from "@/components/matters/CourtName";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -30,7 +31,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
-import { apiErrorMessage } from "@/lib/api/config";
+import { apiErrorMessage, apiFieldErrors } from "@/lib/api/config";
 import {
   fetchPortalOcInvoices,
   fetchPortalOcMatter,
@@ -41,6 +42,7 @@ import {
   uploadPortalOcWorkProduct,
 } from "@/lib/api/portal";
 import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
+import { gstinError, panError } from "@/lib/tax-identifiers";
 
 export default function PortalOcMatterDetailPage() {
   const params = useParams<{ id: string }>();
@@ -134,6 +136,7 @@ function OverviewCard({
         practice_area: string | null;
         forum_level: string | null;
         court_name: string | null;
+        court_website_url?: string | null;
         next_hearing_on: string | null;
       }
     | undefined;
@@ -150,7 +153,16 @@ function OverviewCard({
       <CardContent className="grid gap-3 text-sm md:grid-cols-2">
         <Row label="Status" value={<Badge tone="brand">{matter.status}</Badge>} />
         <Row label="Practice area" value={matter.practice_area ?? "—"} />
-        <Row label="Court" value={matter.court_name ?? "—"} />
+        <Row
+          label="Court"
+          value={
+            <CourtName
+              name={matter.court_name}
+              websiteUrl={matter.court_website_url}
+              testId="portal-matter-court"
+            />
+          }
+        />
         <Row label="Forum level" value={matter.forum_level ?? "—"} />
         <Row
           label="Next hearing"
@@ -292,12 +304,46 @@ function InvoicesCard({ matterId }: { matterId: string }) {
   const [lineDescription, setLineDescription] = useState("");
   const [lineAmountMinor, setLineAmountMinor] = useState<string>("");
   const [notes, setNotes] = useState("");
+  // ENH-001: the counsel is the supplier on its own invoice; these print on
+  // the PDF the firm downloads. Prefilled from the latest submission.
+  const [supplier, setSupplier] = useState({ firm: "", address: "", gstin: "", pan: "" });
+  const supplierTouched = useRef(false);
+  // The GSTIN and PAN print as the supplier's tax identifiers, so their format
+  // is checked as the API checks it, and the API's own 422 lands on the field.
+  const [blurred, setBlurred] = useState({ gstin: false, pan: false });
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
 
   const invoicesQuery = useQuery({
     queryKey: ["portal", "oc", "matter", matterId, "invoices"],
     queryFn: () => fetchPortalOcInvoices(matterId),
     enabled: matterId.length > 0,
   });
+  useEffect(() => {
+    const latest = invoicesQuery.data?.invoices[0];
+    if (!latest || supplierTouched.current) return;
+    setSupplier({
+      firm: latest.counsel_firm_name ?? "",
+      address: latest.counsel_address ?? "",
+      gstin: latest.counsel_gstin ?? "",
+      pan: latest.counsel_pan ?? "",
+    });
+  }, [invoicesQuery.data]);
+  const editSupplier = (field: keyof typeof supplier, value: string) => {
+    supplierTouched.current = true;
+    setSupplier((current) => ({ ...current, [field]: value }));
+    setServerErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+  const clientErrors = {
+    gstin: gstinError(supplier.gstin),
+    pan: panError(supplier.pan, supplier.gstin),
+  };
+  const identifierError = (field: "gstin" | "pan") =>
+    serverErrors[field] ?? (blurred[field] ? clientErrors[field] : null);
   const submitMutation = useMutation({
     mutationFn: () =>
       submitPortalOcInvoice(matterId, {
@@ -312,6 +358,10 @@ function InvoicesCard({ matterId }: { matterId: string }) {
           },
         ],
         notes: notes.trim() || null,
+        counsel_firm_name: supplier.firm.trim() || null,
+        counsel_address: supplier.address.trim() || null,
+        counsel_gstin: supplier.gstin.trim() || null,
+        counsel_pan: supplier.pan.trim() || null,
       }),
     onSuccess: async () => {
       setInvoiceNumber("");
@@ -328,12 +378,33 @@ function InvoicesCard({ matterId }: { matterId: string }) {
       toast.success("Invoice submitted. The firm will review.");
     },
     onError: (err) => {
+      setServerErrors(
+        apiFieldErrors(err, {
+          counsel_firm_name: "firm",
+          counsel_address: "address",
+          counsel_gstin: "gstin",
+          counsel_pan: "pan",
+        }),
+      );
       toast.error(apiErrorMessage(err, "Could not submit invoice."));
     },
   });
+  const submitInvoice = () => {
+    if (clientErrors.gstin || clientErrors.pan) {
+      setBlurred({ gstin: true, pan: true });
+      return;
+    }
+    submitMutation.mutate();
+  };
   const invoices = invoicesQuery.data?.invoices ?? [];
+  // Mirrors PortalOcInvoiceSubmitPayload (and the firm's own invoice rule).
+  const dueError =
+    dueOn && issuedOn && dueOn < issuedOn
+      ? "Due date cannot be earlier than the issue date."
+      : null;
   const canSubmit =
     invoiceNumber.trim().length > 0 &&
+    !dueError &&
     lineDescription.trim().length > 0 &&
     Number(lineAmountMinor || 0) > 0 &&
     !submitMutation.isPending;
@@ -376,8 +447,21 @@ function InvoicesCard({ matterId }: { matterId: string }) {
                 id="oc-inv-due"
                 type="date"
                 value={dueOn}
+                min={issuedOn || undefined}
                 onChange={(e) => setDueOn(e.target.value)}
+                aria-invalid={dueError ? true : undefined}
+                aria-describedby={dueError ? "oc-inv-due-error" : undefined}
+                data-testid="portal-oc-invoice-due"
               />
+              {dueError ? (
+                <p
+                  id="oc-inv-due-error"
+                  className="mt-1 text-xs text-[var(--color-danger-text)]"
+                  data-testid="portal-oc-invoice-due-error"
+                >
+                  {dueError}
+                </p>
+              ) : null}
             </div>
             <div>
               <Label htmlFor="oc-inv-line-amount">
@@ -404,6 +488,97 @@ function InvoicesCard({ matterId }: { matterId: string }) {
               data-testid="portal-oc-invoice-description"
             />
           </div>
+          <fieldset className="grid gap-3 rounded-md border border-[var(--color-line)] p-3 md:grid-cols-2">
+            <legend className="px-1 text-sm font-medium text-[var(--color-ink-2)]">
+              Your billing details (printed as the supplier on the invoice)
+            </legend>
+            <div>
+              <Label htmlFor="oc-inv-firm">Firm name</Label>
+              <Input
+                id="oc-inv-firm"
+                value={supplier.firm}
+                maxLength={255}
+                onChange={(e) => editSupplier("firm", e.target.value)}
+                aria-invalid={serverErrors.firm ? true : undefined}
+                aria-describedby={serverErrors.firm ? "oc-inv-firm-error" : undefined}
+                data-testid="portal-oc-invoice-firm"
+              />
+              {serverErrors.firm ? (
+                <p
+                  id="oc-inv-firm-error"
+                  className="mt-1 text-xs text-[var(--color-danger)]"
+                  data-testid="portal-oc-invoice-firm-error"
+                >
+                  {serverErrors.firm}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="oc-inv-address">Firm address</Label>
+              <Input
+                id="oc-inv-address"
+                value={supplier.address}
+                maxLength={1000}
+                onChange={(e) => editSupplier("address", e.target.value)}
+                aria-invalid={serverErrors.address ? true : undefined}
+                aria-describedby={serverErrors.address ? "oc-inv-address-error" : undefined}
+                data-testid="portal-oc-invoice-address"
+              />
+              {serverErrors.address ? (
+                <p
+                  id="oc-inv-address-error"
+                  className="mt-1 text-xs text-[var(--color-danger)]"
+                  data-testid="portal-oc-invoice-address-error"
+                >
+                  {serverErrors.address}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="oc-inv-gstin">GSTIN (optional)</Label>
+              <Input
+                id="oc-inv-gstin"
+                value={supplier.gstin}
+                maxLength={32}
+                onChange={(e) => editSupplier("gstin", e.target.value)}
+                onBlur={() => setBlurred((current) => ({ ...current, gstin: true }))}
+                aria-invalid={identifierError("gstin") ? true : undefined}
+                aria-describedby={identifierError("gstin") ? "oc-inv-gstin-error" : undefined}
+                data-testid="portal-oc-invoice-gstin"
+              />
+              {identifierError("gstin") ? (
+                <p
+                  id="oc-inv-gstin-error"
+                  className="mt-1 text-xs text-[var(--color-danger)]"
+                  data-testid="portal-oc-invoice-gstin-error"
+                >
+                  {identifierError("gstin")}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="oc-inv-pan">PAN (optional)</Label>
+              <Input
+                id="oc-inv-pan"
+                value={supplier.pan}
+                maxLength={16}
+                onChange={(e) => editSupplier("pan", e.target.value)}
+                onBlur={() => setBlurred((current) => ({ ...current, pan: true }))}
+                aria-invalid={identifierError("pan") ? true : undefined}
+                aria-describedby={identifierError("pan") ? "oc-inv-pan-error" : undefined}
+                data-testid="portal-oc-invoice-pan"
+              />
+              {identifierError("pan") ? (
+                <p
+                  id="oc-inv-pan-error"
+                  className="mt-1 text-xs text-[var(--color-danger)]"
+                  data-testid="portal-oc-invoice-pan-error"
+                >
+                  {identifierError("pan")}
+                </p>
+              ) : null}
+            </div>
+          </fieldset>
           <div>
             <Label htmlFor="oc-inv-notes">Notes (optional)</Label>
             <Textarea
@@ -417,7 +592,7 @@ function InvoicesCard({ matterId }: { matterId: string }) {
             <Button
               type="button"
               disabled={!canSubmit}
-              onClick={() => submitMutation.mutate()}
+              onClick={submitInvoice}
               data-testid="portal-oc-invoice-submit"
             >
               <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
