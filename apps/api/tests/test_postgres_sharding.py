@@ -232,7 +232,7 @@ def test_ci_postgres_capacity_keeps_bounded_complete_acceptance():
     ]
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
-    assert aggregate["if"] == "always() && !cancelled()"
+    assert aggregate["if"] == "github.event_name != 'push' && always() && !cancelled()"
     guard = next(item for item in aggregate["steps"]
                  if item.get("name") == "Require every PostgreSQL shard")
     assert guard["if"] == "needs.postgres-validation-shards.result != 'success'"

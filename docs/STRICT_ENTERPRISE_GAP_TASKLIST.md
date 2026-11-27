@@ -6704,3 +6704,32 @@ until the owner-run enablement in
   manifest needs the same check.
 - **Verification:** see the PR for command evidence. CodeQL on the PR head is
   the proof that the 38 code fixes close their alerts.
+
+## November 26 - Complete CI suite off main pushes (EH-CI-2026-11-26)
+
+- **Status:** Partially implemented. Landed in `.github/workflows/ci.yml`;
+  not yet proven on `main`.
+- **Measured cost (7 days to 2026-11-26, runner time only):** about 88,000
+  billable Actions minutes. CI on pull requests was 72% and CI re-run on the
+  25 merges to `main` was 17% (about 15,100 minutes). The release tooling does
+  not read CI results on `main`; it requires only the Security workflow on the
+  merge commit.
+- **Change:** pull requests, a nightly run on `main` (20:17 UTC, 01:47 IST)
+  and `workflow_dispatch` run the complete suite. A push to `main` runs only
+  API ruff and the web typecheck, vitest, build and Docker builder job. The
+  API, PostgreSQL, Windows web and Playwright suites skip there; their
+  aggregators still require every shard to succeed whenever they run. Each
+  event has its own concurrency group, so a merge cannot cancel a nightly or
+  dispatched run. Expected saving is about 10,000 minutes a week (12%).
+- **Accepted risk:** branch protection does not require branches to be up to
+  date, so two separately green pull requests can break `main` together. That
+  is now caught by the nightly run, up to a day later. Before a release,
+  dispatch CI on `main` to run the complete suite on the exact release commit.
+- **Staging:** `deploy-staging` needs `api` and `e2e`, so it no longer runs on
+  a push. It is already fail-closed and skips without its configuration; move
+  it to the nightly or dispatched run before enabling staging deploys.
+- **Proof:** `apps/api/tests/test_ci_main_push_trim_20261126.py` fails on the
+  previous workflow and passes on this one. The three aggregator condition
+  pins were updated. Still required for Implemented: the first push to `main`
+  after merge skips the heavy suites, and the first nightly run executes all of
+  them.
