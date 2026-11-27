@@ -1,0 +1,774 @@
+{
+  "version": "statute-retrieval-benchmark-2026-11-26",
+  "description": "Paraphrased lawyer questions with the verified sections that answer them. No question carries a section or article number, so the benchmark measures semantic retrieval; exact references are tested separately. Expected sections are verified official provisions in the release bundle.",
+  "queries": [
+    {
+      "id": "ni-01",
+      "statute_id": "ni-act-1881",
+      "query": "criminal offence when a cheque bounces because the drawer's account has insufficient funds",
+      "expected": [
+        "Section 138"
+      ]
+    },
+    {
+      "id": "ni-02",
+      "statute_id": "ni-act-1881",
+      "query": "presumption that the holder received the cheque for discharge of a debt or other liability",
+      "expected": [
+        "Section 139"
+      ]
+    },
+    {
+      "id": "ni-03",
+      "statute_id": "ni-act-1881",
+      "query": "liability of directors and officers when a company issues a cheque that is dishonoured",
+      "expected": [
+        "Section 141"
+      ]
+    },
+    {
+      "id": "ni-04",
+      "statute_id": "ni-act-1881",
+      "query": "who may file a cheque dishonour complaint and when the court can take cognizance of it",
+      "expected": [
+        "Section 142"
+      ]
+    },
+    {
+      "id": "ni-05",
+      "statute_id": "ni-act-1881",
+      "query": "court directing the drawer to pay interim compensation to the complainant in a cheque case",
+      "expected": [
+        "Section 143A"
+      ]
+    },
+    {
+      "id": "ni-06",
+      "statute_id": "ni-act-1881",
+      "query": "appellate court ordering a convicted drawer to deposit part of the fine pending the appeal",
+      "expected": [
+        "Section 148"
+      ]
+    },
+    {
+      "id": "ni-07",
+      "statute_id": "ni-act-1881",
+      "query": "can the accused argue he had no reason to believe the cheque would be dishonoured on presentment",
+      "expected": [
+        "Section 140"
+      ]
+    },
+    {
+      "id": "ni-08",
+      "statute_id": "ni-act-1881",
+      "query": "complainant giving evidence on affidavit in a dishonoured cheque trial",
+      "expected": [
+        "Section 145"
+      ]
+    },
+    {
+      "id": "ni-09",
+      "statute_id": "ni-act-1881",
+      "query": "who is a holder in due course of a negotiable instrument",
+      "expected": [
+        "Section 9"
+      ]
+    },
+    {
+      "id": "ni-10",
+      "statute_id": "ni-act-1881",
+      "query": "meaning of a promissory note under the Negotiable Instruments Act",
+      "expected": [
+        "Section 4"
+      ]
+    },
+    {
+      "id": "ni-11",
+      "statute_id": "ni-act-1881",
+      "query": "are cheque bounce offences compoundable",
+      "expected": [
+        "Section 147"
+      ]
+    },
+    {
+      "id": "ni-12",
+      "statute_id": "ni-act-1881",
+      "query": "summary trial of cheque dishonour cases by a magistrate",
+      "expected": [
+        "Section 143"
+      ]
+    },
+    {
+      "id": "bns-01",
+      "statute_id": "bns-2023",
+      "query": "punishment for murder under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 103"
+      ]
+    },
+    {
+      "id": "bns-02",
+      "statute_id": "bns-2023",
+      "query": "what amounts to theft of movable property under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 303"
+      ]
+    },
+    {
+      "id": "bns-03",
+      "statute_id": "bns-2023",
+      "query": "offence of cheating by dishonestly inducing delivery of property under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 318"
+      ]
+    },
+    {
+      "id": "bns-04",
+      "statute_id": "bns-2023",
+      "query": "dowry death of a woman within seven years of marriage under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 80"
+      ]
+    },
+    {
+      "id": "bns-05",
+      "statute_id": "bns-2023",
+      "query": "cruelty to a married woman by her husband or his relatives under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 85"
+      ]
+    },
+    {
+      "id": "bns-06",
+      "statute_id": "bns-2023",
+      "query": "causing death by a rash or negligent act under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 106"
+      ]
+    },
+    {
+      "id": "bns-07",
+      "statute_id": "bns-2023",
+      "query": "organised crime by a crime syndicate under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 111"
+      ]
+    },
+    {
+      "id": "bns-08",
+      "statute_id": "bns-2023",
+      "query": "criminal breach of trust by a person entrusted with property under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 316"
+      ]
+    },
+    {
+      "id": "bns-09",
+      "statute_id": "bns-2023",
+      "query": "criminal intimidation by threatening injury to person or reputation under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 351"
+      ]
+    },
+    {
+      "id": "bns-10",
+      "statute_id": "bns-2023",
+      "query": "defamation by words or visible representations harming reputation under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 356"
+      ]
+    },
+    {
+      "id": "bns-11",
+      "statute_id": "bns-2023",
+      "query": "extortion by putting a person in fear of injury under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 308"
+      ]
+    },
+    {
+      "id": "bns-12",
+      "statute_id": "bns-2023",
+      "query": "right of private defence of the body and of property under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 35",
+        "Section 34"
+      ]
+    },
+    {
+      "id": "bns-13",
+      "statute_id": "bns-2023",
+      "query": "kidnapping a minor from lawful guardianship under the Bharatiya Nyaya Sanhita",
+      "expected": [
+        "Section 137"
+      ]
+    },
+    {
+      "id": "bnss-01",
+      "statute_id": "bnss-2023",
+      "query": "anticipatory bail for a person apprehending arrest under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 482"
+      ]
+    },
+    {
+      "id": "bnss-02",
+      "statute_id": "bnss-2023",
+      "query": "recording information about a cognizable offence as a first information report under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 173"
+      ]
+    },
+    {
+      "id": "bnss-03",
+      "statute_id": "bnss-2023",
+      "query": "release on bail when the investigation is not completed within the period allowed for detention under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 187"
+      ]
+    },
+    {
+      "id": "bnss-04",
+      "statute_id": "bnss-2023",
+      "query": "maintenance order for wives, children and parents under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 144"
+      ]
+    },
+    {
+      "id": "bnss-05",
+      "statute_id": "bnss-2023",
+      "query": "police report or charge sheet on completion of investigation under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 193"
+      ]
+    },
+    {
+      "id": "bnss-06",
+      "statute_id": "bnss-2023",
+      "query": "when the police may arrest a person without a warrant under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 35"
+      ]
+    },
+    {
+      "id": "bnss-07",
+      "statute_id": "bnss-2023",
+      "query": "bail in a non-bailable offence under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 480"
+      ]
+    },
+    {
+      "id": "bnss-08",
+      "statute_id": "bnss-2023",
+      "query": "plea bargaining application by the accused under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 290"
+      ]
+    },
+    {
+      "id": "bnss-09",
+      "statute_id": "bnss-2023",
+      "query": "trial in absentia of a proclaimed offender who has absconded under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 356"
+      ]
+    },
+    {
+      "id": "bnss-10",
+      "statute_id": "bnss-2023",
+      "query": "inherent powers of the High Court to prevent abuse of process under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 528"
+      ]
+    },
+    {
+      "id": "bnss-11",
+      "statute_id": "bnss-2023",
+      "query": "recording of confessions and statements by a magistrate under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 183"
+      ]
+    },
+    {
+      "id": "bnss-12",
+      "statute_id": "bnss-2023",
+      "query": "special powers of the High Court or Court of Session regarding bail under the Bharatiya Nagarik Suraksha Sanhita",
+      "expected": [
+        "Section 483"
+      ]
+    },
+    {
+      "id": "cpc-01",
+      "statute_id": "cpc-1908",
+      "query": "bar on retrying an issue already finally decided between the same parties in a former suit",
+      "expected": [
+        "Section 11"
+      ]
+    },
+    {
+      "id": "cpc-02",
+      "statute_id": "cpc-1908",
+      "query": "stay of a later civil suit when the same matter in issue is pending in an earlier suit",
+      "expected": [
+        "Section 10"
+      ]
+    },
+    {
+      "id": "cpc-03",
+      "statute_id": "cpc-1908",
+      "query": "where to file a civil suit when the defendant resides or the cause of action arises",
+      "expected": [
+        "Section 20"
+      ]
+    },
+    {
+      "id": "cpc-04",
+      "statute_id": "cpc-1908",
+      "query": "notice required before suing the government or a public officer",
+      "expected": [
+        "Section 80"
+      ]
+    },
+    {
+      "id": "cpc-05",
+      "statute_id": "cpc-1908",
+      "query": "second appeal to the High Court only on a substantial question of law",
+      "expected": [
+        "Section 100"
+      ]
+    },
+    {
+      "id": "cpc-06",
+      "statute_id": "cpc-1908",
+      "query": "review of a judgment by the court that passed the decree",
+      "expected": [
+        "Section 114"
+      ]
+    },
+    {
+      "id": "cpc-07",
+      "statute_id": "cpc-1908",
+      "query": "High Court revision of a subordinate court's order in a case where no appeal lies",
+      "expected": [
+        "Section 115"
+      ]
+    },
+    {
+      "id": "cpc-08",
+      "statute_id": "cpc-1908",
+      "query": "inherent powers of the civil court to make orders for the ends of justice",
+      "expected": [
+        "Section 151"
+      ]
+    },
+    {
+      "id": "cpc-09",
+      "statute_id": "cpc-1908",
+      "query": "lodging a caveat before an application is made in a civil suit",
+      "expected": [
+        "Section 148A"
+      ]
+    },
+    {
+      "id": "cpc-10",
+      "statute_id": "cpc-1908",
+      "query": "interest awarded on a money decree from the date of the suit",
+      "expected": [
+        "Section 34"
+      ]
+    },
+    {
+      "id": "cpc-11",
+      "statute_id": "cpc-1908",
+      "query": "referring a civil dispute to arbitration, conciliation or mediation outside the court",
+      "expected": [
+        "Section 89"
+      ]
+    },
+    {
+      "id": "cpc-12",
+      "statute_id": "cpc-1908",
+      "query": "transfer and withdrawal of a civil suit from one court to another",
+      "expected": [
+        "Section 24"
+      ]
+    },
+    {
+      "id": "cpc-13",
+      "statute_id": "cpc-1908",
+      "query": "civil courts can try all suits of a civil nature unless their cognizance is barred",
+      "expected": [
+        "Section 9"
+      ]
+    },
+    {
+      "id": "coi-01",
+      "statute_id": "constitution-india",
+      "query": "the State shall not deny any person equality before the law or equal protection of the laws",
+      "expected": [
+        "Article 14"
+      ]
+    },
+    {
+      "id": "coi-02",
+      "statute_id": "constitution-india",
+      "query": "no person shall be deprived of his life or personal liberty except according to procedure established by law",
+      "expected": [
+        "Article 21"
+      ]
+    },
+    {
+      "id": "coi-03",
+      "statute_id": "constitution-india",
+      "query": "freedom of speech and expression and the reasonable restrictions on it",
+      "expected": [
+        "Article 19"
+      ]
+    },
+    {
+      "id": "coi-04",
+      "statute_id": "constitution-india",
+      "query": "right to move the Supreme Court for enforcement of fundamental rights",
+      "expected": [
+        "Article 32"
+      ]
+    },
+    {
+      "id": "coi-05",
+      "statute_id": "constitution-india",
+      "query": "High Court power to issue writs such as habeas corpus and mandamus",
+      "expected": [
+        "Article 226"
+      ]
+    },
+    {
+      "id": "coi-06",
+      "statute_id": "constitution-india",
+      "query": "free and compulsory education for children up to fourteen years of age",
+      "expected": [
+        "Article 21A"
+      ]
+    },
+    {
+      "id": "coi-07",
+      "statute_id": "constitution-india",
+      "query": "arrested person to be informed of the grounds of arrest and produced before a magistrate",
+      "expected": [
+        "Article 22"
+      ]
+    },
+    {
+      "id": "coi-08",
+      "statute_id": "constitution-india",
+      "query": "protection against double jeopardy and compulsion to be a witness against oneself",
+      "expected": [
+        "Article 20"
+      ]
+    },
+    {
+      "id": "coi-09",
+      "statute_id": "constitution-india",
+      "query": "Supreme Court granting special leave to appeal from any court or tribunal",
+      "expected": [
+        "Article 136"
+      ]
+    },
+    {
+      "id": "coi-10",
+      "statute_id": "constitution-india",
+      "query": "President's power to grant pardons and commute a death sentence",
+      "expected": [
+        "Article 72"
+      ]
+    },
+    {
+      "id": "coi-11",
+      "statute_id": "constitution-india",
+      "query": "no person shall be deprived of property save by authority of law",
+      "expected": [
+        "Article 300A"
+      ]
+    },
+    {
+      "id": "coi-12",
+      "statute_id": "constitution-india",
+      "query": "procedure for Parliament to amend the Constitution",
+      "expected": [
+        "Article 368"
+      ]
+    },
+    {
+      "id": "coi-13",
+      "statute_id": "constitution-india",
+      "query": "President's rule when the constitutional machinery fails in a State",
+      "expected": [
+        "Article 356"
+      ]
+    },
+    {
+      "id": "coi-14",
+      "statute_id": "constitution-india",
+      "query": "law declared by the Supreme Court is binding on all courts",
+      "expected": [
+        "Article 141"
+      ]
+    },
+    {
+      "id": "lim-01",
+      "statute_id": "limitation-1963",
+      "query": "condonation of delay in filing an appeal when there is sufficient cause",
+      "expected": [
+        "Section 5"
+      ]
+    },
+    {
+      "id": "lim-02",
+      "statute_id": "limitation-1963",
+      "query": "a suit filed after the prescribed period must be dismissed even if limitation is not pleaded as a defence",
+      "expected": [
+        "Section 3"
+      ]
+    },
+    {
+      "id": "lim-03",
+      "statute_id": "limitation-1963",
+      "query": "written acknowledgment of liability signed before the period expires gives a fresh period of limitation",
+      "expected": [
+        "Section 18"
+      ]
+    },
+    {
+      "id": "lim-04",
+      "statute_id": "limitation-1963",
+      "query": "part payment of a debt before the period expires starts a fresh period of limitation",
+      "expected": [
+        "Section 19"
+      ]
+    },
+    {
+      "id": "lim-05",
+      "statute_id": "limitation-1963",
+      "query": "excluding time spent prosecuting a case in good faith in a court without jurisdiction",
+      "expected": [
+        "Section 14"
+      ]
+    },
+    {
+      "id": "lim-06",
+      "statute_id": "limitation-1963",
+      "query": "limitation for a person who is a minor or of unsound mind when the right to sue accrues",
+      "expected": [
+        "Section 6"
+      ]
+    },
+    {
+      "id": "lim-07",
+      "statute_id": "limitation-1963",
+      "query": "filing on the next working day when the court is closed on the last day of the period",
+      "expected": [
+        "Section 4"
+      ]
+    },
+    {
+      "id": "lim-08",
+      "statute_id": "limitation-1963",
+      "query": "effect of fraud or mistake on when the period of limitation begins to run",
+      "expected": [
+        "Section 17"
+      ]
+    },
+    {
+      "id": "lim-09",
+      "statute_id": "limitation-1963",
+      "query": "excluding the time needed to obtain a copy of the decree when computing limitation for an appeal",
+      "expected": [
+        "Section 12"
+      ]
+    },
+    {
+      "id": "lim-10",
+      "statute_id": "limitation-1963",
+      "query": "continuing breach of contract or continuing tort gives a fresh period of limitation every moment",
+      "expected": [
+        "Section 22"
+      ]
+    },
+    {
+      "id": "lim-11",
+      "statute_id": "limitation-1963",
+      "query": "acquiring an easement by peaceable and open enjoyment for twenty years",
+      "expected": [
+        "Section 25"
+      ]
+    },
+    {
+      "id": "lim-12",
+      "statute_id": "limitation-1963",
+      "query": "the owner's right to property is extinguished when the period to sue for possession expires",
+      "expected": [
+        "Section 27"
+      ]
+    },
+    {
+      "id": "arb-01",
+      "statute_id": "arbitration-1996",
+      "query": "setting aside an arbitral award for patent illegality or conflict with public policy",
+      "expected": [
+        "Section 34"
+      ]
+    },
+    {
+      "id": "arb-02",
+      "statute_id": "arbitration-1996",
+      "query": "court granting interim measures before or during arbitral proceedings",
+      "expected": [
+        "Section 9"
+      ]
+    },
+    {
+      "id": "arb-03",
+      "statute_id": "arbitration-1996",
+      "query": "appointment of an arbitrator by the court when the parties fail to agree",
+      "expected": [
+        "Section 11"
+      ]
+    },
+    {
+      "id": "arb-04",
+      "statute_id": "arbitration-1996",
+      "query": "judicial authority must refer the parties to arbitration when there is an arbitration agreement",
+      "expected": [
+        "Section 8"
+      ]
+    },
+    {
+      "id": "arb-05",
+      "statute_id": "arbitration-1996",
+      "query": "arbitral tribunal ruling on its own jurisdiction and objections to the arbitration agreement",
+      "expected": [
+        "Section 16"
+      ]
+    },
+    {
+      "id": "arb-06",
+      "statute_id": "arbitration-1996",
+      "query": "time limit for making an arbitral award and extension of the mandate by the court",
+      "expected": [
+        "Section 29A"
+      ]
+    },
+    {
+      "id": "arb-07",
+      "statute_id": "arbitration-1996",
+      "query": "requirement that an arbitration agreement be in writing",
+      "expected": [
+        "Section 7"
+      ]
+    },
+    {
+      "id": "arb-08",
+      "statute_id": "arbitration-1996",
+      "query": "disclosure of circumstances that give justifiable doubts about an arbitrator's independence or impartiality",
+      "expected": [
+        "Section 12"
+      ]
+    },
+    {
+      "id": "arb-09",
+      "statute_id": "arbitration-1996",
+      "query": "enforcement of an arbitral award in the same manner as a decree of the court",
+      "expected": [
+        "Section 36"
+      ]
+    },
+    {
+      "id": "arb-10",
+      "statute_id": "arbitration-1996",
+      "query": "orders against which an appeal lies under the arbitration law",
+      "expected": [
+        "Section 37"
+      ]
+    },
+    {
+      "id": "arb-11",
+      "statute_id": "arbitration-1996",
+      "query": "fast track arbitration decided on written pleadings without oral hearing",
+      "expected": [
+        "Section 29B"
+      ]
+    },
+    {
+      "id": "arb-12",
+      "statute_id": "arbitration-1996",
+      "query": "grounds for refusing enforcement of a foreign award under the New York Convention",
+      "expected": [
+        "Section 48"
+      ]
+    },
+    {
+      "id": "arb-13",
+      "statute_id": "arbitration-1996",
+      "query": "interim measures ordered by the arbitral tribunal itself during the proceedings",
+      "expected": [
+        "Section 17"
+      ]
+    },
+    {
+      "id": "arb-14",
+      "statute_id": "arbitration-1996",
+      "query": "seat or place of arbitration agreed by the parties",
+      "expected": [
+        "Section 20"
+      ]
+    }
+  ],
+  "negatives": [
+    {
+      "id": "neg-01",
+      "query": "best way to cook chicken biryani at home"
+    },
+    {
+      "id": "neg-02",
+      "query": "who won the football world cup final"
+    },
+    {
+      "id": "neg-03",
+      "query": "how to change a flat car tyre on the highway"
+    },
+    {
+      "id": "neg-04",
+      "query": "symptoms of seasonal flu in young children"
+    },
+    {
+      "id": "neg-05",
+      "query": "growing tomatoes in a small balcony garden"
+    },
+    {
+      "id": "neg-06",
+      "query": "how to improve my running speed for a marathon"
+    },
+    {
+      "id": "neg-07",
+      "query": "recommend a good laptop for video editing"
+    },
+    {
+      "id": "neg-08",
+      "query": "how many planets are there in the solar system"
+    }
+  ],
+  "income_tax_extension": {
+    "statute_id": null,
+    "queries": [],
+    "instructions": "EXTENSION POINT for the Income-tax Act. Once its verified edition is in the release bundle, move reviewed questions into 'queries' with the catalogue statute_id and section_number exactly as the bundle records them (format, sub-section letters and hyphens included). Questions must not contain digits or a section reference. Until then the harness reports zero income-tax questions; nothing here is evaluated.",
+    "draft_questions_without_expected_sections": [
+      "which provision taxes rent paid to a non-resident",
+      "deduction of tax at source on rent paid by a person other than an individual",
+      "notice for reassessment when income has escaped assessment",
+      "penalty for under-reporting or misreporting of income",
+      "interest for delay in furnishing the return of income",
+      "income of other persons included in the assessee's total income"
+    ]
+  }
+}

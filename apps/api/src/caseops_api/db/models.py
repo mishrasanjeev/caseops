@@ -13208,6 +13208,66 @@ class StatuteSection(Base):
     )
 
 
+class StatuteSectionChunk(Base):
+    """Embedded passage of one verified statute section (US-010/US-011).
+
+    Global public reference data, like the section it is cut from: no tenant
+    columns, and only sections that pass the canonical selectability predicate
+    are ever chunked. ``content`` is the verbatim slice
+    ``section_text[char_start:char_end]`` and every chunk records the section's
+    ``source_sha256`` and ``source_version`` at embedding time, so a text change
+    is detectable and a citation always resolves to the exact verified text.
+    On PostgreSQL the migration adds ``embedding_vector vector(1024)`` with an
+    HNSW cosine index; SQLite keeps the JSON-encoded vector only (tests).
+    """
+
+    __tablename__ = "statute_section_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "section_id",
+            "chunk_index",
+            name="uq_statute_section_chunks_section_index",
+        ),
+        CheckConstraint(
+            "char_start >= 0 AND char_end > char_start",
+            name="ck_statute_section_chunks_span",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    statute_id: Mapped[str] = mapped_column(
+        ForeignKey("statutes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_id: Mapped[str] = mapped_column(
+        ForeignKey("statute_sections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    section_number: Mapped[str] = mapped_column(String(64), nullable=False)
+    section_label: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    char_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    exact_source_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    chunker_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    # SHA-256 of the exact text sent to the embedding provider (header plus
+    # content); a changed label, Act name or chunking rule re-embeds.
+    embedded_text_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_json: Mapped[str] = mapped_column(Text, nullable=False)
+    embedded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+    )
+
+
 class StatuteSourceVersion(Base):
     """Immutable candidate/review record for a statute provision source."""
 

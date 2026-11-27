@@ -592,6 +592,13 @@ class Settings(BaseSettings):
     # uplift; operators can flip to False if quality regresses on
     # other surfaces.
     retrieval_query_normalisers_enabled: bool = Field(default=True)
+    # Section-level semantic retrieval over verified statute text
+    # (services/statute_vectors.py). OFF by default: exact section references
+    # and judgment-cited sections keep working, and building the index does not
+    # change live answers. Enable only after the statute retrieval benchmark
+    # meets 4.8/5 with no negative question returning a statute on the
+    # production provider (docs/runbooks/statute-vector-index-2026-11-26.md).
+    statute_semantic_retrieval_enabled: bool = Field(default=False)
     # Model-backed transliteration for Indic-script queries. OFF by
     # default — every non-English query would otherwise pay an LLM
     # round-trip. Enable once the probe confirms the variant beats the

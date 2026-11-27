@@ -1,7 +1,7 @@
 """Persist the requester's no-paid marker on queued AI work.
 
 Revision ID: 20261126_0201
-Revises: 20261124_0002
+Revises: 20261126_0101
 DATA-GOVERNANCE-MAP: updated
 MIGRATION-ROLLBACK: restore-forward. Downgrade refuses before DDL: removing
 the marker would let an independent worker spend on automated-test requests.
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261126_0201"
-down_revision = "20261124_0002"
+down_revision = "20261126_0101"
 branch_labels = None
 depends_on = None
 

@@ -282,6 +282,11 @@ class _Source:
     # cites / names / context_only, against the question's focus; None when the
     # question has no focus (or for statute sections).
     focus_engagement: str | None = None
+    # Statute sources only: how the section was found and the verified source
+    # identity the excerpt was taken from.
+    retrieval: str | None = None
+    source_sha256: str | None = None
+    source_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -592,22 +597,50 @@ def _engagement(
     return 2, others
 
 
+@dataclass(frozen=True)
+class _StatuteMatch:
+    section: StatuteSection
+    statute: Statute
+    # exact_reference | semantic | judgment_citation
+    retrieval: str
+    # Verbatim span of section_text that matched a semantic query.
+    span: tuple[int, int] | None = None
+
+
 def _statute_sections(
-    session: Session, focus: _Focus, documents: Iterable[AuthorityDocument]
-) -> list[tuple[StatuteSection, Statute]]:
-    """Focus provisions, then sections the chosen judgments cite within the same Acts.
+    session: Session,
+    query: str,
+    documents: Iterable[AuthorityDocument],
+    focus: _Focus | None = None,
+) -> list[_StatuteMatch]:
+    """Statute sources in fixed priority, at most ``MAX_STATUTE_SECTIONS``.
+
+    1. The focus provisions, when they have verified text.
+    2. Sections the chosen judgments cite, within the focus Acts.
+    3. Verified sections that match the question's meaning (semantic
+       retrieval), within the focus Acts when the question has a focus.
 
     Sections from other Acts are never added. Before 26 Nov 2026 a question
     whose Act was not recognised let every section the retrieved judgments
     cited through, so quashing petitions could make Section 482 CrPC the lead
-    statutory source of a Section 138 answer (BUG-002).
+    statutory source of a Section 138 answer (BUG-002). A question that names
+    a section without verified text gets no substitute section.
     """
-    refs: list[tuple[str, str]] = list(focus.refs)
+    from caseops_api.services.statute_vectors import search_statute_sections
+
+    focus = focus if focus is not None else _resolve_focus(session, query, None)
+    # Read the citations before retrieval: semantic retrieval releases its
+    # read transaction around the provider call.
+    refs: list[tuple[tuple[str, str], str]] = [(ref, "exact_reference") for ref in focus.refs]
     for document in documents:
-        refs.extend(ref for ref in _cited_refs(document) if ref[0] in focus.acts)
-    found: list[tuple[StatuteSection, Statute]] = []
+        refs.extend(
+            (ref, "judgment_citation") for ref in _cited_refs(document) if ref[0] in focus.acts
+        )
+    found: list[_StatuteMatch] = []
     seen: set[tuple[str, str]] = set()
-    for statute_id, section_number in refs:
+    for (statute_id, section_number), retrieval in refs:
+        if len(found) >= MAX_STATUTE_SECTIONS:
+            break
         if (statute_id, section_number) in seen:
             continue
         seen.add((statute_id, section_number))
@@ -621,10 +654,69 @@ def _statute_sections(
         ).first()
         if row is None or not _is_citable_section(row[0]):
             continue
-        found.append((row[0], row[1]))
+        found.append(_StatuteMatch(section=row[0], statute=row[1], retrieval=retrieval))
+    named_unverified = focus.origin == "question" and not any(
+        match.retrieval == "exact_reference" for match in found
+    )
+    if len(found) >= MAX_STATUTE_SECTIONS or named_unverified or focus.pending:
+        return found
+    seen_ids = {match.section.id for match in found}
+    for hit in search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS):
         if len(found) >= MAX_STATUTE_SECTIONS:
             break
+        if hit.match != "semantic" or hit.section.id in seen_ids:
+            continue
+        if focus.refs and hit.statute.id not in focus.acts:
+            continue
+        seen_ids.add(hit.section.id)
+        found.append(
+            _StatuteMatch(
+                section=hit.section,
+                statute=hit.statute,
+                retrieval=hit.match,
+                span=(hit.char_start, hit.char_end),
+            )
+        )
     return found
+
+
+def _statute_excerpt(section_text: str, span: tuple[int, int] | None) -> str:
+    """A verbatim excerpt of at most ``MAX_EXCERPT_CHARS``.
+
+    A short section, or one found by an exact reference or a judgment
+    citation, is quoted from its opening. A long section found by meaning is
+    quoted around the matched passage, widened to whole neighbouring passages
+    (earlier ones first, so a proviso or Explanation keeps the provision it
+    qualifies) and preceded by the section's opening line when that is not
+    already included. Every part is a verbatim slice of the section text.
+    """
+    from caseops_api.services.statute_vectors import chunk_section_text
+
+    text = section_text.strip()
+    if span is None or len(text) <= MAX_EXCERPT_CHARS:
+        return text[:MAX_EXCERPT_CHARS]
+    spans = chunk_section_text(section_text)
+    if span not in spans:
+        return section_text[span[0] : span[1]].strip()[:MAX_EXCERPT_CHARS]
+    newline = section_text.find("\n", spans[0][0], spans[0][1])
+    opening_end = newline if newline >= 0 else spans[0][1]
+    opening = section_text[spans[0][0] : opening_end].strip()[:200]
+    gap = "\n[...]\n"
+    index = spans.index(span)
+    first = last = index
+
+    def size(lo: int, hi: int) -> int:
+        body = spans[hi][1] - spans[lo][0]
+        return body if lo == 0 else body + len(opening) + len(gap)
+
+    while first > 0 and size(first - 1, last) <= MAX_EXCERPT_CHARS:
+        first -= 1
+    while last + 1 < len(spans) and size(first, last + 1) <= MAX_EXCERPT_CHARS:
+        last += 1
+    body = section_text[spans[first][0] : spans[last][1]]
+    if first == 0:
+        return body[:MAX_EXCERPT_CHARS]
+    return f"{opening}{gap}{body}"[:MAX_EXCERPT_CHARS]
 
 
 @dataclass
@@ -796,14 +888,16 @@ def _build_sources(
     focus = focus if focus is not None else _resolve_focus(session, query, matter)
     judgments, focus = _select_judgments(session, query, focus, matter)
     sources: list[_Source] = []
-    for section, statute in _statute_sections(
-        session, focus, [item.document for item in judgments]
+    for match in _statute_sections(
+        session, query, [item.document for item in judgments], focus
     ):
+        section, statute = match.section, match.statute
         label = section.section_label or ""
         title = f"{section.section_number}, {statute.long_name}"
         if label and label.lower() not in title.lower():
             title = f"{title} ({label})"
         text = (section.section_text or "").strip()
+        excerpt = _statute_excerpt(section.section_text or "", match.span)
         verified = section.verification_status in {"verified_official", "verified_licensed"}
         sources.append(
             _Source(
@@ -816,7 +910,7 @@ def _build_sources(
                 bench=None,
                 decision_date=None,
                 weight="Statutory provision (verified text)",
-                excerpt=text[:MAX_EXCERPT_CHARS],
+                excerpt=excerpt,
                 full_text=text,
                 retrieved_at=section.section_text_fetched_at,
                 source_action=inspect_source_target_action(
@@ -829,6 +923,9 @@ def _build_sources(
                     f"/app/statutes/{quote(statute.id, safe='')}"
                     f"/sections/{quote(section.section_number, safe='')}"
                 ),
+                retrieval=match.retrieval,
+                source_sha256=section.source_sha256,
+                source_version=section.source_version,
             )
         )
     treatments = compute_search_result_treatments(
@@ -1356,6 +1453,9 @@ def _manifest(sources: list[_Source]) -> list[dict[str, Any]]:
             ),
             "retrieved_at": source.retrieved_at.isoformat() if source.retrieved_at else None,
             "excerpt_sha256": hashlib.sha256(source.excerpt.encode("utf-8")).hexdigest(),
+            "retrieval": source.retrieval,
+            "source_sha256": source.source_sha256,
+            "source_version": source.source_version,
             "prompt_injection_detected": any(
                 marker in source.excerpt.lower() for marker in _INJECTION_MARKERS
             ),
