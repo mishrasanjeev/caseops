@@ -7842,3 +7842,18 @@ acceptance remains pending. Existing Android version 3 went live November
 17; fresh signed-in Play Console confirms100% production rollout and no
 unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+## November 28 — BUG-012 production reopen race (test harness)
+
+**Inconclusive until an exact-release prod-verify passes.** J08/M08, BUG-012.
+Exact-release prod-verify 46051558103 for 4232db62a failed batch4 BUG-012 on
+both attempts, and 45856740774 (e492d6472) failed it the same way. All three
+retained error locations are `tests/e2e/ram-2026-10-31-registry.spec.ts:404:36`,
+the reopen's `reopened.json()`. Production API logs for both attempts show every
+registry call returning 200/201 through create, confirm, manual snapshot, diff
+reject and retire. The reopen listener was registered while the page's
+post-retire workspace read was still in flight, so it caught that read and lost
+its body to the deep-link navigation. The product path is not implicated. The
+spec now waits for that post-retire read and asserts it shows the identity
+retired at version 5 before reopening; any other read fails the assertion.
+Recorded by Sanjeev Kumar.
