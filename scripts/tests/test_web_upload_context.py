@@ -82,6 +82,13 @@ PDF_PUBLIC_NOTICES = {
     "apps/web/public/third-party-notices/liberation-fonts-2.1.5-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/noto-sans-devanagari-2.002-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/noto-sans-2.008-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-gujarati-2.101-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-tamil-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-telugu-2.001-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-kannada-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-bengali-2.002-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-malayalam-2.101-OFL-LICENSE.txt",
+    "apps/web/public/third-party-notices/noto-sans-gurmukhi-2.002-OFL-LICENSE.txt",
     "apps/web/public/third-party-notices/uharfbuzz-0.57.0-APACHE-LICENSE.txt",
     "apps/web/public/third-party-notices/harfbuzz-15.0.0-OldMIT-COPYING.txt",
 }
@@ -177,7 +184,7 @@ class NativeUploadTests(unittest.TestCase):
             *PDF_PUBLIC_NOTICES,
             *(value["path"] for entry in record["packages"] for value in entry["materials"]),
         }
-        self.assertEqual(len(self.required), 104)
+        self.assertEqual(len(self.required), 111)
 
     def files(self, paths):
         for relative in paths:

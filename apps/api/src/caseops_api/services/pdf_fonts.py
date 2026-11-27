@@ -2,9 +2,10 @@
 
 The approved font set covers its actual cmaps, not all Unicode. Liberation has
 genuine Sans/Serif/Mono Regular/Bold/Italic/BoldItalic faces. Noto Sans fallback
-also has four genuine faces, including non-breaking hyphen. Devanagari fallback
-has genuine upright Regular/Bold only; italic text keeps bold where requested
-and uses the upright Indic face without inventing an italic font.
+also has four genuine faces, including non-breaking hyphen. The ordered Indic
+fallbacks (Devanagari, Gujarati, Tamil, Telugu, Kannada, Bengali, Malayalam,
+Gurmukhi) have genuine upright Regular/Bold only; italic text keeps bold where
+requested and uses the upright Indic face without inventing an italic font.
 
 fpdf2 2.8.9's public add_font API accepts a pathname. Its TTFFont adapter and
 FontTools accept a binary stream. We use that narrow, version-pinned adapter
@@ -27,12 +28,25 @@ from typing import Any
 
 _ROOT = Path(__file__).parent.parent / "assets" / "pdf_fonts"
 _MANIFEST_PIN = {
-    "bytes": 4604,
-    "sha256": "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4",
+    "bytes": 7864,
+    "sha256": "9eb801f0a80beffce6e295477566b89dcd817493f405884ef9f6833aa6a903b9",
 }
 _NOTICE_PIN = {
-    "bytes": 1020,
-    "sha256": "03f863636cd21d1f28b80d1450c257859bc0d2753ca0fc6aaa52f60c82a48a25",
+    "bytes": 1592,
+    "sha256": "29813e3654a1b713354699817f69e4eef4351387760c690516c4ce6eb7305c6f",
+}
+# One real word ("court" or "advocate") per approved Indic fallback, in the
+# manifest's order. Build verification proves each script's OWN upright faces
+# cover its word; a script never passes by borrowing another script's face.
+_INDIC_SAMPLES = {
+    "CaseOpsDevanagari": "अधिवक्ता",
+    "CaseOpsGujarati": "ન્યાયાલય",
+    "CaseOpsTamil": "நீதிமன்றம்",
+    "CaseOpsTelugu": "న్యాయస్థానం",
+    "CaseOpsKannada": "ನ್ಯಾಯಾಲಯ",
+    "CaseOpsBengali": "আদালত",
+    "CaseOpsMalayalam": "കോടതി",
+    "CaseOpsGurmukhi": "ਅਦਾਲਤ",
 }
 _VERSION_FIELDS = (
     "st_dev",
@@ -52,6 +66,24 @@ _FORMATTING = frozenset("\n\r\t\u200c\u200d")
 def _complete_native_cluster_map(clusters: list[int]) -> bool:
     """Only classify a nonempty, complete prefix with unique ordered clusters."""
     return bool(clusters) and clusters[0] == 0 and clusters == sorted(set(clusters))
+
+
+def _logical_visual_order(positions: list[tuple[int, int]]) -> bool:
+    """True when each glyph's drawn origin (pen + x_offset) is not left of the previous one.
+
+    Extractors order glyphs by position. A mark shaped after another glyph but
+    drawn to its left (for example Gurmukhi tippi after uu) is read out of
+    logical order even though every cluster is unique and ordered.
+    """
+    pen = 0
+    previous = None
+    for advance, offset in positions:
+        origin = pen + offset
+        if previous is not None and origin < previous:
+            return False
+        previous = origin
+        pen += advance
+    return True
 
 
 def _unavailable() -> Exception:
@@ -158,7 +190,8 @@ def _manifest() -> dict[str, Any]:
             "shaper",
             "shaper_version",
             "families",
-            "fallback",
+            "indic_fallbacks",
+            "indic_italic_policy",
             "latin_fallback",
             "assets",
             "notices",
@@ -168,8 +201,11 @@ def _manifest() -> dict[str, Any]:
         or manifest["engine_version"] != "2.8.9"
         or manifest["shaper"] != "uharfbuzz"
         or manifest["shaper_version"] != "0.57.0"
-        or len(manifest["assets"]) != 18
+        or len(manifest["assets"]) != 32
         or len(manifest["notices"]) != 2
+        # Honest-style policy: every Indic family is upright Regular/Bold only.
+        or [item.get("family") for item in manifest["indic_fallbacks"]] != list(_INDIC_SAMPLES)
+        or any(set(item["files"]) != {"", "B"} for item in manifest["indic_fallbacks"])
     ):
         raise _unavailable()
     for name, expected in manifest["notices"].items():
@@ -209,7 +245,8 @@ def unicode_pdf_class() -> type:
     aliases = {key: key for key in families}
     aliases.update({item["family"].lower(): key for key, item in families.items()})
     aliases.update({"arial": "helvetica", "times new roman": "times", "courier new": "courier"})
-    fallback = manifest["fallback"]
+    indic_fallbacks = manifest["indic_fallbacks"]
+    fallback = indic_fallbacks[0]  # Devanagari: preloaded exactly as before.
     latin_fallback = manifest["latin_fallback"]
 
     class SemanticFragment(Fragment):
@@ -226,14 +263,18 @@ def unicode_pdf_class() -> type:
             # A whole-fragment ActualText span makes PDFium assign every source
             # character to the first positioned glyph's box. Recovery is only
             # needed for repeated or reordered clusters (not ordinary Latin).
-            infos, _ = self.font.perform_harfbuzz_shaping(
+            infos, positions = self.font.perform_harfbuzz_shaping(
                 self.string, self.font_size_pt, self.text_shaping_parameters
             )
             clusters = [int(info.cluster) for info in infos]
             # A default-ignorable joiner may have a valid zero-width glyph yet
             # be discarded by a decoder's native map. Keep its logical source.
-            if _complete_native_cluster_map(clusters) and not any(
-                char in "\u200c\u200d" for char in self.string
+            if (
+                _complete_native_cluster_map(clusters)
+                and _logical_visual_order(
+                    [(int(item.x_advance), int(item.x_offset)) for item in positions]
+                )
+                and not any(char in "\u200c\u200d" for char in self.string)
             ):
                 return rendered
             actual = (b"\xfe\xff" + self.string.encode("utf-16-be")).hex().upper()
@@ -296,12 +337,22 @@ def unicode_pdf_class() -> type:
             selected = super().get_fallback_font(char, style)
             if selected is not None:
                 return selected
-            # The approved Indic family has real upright R/B only. Preserve bold;
-            # only this family may lose italics, never the genuine Latin styles.
+            # The approved Indic families have real upright R/B only. Preserve
+            # bold; only these families may lose italics, never the genuine
+            # Latin styles. Devanagari is preloaded; a later script's face is
+            # loaded only when reached, so a document without those scripts
+            # embeds exactly the faces it did before they were approved.
             indic_style = "B" if "B" in style.upper() else ""
-            key = fallback["family"].lower() + indic_style
-            if getattr(self.fonts.get(key), "cmap", {}).get(ord(char)) not in (None, ".notdef", 0):
-                return key
+            for profile in indic_fallbacks:
+                key = self._verified_font(
+                    profile["family"], indic_style, profile["files"][indic_style]
+                )
+                if getattr(self.fonts.get(key), "cmap", {}).get(ord(char)) not in (
+                    None,
+                    ".notdef",
+                    0,
+                ):
+                    return key
             return None
 
         def normalize_text(self, text: str) -> str:
@@ -339,6 +390,11 @@ def verify_package() -> dict[str, Any]:
         raise _unavailable()
     coverage: dict[str, set[int]] = {}
     latin_styles = {name: style for style, name in manifest["latin_fallback"]["files"].items()}
+    indic_styles = {
+        name: style
+        for profile in manifest["indic_fallbacks"]
+        for style, name in profile["files"].items()
+    }
     for name in manifest["assets"]:
         raw = _font_bytes(name)
         font = TTFont(BytesIO(raw), recalcTimestamp=False, lazy=False)
@@ -356,19 +412,29 @@ def verify_package() -> dict[str, Any]:
                     or font.getGlyphID(cmap[0x2011]) == 0
                 ):
                     raise _unavailable()
+            # Indic faces must be genuinely upright, and bold exactly when used as bold.
+            if name in indic_styles and font["head"].macStyle & 3 != (
+                1 if indic_styles[name] == "B" else 0
+            ):
+                raise _unavailable()
         finally:
             font.close()
     required = {ord(c) for c in "Counsel’s — “fees”… ₹ Café Śrī Rāmesh Łukasz अधिवक्ता की फीस\u2011"}
+    devanagari = manifest["indic_fallbacks"][0]["files"]
     for family in manifest["families"].values():
         for style, name in family["files"].items():
-            indic = manifest["fallback"]["files"]["B" if "B" in style else ""]
+            indic = devanagari["B" if "B" in style else ""]
             latin = manifest["latin_fallback"]["files"][style]
             if not required <= coverage[name] | coverage[indic] | coverage[latin]:
                 raise _unavailable()
+    for profile in manifest["indic_fallbacks"]:
+        sample = {ord(c) for c in _INDIC_SAMPLES[profile["family"]]}
+        if not all(sample <= coverage[name] for name in profile["files"].values()):
+            raise _unavailable()
     return {
         "state": "verified_packaged_pdf_fonts",
         "font_files": len(coverage),
         "notices": len(manifest["notices"]),
         "parser_input": "verified immutable bytes",
-        "coverage": "Required Latin/Devanagari samples only; not all Unicode",
+        "coverage": "Required Latin and per-script Indic samples only; not all Unicode",
     }

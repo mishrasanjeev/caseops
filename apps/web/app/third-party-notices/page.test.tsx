@@ -27,13 +27,13 @@ describe("third-party license notices", () => {
     expect(sitemap().some((entry) => new URL(entry.url).pathname.startsWith("/third-party-notices"))).toBe(false);
   });
 
-  it("renders one heading, seventeen named components and twenty-three full notices", () => {
+  it("renders one heading, twenty-four named components and thirty full notices", () => {
     render(<ThirdPartyNoticesPage />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Third-party notices");
     const article = screen.getByRole("article");
-    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(17);
-    expect(article.querySelectorAll("details")).toHaveLength(23);
+    expect(within(article).getAllByRole("heading", { level: 2 })).toHaveLength(24);
+    expect(article.querySelectorAll("details")).toHaveLength(30);
     for (const { component, notice } of allNotices) {
       const section = document.getElementById(component.id)!;
       expect(section).toHaveTextContent(component.packageName);
@@ -74,6 +74,13 @@ describe("third-party license notices", () => {
       ["liberation-fonts", "2.1.5"],
       ["NotoSansDevanagari", "2.002"],
       ["NotoSans", "2.008"],
+      ["NotoSansGujarati", "2.101"],
+      ["NotoSansTamil", "2.002"],
+      ["NotoSansTelugu", "2.001"],
+      ["NotoSansKannada", "2.002"],
+      ["NotoSansBengali", "2.002"],
+      ["NotoSansMalayalam", "2.101"],
+      ["NotoSansGurmukhi", "2.002"],
       ["uharfbuzz", "0.57.0"],
       ["picomatch", "4.0.7-caseops.1"],
       ["@npmcli/arborist", "9.9.3"],
@@ -83,6 +90,7 @@ describe("third-party license notices", () => {
     ]);
     const apiVersions: Record<string, string> = {
       "liberation-fonts": "2.1.5", NotoSansDevanagari: "2.002", NotoSans: "2.008", uharfbuzz: "0.57.0",
+      NotoSansGujarati: "2.101", NotoSansTamil: "2.002", NotoSansTelugu: "2.001", NotoSansKannada: "2.002", NotoSansBengali: "2.002", NotoSansMalayalam: "2.101", NotoSansGurmukhi: "2.002",
     };
     for (const component of notices.components) {
       if (component.packageName === "@npmcli/arborist") {
@@ -180,6 +188,13 @@ describe("third-party license notices", () => {
       ["liberation-fonts", "OFL-1.1", "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b"],
       ["NotoSansDevanagari", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
       ["NotoSans", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansGujarati", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansTamil", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansTelugu", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansKannada", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansBengali", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansMalayalam", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
+      ["NotoSansGurmukhi", "OFL-1.1", "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"],
       ["uharfbuzz", "Apache-2.0", "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"],
       ["uharfbuzz", "Old MIT", "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"],
     ];
@@ -201,7 +216,7 @@ describe("third-party license notices", () => {
     const fonts = JSON.parse(readFileSync(path.join(repoRoot, "apps/api/vendor/pdf-fonts-20261104/SOURCE-AND-LICENSE.json"), "utf8"));
     expect(fonts.liberation_commit).toBe("4b0192046158094654e865245832c66d2104219e");
     expect(fonts.noto_commit).toBe("ffebf8c1ee449e544955a7e813c54f9b73848eac");
-    expect(Object.keys(fonts.font_metadata)).toHaveLength(18);
+    expect(Object.keys(fonts.font_metadata)).toHaveLength(32);
   });
 
   for (const { component, notice } of allNotices) {
