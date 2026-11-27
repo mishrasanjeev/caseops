@@ -994,12 +994,20 @@ def run_research_answer_job(answer_id: str) -> None:
 def _run(session: Session, answer: ResearchAnswer) -> None:
     from caseops_api.services.embeddings import EmbeddingProviderError
 
+    query = answer.query
+    # Retrieval only reads, but between its queries it embeds the question and
+    # reranks candidates on the CPU. Inside a transaction that idle time counts
+    # against the server's idle-in-transaction timeout (60 s in production),
+    # which killed the connection mid-retrieval on 2026-11-26. Read without a
+    # transaction, then return the connection before any write.
+    session.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
     try:
-        sources = _build_sources(session, answer.query)
+        sources = _build_sources(session, query)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")
         return
+    session.commit()
     manifest = _manifest(sources)
     if not sources:
         _finish(session, answer, state="abstained", error_code="no_sources", manifest=manifest)
