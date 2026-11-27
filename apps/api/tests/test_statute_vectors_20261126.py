@@ -466,7 +466,8 @@ def test_an_unrelated_question_gets_no_statute_and_the_answer_abstains(
     monkeypatch.setattr(research, "build_provider", refuse)
     monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
     record = _ask(client, token, query=unrelated)
-    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+    # It names no law, so the lawyer is asked for the Act and section (BUG-002).
+    assert (record["status"], record["error_code"]) == ("abstained", "needs_detail")
     assert record["sources"] == [] and record["answer"] is None
 
 
@@ -1197,7 +1198,8 @@ def test_the_no_paid_http_marker_reaches_the_background_statute_embedding(
     # comparable chunks, so no query is embedded and no statute is matched.
     assert built == [(True, "caseops-automated-test-embed")]
     assert embedded == []
-    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+    # The paraphrase names no provision and nothing matched it.
+    assert (record["status"], record["error_code"]) == ("abstained", "needs_detail")
 
     built.clear()
     unmarked = _ask(client, token, query=PARAPHRASE)

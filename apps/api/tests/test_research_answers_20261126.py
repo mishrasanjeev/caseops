@@ -458,6 +458,32 @@ def test_a_vague_question_without_a_matter_asks_for_detail_not_a_dead_end(
     assert "no indexed statute section or judgment" not in record["message"]
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "What does Section 999 of the Negotiable Instruments Act say about a returned cheque?",
+        "What does Section 139 of the Imaginary Cheques Act say about a returned cheque?",
+    ],
+)
+def test_a_named_provision_without_a_source_is_not_called_vague(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, query: str
+) -> None:
+    """The lawyer named the provision; CaseOps lacks it. Asking them to "name the
+    Act and section" would be wrong (found merging #669, 2026-11-27)."""
+    token = bootstrap_company(client)["access_token"]
+
+    def refuse(**_):
+        raise AssertionError("no model call without sources")
+
+    monkeypatch.setattr(service, "build_provider", refuse)
+    monkeypatch.setattr(service, "_retrieve_judgments", lambda session, query: [])
+
+    record = _ask(client, token, query=query)
+
+    assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
+    assert "Name the Act and section" not in record["message"]
+
+
 def test_an_unsourced_provision_is_never_suggested_back(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

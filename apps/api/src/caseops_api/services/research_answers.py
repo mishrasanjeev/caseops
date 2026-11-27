@@ -1763,7 +1763,12 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
     if not sources:
         # A question CaseOps could place but has no source for is different from
         # one it could not place at all: the second needs the user to say more.
-        code = "no_sources" if focus.refs else "needs_detail"
+        # A named provision CaseOps does not hold ("Section 999 of the NI Act")
+        # was placed by the lawyer, so it is a missing source, not vagueness.
+        from caseops_api.services.statute_vectors import names_a_provision
+
+        placed = bool(focus.refs or focus.pending) or names_a_provision(query)
+        code = "no_sources" if placed else "needs_detail"
         _log_timings(answer.id, code, focus, sources, timings, attempts=0)
         _finish(session, answer, state="abstained", error_code=code, manifest=manifest)
         return
