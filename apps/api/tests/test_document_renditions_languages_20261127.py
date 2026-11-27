@@ -44,8 +44,8 @@ NEW_LANGUAGES = (*SAMPLES, "od")
 @pytest.mark.parametrize("language", sorted(SAMPLES))
 def test_scanned_order_is_read_in_its_language_and_translated_to_english(
     client: TestClient,
-    providers,
-    language: str,  # noqa: F811
+    providers,  # noqa: F811
+    language: str,
 ) -> None:
     sarvam, google = providers
     sarvam.text_for = lambda _job, _page: SAMPLES[language]
@@ -78,8 +78,8 @@ def test_scanned_order_is_read_in_its_language_and_translated_to_english(
 @pytest.mark.parametrize("language", sorted(SAMPLES))
 def test_english_order_translates_into_each_language_with_a_readable_pdf(
     client: TestClient,
-    providers,
-    language: str,  # noqa: F811
+    providers,  # noqa: F811
+    language: str,
 ) -> None:
     sarvam, google = providers
     sarvam.text_for = lambda _job, _page: ENGLISH_ORDER
