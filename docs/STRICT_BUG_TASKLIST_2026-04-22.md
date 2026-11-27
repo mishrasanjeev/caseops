@@ -59,10 +59,22 @@ predates #668): the Section 138 research answer phone case ended
 response. caseops-api runs with `cpu-throttling=true` and concurrency 1, and
 only 5 of the 29 polls reached the job's instance, so retrieval was starved of
 CPU. PostgreSQL then killed its read transaction at the 60 s
-idle-in-transaction limit. Owner decision: rerun the failed job and close the
-release as GO with caveat. The retrieval fix is PR #675 (reads on an
-autocommit connection). CPU allocation for background work stays open under
-EH-RA-01.
+idle-in-transaction limit. The rerun the owner approved failed the same way,
+on the desktop case this time, so the owner chose to release the fix instead.
+That fix is PR #675, which reads retrieval on an autocommit connection. It was
+released as 53384c2ad (API `caseops-api-00539-5fm`, web `caseops-web-00515-2sx`).
+prod-verify 45920226662 passed every suite. The projection executions
+`-5g764` and `-vr45b` rebuilt 4 and then 0, and the guarded scheduler resume
+passed. Release verdict: GO with caveat. Neither research job was starved in
+that run, so the evidence that #675 works is its PostgreSQL test. CPU
+allocation for background work stays open under EH-RA-01.
+
+Observed on the e492d6472 rerun only: the BUG-012 registry journey
+(`ram-2026-10-31-registry.spec.ts:404`) failed once, then passed locally and
+in 45920226662. Production held the expected link (version 5, retired).
+Suspected cause: after Retire the page refetches the registry list, and the
+reopen goes to the same URL, so its listener can catch the older read.
+Inconclusive. Proposed test fix: load `about:blank` before the reopen.
 
 Adjacent defect, found while compiling the Income-tax Act, 1961 for row 1:
 retained repealed-law editions (CrPC 1973, IPC, Evidence Act, and the
