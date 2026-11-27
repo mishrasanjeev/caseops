@@ -6,12 +6,12 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `4d740c256116676d46a6a3f94cafaaac4a818d1f50484bdb8629a989b48d37b1`
-- SQL tables: `373`
-- SQL columns: `5967`
-- ORM indexes: `1859`
-- Alembic/raw index declarations: `1636`
-- Non-SQL data classes: `18`
+- Canonical map SHA-256: `ea4fad5710eabecdee8499fc42dd3b8148284e8c4999d57642f06afa61d412f0`
+- SQL tables: `374`
+- SQL columns: `5986`
+- ORM indexes: `1861`
+- Alembic/raw index declarations: `1639`
+- Non-SQL data classes: `19`
 
 ## Boundary
 
@@ -354,6 +354,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `research_answers` | `tenant_operational_record` | 17 | `registry_fail_closed` |
 | `source_link_reports` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `statute_change_events` | `public_or_licensed_legal_reference` | 12 | `registry_fail_closed` |
+| `statute_section_chunks` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
 | `statute_sections` | `public_or_licensed_legal_reference` | 40 | `registry_fail_closed` |
 | `statute_source_conflicts` | `public_or_licensed_legal_reference` | 13 | `registry_fail_closed` |
 | `statute_source_versions` | `public_or_licensed_legal_reference` | 26 | `registry_fail_closed` |
@@ -407,6 +408,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `tenant-private-retrieval-candidate-cache` | `cache` | `registry_fail_closed` |
 | `sql-relational-index-projections` | `sql_index_projection` | `registry_fail_closed` |
 | `authority-document-pgvector-index` | `search_vector_index` | `registry_fail_closed` |
+| `statute-section-pgvector-index` | `search_vector_index` | `registry_fail_closed` |
 | `matter-attachment-pgvector-index` | `search_vector_index` | `registry_fail_closed` |
 | `database-queues-outbox-and-dead-letter` | `queue_outbox_dead_letter` | `registry_fail_closed` |
 | `application-logs-traces-and-metrics` | `log_trace_metric` | `registry_fail_closed` |

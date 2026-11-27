@@ -86,7 +86,9 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
 
     def deactivate():
         with Session(pg_engine) as writer:
-            writer.execute(text("SET LOCAL lock_timeout = '2s'"))
+            # The login rollback below releases this writer; the lock timeout
+            # only stops a hang and must outlast a slow runner's first poll.
+            writer.execute(text("SET LOCAL lock_timeout = '30s'"))
             writer_pids.append(writer.scalar(text("SELECT pg_backend_pid()")))
             started.set()
             row = writer.scalar(select(model).where(model.id == target_id).with_for_update())
@@ -109,11 +111,14 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
         login_pid = login.scalar(text("SELECT pg_backend_pid()"))
         writer = pool.submit(deactivate)
         try:
-            assert started.wait(1)
+            assert started.wait(30)
             # The writer must be blocked by the real PostgreSQL auth transaction.
-            deadline = monotonic() + 1
+            # Wait for that state, not a one-second window: a loaded runner can
+            # take longer to issue the writer's query. An unblocked writer
+            # finishes and fails the assertion.
+            deadline = monotonic() + 30
             blockers = []
-            while monotonic() < deadline:
+            while monotonic() < deadline and not writer.done():
                 blockers = observer.scalar(
                     text("SELECT pg_blocking_pids(:pid)"), {"pid": writer_pids[0]}
                 )
@@ -123,7 +128,7 @@ def test_auth_fence_still_excludes_identity_deactivation(pg_engine, model):
             assert login_pid in blockers
         finally:
             login.rollback()
-        writer.result(timeout=3)
+        writer.result(timeout=30)
     with Session(pg_engine) as after:
         with pytest.raises(HTTPException) as denial:
             issue_auth_session_under_fence(

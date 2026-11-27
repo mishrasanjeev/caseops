@@ -86,7 +86,7 @@ from caseops_api.services.statute_selection import is_selectable_statute_section
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-24"
+ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-26"
 PROMPT_MARKER = "caseops_research_answer_v1"
 DISCLAIMER = (
     "Source-bounded research support, not legal advice and not exhaustive. Verify each "
@@ -229,6 +229,11 @@ class _Source:
     in_app_href: str | None = None
     treatment: tuple[str | None, int] | None = None
     aliases: list[str] = field(default_factory=list)
+    # Statute sources only: how the section was found and the verified source
+    # identity the excerpt was taken from.
+    retrieval: str | None = None
+    source_sha256: str | None = None
+    source_version: int | None = None
 
 
 def _weight(forum_level: str | None, court: str | None) -> str:
@@ -300,17 +305,36 @@ def _is_citable_section(section: StatuteSection) -> bool:
     return is_selectable_statute_section(section)
 
 
+@dataclass(frozen=True)
+class _StatuteMatch:
+    section: StatuteSection
+    statute: Statute
+    # exact_reference | semantic | judgment_citation
+    retrieval: str
+    # Verbatim span of section_text that matched a semantic query.
+    span: tuple[int, int] | None = None
+
+
 def _statute_sections(
     session: Session, query: str, documents: Iterable[AuthorityDocument]
-) -> list[tuple[StatuteSection, Statute]]:
-    refs: list[tuple[str, str]] = []
+) -> list[_StatuteMatch]:
+    """Statute sources in fixed priority, at most ``MAX_STATUTE_SECTIONS``.
+
+    1. The section the question names, when it has verified text.
+    2. Sections the retrieved judgments cite, within the named Act if any.
+    3. Verified sections that match the question's meaning (semantic
+       retrieval, limited to the named Act when one is named).
+
+    A question that names a section without verified text gets no substitute
+    section from steps 1 or 3.
+    """
+    from caseops_api.services.statute_vectors import search_statute_sections
+
     primary = parse_section_string(query)
-    if primary:
-        refs.append(primary)
-    # Sections the retrieved judgments themselves cite, within the Act(s) the
-    # question is about. This brings in, e.g., Sections 139 and 142 for a
-    # Section 138 question without guessing from model knowledge.
-    statutes_in_scope = {ref[0] for ref in refs}
+    # Read the citations before retrieval: semantic retrieval releases its
+    # read transaction around the provider call.
+    statutes_in_scope = {primary[0]} if primary else set()
+    refs: list[tuple[str, str]] = []
     for document in documents:
         try:
             cited = json.loads(document.sections_cited_json or "[]")
@@ -320,9 +344,19 @@ def _statute_sections(
             parsed = parse_section_string(str(item))
             if parsed and (not statutes_in_scope or parsed[0] in statutes_in_scope):
                 refs.append(parsed)
-    found: list[tuple[StatuteSection, Statute]] = []
+
+    hits = search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS)
+    exact = [hit for hit in hits if hit.match == "exact_reference"]
+    semantic = [hit for hit in hits if hit.match == "semantic"]
+    found: list[_StatuteMatch] = [
+        _StatuteMatch(section=hit.section, statute=hit.statute, retrieval=hit.match)
+        for hit in exact
+    ]
+    seen_ids = {match.section.id for match in found}
     seen: set[tuple[str, str]] = set()
     for statute_id, section_number in refs:
+        if len(found) >= MAX_STATUTE_SECTIONS:
+            break
         if (statute_id, section_number) in seen:
             continue
         seen.add((statute_id, section_number))
@@ -334,12 +368,66 @@ def _statute_sections(
                 StatuteSection.section_number == section_number,
             )
         ).first()
-        if row is None or not _is_citable_section(row[0]):
+        if row is None or not _is_citable_section(row[0]) or row[0].id in seen_ids:
             continue
-        found.append((row[0], row[1]))
+        seen_ids.add(row[0].id)
+        found.append(
+            _StatuteMatch(section=row[0], statute=row[1], retrieval="judgment_citation")
+        )
+    for hit in semantic:
         if len(found) >= MAX_STATUTE_SECTIONS:
             break
+        if hit.section.id in seen_ids:
+            continue
+        seen_ids.add(hit.section.id)
+        found.append(
+            _StatuteMatch(
+                section=hit.section,
+                statute=hit.statute,
+                retrieval=hit.match,
+                span=(hit.char_start, hit.char_end),
+            )
+        )
     return found
+
+
+def _statute_excerpt(section_text: str, span: tuple[int, int] | None) -> str:
+    """A verbatim excerpt of at most ``MAX_EXCERPT_CHARS``.
+
+    A short section, or one found by an exact reference or a judgment
+    citation, is quoted from its opening. A long section found by meaning is
+    quoted around the matched passage, widened to whole neighbouring passages
+    (earlier ones first, so a proviso or Explanation keeps the provision it
+    qualifies) and preceded by the section's opening line when that is not
+    already included. Every part is a verbatim slice of the section text.
+    """
+    from caseops_api.services.statute_vectors import chunk_section_text
+
+    text = section_text.strip()
+    if span is None or len(text) <= MAX_EXCERPT_CHARS:
+        return text[:MAX_EXCERPT_CHARS]
+    spans = chunk_section_text(section_text)
+    if span not in spans:
+        return section_text[span[0] : span[1]].strip()[:MAX_EXCERPT_CHARS]
+    newline = section_text.find("\n", spans[0][0], spans[0][1])
+    opening_end = newline if newline >= 0 else spans[0][1]
+    opening = section_text[spans[0][0] : opening_end].strip()[:200]
+    gap = "\n[...]\n"
+    index = spans.index(span)
+    first = last = index
+
+    def size(lo: int, hi: int) -> int:
+        body = spans[hi][1] - spans[lo][0]
+        return body if lo == 0 else body + len(opening) + len(gap)
+
+    while first > 0 and size(first - 1, last) <= MAX_EXCERPT_CHARS:
+        first -= 1
+    while last + 1 < len(spans) and size(first, last + 1) <= MAX_EXCERPT_CHARS:
+        last += 1
+    body = section_text[spans[first][0] : spans[last][1]]
+    if first == 0:
+        return body[:MAX_EXCERPT_CHARS]
+    return f"{opening}{gap}{body}"[:MAX_EXCERPT_CHARS]
 
 
 def _build_sources(session: Session, query: str) -> list[_Source]:
@@ -355,12 +443,14 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
         )
     }
     sources: list[_Source] = []
-    for section, statute in _statute_sections(session, query, documents.values()):
+    for match in _statute_sections(session, query, documents.values()):
+        section, statute = match.section, match.statute
         label = section.section_label or ""
         title = f"{section.section_number}, {statute.long_name}"
         if label and label.lower() not in title.lower():
             title = f"{title} ({label})"
         text = (section.section_text or "").strip()
+        excerpt = _statute_excerpt(section.section_text or "", match.span)
         verified = section.verification_status in {"verified_official", "verified_licensed"}
         sources.append(
             _Source(
@@ -373,7 +463,7 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 bench=None,
                 decision_date=None,
                 weight="Statutory provision (verified text)",
-                excerpt=text[:MAX_EXCERPT_CHARS],
+                excerpt=excerpt,
                 full_text=text,
                 retrieved_at=section.section_text_fetched_at,
                 source_action=inspect_source_target_action(
@@ -386,6 +476,9 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                     f"/app/statutes/{quote(statute.id, safe='')}"
                     f"/sections/{quote(section.section_number, safe='')}"
                 ),
+                retrieval=match.retrieval,
+                source_sha256=section.source_sha256,
+                source_version=section.source_version,
             )
         )
     treatments = compute_search_result_treatments(
@@ -813,6 +906,9 @@ def _manifest(sources: list[_Source]) -> list[dict[str, Any]]:
             ),
             "retrieved_at": source.retrieved_at.isoformat() if source.retrieved_at else None,
             "excerpt_sha256": hashlib.sha256(source.excerpt.encode("utf-8")).hexdigest(),
+            "retrieval": source.retrieval,
+            "source_sha256": source.source_sha256,
+            "source_version": source.source_version,
             "prompt_injection_detected": any(
                 marker in source.excerpt.lower() for marker in _INJECTION_MARKERS
             ),
@@ -994,12 +1090,20 @@ def run_research_answer_job(answer_id: str) -> None:
 def _run(session: Session, answer: ResearchAnswer) -> None:
     from caseops_api.services.embeddings import EmbeddingProviderError
 
+    query = answer.query
+    # Retrieval only reads, but between its queries it embeds the question and
+    # reranks candidates on the CPU. Inside a transaction that idle time counts
+    # against the server's idle-in-transaction timeout (60 s in production),
+    # which killed the connection mid-retrieval on 2026-11-26. Read without a
+    # transaction, then return the connection before any write.
+    session.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
     try:
-        sources = _build_sources(session, answer.query)
+        sources = _build_sources(session, query)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")
         return
+    session.commit()
     manifest = _manifest(sources)
     if not sources:
         _finish(session, answer, state="abstained", error_code="no_sources", manifest=manifest)

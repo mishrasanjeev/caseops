@@ -5,11 +5,23 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # The complete suite runs on every pull request, nightly on main, and on
+  # demand. A push to main runs only the fast lint, web and build gates: the
+  # merged change already passed the complete suite on its pull request, and
+  # re-running all of it on every merge cost about 17% of all CI minutes.
+  # The nightly run catches two separately green pull requests that break
+  # each other after both merge. Before a release, dispatch this workflow on
+  # main to run the complete suite on the exact release commit.
+  schedule:
+    - cron: "17 20 * * *" # 01:47 IST daily
+  workflow_dispatch:
 
 concurrency:
   # Cancel in-flight runs for the same branch so a fast follow-up push
-  # doesn't queue behind an already-obsolete build.
-  group: ci-${{ github.ref }}
+  # doesn't queue behind an already-obsolete build. The event is part of the
+  # group so a merge to main never cancels the nightly or a dispatched
+  # complete run.
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -96,6 +108,7 @@ jobs:
   statute-evidence:
     name: Official statute evidence
     runs-on: ubuntu-latest
+    if: github.event_name != 'push'
     # Reproduces every pinned official edition from verified bytes, including
     # the 1,117-page Income-tax Act release asset. It runs beside API ruff with
     # its own budget and gates the required API (ruff + pytest) check.
@@ -176,6 +189,7 @@ jobs:
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
+    if: github.event_name != 'push'
     # Broad unit/integration shards must be network-independent. Dedicated OCR
     # tests select and mock each backend explicitly.
     env:
@@ -335,7 +349,7 @@ jobs:
     name: API (ruff + pytest)
     runs-on: ubuntu-latest
     needs: [api-ruff, api-test-shards, statute-evidence]
-    if: always() && !cancelled()
+    if: github.event_name != 'push' && always() && !cancelled()
     timeout-minutes: 15
     steps:
       - name: Fail if API prerequisites failed
@@ -402,6 +416,7 @@ jobs:
     # See apps/api/tests/test_postgres_validation.py for what's covered.
     name: Postgres + pgvector shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
+    if: github.event_name != 'push'
     env:
       UV_LINK_MODE: copy
     timeout-minutes: 12
@@ -523,7 +538,7 @@ jobs:
     name: Postgres + pgvector validation
     runs-on: ubuntu-latest
     needs: [postgres-validation-shards]
-    if: always() && !cancelled()
+    if: github.event_name != 'push' && always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Require every PostgreSQL shard
@@ -547,6 +562,7 @@ jobs:
   web-windows:
     name: Windows web (typecheck + complete coverage)
     runs-on: windows-2025-vs2026
+    if: github.event_name != 'push'
     # Match the existing Windows full-frontend verification window. This new
     # job includes provisioning; all per-test and native deadlines stay fixed.
     timeout-minutes: 60
@@ -1068,7 +1084,7 @@ jobs:
     name: Playwright app suite
     runs-on: ubuntu-24.04
     needs: [api, web, postgres-validation, e2e-projects]
-    if: always() && !cancelled()
+    if: github.event_name != 'push' && always() && !cancelled()
     timeout-minutes: 5
     steps:
       - name: Require successful App projects
@@ -1127,6 +1143,9 @@ jobs:
   deploy-staging:
     name: Cloud Run deploy (staging)
     runs-on: ubuntu-latest
+    # api and e2e do not run on a push to main (see the trigger comment), so
+    # this job is skipped there too. Move it to the nightly or dispatched
+    # complete run before enabling staging deploys.
     needs: [api, web, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     timeout-minutes: 25

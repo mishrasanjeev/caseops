@@ -1,3 +1,25 @@
+## November26 - statute vector index is an operator-run, unscheduled job
+
+**Partially implemented** (J05/M04, MOD-TS-017, FT-117..FT-122, NFT-026,
+SEC-034). Migration `20261126_0101` and `services/statute_vectors.py` add
+section-level vector retrieval over verified statute text; landed in code on
+`feat/statute-vector-retrieval-20261126`, not deployed. Open operations gaps:
+
+- The index is built by `python -m caseops_api.scripts.embed_statute_sections`
+  run by an operator (`docs/runbooks/statute-vector-index-2026-11-26.md`). It is
+  not in `infra/cloudrun/scheduler-inventory.json` and does not run after
+  `caseops-seed-statutes` in `scripts/deploy-prod.sh`, so a seed that changes
+  verified text leaves the changed sections out of semantic retrieval until the
+  job runs. Fail-closed: the read path re-checks selectability and the source
+  hash and version, so stale text is never returned.
+- Live use is gated by `CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED` (default
+  off), so building the index cannot change answers before the benchmark gate.
+  The `voyage-4-large` similarity floor (0.30) is provisional until the
+  production benchmark's calibration confirms it; no production rating exists.
+- HNSW uses `m=16, ef_construction=64` and the default `hnsw.ef_search=40`
+  (candidate pool 40 chunks), measured locally at 7,198 chunks (2 ms, index
+  chosen without hints). Not measured on Cloud SQL.
+
 ## November25 - DataTable data contract (EH-B4-02 progress)
 
 **Partially implemented.** The shared web `DataTable` filtered, paged and
@@ -6552,6 +6574,30 @@ is an unauthenticated probe: `/api/matters/{id}/document-renditions` answers
 until the owner-run enablement in
 `docs/runbooks/ocr-translation-enablement-2026-11-23.md` and a live call.
 
+Enabled and live-verified 2026-11-26. Release 133f2f74d (PR #651 binding, merge
+a430c593c, shipped with integration PR #661) is served by API revision
+caseops-api-00537-77k, whose `CASEOPS_RELEASE_SHA` is 133f2f74d. A read-only
+readback of both the `caseops-api` service and the
+`caseops-document-processing` job showed `CASEOPS_SARVAM_DOCUMENT_AI_ENABLED=true`,
+`CASEOPS_GOOGLE_TRANSLATION_ENABLED=true`,
+`CASEOPS_GOOGLE_TRANSLATION_LOCATION=us-central1` and
+`CASEOPS_SARVAM_API_KEY` bound to `caseops-sarvam-api-key:latest`.
+Exact-release prod-verify 45804566044 passed. The owner then recorded the
+`ocr_page`/`sarvam` and `translation_characters`/`google-translation` cost
+profiles (actual, high confidence, source and evidence) and, signed in to a
+real workspace, ran OCR & Translate on a fictional two-page Hindi rental
+agreement with no text layer. Sarvam OCR read both pages (OCR version
+`review_required`). Google `general/translation-llm` in `us-central1` produced a
+complete English PDF; every clause, party, amount, date and term matched the
+source. The `caseops-document-processing` cadence picked the work up within a
+minute: executions f4jbx and 94655 (14:15 UTC) each completed one job, ldblp
+(14:22) and wmwld (14:23) recorded failed jobs while the translation profile
+carried a mistyped provider (`cost_not_verified`, no provider call), and k9xlv
+(14:28) completed the translation after the provider was corrected. Not read
+from production: the Sarvam job id in `provider_jobs_json`, the settled spend
+rows and the `matter_attachment.*` audit events, because production database
+reads are not available to the verifier.
+
 ### EH-OCRT-01 - Paid OCR/translation providers are fenced and fail closed
 
 - **Status:** Partially implemented (2026-11-23, branch
@@ -6566,8 +6612,13 @@ until the owner-run enablement in
   `PROVIDER_KEYS`). Documents with `native_local_processing_only` are never sent.
   Tests prove each refusal makes no provider request
   (`apps/api/tests/test_document_renditions_20261123.py`).
-- **Open:** no deploy binding and no live call, so live behaviour is unproven.
-  Sarvam's per-page output schema is unpublished and parsed defensively. A
+- **Open:** since 2026-11-26 the binding is deployed and one live OCR and one
+  live translation call succeeded (see the section note). The fence also held
+  in production: translation stayed refused as `cost_not_verified` while the
+  cost profile's provider did not match. Settled spend rows for the live run
+  have not been read. Sarvam's per-page output schema is unpublished and
+  parsed defensively; the live run read both pages without
+  `provider_page_missing`. A
   tenant-level OCR/translation model allowlist (SEC-025 depth) is not in
   `tenant_ai_policy` yet; only the per-document on-device flag and global
   switches restrict it.
@@ -6589,7 +6640,9 @@ until the owner-run enablement in
   PostgreSQL (providers off) showed a mixed PDF reaching `review_required` with
   the scanned page listed as unread, and a review that required a note and
   wrote `ocr_requested`, `ocr_completed` and `rendition_reviewed` audit events.
-- **Open:** production cadence pickup of `resume` jobs is unverified.
+- **Open:** production cadence pickup of `resume` jobs is unverified. Pickup of
+  ordinary OCR and translation jobs was seen in production on 2026-11-26
+  (within one minute).
 
 ### EH-OCRT-03 - Derived legal text is versioned, reviewable and never presented as certified
 
@@ -6601,28 +6654,36 @@ until the owner-run enablement in
   existing storage namespace, private download headers and the storage quota.
 - **Open:** derived text is deliberately not indexed for retrieval. Glossary
   control, in-place edit and a legal-term benchmark are missing, so no
-  language pair may be called production-ready (PRD J16).
+  language pair may be called production-ready (PRD J16). Observed in the
+  2026-11-26 live run: both OCR pages of a clean, printed sample were flagged
+  for review, so every translated segment carried `source_needs_review`, and
+  clause 4 was flagged `number_added` although the English adds no number. The
+  page-level review reasons were not captured; tune the OCR review rule or the
+  number check only after reading them.
 
 ### EH-OCRT-04 - Credentials and deploy wiring
 
-- **Status:** Partially implemented (2026-11-24). The binding change
-  (branch `feat/ocr-translation-enablement-20261124`, PR #651; it was a draft until the secret
-  exists) binds `caseops-sarvam-api-key` and the OCR/translation settings in
-  `scripts/deploy-prod.sh` (`caseops-api`, with service readback) and in the
-  `caseops-document-processing` contract in
-  `infra/cloudrun/scheduler-inventory.json`. A read-only preflight refuses the
-  release before any build or migration unless the secret has an enabled
-  latest version. Covered by `tests/test_deploy_prod_hardening.py`
-  (binding pins, preflight refusal, readback drift for secret, flag and
-  location). Setup confirmed by read-only checks on 2026-11-24: the secret
-  has an enabled version without a trailing newline, the runtime service
-  account can read it, `translate.googleapis.com` is enabled and the runtime
-  service account holds `roles/cloudtranslate.user`. The owner accepted
-  `us-central1` (United States) translation processing on 2026-11-24. Not
-  yet `Implemented`: no release has carried the binding, no provider cost
-  profile is recorded (so no paid call is made), and no live provider call
-  has been recorded. See sections A to C of
-  `docs/runbooks/ocr-translation-enablement-2026-11-23.md`.
+- **Status:** Implemented (2026-11-26). `scripts/deploy-prod.sh` binds
+  `caseops-sarvam-api-key` and the OCR/translation settings on `caseops-api`
+  with service readback, and `infra/cloudrun/scheduler-inventory.json` binds
+  them on the `caseops-document-processing` job contract (PR #651, merge
+  a430c593c). A read-only preflight refuses any release before build or
+  migration unless the secret has an enabled latest version. Covered by
+  `tests/test_deploy_prod_hardening.py` (binding pins, preflight refusal,
+  readback drift for secret, flag and location). Setup confirmed by read-only
+  checks on 2026-11-24: an enabled secret version without a trailing newline,
+  secret access for the runtime service account, `translate.googleapis.com`
+  enabled and `roles/cloudtranslate.user` granted. The owner accepted
+  `us-central1` (United States) translation processing on 2026-11-24. Runtime
+  proof: release 133f2f74d carried the binding, the readback of service and
+  job matched, prod-verify 45804566044 passed, and a live OCR call and a live
+  translation call succeeded on 2026-11-26 (see the section note).
+- **Caveat:** the Sarvam job id, settled spend rows and audit events of the
+  live run were not read from production. The cost page's "Unit minor" field
+  is parsed with `parseInt`: a leading currency sign fails with a server error
+  naming `unit_amount_minor or unit_amount_bps`, and a decimal is silently cut
+  to its whole part, so operators must enter whole paise and check the saved
+  amount.
 
 
 ## November 24 - Research three-part answer (EH-RA-01..02)
@@ -6704,3 +6765,32 @@ until the owner-run enablement in
   manifest needs the same check.
 - **Verification:** see the PR for command evidence. CodeQL on the PR head is
   the proof that the 38 code fixes close their alerts.
+
+## November 26 - Complete CI suite off main pushes (EH-CI-2026-11-26)
+
+- **Status:** Partially implemented. Landed in `.github/workflows/ci.yml`;
+  not yet proven on `main`.
+- **Measured cost (7 days to 2026-11-26, runner time only):** about 88,000
+  billable Actions minutes. CI on pull requests was 72% and CI re-run on the
+  25 merges to `main` was 17% (about 15,100 minutes). The release tooling does
+  not read CI results on `main`; it requires only the Security workflow on the
+  merge commit.
+- **Change:** pull requests, a nightly run on `main` (20:17 UTC, 01:47 IST)
+  and `workflow_dispatch` run the complete suite. A push to `main` runs only
+  API ruff and the web typecheck, vitest, build and Docker builder job. The
+  API, PostgreSQL, Windows web and Playwright suites skip there; their
+  aggregators still require every shard to succeed whenever they run. Each
+  event has its own concurrency group, so a merge cannot cancel a nightly or
+  dispatched run. Expected saving is about 10,000 minutes a week (12%).
+- **Accepted risk:** branch protection does not require branches to be up to
+  date, so two separately green pull requests can break `main` together. That
+  is now caught by the nightly run, up to a day later. Before a release,
+  dispatch CI on `main` to run the complete suite on the exact release commit.
+- **Staging:** `deploy-staging` needs `api` and `e2e`, so it no longer runs on
+  a push. It is already fail-closed and skips without its configuration; move
+  it to the nightly or dispatched run before enabling staging deploys.
+- **Proof:** `apps/api/tests/test_ci_main_push_trim_20261126.py` fails on the
+  previous workflow and passes on this one. The three aggregator condition
+  pins were updated. Still required for Implemented: the first push to `main`
+  after merge skips the heavy suites, and the first nightly run executes all of
+  them.
