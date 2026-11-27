@@ -81,12 +81,16 @@ with get_session_factory()() as session:
         if session.get(Statute, statute_id) is None:
             session.add(Statute(id=statute_id, short_name=short, long_name=long, enacted_year=year))
             session.flush()
-        section = session.scalar(select(StatuteSection).where(
-            StatuteSection.statute_id == statute_id, StatuteSection.section_number == number))
-        if section is None:
-            section = StatuteSection(statute_id=statute_id, section_number=number,
-                                     ordinal=int(number.split()[-1]))
-            session.add(section)
+        # A database that already holds the official section keeps it: the
+        # statute source-data journeys compare those rows with the release
+        # manifest, and overwriting them broke that proof (CI 45936647500).
+        if session.scalar(select(StatuteSection.id).where(
+                StatuteSection.statute_id == statute_id,
+                StatuteSection.section_number == number)) is not None:
+            continue
+        section = StatuteSection(statute_id=statute_id, section_number=number,
+                                 ordinal=int(number.split()[-1]))
+        session.add(section)
         section.section_label = label
         section.section_text = text
         section.section_text_source = "official_source"

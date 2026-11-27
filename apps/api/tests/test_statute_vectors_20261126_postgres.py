@@ -22,7 +22,6 @@ from caseops_api.db.session import clear_engine_cache
 from caseops_api.services import statute_vectors as vectors
 from tests.fixtures_postgres_client import temporary_http_database
 from tests.test_ip_document_taxonomy_defaults_migration_20261031 import _alembic_config
-from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 from tests.test_statute_vectors_20261126 import PARAPHRASE, SECTION_TEXT, ContentWordProvider
 
 PARENT = "20261124_0002"
@@ -99,8 +98,9 @@ def test_migration_adds_only_the_chunk_table_and_refuses_downgrade(
 
 @pytest.mark.postgres
 def test_hnsw_path_returns_the_paraphrased_section_and_drops_stale_rows(
-    pg_engine, _ensure_migrations  # noqa: F811
+    http_pg_engine,
 ) -> None:
+    pg_engine = http_pg_engine  # A fresh migrated database: the sync reads every section.
     statute_id = f"pg-statute-vectors-{uuid4().hex[:12]}"
     embedder = ContentWordProvider()
     try:
@@ -211,8 +211,9 @@ def test_hnsw_path_returns_the_paraphrased_section_and_drops_stale_rows(
 
 @pytest.mark.postgres
 def test_a_pgvector_error_degrades_to_the_exact_path_and_leaves_the_session_usable(
-    pg_engine, _ensure_migrations  # noqa: F811
+    http_pg_engine,
 ) -> None:
+    pg_engine = http_pg_engine  # A fresh migrated database: the sync reads every section.
     """A dimension mismatch reaching pgvector must not become an internal error."""
     statute_id = f"pg-statute-vectors-{uuid4().hex[:12]}"
     embedder = ContentWordProvider()

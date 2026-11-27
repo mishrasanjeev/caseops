@@ -85,6 +85,7 @@ from caseops_api.services.llm import (
     max_tokens_for_purpose,
 )
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.retrieval import STOPWORDS, _tokenize
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     authority_source_verified,
@@ -140,8 +141,8 @@ STATUS_MESSAGES = {
         "one of the suggested questions, or search authorities directly."
     ),
     "needs_detail": (
-        "CaseOps could not tell which law this question is about and found no indexed "
-        "source for it. Name the Act and section or the legal issue (for example, "
+        "CaseOps could not tell which law or legal issue this question is about. "
+        "Name the Act and section or the legal issue (for example, "
         "\"essential ingredients of Section 138 of the Negotiable Instruments Act\"), or "
         "start the research from a matter so its recorded facts and statutes are used."
     ),
@@ -400,6 +401,30 @@ def _matter_statute_refs(session: Session, matter: Matter | None) -> list[tuple[
         if (statute_id, section_number) not in refs:
             refs.append((statute_id, section_number))
     return refs
+
+
+# Words that ask for an explanation or point at a record without saying what
+# it is about. "Explain about this matter/case." names no law, issue or fact.
+_ASKING_WORDS = frozenset(
+    """
+    about above again all also any anything aspect aspects brief briefly can case cases could
+    current describe detail details did discuss do does document elaborate everything explain
+    explanation facts file give help her here his how issue issues its just kindly know law legal
+    matter matters may me might more must my need now our overview please point points position
+    present question record regarding related relating said same shall should situation some
+    something summarise summarize summary tell their there these this those understand want what
+    when where which who why will would you your
+    """.split()
+)
+
+
+def _names_a_subject(query: str) -> bool:
+    """Whether the question says what it is about, beyond asking and pointing."""
+    return any(
+        token.isalpha() and len(token) >= 3
+        and token not in STOPWORDS and token not in _ASKING_WORDS
+        for token in _tokenize(query)
+    )
 
 
 def _resolve_focus(session: Session, query: str, matter: Matter | None) -> _Focus:
@@ -1751,7 +1776,13 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
     matter = session.get(Matter, matter_id) if matter_id else None
     try:
         focus = _resolve_focus(session, query, matter)
-        sources, focus = _build_sources(session, query, focus=focus, matter=matter)
+        # Without a matter, a question that names no provision and no subject
+        # cannot be placed. Retrieval would still match something in a large
+        # corpus and the answer would be about an unrelated case (BUG-004).
+        vague = matter is None and not (focus.refs or focus.pending) and not _names_a_subject(query)
+        sources: list[_Source] = []
+        if not vague:
+            sources, focus = _build_sources(session, query, focus=focus, matter=matter)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")

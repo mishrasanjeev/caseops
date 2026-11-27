@@ -460,6 +460,43 @@ def test_a_vague_question_without_a_matter_asks_for_detail_not_a_dead_end(
 
 @pytest.mark.parametrize(
     "query",
+    [VAGUE_QUERY, "Explain about this matter/case. 6A45DDD9", "Please summarise my case."],
+)
+def test_a_vague_question_is_not_answered_from_an_unrelated_corpus(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, query: str
+) -> None:
+    """A populated corpus always matches something. Without a matter, a question
+    that names no law, issue or fact must ask for detail, never answer from an
+    unrelated judgment (CI 45936647500: two IPLF trade-mark judgments)."""
+    _seed_sources()
+    token = bootstrap_company(client)["access_token"]
+    retrieve = service._retrieve_judgments
+    searched: list[str] = []
+
+    def populated(session, text):
+        searched.append(text)
+        return retrieve(session, CHEQUE_QUERY)  # Every search finds judgments.
+
+    def refuse(**_):
+        raise AssertionError("no model call for an unplaceable question")
+
+    monkeypatch.setattr(service, "_retrieve_judgments", populated)
+    monkeypatch.setattr(service, "build_provider", refuse)
+
+    record = _ask(client, token, query=query)
+
+    assert (record["status"], record["error_code"]) == ("abstained", "needs_detail")
+    assert "Name the Act and section" in record["message"]
+    assert searched == []
+
+    # A question with a subject of its own is still researched without a matter.
+    monkeypatch.setattr(service, "build_provider", lambda **_: _Scripted(_answer()))
+    _ask(client, token, query="What is the punishment when a cheque bounces for want of funds?")
+    assert searched
+
+
+@pytest.mark.parametrize(
+    "query",
     [
         "What does Section 999 of the Negotiable Instruments Act say about a returned cheque?",
         "What does Section 139 of the Imaginary Cheques Act say about a returned cheque?",
