@@ -112,6 +112,8 @@ test.describe("Notice module production workflows", () => {
       { timeout: 90_000 },
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', receivedNoticePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     const receivedResponse = await receivedUploadResponse;
     expect(receivedResponse.status()).toBeGreaterThanOrEqual(200);
     expect(receivedResponse.status()).toBeLessThan(300);
@@ -168,6 +170,8 @@ test.describe("Notice module production workflows", () => {
       { timeout: 90_000 },
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', sentNoticePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     const sentResponse = await sentUploadResponse;
     expect(sentResponse.status()).toBeGreaterThanOrEqual(200);
     expect(sentResponse.status()).toBeLessThan(300);

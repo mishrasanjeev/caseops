@@ -46,6 +46,7 @@ import {
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchAuthorityResearchReports,
@@ -368,17 +369,15 @@ export default function IntelligentReviewsPage() {
                         maxLength={500}
                         onChange={(event) => setFact(setFacts, facts, index, "source_ref", event.target.value)}
                       />
-                      <Button
+                      <IconButton label={`Remove fact ${index + 1}`}
                         type="button"
                         size="sm"
                         variant="ghost"
-                        aria-label={`Remove fact ${index + 1}`}
-                        title="Remove fact"
                         disabled={facts.length === 1}
                         onClick={() => setFacts((current) => current.filter((_, item) => item !== index))}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden />
-                      </Button>
+                      </IconButton>
                     </div>
                   ))}
                 </div>
@@ -425,9 +424,9 @@ export default function IntelligentReviewsPage() {
         <div className="min-w-0">
           <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
             <h2 id="review-history-title" className="text-base font-semibold">Review history</h2>
-            <Button size="sm" variant="ghost" onClick={() => reviewsQuery.refetch()} aria-label="Refresh reviews" title="Refresh reviews">
+            <IconButton label="Refresh reviews" size="sm" variant="ghost" onClick={() => reviewsQuery.refetch()}>
               <RefreshCw className={reviewsQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden />
-            </Button>
+            </IconButton>
           </div>
           {reviewsQuery.isError ? (
             <QueryErrorState title="Could not load reviews" error={reviewsQuery.error} onRetry={reviewsQuery.refetch} />

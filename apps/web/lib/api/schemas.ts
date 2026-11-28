@@ -86,6 +86,7 @@ export const matter = z.object({
   forum_level: z.string().nullable().optional(),
   court_id: z.string().nullable().optional(),
   court_name: z.string().nullable().optional(),
+  court_website_url: z.string().nullable().optional(),
   court_forum_number: z.string().nullable().optional(),
   forum_catalog_entry_id: z.string().nullable().optional(),
   forum_state: z.string().nullable().optional(),
@@ -976,6 +977,61 @@ export const mockHearingListResponse = z
   })
   .strict();
 
+// Nov 27 row 7: Start session prerequisites, evaluated by the start path's
+// own predicates on the server. `ready` is true exactly when starting works.
+export const mockHearingReadinessResponse = z
+  .object({
+    matter_id: z.string(),
+    ready: z.boolean(),
+    checks: z.array(
+      z
+        .object({
+          key: z.enum([
+            "matter_operational",
+            "affidavit_document",
+            "affidavit_text",
+            "affidavit_run",
+            "question_bank",
+          ]),
+          label: z.string(),
+          status: z.enum(["met", "missing", "pending", "blocked"]),
+          detail: z.string(),
+        })
+        .strict(),
+    ),
+    next_action: z.enum([
+      "start_session",
+      "run_affidavit_intelligence",
+      "wait_for_processing",
+      "mark_affidavit",
+      "upload_affidavit",
+      "none",
+    ]),
+    next_action_attachment_id: z.string().nullable(),
+    next_action_detail: z.string(),
+    affidavit_document_types: z.array(z.string()),
+    affidavit_sources: z.array(
+      z
+        .object({
+          attachment_id: z.string(),
+          filename: z.string(),
+          document_type: z.string(),
+          processing_status: z.string(),
+          has_usable_text: z.boolean(),
+          latest_run_status: z
+            .enum(["completed", "insufficient_source_text", "no_findings"])
+            .nullable(),
+          latest_run_question_count: z.number().int().min(0),
+        })
+        .strict(),
+    ),
+    latest_completed_run_id: z.string().nullable(),
+    available_question_count: z.number().int().min(0),
+    available_question_categories: z.array(z.string()),
+  })
+  .strict();
+
+export type MockHearingReadinessResponse = z.infer<typeof mockHearingReadinessResponse>;
 export type MockHearingScorecard = z.infer<typeof mockHearingScorecard>;
 export type MockHearingResponse = z.infer<typeof mockHearingResponse>;
 export type MockHearingQuestion = z.infer<typeof mockHearingQuestion>;
@@ -2485,6 +2541,7 @@ export const outlookTenantConfigurationResponse = z.object({
     "blocked_pending_admin_configuration",
     "ready_for_adp20_implementation",
   ]),
+  expected_redirect_uri: z.string().nullable().optional(),
 }).transform((value) =>
   value.machine_control_version === LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION
     ? {
@@ -3508,7 +3565,44 @@ export const microsoft365TenantConfigurationResponse = z.object({
     "blocked_pending_admin_configuration",
     "ready_for_review_first_workflows",
   ]),
+  // Nov 27 row 8: setup guidance computed by the server. The redirect URI is
+  // the exact callback the Microsoft sign-in flow on this deployment uses.
+  registration_model: z.literal("customer_entra_app_registration"),
+  expected_redirect_uri: z.string(),
+  callback_path: z.string(),
+  saved_redirect_uri: z.string().nullable(),
+  redirect_uri_matches_expected: z.boolean(),
+  client_id: z.string().nullable(),
+  tenant_id: z.string().nullable(),
+  secret_saved: z.boolean(),
+  required_permissions: z.array(
+    z.object({
+      scope: z.string(),
+      kind: z.literal("delegated"),
+      purpose: z.string(),
+    }),
+  ),
 });
+
+export const microsoft365ReadinessTestResponse = z.object({
+  provider: z.literal("microsoft_365"),
+  status: z.enum(["passed", "blocked", "not_run"]),
+  checks: z.array(
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      status: z.enum(["passed", "blocked", "not_run"]),
+      detail: z.string().nullable().optional(),
+    }),
+  ),
+  readiness: z.enum([
+    "blocked_pending_admin_configuration",
+    "ready_for_review_first_workflows",
+  ]),
+  tested_at: z.string(),
+});
+
+export type Microsoft365ReadinessTestResponse = z.infer<typeof microsoft365ReadinessTestResponse>;
 
 export const providerCostProfileRecord = z.object({
   id: z.string(),

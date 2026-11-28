@@ -168,11 +168,18 @@ The first live run (2026-11-26, fictional image-only Hindi sample) is recorded
 under EH-OCRT in `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`.
 
 Until a real successful call has been recorded this way, the live integration
-is unverified. This holds even though mocked contract tests pass. The Sarvam
-per-page JSON layout is not published, and the parser reads it defensively: if
-a live run reports `provider_page_missing` for pages that Sarvam did read,
-capture the output ZIP layout (without content) and adjust
-`parse_output_archive`.
+is unverified. This holds even though mocked contract tests pass. Sarvam
+names the output ZIP after the uploaded file: `manifest.json` plus
+`<name>/<stem>.json`, which holds every page for `output_format=json`
+(`metadata/page_NNN.json` files exist only for html and md output). Until
+2026-11-27 an image was uploaded as `page-1.<ext>`, its primary file
+`page-1.<ext>/page-1.json` was mistaken for a per-page file, and every JPG or
+PNG OCR failed as `provider_page_missing` (BUG-001). Uploads are now named
+`pages-<first>-<last>.<ext>` and only `metadata/` holds per-page files. The
+primary file's top level is not published, so the parser reads `pages` and
+`documents[].pages`. If a live run still reports `provider_page_missing` for
+pages that Sarvam did read, capture the output ZIP layout (without content)
+and adjust `parse_output_archive`.
 
 ## Rollback
 

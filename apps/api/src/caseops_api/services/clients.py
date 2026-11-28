@@ -33,16 +33,23 @@ from caseops_api.schemas.clients import (
     KycDocumentRecord,
     KycRejectRequest,
     KycSubmitRequest,
+    KycVerifyRequest,
     MatterClientAssignmentRecord,
     MatterClientAssignRequest,
     MatterClientVerificationListResponse,
     MatterClientVerificationRecord,
 )
+from caseops_api.services.aadhaar_privacy import mask_full_aadhaar
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.client_kyc_documents import (
+    assert_kyc_pack_complete,
+    record_kyc_review,
+    review_audit_metadata,
+)
 from caseops_api.services.identity import get_session_context
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
@@ -50,6 +57,23 @@ from caseops_api.services.session_context import SessionContext
 
 _ALLOWED_TYPES = {t.value for t in ClientType}
 _ALLOWED_KYC = {s.value for s in ClientKycStatus}
+# Statuses only the KYC submit / review workflow may set: each needs an
+# uploaded pack (submit) or a reviewer's decision on it.
+_WORKFLOW_ONLY_KYC_STATUSES = {
+    ClientKycStatus.SUBMITTED.value,
+    ClientKycStatus.UNDER_REVIEW.value,
+    ClientKycStatus.VERIFIED.value,
+    ClientKycStatus.REJECTED.value,
+}
+# Entering these statuses needs the client's uploaded files to meet the KYC
+# requirements (status -> the action named in the refusal). Uploads are frozen
+# under review and once verified, so a pack entering either without its files
+# could never be completed or approved (BUG-003).
+_PACK_REQUIRED_KYC_ACTIONS = {
+    ClientKycStatus.SUBMITTED.value: "submitted",
+    ClientKycStatus.UNDER_REVIEW.value: "moved to review",
+    ClientKycStatus.VERIFIED.value: "approved",
+}
 _ADP10_STATUS_ALIASES = {
     "not_started": ClientKycStatus.NOT_REQUIRED.value,
     "pending": ClientKycStatus.SUBMITTED.value,
@@ -252,14 +276,16 @@ def _client_record(
         state=client.state,
         postal_code=client.postal_code,
         country=client.country,
-        pan=client.pan,
-        gstin=client.gstin,
+        # BUG-003: a full Aadhaar typed into an identifier before the input
+        # guard existed is never rendered back.
+        pan=mask_full_aadhaar(client.pan),
+        gstin=mask_full_aadhaar(client.gstin),
         internal_notes=client.internal_notes,
         kyc_status=_normalize_kyc_status(client.kyc_status),
         kyc_submitted_at=client.kyc_submitted_at,
         kyc_verified_at=client.kyc_verified_at,
         kyc_verified_by_membership_id=client.kyc_verified_by_membership_id,
-        kyc_rejection_reason=client.kyc_rejection_reason,
+        kyc_rejection_reason=mask_full_aadhaar(client.kyc_rejection_reason),
         kyc_documents=_kyc_documents(client),
         is_active=client.is_active,
         active_matters_count=active,
@@ -331,6 +357,17 @@ def create_client(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown kyc_status {payload.kyc_status!r}.",
+        )
+    if normalized_kyc in _WORKFLOW_ONLY_KYC_STATUSES:
+        # BUG-003: a new client has no KYC files, so it cannot start out
+        # submitted, under review or decided.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "A new client cannot start with KYC "
+                f"{normalized_kyc.replace('_', ' ')}. Create the client, upload its "
+                "KYC documents and submit them for review."
+            ),
         )
 
     client = Client(
@@ -463,16 +500,13 @@ def update_client(
             )
         update_data["kyc_status"] = _normalize_kyc_status(update_data["kyc_status"])
         _ensure_verification_transition(client.kyc_status, update_data["kyc_status"])
-        if update_data["kyc_status"] in {
-            ClientKycStatus.UNDER_REVIEW.value,
-            ClientKycStatus.VERIFIED.value,
-            ClientKycStatus.REJECTED.value,
-        }:
+        if update_data["kyc_status"] in _WORKFLOW_ONLY_KYC_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     "Use the verification workflow endpoint for review "
-                    "status changes."
+                    "status changes: submit uploaded KYC documents, then "
+                    "approve or reject them."
                 ),
             )
     for field in ("name", "primary_contact_name", "primary_contact_phone",
@@ -964,8 +998,18 @@ def _kyc_documents(client: Client) -> list[KycDocumentRecord]:
     for item in raw:
         if not isinstance(item, dict):
             continue
+        # A full Aadhaar typed before the input guard existed is masked, not
+        # rendered (BUG-003); the record validator would otherwise drop it.
+        masked = {
+            **item,
+            **{
+                key: mask_full_aadhaar(item.get(key))
+                for key in ("name", "document_type", "note")
+                if isinstance(item.get(key), str)
+            },
+        }
         try:
-            out.append(KycDocumentRecord.model_validate(item))
+            out.append(KycDocumentRecord.model_validate(masked))
         except Exception:  # noqa: BLE001
             continue
     return out
@@ -1095,6 +1139,7 @@ def submit_client_kyc(
     previous_source_version = private_source_version(client)
     _ensure_verification_transition(client.kyc_status, ClientKycStatus.SUBMITTED.value)
     _reject_direct_attachment_refs(payload.documents)
+    pack = assert_kyc_pack_complete(session, client=client, action="submitted")
     client.kyc_status = ClientKycStatus.SUBMITTED.value
     client.kyc_submitted_at = _dt.now(UTC)
     client.kyc_documents_json = _document_payloads(
@@ -1119,6 +1164,7 @@ def submit_client_kyc(
         metadata={
             "status": ClientKycStatus.SUBMITTED.value,
             **_document_audit_metadata(payload.documents),
+            "uploaded_document_ids": [doc.id for doc in pack],
         },
     )
     session.commit()
@@ -1133,11 +1179,12 @@ def verify_client_kyc(
     *,
     context: SessionContext,
     client_id: str,
+    payload: KycVerifyRequest,
 ) -> ClientRecord:
     """Staff reviewer approves a submitted KYC pack. Refuses to verify
-    a client that hasn't been submitted (must go via /submit first)
-    so the audit trail can never claim a verification with no
-    documents on file."""
+    a client that hasn't been submitted (must go via /submit first),
+    whose uploaded files do not meet the KYC requirements, or when the
+    reviewer did not name every current file (BUG-003)."""
     from datetime import UTC
     from datetime import datetime as _dt
 
@@ -1159,6 +1206,15 @@ def verify_client_kyc(
                 "Submit a KYC pack first."
             ),
         )
+    assert_kyc_pack_complete(session, client=client, action="approved")
+    reviewed = record_kyc_review(
+        session,
+        client=client,
+        reviewed_document_ids=payload.reviewed_document_ids,
+        decision="approved",
+        reviewer_membership_id=context.membership.id,
+        require_complete_review=True,
+    )
     client.kyc_status = ClientKycStatus.VERIFIED.value
     client.kyc_verified_at = _dt.now(UTC)
     client.kyc_verified_by_membership_id = context.membership.id
@@ -1178,6 +1234,7 @@ def verify_client_kyc(
         metadata={
             "status": ClientKycStatus.VERIFIED.value,
             "document_count": len(_kyc_documents(client)),
+            **review_audit_metadata(reviewed),
         },
     )
     session.commit()
@@ -1215,6 +1272,14 @@ def reject_client_kyc(
                 "Only a submitted or under-review pack can be rejected."
             ),
         )
+    reviewed = record_kyc_review(
+        session,
+        client=client,
+        reviewed_document_ids=payload.reviewed_document_ids,
+        decision="rejected",
+        reviewer_membership_id=context.membership.id,
+        require_complete_review=False,
+    )
     client.kyc_status = ClientKycStatus.REJECTED.value
     client.kyc_rejection_reason = payload.reason
     from datetime import UTC
@@ -1239,6 +1304,7 @@ def reject_client_kyc(
             "document_count": len(_kyc_documents(client)),
             "reason_present": True,
             "reason_length": len(payload.reason.strip()),
+            **review_audit_metadata(reviewed),
         },
     )
     session.commit()
@@ -1267,7 +1333,7 @@ def _matter_client_verification_record(
         submitted_at=client.kyc_submitted_at,
         reviewed_at=client.kyc_verified_at,
         reviewer_membership_id=client.kyc_verified_by_membership_id,
-        rejection_reason=client.kyc_rejection_reason,
+        rejection_reason=mask_full_aadhaar(client.kyc_rejection_reason),
         documents=_kyc_documents(client),
     )
 
@@ -1368,6 +1434,7 @@ def update_matter_client_verification(
         matter=matter,
         operation="update matter client verification",
     )
+    reviewed_documents: list = []
     documents = payload.documents
     if documents is not None:
         _validate_matter_attachment_refs(session, matter=matter, documents=documents)
@@ -1392,6 +1459,28 @@ def update_matter_client_verification(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A rejection reason is required when rejecting verification.",
+            )
+        # BUG-003: the same pack rules as /clients/{id}/kyc/submit|verify|reject.
+        # Under review freezes uploads, so entering it without a complete pack
+        # would leave a pack nobody can complete or approve.
+        changed = new_status != previous_status
+        if changed and new_status in _PACK_REQUIRED_KYC_ACTIONS:
+            assert_kyc_pack_complete(
+                session, client=client, action=_PACK_REQUIRED_KYC_ACTIONS[new_status],
+            )
+        if changed and new_status in {
+            ClientKycStatus.VERIFIED.value, ClientKycStatus.REJECTED.value,
+        }:
+            reviewed_documents = record_kyc_review(
+                session,
+                client=client,
+                reviewed_document_ids=payload.reviewed_document_ids or [],
+                decision=(
+                    "approved" if new_status == ClientKycStatus.VERIFIED.value
+                    else "rejected"
+                ),
+                reviewer_membership_id=context.membership.id,
+                require_complete_review=new_status == ClientKycStatus.VERIFIED.value,
             )
         _apply_verification_status_side_effects(
             client,
@@ -1422,6 +1511,7 @@ def update_matter_client_verification(
             "reason_length": len(payload.rejection_reason.strip())
             if payload.rejection_reason else 0,
             **_document_audit_metadata(audit_documents),
+            **review_audit_metadata(reviewed_documents),
         },
     )
     session.commit()

@@ -13,7 +13,8 @@
  * POST/PUT/PATCH/DELETE; reads stay header-free.
  */
 import { API_BASE_URL } from "@/lib/api/config";
-import { apiRequest, fetchWithTimeout } from "@/lib/api/client";
+import { apiDownloadRequest, apiRequest, fetchWithTimeout } from "@/lib/api/client";
+import type { components } from "@/lib/api/openapi-types";
 
 const PORTAL_CSRF_COOKIE = "caseops_portal_csrf";
 const PORTAL_CSRF_HEADER = "X-Portal-CSRF-Token";
@@ -411,6 +412,7 @@ export type PortalMatter = {
   practice_area: string | null;
   forum_level: string | null;
   court_name: string | null;
+  court_website_url?: string | null;
   next_hearing_on: string | null;
 };
 
@@ -502,6 +504,84 @@ export async function submitPortalMatterKyc(
   );
 }
 
+// BUG-003 — KYC files from the portal. The same validation, scan and pack
+// rules as the firm's client profile; a portal user sees only the files they
+// uploaded. Types come from the API schema.
+export type PortalKycDocumentList = components["schemas"]["ClientKycDocumentListResponse"];
+export type PortalKycDocumentFile = components["schemas"]["ClientKycDocumentRecord"];
+export type PortalKycDocumentType = components["schemas"]["KycDocumentTypeOption"]["value"];
+
+export async function fetchPortalKycDocuments(
+  matterId: string,
+  clientId: string,
+): Promise<PortalKycDocumentList> {
+  return apiRequest<PortalKycDocumentList>(
+    `/api/portal/matters/${encodeURIComponent(matterId)}/kyc/documents?client_id=${encodeURIComponent(clientId)}`,
+  );
+}
+
+export async function uploadPortalKycDocument(input: {
+  matterId: string;
+  clientId: string;
+  documentType: PortalKycDocumentType;
+  label?: string | null;
+  file: File;
+}): Promise<PortalKycDocumentFile> {
+  const form = new FormData();
+  form.append("client_id", input.clientId);
+  form.append("document_type", input.documentType);
+  if (input.label && input.label.trim()) form.append("label", input.label.trim());
+  form.append("file", input.file);
+  return portalMultipartPost<PortalKycDocumentFile>(
+    `/api/portal/matters/${encodeURIComponent(input.matterId)}/kyc/documents`,
+    form,
+  );
+}
+
+export async function removePortalKycDocument(input: {
+  matterId: string;
+  clientId: string;
+  documentId: string;
+}): Promise<void> {
+  const csrf = readPortalCsrfCookie();
+  const headers: Record<string, string> = {};
+  if (csrf) headers[PORTAL_CSRF_HEADER] = csrf;
+  const resp = await fetchWithTimeout(
+    `${API_BASE_URL}/api/portal/matters/${encodeURIComponent(input.matterId)}/kyc/documents/${encodeURIComponent(input.documentId)}?client_id=${encodeURIComponent(input.clientId)}`,
+    { method: "DELETE", credentials: "include", headers },
+  );
+  if (!resp.ok) {
+    let detail = "Could not remove the document.";
+    try {
+      const data = await resp.json();
+      if (data?.detail) detail = data.detail;
+    } catch {
+      /* ignore */
+    }
+    throw Object.assign(new Error(detail), {
+      name: "ApiError",
+      detail,
+      status: resp.status,
+      data: null,
+    });
+  }
+}
+
+export async function fetchPortalKycDocumentBlob(input: {
+  matterId: string;
+  clientId: string;
+  documentId: string;
+  inline?: boolean;
+  signal?: AbortSignal;
+}): Promise<Blob> {
+  const path =
+    `/api/portal/matters/${encodeURIComponent(input.matterId)}/kyc/documents/` +
+    `${encodeURIComponent(input.documentId)}/download?client_id=${encodeURIComponent(input.clientId)}` +
+    (input.inline ? "&inline=true" : "");
+  const { blob } = await apiDownloadRequest(path, { signal: input.signal });
+  return blob;
+}
+
 // ---------- Phase C-3 (MOD-TS-016) — outside-counsel portal helpers ----------
 
 async function portalMultipartPost<T>(path: string, form: FormData): Promise<T> {
@@ -585,6 +665,11 @@ export type PortalOcInvoice = {
   due_on: string | null;
   submitted_by_portal_user_id: string | null;
   created_at: string;
+  /** ENH-001: the counsel's own details, printed as the invoice's supplier. */
+  counsel_firm_name?: string | null;
+  counsel_address?: string | null;
+  counsel_gstin?: string | null;
+  counsel_pan?: string | null;
 };
 
 export async function fetchPortalOcInvoices(
@@ -604,6 +689,10 @@ export async function submitPortalOcInvoice(
     currency: string;
     line_items: PortalOcInvoiceLineItem[];
     notes?: string | null;
+    counsel_firm_name?: string | null;
+    counsel_address?: string | null;
+    counsel_gstin?: string | null;
+    counsel_pan?: string | null;
   },
 ): Promise<PortalOcInvoice> {
   return portalMutate<PortalOcInvoice>(

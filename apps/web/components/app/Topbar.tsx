@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 import { Input } from "@/components/ui/Input";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/api/config";
 import { useSession } from "@/lib/use-session";
 
@@ -77,14 +78,15 @@ export function Topbar() {
     <header className="flex h-16 items-center gap-3 border-b border-[var(--color-line)] bg-white px-4 md:px-6">
       <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <DialogTrigger asChild>
-          <button
-            type="button"
-            aria-label="Open navigation menu"
-            data-testid="mobile-nav-trigger"
-            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
-          >
-            <Menu className="h-5 w-5" aria-hidden />
-          </button>
+          <Tooltip label="Open navigation menu">
+            <button
+              type="button"
+              data-testid="mobile-nav-trigger"
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)]"
+            >
+              <Menu className="h-5 w-5" aria-hidden />
+            </button>
+          </Tooltip>
         </DialogTrigger>
         <DialogPortal>
           <DialogOverlay />
@@ -93,7 +95,7 @@ export function Topbar() {
           <DialogContent className="left-0 top-0 h-full max-h-screen w-72 max-w-full translate-x-0 translate-y-0 rounded-none border-r border-[var(--color-line)] p-0">
             <DialogTitle className="sr-only">Workspace navigation</DialogTitle>
             <DialogClose className="sr-only">Close</DialogClose>
-            <div className="flex h-full flex-col bg-white">
+            <div className="flex h-full min-h-0 flex-col bg-white">
               <SidebarBody
                 pathname={pathname}
                 onNavigate={() => setMobileNavOpen(false)}

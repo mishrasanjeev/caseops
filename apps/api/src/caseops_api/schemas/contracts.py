@@ -90,6 +90,13 @@ class ContractCreateRequest(BaseModel):
     def normalize_optional_text(cls, value: object) -> object:
         return _blank_to_none(value)
 
+    @model_validator(mode="after")
+    def expiry_not_before_effective(self) -> ContractCreateRequest:
+        # Same rule as metadata edits (_apply_contract_metadata); create skipped it.
+        if self.effective_on and self.expires_on and self.expires_on < self.effective_on:
+            raise ValueError("Expiry date cannot be before the effective date.")
+        return self
+
 
 class ContractUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)

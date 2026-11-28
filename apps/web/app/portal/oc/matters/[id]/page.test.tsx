@@ -43,6 +43,7 @@ vi.mock("sonner", () => ({
 }));
 
 import PortalOcMatterDetailPage from "@/app/portal/oc/matters/[id]/page";
+import { ApiError } from "@/lib/api/config";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -182,6 +183,154 @@ describe("PortalOcMatterDetailPage", () => {
     await releaseStale();
     expect(screen.getByTestId("portal-oc-invoice-inv-1")).toHaveTextContent("OC-2026-001");
     expect(invoicesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a due date earlier than the issue date inline, as the API does", async () => {
+    matterMock.mockResolvedValue(matterStub);
+    submitInvoiceMock.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(withClient(<PortalOcMatterDetailPage />));
+    await waitFor(() => expect(matterMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("tab", { name: /invoices/i }));
+    await user.type(screen.getByTestId("portal-oc-invoice-number"), "OC-2026-002");
+    await user.type(screen.getByTestId("portal-oc-invoice-description"), "Drafting brief");
+    await user.type(screen.getByTestId("portal-oc-invoice-amount"), "500000");
+    const issued = screen.getByTestId("portal-oc-invoice-issued");
+    await user.clear(issued);
+    await user.type(issued, "2026-11-20");
+    const due = screen.getByTestId("portal-oc-invoice-due");
+    await user.type(due, "2026-11-19");
+
+    expect(await screen.findByTestId("portal-oc-invoice-due-error")).toHaveTextContent(
+      "Due date cannot be earlier than the issue date.",
+    );
+    expect(due).toHaveAttribute("aria-invalid", "true");
+    expect(due).toHaveAttribute("aria-describedby", "oc-inv-due-error");
+    expect(screen.getByTestId("portal-oc-invoice-submit")).toBeDisabled();
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    expect(submitInvoiceMock).not.toHaveBeenCalled();
+
+    // The same day is a valid due date and submits.
+    await user.clear(due);
+    await user.type(due, "2026-11-20");
+    expect(screen.queryByTestId("portal-oc-invoice-due-error")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    await waitFor(() => expect(submitInvoiceMock).toHaveBeenCalledTimes(1));
+    expect(submitInvoiceMock.mock.calls[0][1]).toMatchObject({
+      issued_on: "2026-11-20",
+      due_on: "2026-11-20",
+    });
+  });
+
+  it("ENH-001 sends the counsel's own billing details, prefilled from the last submission", async () => {
+    matterMock.mockResolvedValue(matterStub);
+    const previous = {
+      id: "inv-0",
+      invoice_number: "KA/2026/113",
+      status: "needs_review",
+      currency: "INR",
+      subtotal_amount_minor: 250000,
+      total_amount_minor: 250000,
+      issued_on: "2026-11-01",
+      due_on: null,
+      submitted_by_portal_user_id: "p-1",
+      created_at: "2026-11-01T10:00:00Z",
+      counsel_firm_name: "Khanna Advisory Chambers",
+      counsel_address: "14 Lawyers Chambers, Saket Court",
+      counsel_gstin: "07AAAFK1234Q1Z2",
+      counsel_pan: "AAAFK1234Q",
+    };
+    invoicesMock.mockResolvedValue({ invoices: [previous] });
+    submitInvoiceMock.mockResolvedValue({ ...previous, id: "inv-1", invoice_number: "KA/2026/114" });
+    const user = userEvent.setup();
+    render(withClient(<PortalOcMatterDetailPage />));
+    await waitFor(() => expect(matterMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("tab", { name: /invoices/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("portal-oc-invoice-firm")).toHaveValue("Khanna Advisory Chambers"),
+    );
+    expect(screen.getByTestId("portal-oc-invoice-gstin")).toHaveValue("07AAAFK1234Q1Z2");
+    await user.clear(screen.getByTestId("portal-oc-invoice-address"));
+    await user.type(screen.getByTestId("portal-oc-invoice-address"), "2 Tilak Marg, New Delhi");
+    await user.type(screen.getByTestId("portal-oc-invoice-number"), "KA/2026/114");
+    await user.type(screen.getByTestId("portal-oc-invoice-description"), "Appearance");
+    await user.type(screen.getByTestId("portal-oc-invoice-amount"), "250000");
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    await waitFor(() => expect(submitInvoiceMock).toHaveBeenCalled());
+    const [, payload] = submitInvoiceMock.mock.calls[0];
+    expect(payload).toMatchObject({
+      counsel_firm_name: "Khanna Advisory Chambers",
+      counsel_address: "2 Tilak Marg, New Delhi",
+      counsel_gstin: "07AAAFK1234Q1Z2",
+      counsel_pan: "AAAFK1234Q",
+    });
+  });
+
+  it("ENH-001 shows the API's GSTIN and PAN format errors inline and does not submit", async () => {
+    matterMock.mockResolvedValue(matterStub);
+    const user = userEvent.setup();
+    render(withClient(<PortalOcMatterDetailPage />));
+    await waitFor(() => expect(matterMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("tab", { name: /invoices/i }));
+    await user.type(screen.getByTestId("portal-oc-invoice-number"), "KA/2026/115");
+    await user.type(screen.getByTestId("portal-oc-invoice-description"), "Appearance");
+    await user.type(screen.getByTestId("portal-oc-invoice-amount"), "250000");
+    const gstin = screen.getByTestId("portal-oc-invoice-gstin");
+    await user.type(gstin, "45AAAFK1234Q1Z2");
+    await user.type(screen.getByTestId("portal-oc-invoice-pan"), "BBBFK1234Q");
+    await user.tab();
+    expect(screen.getByTestId("portal-oc-invoice-gstin-error")).toHaveTextContent(
+      "The GSTIN must start with a valid GST state code (01 to 38, 97 or 99).",
+    );
+    expect(gstin).toHaveAttribute("aria-invalid", "true");
+    expect(gstin).toHaveAttribute("aria-describedby", "oc-inv-gstin-error");
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    expect(submitInvoiceMock).not.toHaveBeenCalled();
+
+    await user.clear(gstin);
+    await user.type(gstin, "07AAAFK1234Q1Z2");
+    expect(screen.queryByTestId("portal-oc-invoice-gstin-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("portal-oc-invoice-pan-error")).toHaveTextContent(
+      "The PAN must match characters 3 to 12 of the GSTIN.",
+    );
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    expect(submitInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("ENH-001 puts the API's 422 for a counsel identifier on that field", async () => {
+    matterMock.mockResolvedValue(matterStub);
+    submitInvoiceMock.mockRejectedValue(new ApiError(422, "Validation failed", {
+      errors: [
+        {
+          loc: ["body", "counsel_firm_name"],
+          msg: "Value error, Some characters cannot be printed on billing PDFs (for example emoji, or a script the PDF fonts do not cover). Remove them and save again.",
+          type: "value_error",
+        },
+        {
+          loc: ["body", "counsel_pan"],
+          msg: "Value error, Enter a 10-character PAN: 5 letters, 4 digits and a letter (for example AAAFK1234Q).",
+          type: "value_error",
+        },
+      ],
+    }));
+    const user = userEvent.setup();
+    render(withClient(<PortalOcMatterDetailPage />));
+    await waitFor(() => expect(matterMock).toHaveBeenCalled());
+    await user.click(screen.getByRole("tab", { name: /invoices/i }));
+    await user.type(screen.getByTestId("portal-oc-invoice-number"), "KA/2026/116");
+    await user.type(screen.getByTestId("portal-oc-invoice-description"), "Appearance");
+    await user.type(screen.getByTestId("portal-oc-invoice-amount"), "250000");
+    await user.click(screen.getByTestId("portal-oc-invoice-submit"));
+    expect(await screen.findByTestId("portal-oc-invoice-pan-error")).toHaveTextContent(
+      "Enter a 10-character PAN: 5 letters, 4 digits and a letter (for example AAAFK1234Q).",
+    );
+    expect(screen.getByTestId("portal-oc-invoice-firm-error")).toHaveTextContent(
+      "Some characters cannot be printed on billing PDFs",
+    );
+    expect(screen.getByTestId("portal-oc-invoice-firm")).toHaveAttribute("aria-invalid", "true");
+    await user.type(screen.getByTestId("portal-oc-invoice-pan"), "A");
+    expect(screen.queryByTestId("portal-oc-invoice-pan-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("portal-oc-invoice-firm-error")).toBeInTheDocument();
   });
 
   it("submits a time entry with duration + description", async () => {

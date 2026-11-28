@@ -336,6 +336,9 @@ describe("MatterNoticesPage", () => {
       type: "text/plain",
     });
     await user.upload(page.getByTestId("matter-notice-file-input"), file);
+    // Choosing a file no longer uploads; the form submits only once complete.
+    expect(uploadMock).not.toHaveBeenCalled();
+    await user.click(page.getByTestId("matter-notice-upload"));
 
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalledWith("Notice received uploaded.");
@@ -377,6 +380,7 @@ describe("MatterNoticesPage", () => {
         sequenceIndex: null,
         linkedCourtOrderId: null,
         hearingId: null,
+        allowDuplicate: false,
       },
     ]);
     expect(toastError).not.toHaveBeenCalled();
@@ -407,6 +411,9 @@ describe("MatterNoticesPage", () => {
       type: "text/plain",
     });
     await user.upload(page.getByTestId("matter-notice-file-input"), file);
+    // Choosing a file no longer uploads; the form submits only once complete.
+    expect(uploadMock).not.toHaveBeenCalled();
+    await user.click(page.getByTestId("matter-notice-upload"));
 
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalledWith("Notice sent uploaded.");
@@ -448,6 +455,7 @@ describe("MatterNoticesPage", () => {
         sequenceIndex: null,
         linkedCourtOrderId: null,
         hearingId: null,
+        allowDuplicate: false,
       },
     ]);
     expect(toastError).not.toHaveBeenCalled();

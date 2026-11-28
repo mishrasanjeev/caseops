@@ -404,6 +404,9 @@ class OutlookTenantConfigurationResponse(BaseModel):
     last_tested_at: datetime | None = None
     last_error_redacted: str | None = None
     adp20_readiness: OutlookADP20ReadinessLiteral
+    # The redirect URI to register in Entra: the API origin the admin reached
+    # plus OUTLOOK_OAUTH_CALLBACK_PATH, the callback this flow serves.
+    expected_redirect_uri: str | None = None
 
 
 # The only Microsoft callback CaseOps serves; the Outlook calendar flow builds

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from caseops_api.db.models import (
@@ -18,7 +17,9 @@ from caseops_api.db.models import (
     MatterBillingRateScope,
     MatterInvoice,
     MatterInvoiceExport,
+    MatterOutsideCounselAssignment,
     MembershipRole,
+    OutsideCounsel,
     PortalUser,
 )
 from caseops_api.schemas.matter_billing import (
@@ -30,9 +31,27 @@ from caseops_api.schemas.matter_billing import (
     MatterBillingRateRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.billing_document_layout import (
+    BillingDocument,
+    DocumentIssuer,
+    DocumentSignatory,
+    render_billing_document,
+)
+from caseops_api.services.billing_document_verification import (
+    ISSUED_DOCUMENT_STATUSES,
+    SOURCE_MATTER_INVOICE,
+    is_issued_status,
+    issue_verification,
+    record_pdf_fingerprint,
+)
+from caseops_api.services.document_branding import (
+    effective_watermark,
+    letterhead_lines,
+    load_firm_branding,
+)
 from caseops_api.services.session_context import SessionContext
 
-PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v3"
+PDF_TEMPLATE_VERSION = "caseops-matter-invoice-receipt-v4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -499,6 +518,50 @@ _GST_STATE_ALIASES: dict[str, str] = {
 }
 
 
+# ENH-001: GSTIN state codes that can be issued today: the register above plus
+# 97 (Other Territory) and 99 (Centre Jurisdiction). apps/web/lib/tax-identifiers.ts
+# mirrors this list and the messages below (pinned by a parity test).
+GSTIN_STATE_CODES = frozenset(_GST_STATE_CODES.values()) | {"97", "99"}
+_GSTIN_PATTERN = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
+_PAN_PATTERN = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+GSTIN_FORMAT_MESSAGE = (
+    "Enter a 15-character GSTIN: a 2-digit state code, the 10-character PAN, "
+    "an entity number, Z and a check character (for example 07AAAFK1234Q1Z2)."
+)
+GSTIN_STATE_MESSAGE = "The GSTIN must start with a valid GST state code (01 to 38, 97 or 99)."
+PAN_FORMAT_MESSAGE = (
+    "Enter a 10-character PAN: 5 letters, 4 digits and a letter (for example AAAFK1234Q)."
+)
+PAN_GSTIN_MISMATCH_MESSAGE = "The PAN must match characters 3 to 12 of the GSTIN."
+
+
+def _compact_identifier(value: str) -> str:
+    return "".join(value.split()).upper()
+
+
+def normalise_gstin(value: str) -> str:
+    """Upper-case, space-free GSTIN, or ``ValueError`` with a user-facing message.
+
+    Checks the format and the state code. The check character is not verified.
+    """
+
+    gstin = _compact_identifier(value)
+    if not _GSTIN_PATTERN.fullmatch(gstin):
+        raise ValueError(GSTIN_FORMAT_MESSAGE)
+    if gstin[:2] not in GSTIN_STATE_CODES:
+        raise ValueError(GSTIN_STATE_MESSAGE)
+    return gstin
+
+
+def normalise_pan(value: str, *, gstin: str | None = None) -> str:
+    pan = _compact_identifier(value)
+    if not _PAN_PATTERN.fullmatch(pan):
+        raise ValueError(PAN_FORMAT_MESSAGE)
+    if gstin is not None and gstin[2:12] != pan:
+        raise ValueError(PAN_GSTIN_MISMATCH_MESSAGE)
+    return pan
+
+
 def gst_state_code_for_place(value: str | None) -> str | None:
     """Resolve a place of supply to its GST state code.
 
@@ -715,20 +778,178 @@ def _invoice_document_kind(
     return title, _BANNER_ISSUED, None, ""
 
 
+_STATUS_WATERMARKS = {
+    InvoiceStatus.DRAFT: "DRAFT",
+    InvoiceStatus.NEEDS_REVIEW: "FOR REVIEW",
+    InvoiceStatus.VOID: "VOID",
+    InvoiceStatus.PAID: "PAID",
+}
+# ENH-001: the firm's signature is applied only to a document the firm has
+# actually issued; a draft or void copy carrying it could be passed off as final.
+# The same set decides whether the verification link may call a copy genuine.
+_SIGNED_STATUSES = ISSUED_DOCUMENT_STATUSES
+_NOT_ISSUED_WATERMARK = "NOT ISSUED"
+
+
+def _status_watermark(status: str) -> str | None:
+    """The status word printed behind the page.
+
+    Every status outside the issued set gets one, so a copy that the
+    verification page reports as not issued can never print without a marking.
+    """
+
+    word = _STATUS_WATERMARKS.get(status)
+    if word is None and not is_issued_status(status):
+        return _NOT_ISSUED_WATERMARK
+    return word
+
+
+@dataclass(frozen=True, slots=True)
+class InvoiceParty:
+    """The block printed under the title: who is billed."""
+
+    label: str
+    name: str
+    gstin: str | None
+    address: str | None
+
+
+def linked_outside_counsel(
+    session: Session,
+    *,
+    company_id: str,
+    matter_id: str,
+    email: str,
+) -> OutsideCounsel | None:
+    """The firm's counsel profile whose contact email is this portal user's.
+
+    A portal user and a counsel profile share no foreign key, so the link is
+    the exact (case-insensitive) contact email. A counsel assigned to the matter
+    wins; otherwise a single company-wide match is used. Ambiguity links
+    nothing rather than guessing.
+    """
+
+    candidates = list(
+        session.scalars(
+            select(OutsideCounsel).where(
+                OutsideCounsel.company_id == company_id,
+                func.lower(OutsideCounsel.primary_contact_email) == email.strip().lower(),
+            )
+        )
+    )
+    if not candidates:
+        return None
+    assigned_ids = set(
+        session.scalars(
+            select(MatterOutsideCounselAssignment.counsel_id).where(
+                MatterOutsideCounselAssignment.company_id == company_id,
+                MatterOutsideCounselAssignment.matter_id == matter_id,
+            )
+        )
+    )
+    assigned = [counsel for counsel in candidates if counsel.id in assigned_ids]
+    if len(assigned) == 1:
+        return assigned[0]
+    if not assigned and len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _outside_counsel_issuer(
+    session: Session,
+    *,
+    invoice: MatterInvoice,
+    portal_user: PortalUser,
+) -> DocumentIssuer:
+    """ENH-001: the counsel is the supplier on its own invoice.
+
+    Submissions used to print only the portal user's personal name with no
+    firm, address or tax identifiers, and billed "Client: Not available".
+    The submission now snapshots the counsel's firm details; older rows fall
+    back to the firm's counsel profile linked by contact email.
+    """
+
+    counsel = linked_outside_counsel(
+        session,
+        company_id=invoice.company_id,
+        matter_id=invoice.matter_id,
+        email=portal_user.email,
+    )
+    name = invoice.firm_legal_name or (counsel.name if counsel else portal_user.full_name)
+    address = invoice.firm_address or (counsel.firm_city if counsel else None)
+    lines = list(
+        letterhead_lines(
+            address=address, gstin=invoice.firm_gstin, pan=invoice.firm_pan, company=None
+        )
+    )
+    contact_name = (counsel.primary_contact_name if counsel else None) or portal_user.full_name
+    contact = " | ".join(
+        part
+        for part in (
+            contact_name,
+            (counsel.primary_contact_email if counsel else None) or portal_user.email,
+            counsel.primary_contact_phone if counsel else None,
+        )
+        if part
+    )
+    lines.append(f"Outside counsel | {contact}")
+    return DocumentIssuer(name=name, detail_lines=tuple(lines))
+
+
+def _firm_as_recipient(
+    session: Session,
+    *,
+    invoice: MatterInvoice,
+    matter: Matter | None,
+    company_name: str,
+) -> InvoiceParty:
+    profile = _default_profile(session, company_id=invoice.company_id, matter=matter)
+    return InvoiceParty(
+        label="Bill to",
+        name=(profile.firm_legal_name if profile else None) or company_name,
+        gstin=profile.firm_gstin if profile else None,
+        address=profile.firm_address if profile else None,
+    )
+
+
+def _invoice_verification_kind(invoice: MatterInvoice, *, outside_counsel: bool) -> str:
+    if outside_counsel:
+        return "outside_counsel_invoice"
+    if invoice.amount_received_minor > 0:
+        return "matter_invoice_receipt"
+    return "matter_tax_invoice" if invoice.tax_amount_minor > 0 else "matter_invoice"
+
+
+def _firm_signatory(invoice: MatterInvoice, branding, issuer_name: str) -> DocumentSignatory:
+    signed = invoice.status in _SIGNED_STATUSES
+    if signed:
+        note = None
+    elif invoice.status == InvoiceStatus.VOID:
+        note = "Cancelled; not signed."
+    else:
+        note = "The signature is applied when the invoice is issued."
+    return DocumentSignatory(
+        for_name=issuer_name,
+        name=branding.signatory_name,
+        designation=branding.signatory_designation,
+        signature_png=branding.signature_png if signed else None,
+        note=note,
+    )
+
+
 def render_invoice_pdf(
     session: Session,
     *,
     context: SessionContext,
     invoice: MatterInvoice,
 ) -> tuple[bytes, str, str]:
-    from caseops_api.services.pdf_layout import (
-        TEXT_COLOR,
-        safe_pdf_class,
-        write_wrapped_pairs,
-        write_wrapped_table,
-    )
+    """Render a matter invoice, receipt or outside-counsel invoice.
 
-    pdf_class = safe_pdf_class()
+    ENH-001: drawn through ``render_billing_document`` like every billing
+    PDF, so it carries the letterhead, watermark, signatory and verification
+    QR code. Each download gets its own verification token and records the
+    SHA-256 of the bytes served.
+    """
 
     matter = invoice.matter or session.get(Matter, invoice.matter_id)
     title, banner_fill, explanation, marking = _invoice_document_kind(invoice)
@@ -739,141 +960,79 @@ def render_invoice_pdf(
     )
     if portal_user is not None and portal_user.company_id != invoice.company_id:
         portal_user = None
-    # Portal invoice numbers are free text, so they are never passed to format().
-    footer_prefix = f"{marking}{invoice.invoice_number} | Page "
-
-    class _InvoicePdf(pdf_class):  # type: ignore[misc]
-        # BUG-016: set_y(-14) inside the 16 mm auto-break margin forced a blank
-        # second page holding only "Page 1"; the footer hook numbers every page.
-        def footer(self) -> None:
-            self.set_y(-12)
-            self.set_font("Helvetica", "", 8)
-            self.set_text_color(*TEXT_COLOR)
-            self.cell(0, 5, f"{footer_prefix}{self.page_no()} of {{nb}}", align="C")
-
-    pdf = _InvoicePdf(format="A4", unit="mm")
-    pdf.set_auto_page_break(auto=True, margin=16)
-    pdf.alias_nb_pages()
-    pdf.set_title(f"{title} {invoice.invoice_number}")
-    pdf.set_author(invoice.firm_legal_name or context.company.name or "CaseOps")
-    pdf.add_page()
-    pdf.set_text_color(*TEXT_COLOR)
-    # BUG-016: the bar's fill must not leak into the tables drawn below it.
-    with pdf.local_context(fill_color=banner_fill, text_color=(255, 255, 255)):
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 9, f" {title}", fill=True, new_x="LMARGIN", new_y="NEXT")
-    # User-entered text wraps inside the printable width and every line returns
-    # to the left margin. multi_cell() otherwise leaves the cursor at the right
-    # edge, which drew the following Matter line off the page (BUG-033 audit).
-    lines = {"new_x": "LMARGIN", "new_y": "NEXT"}
-    if explanation:
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.multi_cell(0, 5, explanation, **lines)
-    pdf.ln(3)
+    company = context.company
+    branding = load_firm_branding(session, invoice.company_id)
+    status_word = _status_watermark(invoice.status)
     if portal_user is not None:
-        supplier = f"{portal_user.full_name} (outside counsel)"
-    else:
-        supplier = invoice.firm_legal_name or context.company.name
-    pdf.set_font("Helvetica", "B", 15)
-    pdf.multi_cell(0, 8, supplier, **lines)
-    pdf.set_font("Helvetica", "", 9)
-    for line in (invoice.firm_address or "").splitlines()[:4]:
-        pdf.multi_cell(0, 5, line, **lines)
-    if invoice.firm_gstin:
-        pdf.multi_cell(0, 5, f"GSTIN: {invoice.firm_gstin}", **lines)
-    if invoice.firm_pan:
-        pdf.multi_cell(0, 5, f"PAN: {invoice.firm_pan}", **lines)
-    pdf.ln(3)
-    due_label = invoice.due_on.isoformat() if invoice.due_on else "Not available"
-    client_label = invoice.client_billing_name or invoice.client_name or "Not available"
-    write_wrapped_pairs(
-        pdf,
-        [
-            (
-                f"Invoice No: {invoice.invoice_number}",
-                f"Invoice Date: {invoice.issued_on.isoformat()}",
-            ),
-            (
-                f"Status: {_INVOICE_STATUS_LABELS.get(invoice.status, invoice.status)}",
-                f"Due Date: {due_label}",
-            ),
-            (
-                f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
-                f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
-            ),
-            (
-                f"Client: {client_label}",
-                f"Client GSTIN: {invoice.client_gstin or 'Not available'}",
-            ),
-        ],
-    )
-    pdf.set_font("Helvetica", "", 9)
-    if invoice.client_billing_address:
-        pdf.multi_cell(0, 5, f"Client Address: {invoice.client_billing_address[:500]}", **lines)
-    if matter is not None:
-        pdf.multi_cell(0, 5, f"Matter: {matter.matter_code} - {matter.title}", **lines)
-    pdf.ln(4)
-
-    # Every column wraps inside its own cell and rows grow; a long description
-    # cannot push the other columns onto the wrong page (BUG-033 audit).
-    write_wrapped_table(
-        pdf,
-        headings=("Description", "Qty/Time", "Rate", "SAC/HSN", "Amount"),
-        weights=INVOICE_PDF_WEIGHTS,
-        rows=[
-            (
-                line.description,
-                (
-                    f"{Decimal(line.duration_minutes) / Decimal(60):.2f} hrs"
-                    if line.duration_minutes is not None
-                    else line.category or "Item"
-                ),
-                (
-                    _format_minor(line.unit_rate_amount_minor, invoice.currency)
-                    + ("/hr" if line.duration_minutes is not None else "")
-                    if line.unit_rate_amount_minor is not None
-                    else ""
-                ),
-                line.sac_hsn or invoice.sac_hsn or "Not available",
-                _format_minor(line.line_total_amount_minor, invoice.currency),
-            )
-            for line in invoice.line_items
-        ],
-    )
-
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "", 9)
-    # Outside-counsel submissions created before BUG-016 stored taxable value 0
-    # with no tax; their taxable value is the subtotal.
-    taxable = invoice.taxable_value_minor
-    if not taxable and not invoice.tax_amount_minor:
-        taxable = invoice.subtotal_amount_minor
-    totals = [
-        ("Taxable value", taxable),
-        ("CGST", invoice.cgst_amount_minor),
-        ("SGST", invoice.sgst_amount_minor),
-        ("IGST", invoice.igst_amount_minor),
-        ("Grand total", invoice.total_amount_minor),
-        ("Amount paid", invoice.amount_received_minor),
-        ("TDS deducted", invoice.tds_deducted_minor),
-        ("Payment/retainer adjustment", invoice.payment_adjustment_minor),
-        ("Outstanding", invoice.balance_due_minor),
-    ]
-    for label, amount in totals:
-        pdf.cell(130, 6, label, align="R")
-        pdf.cell(
-            0,
-            6,
-            _format_minor(amount, invoice.currency),
-            align="R",
-            new_x="LMARGIN",
-            new_y="NEXT",
+        issuer = _outside_counsel_issuer(session, invoice=invoice, portal_user=portal_user)
+        recipient = _firm_as_recipient(
+            session, invoice=invoice, matter=matter, company_name=company.name
         )
-    if invoice.notes:
-        pdf.ln(3)
-        pdf.multi_cell(0, 5, f"Notes: {invoice.notes[:1000]}", **lines)
-    body = bytes(pdf.output())
-    checksum = hashlib.sha256(body).hexdigest()
+        signatory = DocumentSignatory(
+            for_name=issuer.name,
+            name=portal_user.full_name,
+            designation="Outside counsel",
+            note=f"Submitted through the outside counsel portal by {portal_user.email}.",
+            label="Submitted by",
+        )
+        # The firm's own watermark text is never put on a counsel's invoice.
+        watermark = status_word or issuer.name
+    else:
+        issuer_name = invoice.firm_legal_name or company.name
+        issuer = DocumentIssuer(
+            name=issuer_name,
+            detail_lines=letterhead_lines(
+                address=invoice.firm_address,
+                gstin=invoice.firm_gstin,
+                pan=invoice.firm_pan,
+                company=company,
+            ),
+            logo_png=branding.logo_png,
+        )
+        recipient = InvoiceParty(
+            label="Client",
+            name=invoice.client_billing_name or invoice.client_name or "Not available",
+            gstin=invoice.client_gstin,
+            address=invoice.client_billing_address,
+        )
+        signatory = _firm_signatory(invoice, branding, issuer_name)
+        watermark = effective_watermark(
+            status_word=status_word, branding=branding, issuer_name=issuer_name
+        )
+    verification = issue_verification(
+        session,
+        company_id=invoice.company_id,
+        document_kind=_invoice_verification_kind(invoice, outside_counsel=portal_user is not None),
+        source_type=SOURCE_MATTER_INVOICE,
+        source_id=invoice.id,
+        matter_id=invoice.matter_id,
+        document_number=invoice.invoice_number,
+        issued_on=invoice.issued_on,
+        issuer_name=issuer.name,
+        amount_minor=invoice.total_amount_minor,
+        currency=invoice.currency,
+        document_status=str(invoice.status),
+        generated_by_membership_id=context.membership.id,
+    )
+    document = BillingDocument(
+        title=title,
+        document_number=invoice.invoice_number,
+        issuer=issuer,
+        author=issuer.name,
+        banner_fill=banner_fill,
+        explanation=explanation,
+        footer_marking=marking,
+        watermark_text=watermark,
+        signatory=signatory,
+        verification_url=verification.url,
+    )
+    rendered = render_billing_document(
+        document,
+        lambda pdf: _draw_invoice_body(pdf, invoice=invoice, matter=matter, recipient=recipient),
+    )
+    record_pdf_fingerprint(verification, rendered.sha256)
+    body = rendered.body
+    checksum = rendered.sha256
     filename = _safe_invoice_filename(invoice.invoice_number)
     export = MatterInvoiceExport(
         company_id=invoice.company_id,
@@ -899,10 +1058,139 @@ def render_invoice_pdf(
             "checksum": checksum,
             "line_count": len(invoice.line_items),
             "template_version": PDF_TEMPLATE_VERSION,
+            "verification_id": verification.row.id,
+            "branding": list(rendered.images),
         },
     )
     session.commit()
     return body, filename, checksum
+
+
+def _line_quantity(line) -> str:
+    """Hours for time entries; the charge type for a fixed amount.
+
+    ENH-001: fixed-fee and expense lines printed "Item" with an empty Rate
+    cell, which read as a missing rate on an issued invoice.
+    """
+    if line.duration_minutes is not None:
+        return f"{Decimal(line.duration_minutes) / Decimal(60):.2f} hrs"
+    if line.category:
+        return line.category.replace("_", " ").strip().capitalize() or "Fixed fee"
+    return "Fixed fee"
+
+
+def _line_rate(line, currency: str) -> str:
+    if line.duration_minutes is not None:
+        if line.unit_rate_amount_minor is None:
+            return "Not available"
+        return _format_minor(line.unit_rate_amount_minor, currency) + "/hr"
+    # A fixed charge is its own rate: one unit at the line amount.
+    amount = (
+        line.unit_rate_amount_minor
+        if line.unit_rate_amount_minor is not None
+        else line.line_total_amount_minor
+    )
+    return _format_minor(amount, currency)
+
+
+def _draw_invoice_body(
+    pdf,
+    *,
+    invoice: MatterInvoice,
+    matter: Matter | None,
+    recipient: InvoiceParty,
+) -> None:
+    from caseops_api.services.pdf_layout import write_wrapped_pairs, write_wrapped_table
+
+    # User-entered text wraps inside the printable width and every line returns
+    # to the left margin. multi_cell() otherwise leaves the cursor at the right
+    # edge, which drew the following Matter line off the page (BUG-033 audit).
+    lines = {"new_x": "LMARGIN", "new_y": "NEXT"}
+    due_label = invoice.due_on.isoformat() if invoice.due_on else "Not available"
+    write_wrapped_pairs(
+        pdf,
+        [
+            (
+                f"Invoice No: {invoice.invoice_number}",
+                f"Invoice Date: {invoice.issued_on.isoformat()}",
+            ),
+            (
+                f"Status: {_INVOICE_STATUS_LABELS.get(invoice.status, invoice.status)}",
+                f"Due Date: {due_label}",
+            ),
+            (
+                f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
+                f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
+            ),
+            (
+                f"{recipient.label}: {recipient.name}",
+                f"{recipient.label} GSTIN: {recipient.gstin or 'Not available'}",
+            ),
+        ],
+    )
+    pdf.set_font("Helvetica", "", 9)
+    if recipient.address:
+        address = " ".join(recipient.address.split())[:500]
+        pdf.multi_cell(0, 5, f"{recipient.label} Address: {address}", **lines)
+    if matter is not None:
+        pdf.multi_cell(0, 5, f"Matter: {matter.matter_code} - {matter.title}", **lines)
+    pdf.ln(4)
+
+    # Every column wraps inside its own cell and rows grow; a long description
+    # cannot push the other columns onto the wrong page (BUG-033 audit).
+    write_wrapped_table(
+        pdf,
+        headings=("Description", "Qty/Time", "Rate", "SAC/HSN", "Amount"),
+        weights=INVOICE_PDF_WEIGHTS,
+        rows=[
+            (
+                line.description,
+                _line_quantity(line),
+                _line_rate(line, invoice.currency),
+                line.sac_hsn or invoice.sac_hsn or "Not available",
+                _format_minor(line.line_total_amount_minor, invoice.currency),
+            )
+            for line in invoice.line_items
+        ],
+    )
+
+    pdf.ln(4)
+    # Outside-counsel submissions created before BUG-016 stored taxable value 0
+    # with no tax; their taxable value is the subtotal.
+    taxable = invoice.taxable_value_minor
+    if not taxable and not invoice.tax_amount_minor:
+        taxable = invoice.subtotal_amount_minor
+    totals = [
+        ("Taxable value", taxable),
+        ("CGST", invoice.cgst_amount_minor),
+        ("SGST", invoice.sgst_amount_minor),
+        ("IGST", invoice.igst_amount_minor),
+        ("Grand total", invoice.total_amount_minor),
+        ("Amount paid", invoice.amount_received_minor),
+        ("TDS deducted", invoice.tds_deducted_minor),
+        ("Payment/retainer adjustment", invoice.payment_adjustment_minor),
+        ("Outstanding", invoice.balance_due_minor),
+    ]
+    for label, amount in totals:
+        pdf.set_font("Helvetica", "B" if label in {"Grand total", "Outstanding"} else "", 9)
+        pdf.cell(pdf.epw - 56, 5.5, label, align="R")
+        pdf.cell(
+            0,
+            5.5,
+            _format_minor(amount, invoice.currency),
+            align="R",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+    pdf.set_font("Helvetica", "", 9)
+    if invoice.notes:
+        pdf.ln(3)
+        pdf.multi_cell(0, 5, f"Notes: {invoice.notes[:1000]}", **lines)
+
+
+def format_money_minor(amount_minor: int | None, currency: str) -> str:
+    """Currency text for billing documents (Indian grouping for INR)."""
+    return _format_minor(amount_minor, currency)
 
 
 def _format_minor(amount_minor: int | None, currency: str) -> str:

@@ -9,6 +9,7 @@ import {
   submitWorkspaceAssistantFeedback,
 } from "@/lib/api/ai-feedback";
 import { apiErrorMessage } from "@/lib/api/config";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 type ProductGuideTarget = {
   surface: "product_guide";
@@ -118,39 +119,39 @@ export function AIFeedbackControls({
   return (
     <div className="mt-3 min-w-0" data-testid={testId}>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          title="Helpful"
-          aria-label="Mark as helpful"
-          aria-pressed={rating === "helpful"}
-          disabled={Boolean(rating) || busy !== null}
-          onClick={() => void rate("helpful")}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-ink)] disabled:cursor-default disabled:opacity-60"
-        >
-          {busy === "rating" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
-        </button>
-        <button
-          type="button"
-          title="Not helpful"
-          aria-label="Mark as not helpful"
-          aria-pressed={rating === "not_helpful"}
-          disabled={Boolean(rating) || busy !== null}
-          onClick={() => void rate("not_helpful")}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-ink)] disabled:cursor-default disabled:opacity-60"
-        >
-          <ThumbsDown className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          title="Report an issue"
-          aria-label="Report an issue"
-          aria-expanded={reportOpen}
-          disabled={reported || busy !== null}
-          onClick={() => setReportOpen((current) => !current)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-danger-600)] disabled:cursor-default disabled:opacity-60"
-        >
-          <Flag className="h-4 w-4" />
-        </button>
+        <Tooltip label="Mark as helpful">
+          <button
+            type="button"
+            aria-pressed={rating === "helpful"}
+            disabled={Boolean(rating) || busy !== null}
+            onClick={() => void rate("helpful")}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-ink)] disabled:cursor-default disabled:opacity-60"
+          >
+            {busy === "rating" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
+          </button>
+        </Tooltip>
+        <Tooltip label="Mark as not helpful">
+          <button
+            type="button"
+            aria-pressed={rating === "not_helpful"}
+            disabled={Boolean(rating) || busy !== null}
+            onClick={() => void rate("not_helpful")}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-ink)] disabled:cursor-default disabled:opacity-60"
+          >
+            <ThumbsDown className="h-4 w-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Report an issue">
+          <button
+            type="button"
+            aria-expanded={reportOpen}
+            disabled={reported || busy !== null}
+            onClick={() => setReportOpen((current) => !current)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-mute)] hover:text-[var(--color-danger-600)] disabled:cursor-default disabled:opacity-60"
+          >
+            <Flag className="h-4 w-4" />
+          </button>
+        </Tooltip>
         {rating || reported ? (
           <span className="text-xs text-[var(--color-mute)]" role="status">Feedback received</span>
         ) : null}
@@ -177,15 +178,15 @@ export function AIFeedbackControls({
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              title="Close report"
-              aria-label="Close report"
-              onClick={() => setReportOpen(false)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--color-mute)] hover:text-[var(--color-ink)]"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <Tooltip label="Close report">
+              <button
+                type="button"
+                onClick={() => setReportOpen(false)}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--color-mute)] hover:text-[var(--color-ink)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </div>
           <label
             htmlFor={`${fieldId}-note`}

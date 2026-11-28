@@ -223,6 +223,11 @@ test.describe("Hari 2026-07-02 bugs", () => {
     ).toBeVisible();
     await expect(page.getByText(/No notices on file/i)).toBeVisible();
 
+    // Notice details are required since the 2026-11-27 validation fix.
+    await page.getByTestId("matter-notice-received-on").fill("2026-07-02");
+    await page.getByTestId("matter-notice-type").fill("Legal demand");
+    await page.getByTestId("matter-notice-subject").fill("Section 138 demand notice");
+    await page.getByTestId("matter-notice-reply-due-on").fill("2026-07-17");
     const filePath = makeUploadFixture(
       `${matterCode.toLowerCase()}-demand-notice.txt`,
       "Demand notice under Section 138 for Hari 2026-07-02 regression.",
@@ -233,6 +238,8 @@ test.describe("Hari 2026-07-02 bugs", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', filePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     expect((await uploadResponse).status()).toBe(200);
 
     await expect(page.getByTestId("matter-notice-row")).toContainText(

@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
+import { CourtName } from "@/components/matters/CourtName";
 import { MatterLifecycleDialog } from "@/components/matters/MatterLifecycleDialog";
 import { NextHearingCell } from "@/components/matters/NextHearingCell";
 import { Badge } from "@/components/ui/Badge";
@@ -288,7 +289,13 @@ export default function MattersPage() {
       {
         accessorKey: "court_name",
         header: "Court",
-        cell: (ctx) => ctx.getValue<string>() ?? "—",
+        cell: (ctx) => (
+          <CourtName
+            name={ctx.getValue<string | null>()}
+            websiteUrl={ctx.row.original.court_website_url}
+            testId={`matter-court-${ctx.row.original.id}`}
+          />
+        ),
       },
       {
         accessorKey: "next_hearing_on",

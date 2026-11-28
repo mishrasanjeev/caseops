@@ -17,6 +17,26 @@ LOCAL_OAUTH_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _FORBIDDEN_URI_CHARACTERS = tuple(chr(code) for code in range(33)) + (chr(127),)
 
 
+def public_origin(scheme: str, host: str | None, port: int | None) -> str:
+    """The https origin an identity provider must call back on this deployment.
+
+    Built from the host the admin's browser reached the API on (the API serves
+    every OAuth callback, so the callback host is the API host). TLS ends in
+    front of the API, so the scheme is always https except on a loopback host.
+    """
+
+    hostname = (host or "").lower()
+    if not hostname:
+        raise ValueError("The request has no host to build a redirect URI from.")
+    local = hostname in LOCAL_OAUTH_HOSTS
+    effective_scheme = (scheme or "http") if local else "https"
+    authority = f"[{hostname}]" if ":" in hostname else hostname
+    default_port = 443 if effective_scheme == "https" else 80
+    if port and port != default_port and (local or port != 80):
+        authority = f"{authority}:{port}"
+    return f"{effective_scheme}://{authority}"
+
+
 def oauth_redirect_error(
     value: str,
     *,

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type FocusEvent, type KeyboardEvent } fro
 
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { ApiError, NetworkError } from "@/lib/api/config";
 import { fetchIpNiceClasses } from "@/lib/api/endpoints";
 import type { IpNiceClass } from "@/lib/api/schemas";
@@ -277,15 +278,16 @@ export function NiceClassPicker(props: NiceClassPickerProps) {
                 className="flex min-w-0 items-start gap-2 rounded-md border border-[var(--color-line)] bg-[var(--color-bg)] px-2 py-1 text-sm text-[var(--color-ink)]"
               >
                 <span className="min-w-0 flex-1 whitespace-normal break-words">{text}</span>
-                <button
-                  type="button"
-                  onClick={() => remove(number)}
-                  disabled={disabled}
-                  aria-label={`Remove class ${number}`}
-                  className="shrink-0 rounded p-0.5 text-[var(--color-mute)] hover:text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-[var(--color-brand-500)] disabled:opacity-50"
-                >
-                  <X className="h-4 w-4" aria-hidden />
-                </button>
+                <Tooltip label={`Remove class ${number}`}>
+                  <button
+                    type="button"
+                    onClick={() => remove(number)}
+                    disabled={disabled}
+                    className="shrink-0 rounded p-0.5 text-[var(--color-mute)] hover:text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-[var(--color-brand-500)] disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" aria-hidden />
+                  </button>
+                </Tooltip>
               </li>
             );
           })}
@@ -322,22 +324,23 @@ export function NiceClassPicker(props: NiceClassPickerProps) {
             invalid ? "border-[var(--color-danger-500)]" : "border-[var(--color-line)]",
           )}
         />
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={controlDisabled}
-          aria-label={open ? "Hide Nice classes" : "Show Nice classes"}
-          aria-controls={listboxId}
-          aria-expanded={open}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            setOpen((value) => !value);
-            document.getElementById(id)?.focus();
-          }}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--color-line)] bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ChevronDown className={cn("h-4 w-4", open && "rotate-180")} aria-hidden />
-        </button>
+        <Tooltip label={open ? "Hide Nice classes" : "Show Nice classes"}>
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={controlDisabled}
+            aria-controls={listboxId}
+            aria-expanded={open}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setOpen((value) => !value);
+              document.getElementById(id)?.focus();
+            }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--color-line)] bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronDown className={cn("h-4 w-4", open && "rotate-180")} aria-hidden />
+          </button>
+        </Tooltip>
       </div>
 
       <p id={statusId} aria-live="polite" className="sr-only">

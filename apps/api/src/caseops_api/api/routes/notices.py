@@ -19,6 +19,7 @@ from caseops_api.schemas.notices import (
     NoticeRecord,
     NoticeUpdateRequest,
 )
+from caseops_api.schemas.storage_governance import StorageUploadPolicy
 from caseops_api.services.notices import (
     create_notice,
     get_notice,
@@ -29,6 +30,7 @@ from caseops_api.services.notices import (
     upload_notice_file,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.storage_governance import get_storage_upload_policy
 
 router = APIRouter()
 
@@ -84,6 +86,18 @@ def get_current_company_notice_owners(
     session: DbSession,
 ) -> list[NoticeOwnerOption]:
     return list_notice_owners(session, context=context)
+
+
+@router.get(
+    "/upload-policy",
+    response_model=StorageUploadPolicy,
+    summary="Upload allow-list, size cap and quota that apply to notice documents",
+)
+def get_current_company_notice_upload_policy(
+    context: CurrentContext,
+    session: DbSession,
+) -> StorageUploadPolicy:
+    return get_storage_upload_policy(session, company_id=context.company.id)
 
 
 @router.get(

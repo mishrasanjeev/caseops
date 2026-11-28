@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   fetchCaseTrackingStatusMock,
@@ -47,8 +47,10 @@ vi.mock("@/lib/api/case-tracking-matter-resolution", () => ({
   linkMatterCase: linkMatterCaseMock,
 }));
 
+const navigationState = vi.hoisted(() => ({ search: "matterId=matter-1" }));
+
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("matterId=matter-1"),
+  useSearchParams: () => new URLSearchParams(navigationState.search),
 }));
 
 import CaseTrackingPage from "@/app/app/case-tracking/page";
@@ -490,7 +492,7 @@ describe("CaseTrackingPage", () => {
 
     await user.click(screen.getByRole("button", { name: /Refresh/i }));
     expect(refreshCaseTrackingBookmarkMock.mock.calls[0][0]).toBe("bm-1");
-    await user.click(screen.getByTitle("Disable notifications"));
+    await user.click(screen.getByRole("button", { name: "Disable notifications" }));
     expect(updateCaseTrackingBookmarkMock.mock.calls[0][1]).toEqual({
       notification_enabled: false,
     });
@@ -668,5 +670,146 @@ describe("CaseTrackingPage", () => {
     expect(await screen.findByTestId("case-tracking-search-error")).toHaveTextContent(
       "eCourtsIndia provider returned an error.",
     );
+  });
+
+  // Nov 27 workbook (Aishwarya, nova-legal) rows 6 and 10: Bookmarks needed a
+  // Matter Code search instead of scrolling, and the delete icon had no
+  // tooltip or accessible name.
+  describe("CaseTrackingPage bookmarks search and delete", () => {
+    const target = { ...bookmark, id: "bm-target", matter_code: "MTR-2026-200", tracked_case: { ...bookmark.tracked_case, id: "tc-target", case_title: "Saraswati Exports v Union of India" } };
+    const row = (index: number) => ({
+      ...bookmark,
+      id: `bm-${index}`,
+      matter_id: null,
+      matter_code: null,
+      tracked_case: { ...bookmark.tracked_case, id: `tc-${index}`, case_title: `Routine Petitioner ${index} v State` },
+    });
+    const pageOne = Array.from({ length: 50 }, (_, index) => row(index));
+    const pageTwo = Array.from({ length: 50 }, (_, index) => row(index + 50));
+    const pageThree = [...Array.from({ length: 19 }, (_, index) => row(index + 100)), target];
+
+    beforeEach(() => {
+      navigationState.search = "";
+      window.history.replaceState(null, "", "/app/case-tracking");
+      listCaseTrackingBookmarksMock.mockImplementation(
+        async (params?: { q?: string; cursor?: string | null }) => {
+          if (params?.q === "MTR-2026-200") {
+            return { bookmarks: [target], next_cursor: null, total_count: 1 };
+          }
+          if (params?.q) return { bookmarks: [], next_cursor: null, total_count: 0 };
+          if (params?.cursor === "c1") return { bookmarks: pageTwo, next_cursor: "c2", total_count: null };
+          if (params?.cursor === "c2") return { bookmarks: pageThree, next_cursor: null, total_count: null };
+          return { bookmarks: pageOne, next_cursor: "c1", total_count: 120 };
+        },
+      );
+    });
+
+    afterEach(() => {
+      navigationState.search = "matterId=matter-1";
+    });
+
+    it("finds a Matter Code on a page the browser never loaded through a server search", async () => {
+      const user = userEvent.setup();
+      render(withClient(<CaseTrackingPage />));
+
+      expect(await screen.findByTestId("case-tracking-bookmark-count", undefined, { timeout: 5_000 })).toHaveTextContent(
+        "Showing 50 of 120 bookmarks.",
+      );
+      expect(screen.queryByText("Saraswati Exports v Union of India")).not.toBeInTheDocument();
+
+      await user.type(screen.getByRole("searchbox", { name: "Search bookmarks" }), "MTR-2026-200");
+
+      expect(await screen.findByText("Saraswati Exports v Union of India", undefined, { timeout: 5_000 })).toBeInTheDocument();
+      expect(screen.getByTestId("case-tracking-bookmark-count")).toHaveTextContent(
+        '1 bookmark matches "MTR-2026-200". Showing 1.',
+      );
+      expect(screen.getByTestId("case-tracking-bookmark-matter-code")).toHaveTextContent("MTR-2026-200");
+      expect(screen.queryByText("Routine Petitioner 0 v State")).not.toBeInTheDocument();
+      expect(listCaseTrackingBookmarksMock).toHaveBeenCalledWith({
+        q: "MTR-2026-200",
+        limit: 50,
+        cursor: null,
+        include_total: true,
+      });
+      // Debounced: no request per keystroke.
+      const queries = listCaseTrackingBookmarksMock.mock.calls.map(([params]) => params?.q);
+      expect(queries.filter((q) => q && q !== "MTR-2026-200")).toEqual([]);
+      expect(new URL(window.location.href).searchParams.get("bookmarkSearch")).toBe("MTR-2026-200");
+    });
+
+    it("pages to the end with Load more and keeps the server total", async () => {
+      const user = userEvent.setup();
+      render(withClient(<CaseTrackingPage />));
+      await screen.findByText("Showing 50 of 120 bookmarks.", undefined, { timeout: 5_000 });
+
+      await user.click(screen.getByTestId("case-tracking-bookmark-load-more"));
+      expect(await screen.findByText("Showing 100 of 120 bookmarks.", undefined, { timeout: 5_000 })).toBeInTheDocument();
+      await user.click(screen.getByTestId("case-tracking-bookmark-load-more"));
+      expect(await screen.findByText("Showing 120 of 120 bookmarks.", undefined, { timeout: 5_000 })).toBeInTheDocument();
+      expect(screen.getByText("Saraswati Exports v Union of India")).toBeInTheDocument();
+      expect(screen.queryByTestId("case-tracking-bookmark-load-more")).not.toBeInTheDocument();
+      expect(listCaseTrackingBookmarksMock).toHaveBeenCalledWith(
+        expect.objectContaining({ cursor: "c2", include_total: false }),
+      );
+    });
+
+    it("says no bookmark matches and clears back to the full list", async () => {
+      const user = userEvent.setup();
+      render(withClient(<CaseTrackingPage />));
+      await screen.findByText("Showing 50 of 120 bookmarks.", undefined, { timeout: 5_000 });
+
+      await user.type(screen.getByRole("searchbox", { name: "Search bookmarks" }), "MTR-2099-999");
+      expect(await screen.findByTestId("case-tracking-bookmark-search-empty", undefined, { timeout: 5_000 })).toHaveTextContent(
+        'No bookmarks match "MTR-2099-999".',
+      );
+      await user.click(within(screen.getByTestId("case-tracking-bookmark-search-empty")).getByRole("button", { name: "Clear search" }));
+      expect(await screen.findByText("Showing 50 of 120 bookmarks.", undefined, { timeout: 5_000 })).toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "Search bookmarks" })).toHaveValue("");
+      await waitFor(() =>
+        expect(new URL(window.location.href).searchParams.has("bookmarkSearch")).toBe(false),
+        { timeout: 5_000 },
+      );
+    });
+
+    it("reopens the search kept in the address after reload or Back", async () => {
+      navigationState.search = "bookmarkSearch=MTR-2026-200";
+      render(withClient(<CaseTrackingPage />));
+      expect(await screen.findByText("Saraswati Exports v Union of India", undefined, { timeout: 5_000 })).toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "Search bookmarks" })).toHaveValue("MTR-2026-200");
+      expect(listCaseTrackingBookmarksMock).toHaveBeenCalledTimes(1);
+      expect(listCaseTrackingBookmarksMock).toHaveBeenCalledWith(
+        expect.objectContaining({ q: "MTR-2026-200", cursor: null }),
+      );
+    });
+
+    it("names the delete icon, shows its tooltip on hover and focus, and still deletes", async () => {
+      const user = userEvent.setup();
+      listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [target], next_cursor: null, total_count: 1 });
+      render(withClient(<CaseTrackingPage />));
+
+      const remove = await screen.findByRole("button", { name: "Delete bookmark" }, { timeout: 5_000 });
+      expect(remove).not.toHaveAttribute("title");
+      await user.hover(remove);
+      expect(await screen.findByRole("tooltip", {}, { timeout: 5_000 })).toHaveTextContent("Delete bookmark");
+      expect(screen.getByRole("button", { name: "Disable notifications" })).toBeInTheDocument();
+
+      await user.click(remove);
+      await waitFor(() =>
+        expect(updateCaseTrackingBookmarkMock).toHaveBeenCalledWith("bm-target", { is_archived: true }),
+        { timeout: 5_000 },
+      );
+    });
+
+    it("shows the delete tooltip on keyboard focus", async () => {
+      const user = userEvent.setup();
+      listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [target], next_cursor: null, total_count: 1 });
+      render(withClient(<CaseTrackingPage />));
+      const remove = await screen.findByRole("button", { name: "Delete bookmark" }, { timeout: 5_000 });
+      const notifications = screen.getByRole("button", { name: "Disable notifications" });
+      notifications.focus();
+      await user.tab();
+      expect(remove).toHaveFocus();
+      expect(await screen.findByRole("tooltip", { name: "Delete bookmark" }, { timeout: 5_000 })).toBeInTheDocument();
+    });
   });
 });

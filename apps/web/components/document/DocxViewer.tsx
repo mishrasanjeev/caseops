@@ -3,7 +3,7 @@
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 
 type Props = {
   blob: Blob;
@@ -74,31 +74,27 @@ export function DocxViewer({ blob, filename }: Props): React.JSX.Element {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       <div className="flex h-8 shrink-0 items-center justify-end gap-1">
-        <Button
+        <IconButton label="Zoom out"
           type="button"
           variant="ghost"
           size="sm"
           className="w-8 px-0"
-          aria-label="Zoom out"
-          title="Zoom out"
           disabled={zoom <= 0.5}
           onClick={() => setZoom((value) => Math.max(0.5, +(value - 0.15).toFixed(2)))}
         >
           <ZoomOut className="h-4 w-4" />
-        </Button>
+        </IconButton>
         <span className="w-12 text-center text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
-        <Button
+        <IconButton label="Zoom in"
           type="button"
           variant="ghost"
           size="sm"
           className="w-8 px-0"
-          aria-label="Zoom in"
-          title="Zoom in"
           disabled={zoom >= 2}
           onClick={() => setZoom((value) => Math.min(2, +(value + 0.15).toFixed(2)))}
         >
           <ZoomIn className="h-4 w-4" />
-        </Button>
+        </IconButton>
       </div>
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-[var(--color-line)] bg-white">
         <iframe

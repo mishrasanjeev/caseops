@@ -22,6 +22,8 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { IconButton } from "@/components/ui/IconButton";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket, listClients } from "@/lib/api/endpoints";
 import {
@@ -50,9 +52,10 @@ export function PatentFamilyIndex() {
   return <div className="flex min-w-0 flex-col gap-5">
     <Link href="/app/ip" className="inline-flex w-fit items-center gap-2 text-sm"><ArrowLeft size={16} />IP workspace</Link>
     <PageHeader title="Patent families" actions={<>
-      <a href="#patent-ipindia-sources"
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"
-        aria-label="IP India official references" title="IP India official references"><BookOpen className="h-4 w-4" aria-hidden /></a>
+      <Tooltip label="IP India official references">
+        <a href="#patent-ipindia-sources"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-white text-[var(--color-ink-2)] hover:border-[var(--color-ink-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand-500)]"><BookOpen className="h-4 w-4" aria-hidden /></a>
+      </Tooltip>
       {canWrite && !creating ? <Button onClick={() => setCreating(true)}><Plus size={16} />New disclosure</Button> : null}
     </>} />
     {creating && <FamilyForm onCancel={() => setCreating(false)} onSaved={(family) => {
@@ -63,7 +66,7 @@ export function PatentFamilyIndex() {
     }}>
       <div className="min-w-0 flex-1 basis-48"><Label htmlFor="patent-search">Family title</Label>
         <Input id="patent-search" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} /></div>
-      <Button type="submit" variant="secondary" aria-label="Search patent families" title="Search patent families"><Search size={16} /></Button>
+      <IconButton label="Search patent families" type="submit" variant="secondary"><Search size={16} /></IconButton>
       <div className="min-w-0 basis-40"><Label htmlFor="patent-lifecycle-filter">Lifecycle</Label>
         <select id="patent-lifecycle-filter" className={selectClass} value={statusScope} onChange={(event) => {
           setStatusScope(event.target.value as PatentFamilyStatusScope); setCursor(undefined);

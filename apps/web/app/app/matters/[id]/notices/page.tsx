@@ -33,7 +33,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   updateMatterAttachmentMetadata,
@@ -48,35 +47,11 @@ import type { WorkspaceAttachment } from "@/lib/api/workspace-types";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
+import { validateNoticeFile, acceptAttribute } from "@/lib/notice-rules";
+import { MatterNoticeUploadForm } from "@/components/matters/MatterNoticeUploadForm";
 
 type NoticeDirection = "received" | "sent";
 type RelatedDocumentRole = "reply" | "supporting";
-
-type NoticeUploadDraft = {
-  receivedOn: string;
-  noticeType: string;
-  mode: string;
-  subject: string;
-  authority: string;
-  receivedFrom: string;
-  summary: string;
-  response: string;
-  remarks: string;
-  status: string;
-  department: string;
-  internalSpoc: string;
-  internalRemarks: string;
-  amount: string;
-  replyDueOn: string;
-  replyRequired: boolean;
-  replySent: boolean;
-  replySentOn: string;
-  sentOn: string;
-  counselEngaged: string;
-  disputeAmount: string;
-  recoveredAmount: string;
-  currency: string;
-};
 
 type NoticeFilters = {
   query: string;
@@ -94,32 +69,6 @@ type RelatedUploadTarget = {
   parentSubject: string;
   direction: NoticeDirection;
   role: RelatedDocumentRole;
-};
-
-const EMPTY_NOTICE_UPLOAD_DRAFT: NoticeUploadDraft = {
-  receivedOn: "",
-  noticeType: "",
-  mode: "",
-  subject: "",
-  authority: "",
-  receivedFrom: "",
-  summary: "",
-  response: "",
-  remarks: "",
-  status: "Open",
-  department: "",
-  internalSpoc: "",
-  internalRemarks: "",
-  amount: "",
-  replyDueOn: "",
-  replyRequired: true,
-  replySent: false,
-  replySentOn: "",
-  sentOn: "",
-  counselEngaged: "",
-  disputeAmount: "",
-  recoveredAmount: "",
-  currency: "INR",
 };
 
 const EMPTY_FILTERS: NoticeFilters = {
@@ -162,14 +111,6 @@ function humanSize(bytes: number | null | undefined): string {
     index += 1;
   }
   return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
-function amountToMinor(value: string): number | null {
-  const cleaned = value.trim().replace(/,/g, "");
-  if (!cleaned) return null;
-  const parsed = Number(cleaned);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * 100);
 }
 
 function formatMoney(
@@ -296,12 +237,8 @@ export default function MatterNoticesPage() {
   const params = useParams<{ id: string }>();
   const matterId = params.id;
   const queryClient = useQueryClient();
-  const noticeFileInput = useRef<HTMLInputElement | null>(null);
   const relatedFileInput = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<NoticeDirection>("received");
-  const [noticeDraft, setNoticeDraft] = useState<NoticeUploadDraft>(
-    EMPTY_NOTICE_UPLOAD_DRAFT,
-  );
   const [filters, setFilters] = useState<NoticeFilters>(EMPTY_FILTERS);
   const [relatedUploadTarget, setRelatedUploadTarget] =
     useState<RelatedUploadTarget | null>(null);
@@ -491,70 +428,6 @@ export default function MatterNoticesPage() {
     });
   };
 
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) =>
-      uploadMatterAttachment({
-        matterId,
-        file,
-        documentType: "notice",
-        lifecycleStage: "initiation",
-        documentDate:
-          activeTab === "received"
-            ? noticeDraft.receivedOn || null
-            : noticeDraft.sentOn || null,
-        noticeDirection: activeTab,
-        noticeDocumentRole: "notice",
-        noticeType: noticeDraft.noticeType || null,
-        noticeMode: activeTab === "received" ? noticeDraft.mode || null : null,
-        noticeSource: activeTab === "received" ? noticeDraft.receivedFrom || null : null,
-        noticeSubject: noticeDraft.subject || null,
-        noticeReceivedOn: activeTab === "received" ? noticeDraft.receivedOn || null : null,
-        noticeResponse:
-          activeTab === "received" ? noticeDraft.response || null : null,
-        noticeAuthority: noticeDraft.authority || null,
-        noticeReceivedFrom:
-          activeTab === "received" ? noticeDraft.receivedFrom || null : null,
-        noticeSummary: noticeDraft.summary || null,
-        noticeRemarks: noticeDraft.remarks || null,
-        noticeStatus: noticeDraft.status || null,
-        noticeDepartment: noticeDraft.department || null,
-        noticeInternalSpoc: noticeDraft.internalSpoc || null,
-        noticeInternalRemarks: noticeDraft.internalRemarks || null,
-        noticeAmountMinor:
-          activeTab === "received" ? amountToMinor(noticeDraft.amount) : null,
-        noticeDisputeAmountMinor:
-          activeTab === "sent" ? amountToMinor(noticeDraft.disputeAmount) : null,
-        noticeRecoveredAmountMinor:
-          activeTab === "sent" ? amountToMinor(noticeDraft.recoveredAmount) : null,
-        noticeCurrency: noticeDraft.currency || "INR",
-        noticeReplyDueOn:
-          activeTab === "received" ? noticeDraft.replyDueOn || null : null,
-        noticeReplyRequired: activeTab === "received" ? noticeDraft.replyRequired : false,
-        noticeReplySent: activeTab === "received" ? noticeDraft.replySent : false,
-        noticeReplySentOn:
-          activeTab === "received" && noticeDraft.replySent
-            ? noticeDraft.replySentOn || todayIso()
-            : null,
-        noticeSentOn: activeTab === "sent" ? noticeDraft.sentOn || null : null,
-        noticeCounselEngaged:
-          activeTab === "sent" ? noticeDraft.counselEngaged || null : null,
-        sequenceIndex: null,
-        linkedCourtOrderId: null,
-        hearingId: null,
-      }),
-    onSuccess: async () => {
-      await invalidateWorkspace();
-      toast.success(activeTab === "received" ? "Notice received uploaded." : "Notice sent uploaded.");
-      setNoticeDraft(EMPTY_NOTICE_UPLOAD_DRAFT);
-    },
-    onError: (err) => {
-      toast.error(apiErrorMessage(err, "Could not upload the notice."));
-    },
-    onSettled: () => {
-      if (noticeFileInput.current) noticeFileInput.current.value = "";
-    },
-  });
-
   const relatedUploadMutation = useMutation({
     mutationFn: ({ file, target }: { file: File; target: RelatedUploadTarget }) => {
       const sentOn = target.role === "reply" ? replySentDates[target.parentId] || todayIso() : null;
@@ -725,415 +598,12 @@ export default function MatterNoticesPage() {
           </div>
 
           {canUpload ? (
-            <div
-              className="mb-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4"
-              data-testid="matter-notice-upload-template"
-            >
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
-                {activeTab === "received" ? (
-                  <Inbox className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Send className="h-4 w-4" aria-hidden />
-                )}
-                {activeTab === "received" ? "Upload Notice Received" : "Upload Notice Sent"}
-              </div>
-              <div className="grid gap-3 md:grid-cols-4">
-                {activeTab === "received" ? (
-                  <div>
-                    <Label htmlFor="notice-received-on">Date of receipt</Label>
-                    <Input
-                      id="notice-received-on"
-                      className="mt-1.5"
-                      type="date"
-                      value={noticeDraft.receivedOn}
-                      onChange={(event) =>
-                        setNoticeDraft((current) => ({
-                          ...current,
-                          receivedOn: event.target.value,
-                        }))
-                      }
-                      data-testid="matter-notice-received-on"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <Label htmlFor="notice-sent-on">Notice sent date</Label>
-                    <Input
-                      id="notice-sent-on"
-                      className="mt-1.5"
-                      type="date"
-                      value={noticeDraft.sentOn}
-                      onChange={(event) =>
-                        setNoticeDraft((current) => ({
-                          ...current,
-                          sentOn: event.target.value,
-                        }))
-                      }
-                      data-testid="matter-notice-sent-on"
-                    />
-                  </div>
-                )}
-                <div>
-                  <Label htmlFor="notice-type">Type of notice</Label>
-                  <Input
-                    id="notice-type"
-                    className="mt-1.5"
-                    value={noticeDraft.noticeType}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        noticeType: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-type"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-status">Status</Label>
-                  <Input
-                    id="notice-status"
-                    className="mt-1.5"
-                    value={noticeDraft.status}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        status: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-status"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-department">Department / SPOC</Label>
-                  <Input
-                    id="notice-department"
-                    className="mt-1.5"
-                    value={noticeDraft.department}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        department: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-department"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="notice-subject">Subject</Label>
-                  <Input
-                    id="notice-subject"
-                    className="mt-1.5"
-                    value={noticeDraft.subject}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        subject: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-subject"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-authority">Authority</Label>
-                  <Input
-                    id="notice-authority"
-                    className="mt-1.5"
-                    value={noticeDraft.authority}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        authority: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-authority"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-spoc">Internal SPOC</Label>
-                  <Input
-                    id="notice-spoc"
-                    className="mt-1.5"
-                    value={noticeDraft.internalSpoc}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        internalSpoc: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-internal-spoc"
-                  />
-                </div>
-                {activeTab === "received" ? (
-                  <>
-                    <div>
-                      <Label htmlFor="notice-mode">Mode of receiving</Label>
-                      <Input
-                        id="notice-mode"
-                        className="mt-1.5"
-                        value={noticeDraft.mode}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            mode: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-mode"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notice-received-from">Received from</Label>
-                      <Input
-                        id="notice-received-from"
-                        className="mt-1.5"
-                        value={noticeDraft.receivedFrom}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            receivedFrom: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-source"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notice-amount">Amount</Label>
-                      <Input
-                        id="notice-amount"
-                        className="mt-1.5"
-                        inputMode="decimal"
-                        value={noticeDraft.amount}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            amount: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-amount"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notice-reply-due-on">Reply due date</Label>
-                      <Input
-                        id="notice-reply-due-on"
-                        className="mt-1.5"
-                        type="date"
-                        value={noticeDraft.replyDueOn}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            replyDueOn: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-reply-due-on"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 pt-6">
-                      <input
-                        id="notice-reply-required"
-                        type="checkbox"
-                        checked={noticeDraft.replyRequired}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            replyRequired: event.target.checked,
-                          }))
-                        }
-                        data-testid="matter-notice-reply-required"
-                      />
-                      <Label htmlFor="notice-reply-required">Reply required</Label>
-                    </div>
-                    <div className="flex items-center gap-2 pt-6">
-                      <input
-                        id="notice-reply-sent"
-                        type="checkbox"
-                        checked={noticeDraft.replySent}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            replySent: event.target.checked,
-                          }))
-                        }
-                        data-testid="matter-notice-reply-sent"
-                      />
-                      <Label htmlFor="notice-reply-sent">Reply sent</Label>
-                    </div>
-                    {noticeDraft.replySent ? (
-                      <div>
-                        <Label htmlFor="notice-reply-sent-on">Reply sent date</Label>
-                        <Input
-                          id="notice-reply-sent-on"
-                          className="mt-1.5"
-                          type="date"
-                          value={noticeDraft.replySentOn}
-                          onChange={(event) =>
-                            setNoticeDraft((current) => ({
-                              ...current,
-                              replySentOn: event.target.value,
-                            }))
-                          }
-                          data-testid="matter-notice-reply-sent-on"
-                        />
-                      </div>
-                    ) : null}
-                    <div className="md:col-span-2">
-                      <Label htmlFor="notice-response">Response / reply plan</Label>
-                      <Textarea
-                        id="notice-response"
-                        className="mt-1.5"
-                        value={noticeDraft.response}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            response: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-response"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <Label htmlFor="notice-counsel">Counsel engaged</Label>
-                      <Input
-                        id="notice-counsel"
-                        className="mt-1.5"
-                        value={noticeDraft.counselEngaged}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            counselEngaged: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-counsel"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notice-dispute-amount">Dispute amount</Label>
-                      <Input
-                        id="notice-dispute-amount"
-                        className="mt-1.5"
-                        inputMode="decimal"
-                        value={noticeDraft.disputeAmount}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            disputeAmount: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-dispute-amount"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notice-recovered-amount">Recovered amount</Label>
-                      <Input
-                        id="notice-recovered-amount"
-                        className="mt-1.5"
-                        inputMode="decimal"
-                        value={noticeDraft.recoveredAmount}
-                        onChange={(event) =>
-                          setNoticeDraft((current) => ({
-                            ...current,
-                            recoveredAmount: event.target.value,
-                          }))
-                        }
-                        data-testid="matter-notice-recovered-amount"
-                      />
-                    </div>
-                  </>
-                )}
-                <div>
-                  <Label htmlFor="notice-currency">Currency</Label>
-                  <Input
-                    id="notice-currency"
-                    className="mt-1.5 uppercase"
-                    maxLength={3}
-                    value={noticeDraft.currency}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        currency: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    data-testid="matter-notice-currency"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label htmlFor="notice-summary">Summary</Label>
-                  <Textarea
-                    id="notice-summary"
-                    className="mt-1.5"
-                    value={noticeDraft.summary}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        summary: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-summary"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-remarks">Remarks</Label>
-                  <Textarea
-                    id="notice-remarks"
-                    className="mt-1.5"
-                    value={noticeDraft.remarks}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        remarks: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-remarks"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="notice-internal-remarks">Internal remarks</Label>
-                  <Textarea
-                    id="notice-internal-remarks"
-                    className="mt-1.5"
-                    value={noticeDraft.internalRemarks}
-                    onChange={(event) =>
-                      setNoticeDraft((current) => ({
-                        ...current,
-                        internalRemarks: event.target.value,
-                      }))
-                    }
-                    data-testid="matter-notice-internal-remarks"
-                  />
-                </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex items-center gap-2 text-xs text-[var(--color-mute)]">
-                  <Bell className="h-4 w-4" aria-hidden />
-                  Reply reminders are tracked 7, 3, and 1 day before due date.
-                </div>
-                <input
-                  ref={noticeFileInput}
-                  type="file"
-                  className="hidden"
-                  data-testid="matter-notice-file-input"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) uploadMutation.mutate(file);
-                  }}
-                />
-                <Button
-                  type="button"
-                  disabled={uploadMutation.isPending}
-                  onClick={() => noticeFileInput.current?.click()}
-                  data-testid="matter-notice-upload"
-                >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Upload className="h-4 w-4" aria-hidden />
-                  )}
-                  {activeTab === "received" ? "Upload received notice" : "Upload sent notice"}
-                </Button>
-              </div>
-            </div>
+            <MatterNoticeUploadForm
+              matterId={matterId}
+              direction={activeTab}
+              filePolicy={data.storage_governance ?? null}
+              onUploaded={invalidateWorkspace}
+            />
           ) : null}
 
           <div className="mb-5 rounded-lg border border-[var(--color-line)] bg-white p-4">
@@ -1279,11 +749,18 @@ export default function MatterNoticesPage() {
             type="file"
             className="hidden"
             data-testid="matter-notice-related-file-input"
+            accept={acceptAttribute(data.storage_governance)}
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file && relatedUploadTarget) {
-                relatedUploadMutation.mutate({ file, target: relatedUploadTarget });
+              if (!file || !relatedUploadTarget) return;
+              // Same allow-list and size cap as the API, before any bytes move.
+              const fileError = validateNoticeFile(file, data.storage_governance);
+              if (fileError) {
+                toast.error(fileError);
+                event.target.value = "";
+                return;
               }
+              relatedUploadMutation.mutate({ file, target: relatedUploadTarget });
             }}
           />
 
@@ -1531,6 +1008,8 @@ export default function MatterNoticesPage() {
                             id={`reply-sent-on-${notice.id}`}
                             className="mt-1.5 w-44"
                             type="date"
+                            min={notice.notice_received_on ?? undefined}
+                            max={todayIso()}
                             value={replySentOn}
                             onChange={(event) =>
                               setReplySentDates((current) => ({

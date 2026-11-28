@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   createNotificationRule,
   deleteNotificationRule,
@@ -834,17 +835,16 @@ function NotificationRuleRow({
         >
           {rule.enabled ? "Disable" : "Enable"}
         </Button>
-        <Button
+        <IconButton label="Delete notification rule"
           type="button"
           size="sm"
           variant="ghost"
           onClick={onDelete}
           disabled={disabled}
-          aria-label="Delete notification rule"
           data-testid={`notification-rule-delete-${rule.id}`}
         >
           <Trash2 className="h-4 w-4" aria-hidden />
-        </Button>
+        </IconButton>
       </div>
     </li>
   );

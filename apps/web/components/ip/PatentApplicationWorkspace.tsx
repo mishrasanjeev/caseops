@@ -22,6 +22,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
 import {
@@ -60,7 +61,7 @@ export function PatentFamilyApplications({ family, canWrite, onOpenDocuments }: 
     }}>
       <div className="min-w-0 flex-1 basis-48"><Label htmlFor="patent-application-search">Title or exact identifier</Label>
         <Input id="patent-application-search" value={search} maxLength={200} onChange={(event) => setSearch(event.target.value)} /></div>
-      <Button type="submit" variant="secondary" aria-label="Search patent applications" title="Search patent applications"><Search size={16} /></Button>
+      <IconButton label="Search patent applications" type="submit" variant="secondary"><Search size={16} /></IconButton>
       <div className="min-w-0 basis-40"><Label htmlFor="patent-application-scope">Lifecycle</Label>
         <select id="patent-application-scope" className={selectClass} value={scope} onChange={(event) => {
           setScope(event.target.value as PatentFamilyStatusScope); setCursor(undefined);
@@ -269,7 +270,7 @@ function ApplicationForm({ family, initial, onSaved, onCancel, onOpenDocuments }
           }}><Plus size={16} />Add identifier</Button></div>
         {identifiers.map((row, index) => <div key={row.key} className="min-w-0 space-y-3 border-t border-line py-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-medium">Identifier {index + 1}</h4>
-            <Button type="button" variant="ghost" aria-label={`Remove identifier ${index + 1}`} title={`Remove identifier ${index + 1}`} onClick={() => setIdentifiers((rows) => rows.filter((item) => item.key !== row.key))}><Trash2 size={16} /></Button></div>
+            <IconButton label={`Remove identifier ${index + 1}`} type="button" variant="ghost" onClick={() => setIdentifiers((rows) => rows.filter((item) => item.key !== row.key))}><Trash2 size={16} /></IconButton></div>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2"><div className="min-w-0"><Label htmlFor={`patent-id-kind-${index}`}>Identifier {index + 1} kind</Label>
             <select id={`patent-id-kind-${index}`} className={selectClass} value={row.kind} onChange={(event) => { if (event.target.value === "application") setPending(false); updateIdentifier(row.key, { kind: event.target.value as IdentifierInput["kind"] }); }}>
               <option value="application">Application</option><option value="publication">Publication</option><option value="grant">Grant</option>

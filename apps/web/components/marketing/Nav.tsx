@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { siteConfig } from "@/lib/site";
 
@@ -63,16 +64,17 @@ export function Nav() {
           </Button>
         </div>
 
-        <button
-          type="button"
-          className="inline-flex items-center justify-center rounded-md p-2 text-[var(--color-ink-2)] md:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <Tooltip label={open ? "Close menu" : "Open menu"}>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-md p-2 text-[var(--color-ink-2)] md:hidden"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </Tooltip>
       </Container>
 
       {open ? (

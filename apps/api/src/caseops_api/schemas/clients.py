@@ -4,7 +4,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from caseops_api.services.aadhaar_privacy import reject_full_aadhaar
 
 ClientTypeLiteral = Literal["individual", "corporate", "government", "nonprofit"]
 ClientVerificationStatusLiteral = Literal[
@@ -29,6 +31,20 @@ KycDocumentStatusLiteral = Literal[
     "expired",
     "pending",
 ]
+# BUG-003: uploaded KYC document kinds. ``aadhaar_masked`` is the only Aadhaar
+# form CaseOps keeps (UIDAI masking rule); ``other`` needs a label.
+KycDocumentTypeLiteral = Literal[
+    "pan",
+    "aadhaar_masked",
+    "passport",
+    "address_proof",
+    "other",
+]
+KycReviewDecisionLiteral = Literal["approved", "rejected"]
+
+
+def _no_full_aadhaar(value: str | None) -> str | None:
+    return reject_full_aadhaar(value)
 
 
 class ClientCreateRequest(BaseModel):
@@ -52,6 +68,8 @@ class ClientCreateRequest(BaseModel):
     internal_notes: str | None = Field(default=None, max_length=4000)
     kyc_status: ClientKycStatusInputLiteral = "not_required"
 
+    _identifiers_hold_no_aadhaar = field_validator("pan", "gstin")(_no_full_aadhaar)
+
 
 class ClientUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -70,6 +88,8 @@ class ClientUpdateRequest(BaseModel):
     internal_notes: str | None = Field(default=None, max_length=4000)
     kyc_status: ClientKycStatusInputLiteral | None = None
     is_active: bool | None = None
+
+    _identifiers_hold_no_aadhaar = field_validator("pan", "gstin")(_no_full_aadhaar)
 
 
 class ClientMatterLink(BaseModel):
@@ -98,15 +118,87 @@ class KycDocumentRecord(BaseModel):
     attachment_id: str | None = Field(default=None, min_length=10, max_length=64)
     expires_on: date | None = None
 
+    _text_holds_no_aadhaar = field_validator("name", "document_type", "note")(
+        _no_full_aadhaar
+    )
+
 
 class KycSubmitRequest(BaseModel):
-    """Submit a KYC pack - moves the client into ``submitted``."""
+    """Submit a KYC pack - moves the client into ``submitted``.
 
-    documents: list[KycDocumentRecord] = Field(default_factory=list)
+    ``documents`` is an optional checklist of document names. The pack itself
+    is the client's uploaded KYC files; submission is refused until they meet
+    the KYC requirements (``ClientKycDocumentListResponse.requirements``).
+    """
+
+    documents: list[KycDocumentRecord] = Field(default_factory=list, max_length=20)
+
+
+class KycVerifyRequest(BaseModel):
+    """Approve a submitted pack. ``reviewed_document_ids`` must name every
+    file in the client's current pack: an approval records exactly which
+    documents the reviewer checked, and a pack that changed since the reviewer
+    loaded it is refused."""
+
+    reviewed_document_ids: list[str] = Field(min_length=1, max_length=50)
 
 
 class KycRejectRequest(BaseModel):
     reason: str = Field(min_length=4, max_length=1000)
+    # The files the reviewer checked before rejecting (may be empty when the
+    # pack is rejected for missing files). Each must be in the current pack.
+    reviewed_document_ids: list[str] = Field(default_factory=list, max_length=50)
+
+    # The reason is stored on the client and shown to the submitter (BUG-003).
+    _reason_holds_no_aadhaar = field_validator("reason")(_no_full_aadhaar)
+
+
+class ClientKycDocumentRecord(BaseModel):
+    """One uploaded KYC file. Storage keys and hashes stay server-side."""
+
+    id: str
+    client_id: str
+    document_type: KycDocumentTypeLiteral
+    label: str | None
+    original_filename: str
+    content_type: str | None
+    size_bytes: int
+    uploaded_by_membership_id: str | None
+    uploaded_by_name: str | None
+    uploaded_by_portal: bool
+    review_decision: KycReviewDecisionLiteral | None
+    reviewed_at: datetime | None
+    reviewed_by_membership_id: str | None
+    previewable: bool
+    created_at: datetime
+
+
+class KycDocumentTypeOption(BaseModel):
+    value: KycDocumentTypeLiteral
+    label: str
+    hint: str
+    requires_label: bool
+
+
+class KycRequirementRecord(BaseModel):
+    key: str
+    label: str
+    satisfied_by: list[KycDocumentTypeLiteral]
+    satisfied: bool
+
+
+class ClientKycDocumentListResponse(BaseModel):
+    client_id: str
+    kyc_status: ClientKycStatusLiteral
+    documents: list[ClientKycDocumentRecord]
+    requirements: list[KycRequirementRecord]
+    # True when every requirement has at least one current file.
+    requirements_met: bool
+    # Uploads and removals are open in these KYC states only.
+    upload_allowed: bool
+    document_types: list[KycDocumentTypeOption]
+    accepted_extensions: list[str]
+    max_upload_bytes: int
 
 
 class ClientRecord(BaseModel):
@@ -175,6 +267,11 @@ class ClientVerificationUpdateRequest(BaseModel):
     status: ClientKycStatusInputLiteral | None = None
     documents: list[KycDocumentRecord] | None = Field(default=None, max_length=20)
     rejection_reason: str | None = Field(default=None, max_length=1000)
+    # Required to approve (every current KYC file) and recorded on reject;
+    # the same rule as /clients/{id}/kyc/verify|reject (BUG-003).
+    reviewed_document_ids: list[str] | None = Field(default=None, max_length=50)
+
+    _reason_holds_no_aadhaar = field_validator("rejection_reason")(_no_full_aadhaar)
 
 
 class MatterClientVerificationRecord(BaseModel):
@@ -213,9 +310,15 @@ __all__ = [
     "ClientVerificationStatusLiteral",
     "ClientVerificationUpdateRequest",
     "ClientUpdateRequest",
+    "ClientKycDocumentListResponse",
+    "ClientKycDocumentRecord",
     "KycDocumentRecord",
+    "KycDocumentTypeLiteral",
+    "KycDocumentTypeOption",
     "KycRejectRequest",
+    "KycRequirementRecord",
     "KycSubmitRequest",
+    "KycVerifyRequest",
     "MatterClientAssignRequest",
     "MatterClientAssignmentRecord",
     "MatterClientVerificationListResponse",

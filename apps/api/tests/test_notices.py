@@ -104,6 +104,11 @@ def _notice(
 ) -> dict[str, object]:
     payload: dict[str, object] = {"subject": subject}
     payload.update(overrides)
+    # Every notice must carry a type and its business date (notice_rules); a
+    # caller that does not care about them gets valid defaults.
+    payload.setdefault("type", "Legal notice")
+    date_field = "sent_on" if payload.get("direction") == "sent" else "received_on"
+    payload.setdefault(date_field, "2026-07-15")
     response = client.post(
         "/api/notices/",
         headers=_auth(token),
@@ -931,6 +936,8 @@ def test_notice_owner_options_and_create_assignment_permissions(
         headers=_auth(member_token),
         json={
             "subject": "Uploader may self-assign",
+            "type": "Legal notice",
+            "received_on": "2026-07-15",
             "owner_membership_id": member_id,
         },
     )
@@ -940,6 +947,8 @@ def test_notice_owner_options_and_create_assignment_permissions(
         headers=_auth(partner_token),
         json={
             "subject": "Partner assignment without user-admin capability",
+            "type": "Legal notice",
+            "received_on": "2026-07-15",
             "owner_membership_id": member_id,
         },
     )

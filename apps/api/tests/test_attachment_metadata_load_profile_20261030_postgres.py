@@ -98,6 +98,8 @@ _HISTORY_TABLES |= {
 _META_COLUMNS = {
     "notice_reminder_offsets_json" if name == "notice_reminder_offsets" else name
     for name in MatterAttachmentMetadataUpdateRequest.model_fields
+    # A request control (the audited duplicate override), not a stored column.
+    if name != "allow_duplicate"
 }
 _TEXT = "The respondent shall file reply within 14 days from the date of this order."
 _TAIL_CONTEXT_SELECT = "SELECT set_config('caseops.compliance_tail', :identity, true)"

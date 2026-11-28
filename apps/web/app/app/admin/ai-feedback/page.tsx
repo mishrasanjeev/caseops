@@ -4,6 +4,7 @@ import { CheckCircle2, LoaderCircle, MessageSquareWarning, RefreshCw } from "luc
 import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   type AIFeedbackRecord,
   type AIFeedbackStatus,
@@ -67,16 +68,16 @@ export default function AIFeedbackPage() {
         title="Feedback review"
         description="Review Product Guide and workspace assistant feedback without duplicating prompts, answers, citations, or source content."
         actions={
-          <button
-            type="button"
-            title="Refresh feedback"
-            aria-label="Refresh feedback"
-            disabled={!canAdmin || busy}
-            onClick={() => void load()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] bg-white text-[var(--color-ink-2)] disabled:opacity-60"
-          >
-            <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} aria-hidden />
-          </button>
+          <Tooltip label="Refresh feedback">
+            <button
+              type="button"
+              disabled={!canAdmin || busy}
+              onClick={() => void load()}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] bg-white text-[var(--color-ink-2)] disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} aria-hidden />
+            </button>
+          </Tooltip>
         }
       />
 

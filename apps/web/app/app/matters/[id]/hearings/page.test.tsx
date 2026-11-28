@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  analyzeAffidavitIntelligenceMock,
+  fetchMockHearingReadinessMock,
   completeMockHearingMock,
   fetchCalendarSyncStatusMock,
   fetchMatterComplianceMock,
@@ -24,6 +26,8 @@ const {
   workspaceData,
   useCapabilityMock,
 } = vi.hoisted(() => ({
+  analyzeAffidavitIntelligenceMock: vi.fn(),
+  fetchMockHearingReadinessMock: vi.fn(),
   completeMockHearingMock: vi.fn(),
   fetchCalendarSyncStatusMock: vi.fn(),
   fetchMatterComplianceMock: vi.fn(),
@@ -58,6 +62,8 @@ const {
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  analyzeAffidavitIntelligence: analyzeAffidavitIntelligenceMock,
+  fetchMockHearingReadiness: fetchMockHearingReadinessMock,
   completeMockHearing: completeMockHearingMock,
   createMatterHearing: vi.fn(),
   // ScheduleHearingDialog reads workspace phone-channel enablement.
@@ -109,6 +115,68 @@ function withClient(children: ReactNode) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+type ReadinessAction =
+  | "start_session"
+  | "run_affidavit_intelligence"
+  | "wait_for_processing"
+  | "mark_affidavit"
+  | "upload_affidavit"
+  | "none";
+
+function readiness(nextAction: ReadinessAction, overrides: Record<string, unknown> = {}) {
+  const ready = nextAction === "start_session";
+  return {
+    matter_id: "m1",
+    ready,
+    checks: [
+      { key: "matter_operational", label: "Matter is open", status: "met", detail: "Open matter." },
+      {
+        key: "affidavit_document",
+        label: "Affidavit uploaded and marked",
+        status: nextAction === "upload_affidavit" || nextAction === "mark_affidavit" ? "missing" : "met",
+        detail: "1 marked affidavit.",
+      },
+      { key: "affidavit_text", label: "Affidavit text readable", status: "met", detail: "Searchable text is available." },
+      {
+        key: "affidavit_run",
+        label: "Affidavit intelligence run completed",
+        status: ready ? "met" : "missing",
+        detail: ready ? "Latest analysis completed." : "No completed affidavit intelligence run yet.",
+      },
+      {
+        key: "question_bank",
+        label: "Source-backed questions available",
+        status: ready ? "met" : "missing",
+        detail: ready ? "3 questions." : "No source-backed questions yet.",
+      },
+    ],
+    next_action: nextAction,
+    next_action_attachment_id: nextAction === "run_affidavit_intelligence" ? "att-aff" : null,
+    next_action_detail:
+      nextAction === "run_affidavit_intelligence"
+        ? "Run affidavit intelligence on chief-affidavit.pdf to build the question bank, then start the session."
+        : nextAction === "start_session"
+          ? "3 source-backed questions ready from the latest affidavit intelligence run."
+          : "Upload the affidavit to this matter's documents and mark it as an affidavit; mock hearing questions are built from its text.",
+    affidavit_document_types: ["affidavit", "chief_affidavit", "counter_affidavit"],
+    affidavit_sources: [
+      {
+        attachment_id: "att-aff",
+        filename: "chief-affidavit.pdf",
+        document_type: "chief_affidavit",
+        processing_status: "indexed",
+        has_usable_text: true,
+        latest_run_status: ready ? "completed" : null,
+        latest_run_question_count: ready ? 3 : 0,
+      },
+    ],
+    latest_completed_run_id: ready ? "run1" : null,
+    available_question_count: ready ? 3 : 0,
+    available_question_categories: ready ? ["document_support"] : [],
+    ...overrides,
+  };
 }
 
 function mockHearingSession(overrides: Record<string, unknown> = {}) {
@@ -225,6 +293,9 @@ function hearingCoachReport(overrides: Record<string, unknown> = {}) {
 
 describe("MatterHearingsPage", () => {
   beforeEach(() => {
+    analyzeAffidavitIntelligenceMock.mockReset();
+    fetchMockHearingReadinessMock.mockReset();
+    fetchMockHearingReadinessMock.mockResolvedValue(readiness("start_session"));
     completeMockHearingMock.mockReset();
     decideNextHearingSuggestionMock.mockReset();
     fetchCalendarSyncStatusMock.mockReset();
@@ -885,6 +956,92 @@ describe("MatterHearingsPage", () => {
     );
     expect(screen.getByTestId("mock-hearing-scorecard")).toHaveTextContent("New assertions");
     expect(screen.getByTestId("mock-hearing-scorecard")).toHaveTextContent("1");
+  });
+
+  it("Nov 27 row 7: Start session waits for affidavit intelligence and the checklist runs it", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    fetchMockHearingReadinessMock
+      .mockResolvedValueOnce(readiness("run_affidavit_intelligence"))
+      .mockResolvedValue(readiness("start_session"));
+    analyzeAffidavitIntelligenceMock.mockResolvedValue({});
+    startMockHearingMock.mockResolvedValue(mockHearingSession());
+
+    render(withClient(<MatterHearingsPage />));
+
+    const start = await screen.findByTestId("mock-hearing-start");
+    const panel = await screen.findByTestId("mock-hearing-readiness");
+    // The impossible action is disabled before any click, and says why.
+    expect(start).toBeDisabled();
+    expect(start).toHaveAttribute("aria-describedby", "mock-hearing-readiness-detail");
+    expect(panel).toHaveTextContent("Before you can start a session");
+    expect(within(panel).getByTestId("mock-hearing-check-affidavit_run")).toHaveAttribute(
+      "data-status",
+      "missing",
+    );
+    await userEvent.click(start);
+    expect(startMockHearingMock).not.toHaveBeenCalled();
+
+    await userEvent.click(within(panel).getByTestId("mock-hearing-run-affidavit"));
+    expect(analyzeAffidavitIntelligenceMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentId: "att-aff",
+    });
+    await vi.waitFor(() => expect(screen.getByTestId("mock-hearing-start")).not.toBeDisabled());
+    expect(screen.queryByTestId("mock-hearing-readiness")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("mock-hearing-start"));
+    expect(startMockHearingMock).toHaveBeenCalledWith({ matterId: "m1" });
+  });
+
+  it("Nov 27 row 7 review: an affidavit analysed before its text was readable is re-run in place", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    const staleSource = {
+      attachment_id: "att-aff",
+      filename: "scanned-affidavit.pdf",
+      document_type: "chief_affidavit",
+      processing_status: "indexed",
+      has_usable_text: true,
+      latest_run_status: "insufficient_source_text",
+      latest_run_question_count: 0,
+    };
+    fetchMockHearingReadinessMock
+      .mockResolvedValueOnce(
+        readiness("run_affidavit_intelligence", {
+          next_action_detail:
+            "scanned-affidavit.pdf was analysed before its text could be read. The text is readable now: re-run affidavit intelligence on it to build the question bank, then start the session.",
+          affidavit_sources: [staleSource],
+        }),
+      )
+      .mockResolvedValue(readiness("start_session"));
+    analyzeAffidavitIntelligenceMock.mockResolvedValue({});
+    startMockHearingMock.mockResolvedValue(mockHearingSession());
+
+    render(withClient(<MatterHearingsPage />));
+
+    const panel = await screen.findByTestId("mock-hearing-readiness");
+    expect(screen.getByTestId("mock-hearing-start")).toBeDisabled();
+    // The way forward is the re-run on this page, not another upload.
+    expect(within(panel).queryByTestId("mock-hearing-upload-affidavit")).not.toBeInTheDocument();
+    const rerun = within(panel).getByTestId("mock-hearing-run-affidavit");
+    expect(rerun).toHaveTextContent("Re-run affidavit intelligence");
+    await userEvent.click(rerun);
+    expect(analyzeAffidavitIntelligenceMock).toHaveBeenCalledWith({
+      matterId: "m1",
+      attachmentId: "att-aff",
+    });
+    await vi.waitFor(() => expect(screen.getByTestId("mock-hearing-start")).not.toBeDisabled());
+    await userEvent.click(screen.getByTestId("mock-hearing-start"));
+    expect(startMockHearingMock).toHaveBeenCalledWith({ matterId: "m1" });
+  });
+
+  it("Nov 27 row 7: missing affidavit links to documents with the upload preselected", async () => {
+    useCapabilityMock.mockImplementation((cap: string) => cap === "hearing_packs:generate");
+    fetchMockHearingReadinessMock.mockResolvedValue(readiness("upload_affidavit"));
+
+    render(withClient(<MatterHearingsPage />));
+
+    const upload = await screen.findByTestId("mock-hearing-upload-affidavit");
+    expect(upload).toHaveAttribute("href", "/app/matters/m1/documents?affidavit=upload");
+    expect(screen.getByTestId("mock-hearing-start")).toBeDisabled();
   });
 
   it("keeps mock hearing copy within legal-safety boundaries", async () => {

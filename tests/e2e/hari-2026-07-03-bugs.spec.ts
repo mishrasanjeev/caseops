@@ -166,6 +166,8 @@ test.describe("Hari 2026-07-03 bugs", () => {
     await page.getByTestId("matter-notice-source").fill("Opposing counsel");
     await page.getByTestId("matter-notice-subject").fill("Hari Jul03 demand notice");
     await page.getByTestId("matter-notice-received-on").fill("2026-07-03");
+    await page.getByTestId("matter-notice-type").fill("Legal demand");
+    await page.getByTestId("matter-notice-reply-due-on").fill("2026-07-17");
     await page
       .getByTestId("matter-notice-response")
       .fill("Draft reply denying the demand and preserving limitation.");
@@ -179,6 +181,8 @@ test.describe("Hari 2026-07-03 bugs", () => {
         response.request().method() === "POST",
     );
     await page.setInputFiles('[data-testid="matter-notice-file-input"]', noticePath);
+    // Choosing the file no longer uploads; the complete form is submitted.
+    await page.getByTestId("matter-notice-upload").click();
     expect((await uploadResponse).status()).toBe(200);
 
     await expect(page.getByTestId("matter-notice-row")).toContainText(

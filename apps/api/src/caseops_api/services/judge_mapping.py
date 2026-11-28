@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -34,6 +34,112 @@ ANALYTICS_CONFIDENCE = frozenset({"exact", "initial_surname", "curator_confirmed
 
 class JudgeMappingError(ValueError):
     pass
+
+
+# One definition of each curatable catalogue row. The curator pickers list
+# exactly the rows these predicates admit and the alias writers lock rows only
+# through them, so a picker can never offer a row its writer rejects.
+CATALOG_SEARCH_MAX_TOKENS = 8
+
+
+def curatable_judge_predicate() -> ColumnElement[bool]:
+    return and_(Judge.is_active.is_(True), Judge.merged_into_judge_id.is_(None))
+
+
+def curatable_bench_predicate() -> ColumnElement[bool]:
+    """A bench is curatable while its catalogued court is active (needs a Court join)."""
+    return Court.is_active.is_(True)
+
+
+def _escaped_contains(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def catalog_search_clause(q: str | None, columns: list) -> ColumnElement[bool] | None:
+    """Every whitespace token must appear (case-insensitively) in one of ``columns``.
+
+    Curators type a court, seat or name in any order ("Bombay Nagpur"), so a
+    single substring match over one column would hide rows that exist.
+    """
+    tokens = (q or "").split()[:CATALOG_SEARCH_MAX_TOKENS]
+    if not tokens:
+        return None
+    return and_(
+        *(
+            or_(*(column.ilike(_escaped_contains(token), escape="\\") for column in columns))
+            for token in tokens
+        )
+    )
+
+
+@dataclass(frozen=True)
+class CatalogPage:
+    rows: list
+    total_count: int
+    has_more: bool
+    # Bench listings only: curatable courts the search names that hold no
+    # curatable bench, so the picker can say "not catalogued for this court"
+    # instead of showing an unexplained empty list.
+    courts_without_benches: list = field(default_factory=list)
+    courts_without_benches_total: int = 0
+
+
+def list_curatable_judges(
+    session: Session, *, court_id: str | None, q: str | None, limit: int
+) -> CatalogPage:
+    base = (
+        select(Judge, Court)
+        .join(Court, Court.id == Judge.court_id)
+        .where(curatable_judge_predicate())
+    )
+    if court_id:
+        base = base.where(Judge.court_id == court_id)
+    search = catalog_search_clause(q, [Judge.full_name, Court.name, Court.short_name])
+    if search is not None:
+        base = base.where(search)
+    total = int(session.scalar(select(func.count()).select_from(base.subquery())) or 0)
+    rows = list(session.execute(base.order_by(Judge.full_name, Judge.id).limit(limit + 1)))
+    return CatalogPage(rows=rows[:limit], total_count=total, has_more=len(rows) > limit)
+
+
+def list_curatable_benches(
+    session: Session, *, court_id: str | None, q: str | None, limit: int
+) -> CatalogPage:
+    base = (
+        select(Bench, Court)
+        .join(Court, Court.id == Bench.court_id)
+        .where(curatable_bench_predicate())
+    )
+    if court_id:
+        base = base.where(Bench.court_id == court_id)
+    search = catalog_search_clause(
+        q, [Bench.name, Bench.seat_city, Court.name, Court.short_name]
+    )
+    if search is not None:
+        base = base.where(search)
+    total = int(session.scalar(select(func.count()).select_from(base.subquery())) or 0)
+    rows = list(
+        session.execute(base.order_by(Court.name, Bench.name, Bench.id).limit(limit + 1))
+    )
+    bare = select(Court).where(
+        curatable_bench_predicate(),
+        ~select(Bench.id).where(Bench.court_id == Court.id).exists(),
+    )
+    if court_id:
+        bare = bare.where(Court.id == court_id)
+    court_search = catalog_search_clause(q, [Court.name, Court.short_name])
+    if court_search is not None:
+        bare = bare.where(court_search)
+    bare_total = int(session.scalar(select(func.count()).select_from(bare.subquery())) or 0)
+    bare_courts = list(session.scalars(bare.order_by(Court.name, Court.id).limit(limit)))
+    return CatalogPage(
+        rows=rows[:limit],
+        total_count=total,
+        has_more=len(rows) > limit,
+        courts_without_benches=bare_courts,
+        courts_without_benches_total=bare_total,
+    )
 
 
 class JudgeMappingConflict(JudgeMappingError):
@@ -421,8 +527,10 @@ def add_judge_alias(
     source_evidence_text: str | None,
     commit: bool = True,
 ) -> JudgeAlias:
-    judge = session.scalar(select(Judge).where(Judge.id == judge_id).with_for_update())
-    if judge is None or not judge.is_active or judge.merged_into_judge_id is not None:
+    judge = session.scalar(
+        select(Judge).where(Judge.id == judge_id, curatable_judge_predicate()).with_for_update()
+    )
+    if judge is None:
         raise JudgeMappingError("Canonical judge not found.")
     alias_normalised = normalise(alias_text)
     if not alias_normalised:
@@ -501,7 +609,12 @@ def add_bench_alias(
     source_url: str | None,
     commit: bool = True,
 ) -> BenchAlias:
-    bench = session.scalar(select(Bench).where(Bench.id == bench_id).with_for_update())
+    bench = session.scalar(
+        select(Bench)
+        .join(Court, Court.id == Bench.court_id)
+        .where(Bench.id == bench_id, curatable_bench_predicate())
+        .with_for_update(of=Bench)
+    )
     if bench is None:
         raise JudgeMappingError("Canonical bench not found.")
     alias_normalised = normalise(alias_text)

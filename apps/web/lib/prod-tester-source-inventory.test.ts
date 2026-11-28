@@ -256,6 +256,15 @@ const nov24Cases = [
 ] as const;
 const nov24Keys = new Set(nov24Cases.map(([project, title]) => JSON.stringify([project, [nov24File, title]])));
 const isNov24 = (row: Case) => row.file === nov24File;
+// November 27 workbook ENH-001 (branded, verifiable invoice PDFs), matched by exact identity.
+const nov27InvoiceFile = "ram-2026-11-27-invoice-branding.spec.ts";
+const nov27InvoiceCases = [
+  ["app-chromium", "ENH-001 [local-only] admin uploads a logo and signature and the issued invoice carries both with a verifiable QR code"],
+  ["app-chromium", "ENH-001 draft invoice PDF carries the letterhead, DRAFT watermark and a QR code that verifies until voided"],
+  ["app-mobile", "ENH-001 [mobile] draft invoice QR code verifies and the verification page fits a phone"],
+] as const;
+const nov27InvoiceKeys = new Set(nov27InvoiceCases.map(([project, title]) => JSON.stringify([project, [nov27InvoiceFile, title]])));
+const isNov27Invoice = (row: Case) => row.file === nov27InvoiceFile;
 // November 25 workbook (2) regressions (rows 1-3, nova-legal) plus the source
 // batches for the newly admitted Constitution, matched by exact identity.
 const nov25ConstitutionPrefix = "Nov25 Constitution source records ";
@@ -275,6 +284,48 @@ const nov25Keys = new Set(nov25Cases.map(([project, file, title]) => JSON.string
 const nov25Files = new Set<string>(nov25Cases.map(([, file]) => file).filter(file => file !== motorStatuteFile));
 const isNov25 = (row: Case) => nov25Files.has(row.file)
   || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25ConstitutionPrefix)));
+// November 27 workbooks (test-legal journeys), matched by exact identity across every Nov 27 spec.
+const nov27OcrFile = "ram-2026-11-27-ocr-images.spec.ts";
+const nov27BenchStatutesFile = "bugs7-2026-11-27-bench-statutes.spec.ts";
+const nov27TrackingFile = "ram-2026-11-27-case-tracking.spec.ts";
+const nov27NoticeFile = "notice-validation-2026-11-27.spec.ts";
+const nov27MatterFile = "nova-2026-11-27-matter.spec.ts";
+const nov27Cases: ReadonlyArray<readonly [string, string, string]> = [
+  ...["JPG", "JPEG", "PNG"].map(kind =>
+    ["app-chromium", nov27OcrFile, `BUG-001 OCR reads an uploaded ${kind} image instead of page_missing`] as const),
+  ["app-chromium", nov27BenchStatutesFile, "row 1 the Canonical bench picker offers the searched court's benches"],
+  ["app-chromium", nov27BenchStatutesFile, "row 4 a disabled Act says why, and a verified provision still attaches"],
+  ["app-mobile", nov27BenchStatutesFile, "[mobile] row 1 the Canonical bench picker offers the searched court's benches"],
+  ["app-mobile", nov27BenchStatutesFile, "[mobile] row 4 a disabled Act says why, and a verified provision still attaches"],
+  ["app-chromium", nov27TrackingFile, "row 6 bookmark search finds a Matter Code on an unloaded page"],
+  ["app-chromium", nov27TrackingFile, "row 10 delete bookmark icon shows its tooltip on hover and keyboard focus"],
+  ["app-chromium", nov27TrackingFile, "[local-only] row 10 delete bookmark still deletes the bookmark"],
+  ["app-chromium", nov27NoticeFile, "row 2 Notice Received refuses incomplete details and creates nothing"],
+  ["app-chromium", nov27NoticeFile, "row 3 Notice Sent refuses invalid details and files, and handles duplicates"],
+  ["app-chromium", nov27MatterFile, "row 5 court badge opens the official court website in a new tab"],
+  ["app-chromium", nov27MatterFile, "row 5 a court without a verified website is plain text, not a dead link"],
+  ["app-chromium", nov27MatterFile, "row 7 mock hearing shows its prerequisites, runs affidavit intelligence, then starts"],
+  ["app-chromium", nov27MatterFile, "row 8 Microsoft 365 setup shows the redirect URI the flow uses and tenant ID guidance"],
+  ["app-chromium", nov27MatterFile, "row 8 [local-only] saving valid values and Test reports a complete setup"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1366x768"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1280x720"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1920x1080"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1366 at 80%"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1366 at 125%"],
+  ["app-chromium", nov27MatterFile, "row 9 sidebar stays fixed and scrolls independently at 1366 at 150%"],
+  ["app-chromium", nov27MatterFile, "row 9 full-height pages keep the sidebar fixed without horizontal overflow"],
+  ["app-mobile", nov27MatterFile, "[mobile] row 9 the phone navigation drawer still opens and scrolls to its last item"],
+];
+const nov27Keys = new Set(nov27Cases.map(([project, file, title]) => JSON.stringify([project, [file, title]])));
+const nov27Files = new Set<string>(nov27Cases.map(([, file]) => file));
+const isNov27 = (row: Case) => nov27Files.has(row.file);
+// November 27 workbook BUG-003 (test-legal): KYC documents are uploaded files.
+const nov27KycFile = "ram-2026-11-27-kyc-documents.spec.ts";
+const nov27KycCases = [
+  ["app-chromium", "BUG-003 upload PAN and masked Aadhaar, re-submit, open each document and approve"],
+] as const;
+const nov27KycKeys = new Set(nov27KycCases.map(([project, title]) => JSON.stringify([project, [nov27KycFile, title]])));
+const isNov27Kyc = (row: Case) => row.file === nov27KycFile;
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -394,6 +445,9 @@ describe("complete independent App CI project inventory", () => {
   let nov22: Case[];
   let nov24: Case[];
   let nov25: Case[];
+  let nov27: Case[];
+  let nov27Invoice: Case[];
+  let nov27Kyc: Case[];
   let wholeByDeclaration: Case[];
 
   beforeAll(() => {
@@ -406,8 +460,12 @@ describe("complete independent App CI project inventory", () => {
     nov22 = all.filter(isNov22);
     nov24 = all.filter(isNov24);
     nov25 = all.filter(isNov25);
+    nov27 = all.filter(isNov27);
+    nov27Invoice = all.filter(isNov27Invoice);
+    nov27Kyc = all.filter(isNov27Kyc);
     canonical = all.filter(row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
-      && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row));
+      && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row)
+      && !isNov27(row) && !isNov27Invoice(row) && !isNov27Kyc(row));
     // Built-in JSON merges shared spec suites across projects. This named
     // projection preserves observed order inside each literal declaration.
     wholeByDeclaration = (Object.keys(appSourceProjects) as (keyof typeof appSourceProjects)[])
@@ -442,7 +500,8 @@ describe("complete independent App CI project inventory", () => {
       expectAppSelection(native, canonicalAppProject(all, project));
       const selected = native.filter(
         row => !isBatch5(row) && !isNov14(row) && !isNov15(row)
-          && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row),
+          && !isMotorStatute(row) && !isCompactMatter(row) && !isNov22(row) && !isNov24(row) && !isNov25(row)
+          && !isNov27(row) && !isNov27Invoice(row) && !isNov27Kyc(row),
       );
       expect(selected).toHaveLength(count);
       expectAppSelection(selected, canonicalAppProject(canonical, project));
@@ -492,10 +551,11 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(compactMatter.map(row => row.id)).size).toBe(2);
     expect(compactMatter.every(row => row.retries === 0 && row.repeat === 0
       && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
-    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22, ...nov24, ...nov25];
+    const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22, ...nov24, ...nov25,
+      ...nov27, ...nov27Invoice, ...nov27Kyc];
     expect(new Set(reviewed.map(row => row.id))).toEqual(new Set(all.map(row => row.id)));
     expect(new Set(all.map(row => row.id)).size).toBe(all.length);
-    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 767, "app-mobile": 70 });
+    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 792, "app-mobile": 74 });
   });
 
   it("requires every exact Nov22 release identity outside the unchanged prior cohorts", () => {
@@ -521,6 +581,29 @@ describe("complete independent App CI project inventory", () => {
     expect(new Set(nov25.map(row => row.id)).size).toBe(nov25Cases.length);
     expect(nov25.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
     expect(counts(nov25.map(row => row.project))).toEqual({ "app-chromium": 17, "app-mobile": 2 });
+  });
+
+  it("requires every exact Nov27 workbook identity outside the prior cohorts", () => {
+    expect(nov27.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov27Keys].sort());
+    expect(new Set(nov27.map(row => row.id)).size).toBe(nov27Cases.length);
+    expect(nov27.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts(nov27.map(row => row.project))).toEqual({ "app-chromium": 22, "app-mobile": 3 });
+  });
+
+  it("requires every exact Nov27 ENH-001 invoice branding identity outside the prior cohorts", () => {
+    expect(nov27Invoice.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov27InvoiceKeys].sort());
+    expect(new Set(nov27Invoice.map(row => row.id)).size).toBe(nov27InvoiceCases.length);
+    expect(nov27Invoice.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
+    expect(counts(nov27Invoice.map(row => row.project))).toEqual({ "app-chromium": 2, "app-mobile": 1 });
+  });
+
+  it("requires the exact Nov27 BUG-003 KYC document identity outside the prior cohorts", () => {
+    expect(nov27Kyc.map(row => JSON.stringify([row.project, row.titles])).sort())
+      .toEqual([...nov27KycKeys].sort());
+    expect(new Set(nov27Kyc.map(row => row.id)).size).toBe(nov27KycCases.length);
+    expect(nov27Kyc.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

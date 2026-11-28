@@ -150,6 +150,7 @@ from caseops_api.schemas.matters import (
 )
 from caseops_api.schemas.mock_hearing import (
     MockHearingListResponse,
+    MockHearingReadinessResponse,
     MockHearingResponseCreateRequest,
     MockHearingSessionRecord,
     MockHearingStartRequest,
@@ -1311,6 +1312,21 @@ def post_current_company_matter_attachment_affidavit_intelligence_analyze(
         matter_id=matter_id,
         attachment_id=attachment_id,
     )
+
+
+@router.get(
+    "/{matter_id}/mock-hearing-readiness",
+    response_model=MockHearingReadinessResponse,
+    summary="What starting a mock hearing needs, and the next action to take",
+)
+def get_current_company_matter_mock_hearing_readiness(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MockHearingReadinessResponse:
+    from caseops_api.services.mock_hearing import mock_hearing_readiness
+
+    return mock_hearing_readiness(session, context=context, matter_id=matter_id)
 
 
 @router.post(
@@ -2854,6 +2870,7 @@ def post_current_company_matter_attachment(
     sequence_index: Annotated[int | None, Form(ge=0)] = None,
     linked_court_order_id: Annotated[str | None, Form(max_length=36)] = None,
     hearing_id: Annotated[str | None, Form(max_length=36)] = None,
+    allow_duplicate: Annotated[bool, Form()] = False,
 ) -> MatterAttachmentRecord:
     attachment, job_id = create_matter_attachment(
         session,
@@ -2896,6 +2913,7 @@ def post_current_company_matter_attachment(
         sequence_index=sequence_index,
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
+        allow_duplicate=allow_duplicate,
     )
     dispatch_document_processing_job(
         session=session, background_tasks=background_tasks, job_id=job_id

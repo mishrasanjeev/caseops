@@ -543,6 +543,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/document-branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the firm branding printed on billing PDFs */
+        get: operations["get_branding_api_admin_document_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update the authorised signatory and watermark for billing PDFs */
+        patch: operations["patch_branding_api_admin_document_branding_patch"];
+        trace?: never;
+    };
+    "/api/admin/document-branding/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch the stored logo or signature for the settings preview */
+        get: operations["get_branding_image_api_admin_document_branding__kind__get"];
+        /** Upload the firm logo or authorised signature (PNG or JPEG) */
+        put: operations["put_branding_image_api_admin_document_branding__kind__put"];
+        post?: never;
+        /** Remove the firm logo or authorised signature */
+        delete: operations["delete_branding_image_api_admin_document_branding__kind__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/email-templates": {
         parameters: {
             query?: never;
@@ -793,14 +830,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read tenant Microsoft 365 readiness without exposing OAuth values. */
+        /** Read the saved Microsoft 365 app-registration values without exposing secrets. */
         get: operations["get_microsoft365_configuration_api_admin_microsoft365_configuration_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Configure tenant Microsoft 365 Graph OAuth values without echoing secrets. */
+        /** Save Microsoft 365 app-registration values; connects no account. */
         patch: operations["patch_microsoft365_configuration_api_admin_microsoft365_configuration_patch"];
         trace?: never;
     };
@@ -813,7 +850,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run a safe Microsoft 365 readiness probe without calling Graph. */
+        /** Check saved Microsoft 365 values and approvals without calling Microsoft. */
         post: operations["post_microsoft365_configuration_test_api_admin_microsoft365_configuration_test_post"];
         delete?: never;
         options?: never;
@@ -3368,6 +3405,58 @@ export interface paths {
         head?: never;
         /** Update a client */
         patch: operations["patch_current_company_client_api_clients__client_id__patch"];
+        trace?: never;
+    };
+    "/api/clients/{client_id}/kyc/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a client's current KYC files and the KYC requirements they meet */
+        get: operations["get_current_company_client_kyc_documents_api_clients__client_id__kyc_documents_get"];
+        put?: never;
+        /** Upload a KYC file (PDF or image, virus-scanned) for a client */
+        post: operations["post_current_company_client_kyc_document_api_clients__client_id__kyc_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/clients/{client_id}/kyc/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a KYC file from the client's current pack */
+        delete: operations["delete_current_company_client_kyc_document_api_clients__client_id__kyc_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/clients/{client_id}/kyc/documents/{document_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open or download a client KYC file (audited) */
+        get: operations["download_current_company_client_kyc_document_api_clients__client_id__kyc_documents__document_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/clients/{client_id}/kyc/reject": {
@@ -11416,6 +11505,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/{matter_id}/mock-hearing-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What starting a mock hearing needs, and the next action to take */
+        get: operations["get_current_company_matter_mock_hearing_readiness_api_matters__matter_id__mock_hearing_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/mock-hearings": {
         parameters: {
             query?: never;
@@ -12408,6 +12514,23 @@ export interface paths {
         };
         /** List active company members eligible for notice assignment */
         get: operations["get_current_company_notice_owners_api_notices_owners_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notices/upload-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Upload allow-list, size cap and quota that apply to notice documents */
+        get: operations["get_current_company_notice_upload_policy_api_notices_upload_policy_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -14145,6 +14268,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portal/matters/{matter_id}/kyc/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the KYC files this portal user uploaded for a client on this matter */
+        get: operations["get_portal_matter_kyc_documents_api_portal_matters__matter_id__kyc_documents_get"];
+        put?: never;
+        /** Upload a KYC file (PDF or image, virus-scanned) for a client on this matter */
+        post: operations["post_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/kyc/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a KYC file this portal user uploaded */
+        delete: operations["delete_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/matters/{matter_id}/kyc/documents/{document_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open a KYC file this portal user uploaded */
+        get: operations["download_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents__document_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portal/me": {
         parameters: {
             query?: never;
@@ -15150,6 +15325,23 @@ export interface paths {
         get?: never;
         /** Turn team-scoped matter visibility on or off */
         put: operations["put_team_scoping_api_teams_scoping_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/verify/billing-documents/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verify a billing PDF from the code printed on it (public, minimal) */
+        get: operations["get_billing_document_verification_api_verify_billing_documents__token__get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -17481,12 +17673,18 @@ export interface components {
         BenchCatalogListResponse: {
             /** Benches */
             benches: components["schemas"]["BenchIdentityRecord"][];
+            /** Courts Without Benches */
+            courts_without_benches: components["schemas"]["CourtWithoutBenchesRecord"][];
+            /** Courts Without Benches Total */
+            courts_without_benches_total: number;
             /** Has More */
             has_more: boolean;
             /** Limit */
             limit: number;
             /** Returned Count */
             returned_count: number;
+            /** Total Count */
+            total_count: number;
         };
         /** BenchContextCitableAuthorityResponse */
         BenchContextCitableAuthorityResponse: {
@@ -17602,12 +17800,18 @@ export interface components {
         BenchIdentityRecord: {
             /** Court Id */
             court_id: string;
+            /** Court Name */
+            court_name: string;
+            /** Court Short Name */
+            court_short_name: string;
             /** Id */
             id: string;
             /** Name */
             name: string;
             /** Record Version */
             record_version: number;
+            /** Seat City */
+            seat_city: string | null;
             /** Source Name */
             source_name: string | null;
             /** Source Reference */
@@ -17907,6 +18111,52 @@ export interface components {
             subscription: components["schemas"]["BillingSubscriptionRecord"] | null;
             usage: components["schemas"]["BillingUsageSnapshot"];
         };
+        /**
+         * BillingDocumentVerificationResponse
+         * @description Public, minimal facts about one generated billing PDF.
+         *
+         *     Deliberately omits the client, the matter, line items and any tenant
+         *     identifier: a verifier learns only whether the copy in hand is genuine.
+         */
+        BillingDocumentVerificationResponse: {
+            /** Amount Minor */
+            amount_minor: number;
+            /** Currency */
+            currency: string;
+            /** Current Status */
+            current_status: string;
+            /** Document Number */
+            document_number: string;
+            /** Document Type */
+            document_type: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Issued On
+             * Format: date
+             */
+            issued_on: string;
+            /** Issuer Name */
+            issuer_name: string;
+            /** Issuer Supplied By Counsel */
+            issuer_supplied_by_counsel: boolean;
+            /** Pdf Sha256 */
+            pdf_sha256: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revoked Reason */
+            revoked_reason: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "valid" | "not_issued" | "revoked";
+            /** Status At Generation */
+            status_at_generation: string;
+        };
         /** BillingInvoiceListResponse */
         BillingInvoiceListResponse: {
             /** Invoices */
@@ -18171,6 +18421,18 @@ export interface components {
              */
             mapping_file: string;
         };
+        /** Body_post_current_company_client_kyc_document_api_clients__client_id__kyc_documents_post */
+        Body_post_current_company_client_kyc_document_api_clients__client_id__kyc_documents_post: {
+            /**
+             * Document Type
+             * @enum {string}
+             */
+            document_type: "pan" | "aadhaar_masked" | "passport" | "address_proof" | "other";
+            /** File */
+            file: string;
+            /** Label */
+            label?: string | null;
+        };
         /** Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post */
         Body_post_current_company_contract_attachment_api_contracts__contract_id__attachments_post: {
             /** Attachment Role */
@@ -18186,6 +18448,11 @@ export interface components {
         };
         /** Body_post_current_company_matter_attachment_api_matters__matter_id__attachments_post */
         Body_post_current_company_matter_attachment_api_matters__matter_id__attachments_post: {
+            /**
+             * Allow Duplicate
+             * @default false
+             */
+            allow_duplicate: boolean;
             /** Document Date */
             document_date?: string | null;
             /** Document Type */
@@ -18291,6 +18558,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_post_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents_post */
+        Body_post_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents_post: {
+            /** Client Id */
+            client_id: string;
+            /**
+             * Document Type
+             * @enum {string}
+             */
+            document_type: "pan" | "aadhaar_masked" | "passport" | "address_proof" | "other";
+            /** File */
+            file: string;
+            /** Label */
+            label?: string | null;
+        };
         /** Body_preview_current_company_employee_import_api_companies_current_employees_imports_preview_post */
         Body_preview_current_company_employee_import_api_companies_current_employees_imports_preview_post: {
             /** File */
@@ -18303,6 +18584,11 @@ export interface components {
         };
         /** Body_preview_current_company_matter_import_api_matters_imports_preview_post */
         Body_preview_current_company_matter_import_api_matters_imports_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_put_branding_image_api_admin_document_branding__kind__put */
+        Body_put_branding_image_api_admin_document_branding__kind__put: {
             /** File */
             file: string;
         };
@@ -19451,6 +19737,10 @@ export interface components {
         CaseTrackingBookmarkListResponse: {
             /** Bookmarks */
             bookmarks: components["schemas"]["CaseTrackingBookmarkRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Total Count */
+            total_count?: number | null;
         };
         /** CaseTrackingBookmarkRecord */
         CaseTrackingBookmarkRecord: {
@@ -19469,6 +19759,8 @@ export interface components {
             id: string;
             /** Is Archived */
             is_archived: boolean;
+            /** Matter Code */
+            matter_code?: string | null;
             /** Matter Id */
             matter_id: string | null;
             /** Name */
@@ -20103,6 +20395,72 @@ export interface components {
             /** State */
             state?: string | null;
         };
+        /** ClientKycDocumentListResponse */
+        ClientKycDocumentListResponse: {
+            /** Accepted Extensions */
+            accepted_extensions: string[];
+            /** Client Id */
+            client_id: string;
+            /** Document Types */
+            document_types: components["schemas"]["KycDocumentTypeOption"][];
+            /** Documents */
+            documents: components["schemas"]["ClientKycDocumentRecord"][];
+            /**
+             * Kyc Status
+             * @enum {string}
+             */
+            kyc_status: "not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired";
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
+            /** Requirements */
+            requirements: components["schemas"]["KycRequirementRecord"][];
+            /** Requirements Met */
+            requirements_met: boolean;
+            /** Upload Allowed */
+            upload_allowed: boolean;
+        };
+        /**
+         * ClientKycDocumentRecord
+         * @description One uploaded KYC file. Storage keys and hashes stay server-side.
+         */
+        ClientKycDocumentRecord: {
+            /** Client Id */
+            client_id: string;
+            /** Content Type */
+            content_type: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Document Type
+             * @enum {string}
+             */
+            document_type: "pan" | "aadhaar_masked" | "passport" | "address_proof" | "other";
+            /** Id */
+            id: string;
+            /** Label */
+            label: string | null;
+            /** Original Filename */
+            original_filename: string;
+            /** Previewable */
+            previewable: boolean;
+            /** Review Decision */
+            review_decision: ("approved" | "rejected") | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Uploaded By Membership Id */
+            uploaded_by_membership_id: string | null;
+            /** Uploaded By Name */
+            uploaded_by_name: string | null;
+            /** Uploaded By Portal */
+            uploaded_by_portal: boolean;
+        };
         /** ClientListResponse */
         ClientListResponse: {
             /** Clients */
@@ -20246,6 +20604,8 @@ export interface components {
             documents?: components["schemas"]["KycDocumentRecord"][] | null;
             /** Rejection Reason */
             rejection_reason?: string | null;
+            /** Reviewed Document Ids */
+            reviewed_document_ids?: string[] | null;
             /** Status */
             status?: ("not_required" | "required" | "requested" | "submitted" | "under_review" | "verified" | "rejected" | "expired") | null;
         };
@@ -22773,6 +23133,15 @@ export interface components {
             /** Courts */
             courts: components["schemas"]["CourtRecord"][];
         };
+        /** CourtWithoutBenchesRecord */
+        CourtWithoutBenchesRecord: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Short Name */
+            short_name: string;
+        };
         /** CreditNoteCreateRequest */
         CreditNoteCreateRequest: {
             /**
@@ -23087,6 +23456,67 @@ export interface components {
             publication_instruction: "unknown" | "confidential" | "published";
             /** Representation Description */
             representation_description?: string | null;
+        };
+        /** DocumentBrandingRecord */
+        DocumentBrandingRecord: {
+            /** Effective Watermark Text */
+            effective_watermark_text: string | null;
+            /** Has Logo */
+            has_logo: boolean;
+            /** Has Signature */
+            has_signature: boolean;
+            letterhead: components["schemas"]["DocumentLetterheadPreview"];
+            /** Logo Height */
+            logo_height: number | null;
+            /** Logo Sha256 */
+            logo_sha256: string | null;
+            /** Logo Width */
+            logo_width: number | null;
+            /** Signatory Designation */
+            signatory_designation: string | null;
+            /** Signatory Name */
+            signatory_name: string | null;
+            /** Signature Height */
+            signature_height: number | null;
+            /** Signature Sha256 */
+            signature_sha256: string | null;
+            /** Signature Width */
+            signature_width: number | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Watermark Enabled */
+            watermark_enabled: boolean;
+            /** Watermark Text */
+            watermark_text: string | null;
+        };
+        /**
+         * DocumentBrandingUpdateRequest
+         * @description Only the fields sent are changed (PATCH).
+         */
+        DocumentBrandingUpdateRequest: {
+            /** Signatory Designation */
+            signatory_designation?: string | null;
+            /** Signatory Name */
+            signatory_name?: string | null;
+            /** Watermark Enabled */
+            watermark_enabled?: boolean | null;
+            /** Watermark Text */
+            watermark_text?: string | null;
+        };
+        /**
+         * DocumentLetterheadPreview
+         * @description What the letterhead prints today, read from the default billing profile.
+         */
+        DocumentLetterheadPreview: {
+            /** Detail Lines */
+            detail_lines: string[];
+            /** Issuer Name */
+            issuer_name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "billing_profile" | "workspace";
         };
         /** DocumentProcessingJobRecord */
         DocumentProcessingJobRecord: {
@@ -24662,6 +25092,8 @@ export interface components {
         };
         /** FirmStorageUsageSummary */
         FirmStorageUsageSummary: {
+            /** Allowed Upload Extensions */
+            allowed_upload_extensions: string[];
             /** Archive Candidates */
             archive_candidates: components["schemas"]["StorageArchiveCandidate"][];
             /** Company Id */
@@ -37445,11 +37877,17 @@ export interface components {
             limit: number;
             /** Returned Count */
             returned_count: number;
+            /** Total Count */
+            total_count: number;
         };
         /** JudgeIdentityRecord */
         JudgeIdentityRecord: {
             /** Court Id */
             court_id: string;
+            /** Court Name */
+            court_name?: string | null;
+            /** Court Short Name */
+            court_short_name?: string | null;
             /** Full Name */
             full_name: string;
             /** Id */
@@ -37899,18 +38337,60 @@ export interface components {
              */
             status: "required" | "requested" | "submitted" | "received" | "verified" | "rejected" | "expired" | "pending";
         };
+        /** KycDocumentTypeOption */
+        KycDocumentTypeOption: {
+            /** Hint */
+            hint: string;
+            /** Label */
+            label: string;
+            /** Requires Label */
+            requires_label: boolean;
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "pan" | "aadhaar_masked" | "passport" | "address_proof" | "other";
+        };
         /** KycRejectRequest */
         KycRejectRequest: {
             /** Reason */
             reason: string;
+            /** Reviewed Document Ids */
+            reviewed_document_ids?: string[];
+        };
+        /** KycRequirementRecord */
+        KycRequirementRecord: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Satisfied */
+            satisfied: boolean;
+            /** Satisfied By */
+            satisfied_by: ("pan" | "aadhaar_masked" | "passport" | "address_proof" | "other")[];
         };
         /**
          * KycSubmitRequest
          * @description Submit a KYC pack - moves the client into ``submitted``.
+         *
+         *     ``documents`` is an optional checklist of document names. The pack itself
+         *     is the client's uploaded KYC files; submission is refused until they meet
+         *     the KYC requirements (``ClientKycDocumentListResponse.requirements``).
          */
         KycSubmitRequest: {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
+        };
+        /**
+         * KycVerifyRequest
+         * @description Approve a submitted pack. ``reviewed_document_ids`` must name every
+         *     file in the client's current pack: an approval records exactly which
+         *     documents the reviewer checked, and a pack that changed since the reviewer
+         *     loaded it is refused.
+         */
+        KycVerifyRequest: {
+            /** Reviewed Document Ids */
+            reviewed_document_ids: string[];
         };
         /** LanguagePair */
         LanguagePair: {
@@ -39614,6 +40094,11 @@ export interface components {
         };
         /** MatterAttachmentMetadataUpdateRequest */
         MatterAttachmentMetadataUpdateRequest: {
+            /**
+             * Allow Duplicate
+             * @default false
+             */
+            allow_duplicate: boolean;
             /** Document Date */
             document_date?: string | null;
             /** Document Type */
@@ -42012,6 +42497,8 @@ export interface components {
             court_id?: string | null;
             /** Court Name */
             court_name: string | null;
+            /** Court Website Url */
+            court_website_url?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -42891,6 +43378,19 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Microsoft365GraphPermission */
+        Microsoft365GraphPermission: {
+            /**
+             * Kind
+             * @default delegated
+             * @constant
+             */
+            kind: "delegated";
+            /** Purpose */
+            purpose: string;
+            /** Scope */
+            scope: string;
+        };
         /** Microsoft365ReadinessCheckResult */
         Microsoft365ReadinessCheckResult: {
             /** Detail */
@@ -42905,7 +43405,14 @@ export interface components {
              */
             status: "passed" | "blocked" | "not_run";
         };
-        /** Microsoft365ReadinessTestResponse */
+        /**
+         * Microsoft365ReadinessTestResponse
+         * @description Whether every Microsoft 365 value and approval is saved and well formed.
+         *
+         *     Checked in CaseOps only: no Microsoft call is made, so a wrong secret or
+         *     consent not granted in Microsoft Entra is not detected, and no account is
+         *     connected.
+         */
         Microsoft365ReadinessTestResponse: {
             /** Checks */
             checks: components["schemas"]["Microsoft365ReadinessCheckResult"][];
@@ -42931,12 +43438,27 @@ export interface components {
              */
             tested_at: string;
         };
-        /** Microsoft365TenantConfigurationResponse */
+        /**
+         * Microsoft365TenantConfigurationResponse
+         * @description The workspace's saved Microsoft 365 app-registration values and approvals.
+         *
+         *     Saving or testing them calls no Microsoft service and connects no account.
+         *     Today only connector health reads them (Microsoft 365 readiness); Outlook
+         *     Calendar is connected through the Outlook configuration and its sign-in,
+         *     and Outlook Mail and OneDrive/SharePoint have no sign-in yet.
+         */
         Microsoft365TenantConfigurationResponse: {
             /** Approved Scopes */
             approved_scopes?: string[];
             /** Calendar Enabled */
             calendar_enabled: boolean;
+            /**
+             * Callback Path
+             * @default /api/calendar/connections/outlook/callback
+             */
+            callback_path: string;
+            /** Client Id */
+            client_id?: string | null;
             /** Configured */
             configured: boolean;
             /** Connected Account Count */
@@ -42947,6 +43469,8 @@ export interface components {
             drive_enabled: boolean;
             /** Enabled */
             enabled: boolean;
+            /** Expected Redirect Uri */
+            expected_redirect_uri: string;
             /** Last Error Redacted */
             last_error_redacted?: string | null;
             /**
@@ -42974,10 +43498,32 @@ export interface components {
              * @enum {string}
              */
             readiness: "blocked_pending_admin_configuration" | "ready_for_review_first_workflows";
+            /**
+             * Redirect Uri Matches Expected
+             * @default false
+             */
+            redirect_uri_matches_expected: boolean;
+            /**
+             * Registration Model
+             * @default customer_entra_app_registration
+             * @constant
+             */
+            registration_model: "customer_entra_app_registration";
             /** Required Approvals */
             required_approvals: components["schemas"]["Microsoft365ApprovalItemStatus"][];
             /** Required Config */
             required_config: components["schemas"]["Microsoft365ConfigurationItemStatus"][];
+            /** Required Permissions */
+            required_permissions?: components["schemas"]["Microsoft365GraphPermission"][];
+            /** Saved Redirect Uri */
+            saved_redirect_uri?: string | null;
+            /**
+             * Secret Saved
+             * @default false
+             */
+            secret_saved: boolean;
+            /** Tenant Id */
+            tenant_id?: string | null;
         };
         /** Microsoft365TenantConfigurationUpdateRequest */
         Microsoft365TenantConfigurationUpdateRequest: {
@@ -43021,6 +43567,26 @@ export interface components {
             scopes_approved: boolean;
             /** Tenant Id */
             tenant_id?: string | null;
+        };
+        /** MockHearingAffidavitSource */
+        MockHearingAffidavitSource: {
+            /** Attachment Id */
+            attachment_id: string;
+            /** Document Type */
+            document_type: string;
+            /** Filename */
+            filename: string;
+            /** Has Usable Text */
+            has_usable_text: boolean;
+            /**
+             * Latest Run Question Count
+             * @default 0
+             */
+            latest_run_question_count: number;
+            /** Latest Run Status */
+            latest_run_status?: ("completed" | "insufficient_source_text" | "no_findings") | null;
+            /** Processing Status */
+            processing_status: string;
         };
         /** MockHearingListResponse */
         MockHearingListResponse: {
@@ -43094,6 +43660,57 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MockHearingReadinessCheck */
+        MockHearingReadinessCheck: {
+            /** Detail */
+            detail: string;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "matter_operational" | "affidavit_document" | "affidavit_text" | "affidavit_run" | "question_bank";
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "met" | "missing" | "pending" | "blocked";
+        };
+        /**
+         * MockHearingReadinessResponse
+         * @description What Start session needs, evaluated with the start path's own predicates.
+         *
+         *     ``ready`` is true exactly when POST /mock-hearings would find a completed
+         *     affidavit intelligence run with at least one source-backed question.
+         */
+        MockHearingReadinessResponse: {
+            /** Affidavit Document Types */
+            affidavit_document_types: string[];
+            /** Affidavit Sources */
+            affidavit_sources: components["schemas"]["MockHearingAffidavitSource"][];
+            /** Available Question Categories */
+            available_question_categories?: ("fact_based" | "timeline_inconsistency" | "financial_scrutiny" | "evidence_contradiction" | "document_support" | "intent_motive")[];
+            /** Available Question Count */
+            available_question_count: number;
+            /** Checks */
+            checks: components["schemas"]["MockHearingReadinessCheck"][];
+            /** Latest Completed Run Id */
+            latest_completed_run_id?: string | null;
+            /** Matter Id */
+            matter_id: string;
+            /**
+             * Next Action
+             * @enum {string}
+             */
+            next_action: "start_session" | "run_affidavit_intelligence" | "wait_for_processing" | "mark_affidavit" | "upload_affidavit" | "none";
+            /** Next Action Attachment Id */
+            next_action_attachment_id?: string | null;
+            /** Next Action Detail */
+            next_action_detail: string;
+            /** Ready */
+            ready: boolean;
         };
         /** MockHearingResponseCreateRequest */
         MockHearingResponseCreateRequest: {
@@ -43461,6 +44078,11 @@ export interface components {
         };
         /** NoticeCreateRequest */
         NoticeCreateRequest: {
+            /**
+             * Allow Duplicate
+             * @default false
+             */
+            allow_duplicate: boolean;
             /** Amount Minor */
             amount_minor?: number | null;
             /** Authority */
@@ -43648,6 +44270,11 @@ export interface components {
         };
         /** NoticeUpdateRequest */
         NoticeUpdateRequest: {
+            /**
+             * Allow Duplicate
+             * @default false
+             */
+            allow_duplicate: boolean;
             /** Amount Minor */
             amount_minor?: number | null;
             /** Authority */
@@ -44293,6 +44920,8 @@ export interface components {
             connection_count: number;
             /** Enabled */
             enabled: boolean;
+            /** Expected Redirect Uri */
+            expected_redirect_uri?: string | null;
             /** Last Error Redacted */
             last_error_redacted?: string | null;
             /**
@@ -46972,6 +47601,8 @@ export interface components {
         PortalMatterRecord: {
             /** Court Name */
             court_name: string | null;
+            /** Court Website Url */
+            court_website_url?: string | null;
             /** Forum Level */
             forum_level: string | null;
             /** Id */
@@ -47001,6 +47632,14 @@ export interface components {
         };
         /** PortalOcInvoiceRecord */
         PortalOcInvoiceRecord: {
+            /** Counsel Address */
+            counsel_address?: string | null;
+            /** Counsel Firm Name */
+            counsel_firm_name?: string | null;
+            /** Counsel Gstin */
+            counsel_gstin?: string | null;
+            /** Counsel Pan */
+            counsel_pan?: string | null;
             /** Created At */
             created_at: string;
             /** Currency */
@@ -47024,6 +47663,14 @@ export interface components {
         };
         /** PortalOcInvoiceSubmitPayload */
         PortalOcInvoiceSubmitPayload: {
+            /** Counsel Address */
+            counsel_address?: string | null;
+            /** Counsel Firm Name */
+            counsel_firm_name?: string | null;
+            /** Counsel Gstin */
+            counsel_gstin?: string | null;
+            /** Counsel Pan */
+            counsel_pan?: string | null;
             /**
              * Currency
              * @default INR
@@ -50909,6 +51556,8 @@ export interface components {
         };
         /** StorageUploadPolicy */
         StorageUploadPolicy: {
+            /** Allowed Upload Extensions */
+            allowed_upload_extensions: string[];
             /** Company Id */
             company_id: string;
             /** Max Upload Size Bytes */
@@ -54033,6 +54682,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantDataOperationDryRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_branding_api_admin_document_branding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentBrandingRecord"];
+                };
+            };
+        };
+    };
+    patch_branding_api_admin_document_branding_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentBrandingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentBrandingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_branding_image_api_admin_document_branding__kind__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "logo" | "signature";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_branding_image_api_admin_document_branding__kind__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "logo" | "signature";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_put_branding_image_api_admin_document_branding__kind__put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentBrandingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_branding_image_api_admin_document_branding__kind__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "logo" | "signature";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentBrandingRecord"];
                 };
             };
             /** @description Validation Error */
@@ -58802,7 +59601,12 @@ export interface operations {
     };
     get_case_tracking_bookmarks_api_case_tracking_bookmarks_get: {
         parameters: {
-            query?: never;
+            query?: {
+                cursor?: string | null;
+                include_total?: boolean;
+                limit?: number | null;
+                q?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -58816,6 +59620,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseTrackingBookmarkListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -59373,6 +60186,134 @@ export interface operations {
             };
         };
     };
+    get_current_company_client_kyc_documents_api_clients__client_id__kyc_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientKycDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_current_company_client_kyc_document_api_clients__client_id__kyc_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_current_company_client_kyc_document_api_clients__client_id__kyc_documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientKycDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_current_company_client_kyc_document_api_clients__client_id__kyc_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_current_company_client_kyc_document_api_clients__client_id__kyc_documents__document_id__download_get: {
+        parameters: {
+            query?: {
+                inline?: boolean;
+            };
+            header?: never;
+            path: {
+                client_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     reject_current_company_client_kyc_api_clients__client_id__kyc_reject_post: {
         parameters: {
             query?: never;
@@ -59452,7 +60393,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KycVerifyRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -76794,6 +77739,37 @@ export interface operations {
             };
         };
     };
+    get_current_company_matter_mock_hearing_readiness_api_matters__matter_id__mock_hearing_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockHearingReadinessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_company_matter_mock_hearings_api_matters__matter_id__mock_hearings_get: {
         parameters: {
             query?: never;
@@ -78868,6 +79844,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoticeOwnerOption"][];
+                };
+            };
+        };
+    };
+    get_current_company_notice_upload_policy_api_notices_upload_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageUploadPolicy"];
                 };
             };
         };
@@ -82117,6 +83113,139 @@ export interface operations {
             };
         };
     };
+    get_portal_matter_kyc_documents_api_portal_matters__matter_id__kyc_documents_get: {
+        parameters: {
+            query: {
+                client_id: string;
+            };
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientKycDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_post_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientKycDocumentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents__document_id__delete: {
+        parameters: {
+            query: {
+                client_id: string;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_portal_matter_kyc_document_api_portal_matters__matter_id__kyc_documents__document_id__download_get: {
+        parameters: {
+            query: {
+                client_id: string;
+                inline?: boolean;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_portal_me_api_portal_me_get: {
         parameters: {
             query?: never;
@@ -84262,6 +85391,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamScopingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_billing_document_verification_api_verify_billing_documents__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingDocumentVerificationResponse"];
                 };
             };
             /** @description Validation Error */

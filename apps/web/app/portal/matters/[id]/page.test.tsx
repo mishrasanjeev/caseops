@@ -12,7 +12,9 @@ const {
   kycMock,
   clientsMock,
   paramsMock,
+  kycDocsMock,
 } = vi.hoisted(() => ({
+  kycDocsMock: vi.fn(),
   matterMock: vi.fn(),
   commsMock: vi.fn(),
   hearingsMock: vi.fn(),
@@ -33,6 +35,9 @@ vi.mock("@/lib/api/portal", () => ({
   fetchPortalMatterClients: clientsMock,
   postPortalMatterReply: replyMock,
   submitPortalMatterKyc: kycMock,
+  fetchPortalKycDocuments: kycDocsMock,
+  removePortalKycDocument: vi.fn(),
+  uploadPortalKycDocument: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -70,6 +75,44 @@ describe("PortalMatterDetailPage", () => {
     replyMock.mockReset();
     kycMock.mockReset();
     clientsMock.mockReset();
+    kycDocsMock.mockReset();
+    kycDocsMock.mockImplementation(async (_matterId: string, clientId: string) => ({
+      client_id: clientId,
+      kyc_status: "not_required",
+      documents: [
+        {
+          id: "doc-pan", client_id: clientId, document_type: "pan", label: null,
+          original_filename: "pan.pdf", content_type: "application/pdf", size_bytes: 10,
+          uploaded_by_membership_id: null, uploaded_by_name: "Client portal", uploaded_by_portal: true,
+          review_decision: null, reviewed_at: null, reviewed_by_membership_id: null,
+          previewable: true, created_at: "2026-11-27T10:00:00Z",
+        },
+        {
+          id: "doc-aadhaar", client_id: clientId, document_type: "aadhaar_masked", label: null,
+          original_filename: "aadhaar-masked.png", content_type: "image/png", size_bytes: 10,
+          uploaded_by_membership_id: null, uploaded_by_name: "Client portal", uploaded_by_portal: true,
+          review_decision: null, reviewed_at: null, reviewed_by_membership_id: null,
+          previewable: true, created_at: "2026-11-27T10:00:00Z",
+        },
+      ],
+      requirements: [
+        { key: "pan", label: "PAN card", satisfied_by: ["pan"], satisfied: true },
+        {
+          key: "identity_address_proof",
+          label: "Masked Aadhaar, passport or another address proof",
+          satisfied_by: ["aadhaar_masked", "passport", "address_proof"],
+          satisfied: true,
+        },
+      ],
+      requirements_met: true,
+      upload_allowed: true,
+      document_types: [
+        { value: "pan", label: "PAN card", hint: "PAN.", requires_label: false },
+        { value: "aadhaar_masked", label: "Aadhaar (masked)", hint: "Masked.", requires_label: false },
+      ],
+      accepted_extensions: [".pdf", ".png", ".jpg", ".jpeg"],
+      max_upload_bytes: 1024 * 1024,
+    }));
     clientsMock.mockResolvedValue({
       clients: [
         {
@@ -136,7 +179,7 @@ describe("PortalMatterDetailPage", () => {
     ));
   });
 
-  it("submits KYC with the documents the user filled in", async () => {
+  it("submits KYC once the uploaded files meet the requirements", async () => {
     matterMock.mockResolvedValue(matterStub);
     commsMock.mockResolvedValue({ communications: [] });
     hearingsMock.mockResolvedValue({ hearings: [] });
@@ -149,6 +192,8 @@ describe("PortalMatterDetailPage", () => {
     render(withClient(<PortalMatterDetailPage />));
     await waitFor(() => expect(matterMock).toHaveBeenCalled());
     await user.click(screen.getByRole("tab", { name: /kyc/i }));
+    expect(await screen.findByText("aadhaar-masked.png")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("portal-kyc-submit")).toBeEnabled());
     await user.click(screen.getByTestId("portal-kyc-submit"));
     await waitFor(() => expect(kycMock).toHaveBeenCalled());
     const [callMatterId, callClientId, callDocs] = kycMock.mock.calls[0];

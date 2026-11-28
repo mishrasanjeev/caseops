@@ -1169,6 +1169,19 @@ def update_outside_counsel_spend_record(
         spend_record.billed_on = updates["billed_on"]
     if "due_on" in updates:
         spend_record.due_on = updates["due_on"]
+    if (
+        ("billed_on" in updates or "due_on" in updates)
+        and spend_record.billed_on is not None
+        and spend_record.due_on is not None
+        and spend_record.due_on < spend_record.billed_on
+    ):
+        # The create rule on the merged record; an edit that touches neither
+        # date leaves a legacy reversed pair alone.
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Due date cannot be earlier than the issue date.",
+        )
     if "paid_on" in updates:
         spend_record.paid_on = updates["paid_on"]
     if "status" in updates and updates["status"] is not None:

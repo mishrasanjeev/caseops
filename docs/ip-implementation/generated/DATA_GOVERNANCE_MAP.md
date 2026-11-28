@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `fa3469bc1cc4a01505661d418ade2e875bc9f1cb6d79dd759b3117d2766ace00`
-- SQL tables: `374`
-- SQL columns: `5986`
-- ORM indexes: `1861`
-- Alembic/raw index declarations: `1639`
+- Canonical map SHA-256: `74b44d2aa2a0c49ba256d95beb93406cc5e393e01d9d5c1376c0964b01acdcb4`
+- SQL tables: `377`
+- SQL columns: `6040`
+- ORM indexes: `1872`
+- Alembic/raw index declarations: `1650`
 - Non-SQL data classes: `19`
 
 ## Boundary
@@ -64,6 +64,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `billing_coupons` | `billing_provider_evidence` | 18 | `registry_fail_closed` |
 | `billing_credit_ledger` | `billing_provider_evidence` | 14 | `registry_fail_closed` |
 | `billing_credit_notes` | `billing_provider_evidence` | 18 | `registry_fail_closed` |
+| `billing_document_verifications` | `billing_provider_evidence` | 18 | `registry_fail_closed` |
 | `billing_enrollments` | `billing_provider_evidence` | 20 | `registry_fail_closed` |
 | `billing_manual_invoices` | `billing_provider_evidence` | 20 | `registry_fail_closed` |
 | `billing_margin_simulations` | `billing_provider_evidence` | 16 | `registry_fail_closed` |
@@ -91,9 +92,11 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `calendar_projection_reconciliation_candidates` | `tenant_operational_record` | 18 | `registry_fail_closed` |
 | `case_tracking_support_matrix` | `platform_operational_reference` | 20 | `registry_fail_closed` |
 | `cause_list_exports` | `tenant_operational_record` | 12 | `registry_fail_closed` |
+| `client_kyc_documents` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `clients` | `tenant_restricted_legal_content` | 26 | `registry_fail_closed` |
 | `communications` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `companies` | `platform_operational_reference` | 16 | `registry_fail_closed` |
+| `company_document_brandings` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
 | `company_ip_rule_policies` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `company_memberships` | `tenant_operational_record` | 8 | `registry_fail_closed` |
 | `company_notice_ip_links` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
@@ -137,7 +140,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `evaluation_cases` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `evaluation_runs` | `platform_operational_reference` | 12 | `registry_fail_closed` |
 | `forum_catalog_aliases` | `public_or_licensed_legal_reference` | 16 | `registry_fail_closed` |
-| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
+| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 21 | `registry_fail_closed` |
 | `hearing_pack_items` | `platform_operational_reference` | 8 | `registry_fail_closed` |
 | `hearing_packs` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `hearing_reminder_delivery_intents` | `platform_operational_reference` | 5 | `registry_fail_closed` |

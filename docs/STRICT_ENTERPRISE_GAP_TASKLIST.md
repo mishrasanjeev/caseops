@@ -1,3 +1,54 @@
+## November28 - gaps found while fixing the Nov 27 workbooks
+
+Recorded from the `fix/bugs7-20261127` audit and its independent review. Code
+fixes for the reported rows are in that branch; these remain open.
+
+- **Missing** - global judge and bench alias writes are gated by
+  `court_sync:run` (`api/routes/judge_mapping.py:40`), which
+  `services/capability_catalog.py:13,85` grants to owner, admin and partner of
+  every tenant. Any tenant's staff can write cross-tenant reference aliases.
+  Owner decision: restrict to platform administrators.
+- **Missing** - portal users are not bound to one client (`PortalUser`,
+  `db/models.py`; `services/client_kyc_documents.py` `_portal_client`,
+  `services/portal_matters.py` `submit_matter_kyc`). A portal user with a client
+  grant can list, upload and submit KYC for every client on that matter.
+- **Missing** - KYC documents are company-scoped, not wall-aware
+  (`services/clients.py` `_get_client_model`). A wall-aware rule would refuse
+  KYC list, open, upload and review when a linked matter walls the member out.
+- **Missing** - `clients.internal_notes` accepts and returns a full Aadhaar
+  number; every other KYC text field refuses or masks it.
+- **Missing** - update endpoints turn `null` on a required field into a 500,
+  not a 422: matter title, practice area and forum level
+  (`schemas/matters.py:254,276,277`), task title/status/priority (`:663,666,667`),
+  deadline due date and title (`:723,725`), billing profile
+  (`schemas/matter_billing.py:86-101`), outside-counsel spend description
+  (`schemas/outside_counsel.py:79`).
+- **Missing** - date pairs still unchecked: calendar provider event candidates
+  (`schemas/calendar.py:345`), court order stay date (`schemas/matters.py:947,978`),
+  async audit export range (`schemas/audit.py:13`), settlement import period
+  (`schemas/production_safety.py:320`), contract term suggestions
+  (`schemas/contracts.py:405,432`), contract renewal date, IP renewal due date,
+  matter filing date against next hearing.
+- **Missing** - no Microsoft 365 OAuth flow consumes
+  `TenantMicrosoft365Configuration`; it feeds readiness only, and
+  `connector_health.py:643-650` reports Outlook Calendar health from it rather
+  than from the Outlook configuration the sign-in uses.
+- **Partially implemented** - court catalogue: no migration creates
+  Allahabad, Calcutta or Gauhati High Court rows, so their benches are not
+  seeded; Allahabad's official site is not on a government domain and is not
+  linked.
+- **Partially implemented** - the case-tracking bookmark list stays unbounded
+  for callers that send no `limit`; its keyset cursor orders by `updated_at`,
+  so a refresh while paging can skip or repeat rows.
+- **Partially implemented** - Radix tooltips do not open on touch, so phones
+  still get no visible explanation for icon-only buttons (accessible names are
+  present).
+- **Missing** - retired KYC files are kept indefinitely; no retention policy.
+- **Missing** - invoice `payment_adjustment_minor` is unbounded and can produce
+  a negative balance on the path without a billing profile
+  (`schemas/billing.py:87`, `services/matters.py:7229`); owner decision on
+  whether negative adjustments are allowed.
+
 ## November26 - statute vector index is an operator-run, unscheduled job
 
 **Partially implemented** (J05/M04, MOD-TS-017, FT-117..FT-122, NFT-026,

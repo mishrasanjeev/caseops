@@ -1,8 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Archive,
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
   Bell,
   BellOff,
   Bookmark,
@@ -10,10 +15,11 @@ import {
   Link2,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +34,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
+import { IconButton } from "@/components/ui/IconButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { API_BASE_URL, apiErrorMessage } from "@/lib/api/config";
 import {
@@ -52,6 +59,14 @@ import {
 } from "@/lib/api/case-tracking-matter-resolution";
 import { matterCaseIdentityGapMessage } from "@/lib/case-tracking-identity-gap";
 
+// Bookmark search and paging run on the server (Nov 27 workbook, row 6): a
+// bookmark on a page the browser has not loaded is still found, and the count
+// is the server total, never the length of the loaded rows.
+const BOOKMARK_PAGE_SIZE = 50;
+const BOOKMARK_SEARCH_MAX_LENGTH = 120;
+const SEARCH_DEBOUNCE_MS = 300;
+const BOOKMARK_SEARCH_PARAM = "bookmarkSearch";
+
 export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -63,17 +78,45 @@ export default function CaseTrackingPage() {
   const initialCourtName = searchParams.get("court");
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | null>(null);
   const [linkedCandidateToken, setLinkedCandidateToken] = useState<string | null>(null);
+  const [bookmarkSearch, setBookmarkSearch] = useState(
+    () => searchParams.get(BOOKMARK_SEARCH_PARAM) ?? "",
+  );
+  const [bookmarkQuery, setBookmarkQuery] = useState(() => bookmarkSearch.trim());
+  useEffect(() => {
+    const handle = window.setTimeout(() => setBookmarkQuery(bookmarkSearch.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [bookmarkSearch]);
+  useEffect(() => {
+    // Keep the search in the address so reload, Back and a shared link reopen it.
+    const url = new URL(window.location.href);
+    if (bookmarkQuery) url.searchParams.set(BOOKMARK_SEARCH_PARAM, bookmarkQuery);
+    else url.searchParams.delete(BOOKMARK_SEARCH_PARAM);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
+  }, [bookmarkQuery]);
 
   const status = useQuery({
     queryKey: ["case-tracking", "status"],
     queryFn: fetchCaseTrackingStatus,
     staleTime: 60_000,
   });
-  const bookmarks = useQuery({
-    queryKey: ["case-tracking", "bookmarks"],
-    queryFn: listCaseTrackingBookmarks,
+  const bookmarks = useInfiniteQuery({
+    queryKey: ["case-tracking", "bookmarks", { q: bookmarkQuery }],
+    queryFn: ({ pageParam }) =>
+      listCaseTrackingBookmarks({
+        q: bookmarkQuery || undefined,
+        limit: BOOKMARK_PAGE_SIZE,
+        cursor: pageParam,
+        include_total: pageParam === null,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
+  const bookmarkRows = bookmarks.data?.pages.flatMap((page) => page.bookmarks) ?? [];
+  const bookmarkTotal = bookmarks.data?.pages[0]?.total_count ?? null;
+  const bookmarkSearchPending =
+    bookmarkSearch.trim() !== bookmarkQuery || bookmarks.isPlaceholderData;
   const updates = useQuery({
     queryKey: ["case-tracking", "updates", selectedBookmarkId],
     queryFn: () => listCaseTrackingUpdates(selectedBookmarkId as string),
@@ -509,33 +552,124 @@ export default function CaseTrackingPage() {
                 {apiErrorMessage(updateMutation.error, "Could not update this bookmark. Try again.")}
               </p>
             ) : null}
-            {bookmarks.data?.bookmarks.length ? (
-              <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
-                {bookmarks.data.bookmarks.map((bookmark) => (
-                  <BookmarkRow
-                    key={bookmark.id}
-                    bookmark={bookmark}
-                    selected={selectedBookmarkId === bookmark.id}
-                    busy={refreshMutation.isPending || updateMutation.isPending}
-                    onSelect={() => setSelectedBookmarkId(bookmark.id)}
-                    onRefresh={() => refreshMutation.mutate(bookmark.id)}
-                    onToggleNotifications={() =>
-                      updateMutation.mutate({
-                        bookmarkId: bookmark.id,
-                        input: {
-                          notification_enabled: !bookmark.notification_enabled,
-                        },
-                      })
-                    }
-                    onArchive={() =>
-                      updateMutation.mutate({
-                        bookmarkId: bookmark.id,
-                        input: { is_archived: true },
-                      })
-                    }
-                  />
-                ))}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-mute)]"
+                  aria-hidden
+                />
+                <Input
+                  type="search"
+                  aria-label="Search bookmarks"
+                  data-testid="case-tracking-bookmark-search"
+                  className="pl-9"
+                  placeholder="Matter code, CNR, case number, title or party"
+                  maxLength={BOOKMARK_SEARCH_MAX_LENGTH}
+                  value={bookmarkSearch}
+                  onChange={(event) => setBookmarkSearch(event.target.value)}
+                />
               </div>
+              {bookmarkSearch ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBookmarkSearch("")}
+                  data-testid="case-tracking-bookmark-search-clear"
+                >
+                  Clear search
+                </Button>
+              ) : null}
+            </div>
+            <p
+              role="status"
+              aria-live="polite"
+              className="text-xs text-[var(--color-mute)]"
+              data-testid="case-tracking-bookmark-count"
+            >
+              {bookmarks.isError || bookmarkTotal === null
+                ? null
+                : bookmarkSearchPending
+                  ? "Searching bookmarks..."
+                  : bookmarkQuery
+                    ? `${bookmarkTotal} ${bookmarkTotal === 1 ? "bookmark matches" : "bookmarks match"} "${bookmarkQuery}". Showing ${bookmarkRows.length}.`
+                    : `Showing ${bookmarkRows.length} of ${bookmarkTotal} ${bookmarkTotal === 1 ? "bookmark" : "bookmarks"}.`}
+            </p>
+            {bookmarks.isError && !bookmarks.data ? (
+              <QueryErrorState
+                title={bookmarkQuery ? "Could not search bookmarks" : "Could not load bookmarks"}
+                error={bookmarks.error}
+                onRetry={() => bookmarks.refetch()}
+              />
+            ) : bookmarkRows.length ? (
+              <>
+                <div
+                  className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]"
+                  data-testid="case-tracking-bookmark-list"
+                  aria-busy={bookmarkSearchPending}
+                >
+                  {bookmarkRows.map((bookmark) => (
+                    <BookmarkRow
+                      key={bookmark.id}
+                      bookmark={bookmark}
+                      selected={selectedBookmarkId === bookmark.id}
+                      busy={refreshMutation.isPending || updateMutation.isPending}
+                      onSelect={() => setSelectedBookmarkId(bookmark.id)}
+                      onRefresh={() => refreshMutation.mutate(bookmark.id)}
+                      onToggleNotifications={() =>
+                        updateMutation.mutate({
+                          bookmarkId: bookmark.id,
+                          input: {
+                            notification_enabled: !bookmark.notification_enabled,
+                          },
+                        })
+                      }
+                      onArchive={() =>
+                        updateMutation.mutate({
+                          bookmarkId: bookmark.id,
+                          input: { is_archived: true },
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+                {bookmarks.isFetchNextPageError ? (
+                  <p role="alert" className="text-sm text-[var(--color-danger)]">
+                    {apiErrorMessage(bookmarks.error, "Could not load more bookmarks. Try again.")}
+                  </p>
+                ) : null}
+                {bookmarks.hasNextPage ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    disabled={bookmarks.isFetchingNextPage || bookmarkSearchPending}
+                    onClick={() => void bookmarks.fetchNextPage()}
+                    data-testid="case-tracking-bookmark-load-more"
+                  >
+                    {bookmarks.isFetchingNextPage ? "Loading bookmarks..." : "Load more bookmarks"}
+                  </Button>
+                ) : null}
+              </>
+            ) : bookmarkQuery || bookmarkSearch.trim() ? (
+              bookmarkSearchPending ? null : (
+                <div
+                  className="flex flex-col items-start gap-2 rounded-md border border-[var(--color-line)] p-3"
+                  data-testid="case-tracking-bookmark-search-empty"
+                >
+                  <p className="text-sm text-[var(--color-ink)]">
+                    No bookmarks match &quot;{bookmarkQuery}&quot;.
+                  </p>
+                  <p className="text-xs text-[var(--color-mute)]">
+                    Search covers the Matter code, CNR, case number, case title, bookmark name and
+                    parties of every bookmark you track.
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setBookmarkSearch("")}>
+                    Clear search
+                  </Button>
+                </div>
+              )
             ) : (
               <EmptyState
                 title="No tracked cases yet"
@@ -681,6 +815,15 @@ function BookmarkRow({
             stage={bookmark.tracked_case.current_stage}
             nextHearing={bookmark.tracked_case.next_hearing_on}
           />
+          {bookmark.matter_code || tracking.cnr_number || tracking.case_number ? (
+            <p className="mt-1 flex flex-wrap gap-x-3 font-mono text-xs tabular-nums text-[var(--color-ink-2)]">
+              {bookmark.matter_code ? (
+                <span data-testid="case-tracking-bookmark-matter-code">{bookmark.matter_code}</span>
+              ) : null}
+              {tracking.cnr_number ? <span>{tracking.cnr_number}</span> : null}
+              {tracking.case_number ? <span>{tracking.case_number}</span> : null}
+            </p>
+          ) : null}
         </button>
         <div className="flex w-full min-w-0 flex-wrap gap-2 md:w-auto">
           <Button
@@ -694,23 +837,31 @@ function BookmarkRow({
             <RefreshCw className="h-4 w-4" aria-hidden />
             Refresh
           </Button>
-          <Button
+          <IconButton
+            label={bookmark.notification_enabled ? "Disable notifications" : "Enable notifications"}
             type="button"
             variant="ghost"
             size="sm"
             onClick={onToggleNotifications}
             disabled={busy}
-            title={bookmark.notification_enabled ? "Disable notifications" : "Enable notifications"}
           >
             {bookmark.notification_enabled ? (
               <Bell className="h-4 w-4" aria-hidden />
             ) : (
               <BellOff className="h-4 w-4" aria-hidden />
             )}
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={onArchive} disabled={busy}>
-            <Archive className="h-4 w-4" aria-hidden />
-          </Button>
+          </IconButton>
+          <IconButton
+            label="Delete bookmark"
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onArchive}
+            disabled={busy}
+            data-testid="case-tracking-bookmark-delete"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </IconButton>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">

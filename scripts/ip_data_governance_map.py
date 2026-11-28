@@ -1283,8 +1283,10 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "id": "document-object-prefix-and-version",
             "kind": "object_prefix_version",
             "purpose": (
-                "Logical matter/contract attachment objects and any configured GCS object "
-                "versions under the company-scoped storage-key namespace."
+                "Logical matter/contract attachment objects, client KYC identity "
+                "documents (company/client-kyc/client prefix, never indexed or "
+                "embedded), and any configured GCS object versions under the "
+                "company-scoped storage-key namespace."
             ),
             "sensitivity": "privileged_or_confidential",
             "source_licence_limits": (
@@ -1293,6 +1295,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             ),
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/document_storage.py",
+                "apps/api/src/caseops_api/services/client_kyc_documents.py",
                 "apps/api/src/caseops_api/core/settings.py",
                 "docs/GCP_DEPLOY.md",
             ],

@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Banknote, Briefcase, ExternalLink, Gavel, Scale, User } from "lucide-react";
+import { ArrowLeft, Banknote, Briefcase, Gavel, Scale, User } from "lucide-react";
 import Link from "next/link";
 
 import { MatterTeamPicker } from "@/components/app/MatterTeamPicker";
+import { CourtName } from "@/components/matters/CourtName";
 import { Badge } from "@/components/ui/Badge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -91,10 +92,14 @@ export function MatterHeader({ matter }: { matter: WorkspaceMatter }) {
           ) : null}
         </div>
         <div className="flex flex-col items-stretch gap-2 md:items-end">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-mute)]">
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            {matter.court_name ?? "No court"}
-          </div>
+          <CourtName
+            name={matter.court_name}
+            websiteUrl={matter.court_website_url}
+            fallback="No court"
+            variant="badge"
+            className="self-start md:self-end"
+            testId="matter-court-badge"
+          />
           <MatterTeamPicker
             matterId={matter.id}
             currentTeamId={matter.team_id}

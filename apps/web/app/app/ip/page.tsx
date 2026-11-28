@@ -44,6 +44,7 @@ import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   addIpCostItem,
   addIpRelatedRightObligation,
@@ -308,12 +309,11 @@ export default function IpDocketPage() {
         actions={
           canWrite || canConfigure ? (
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {canConfigure ? <Button type="button" size="sm" variant="outline" className="h-10 w-10 shrink-0 p-0"
-                aria-label="Workspace configuration" title="Workspace configuration"
+              {canConfigure ? <IconButton label="Workspace configuration" type="button" size="sm" variant="outline" className="h-10 w-10 shrink-0 p-0"
                 aria-expanded={showConfiguration} aria-controls="ip-workspace-configuration-panel"
                 onClick={() => setShowConfiguration((current) => !current)}>
                 <Settings2 className="h-4 w-4" aria-hidden />
-              </Button> : null}
+              </IconButton> : null}
               {canWrite ? <Button id="ip-new-trademark-toggle" type="button" size="sm"
                 variant={showCreate ? "outline" : "primary"}
                 aria-expanded={showCreate} aria-controls={showCreate ? IP_NEW_TRADEMARK_PANEL_ID : undefined}

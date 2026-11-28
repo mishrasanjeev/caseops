@@ -48,6 +48,7 @@ import {
   type AssistantTurnPage,
 } from "@/lib/api/workspace-assistant";
 import { apiErrorMessage, isApiErrorShape, isNetworkError } from "@/lib/api/config";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 const TRANSIENT_HISTORY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const TRANSIENT_HISTORY_PROBLEMS = new Set([
@@ -511,26 +512,26 @@ export function WorkspaceAssistant() {
         </div>
         {active ? (
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <button
-              type="button"
-              onClick={() => void downloadExport()}
-              disabled={busy !== null}
-              title="Export conversation"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] disabled:opacity-50"
-              aria-label="Export conversation"
-            >
-              {busy === "export" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => void requestDeletion()}
-              disabled={busy !== null}
-              title="Delete conversation"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] disabled:opacity-50"
-              aria-label="Delete conversation"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <Tooltip label="Export conversation">
+              <button
+                type="button"
+                onClick={() => void downloadExport()}
+                disabled={busy !== null}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] disabled:opacity-50"
+              >
+                {busy === "export" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              </button>
+            </Tooltip>
+            <Tooltip label="Delete conversation">
+              <button
+                type="button"
+                onClick={() => void requestDeletion()}
+                disabled={busy !== null}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </Tooltip>
             <button
               type="button"
               onClick={() => void archiveAndClear()}
@@ -556,14 +557,15 @@ export function WorkspaceAssistant() {
                   className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md border border-[var(--color-line)] bg-white py-1 pl-2.5 pr-1 text-xs text-[var(--color-ink-2)]"
                 >
                   <span className="truncate">{scope.label}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeScope(scope)}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-mute)] hover:bg-[var(--color-bg-2)] hover:text-[var(--color-ink)]"
-                    aria-label={`Remove ${scope.label}`}
-                  >
-                    <X className="h-3.5 w-3.5" aria-hidden />
-                  </button>
+                  <Tooltip label={`Remove ${scope.label}`}>
+                    <button
+                      type="button"
+                      onClick={() => removeScope(scope)}
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[var(--color-mute)] hover:bg-[var(--color-bg-2)] hover:text-[var(--color-ink)]"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </Tooltip>
                 </span>
               ))
             )}
@@ -586,15 +588,15 @@ export function WorkspaceAssistant() {
                 className="h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white pl-9 pr-3 text-sm outline-none focus:border-[var(--color-brand-600)] focus:ring-2 focus:ring-[var(--color-brand-600)]/15"
               />
             </label>
-            <button
-              type="submit"
-              disabled={busy !== null}
-              title="Find permitted records"
-              aria-label="Find permitted records"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--color-ink)] text-white disabled:opacity-50"
-            >
-              {busy === "scope" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            </button>
+            <Tooltip label="Find permitted records">
+              <button
+                type="submit"
+                disabled={busy !== null}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--color-ink)] text-white disabled:opacity-50"
+              >
+                {busy === "scope" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </button>
+            </Tooltip>
           </form>
 
           {policyDisabled ? (
@@ -625,16 +627,16 @@ export function WorkspaceAssistant() {
                       <span className="block truncate text-sm font-semibold text-[var(--color-ink)]">{option.label}</span>
                       <span className="block truncate text-xs text-[var(--color-mute)]">{option.secondary_text}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => addScope(option)}
-                      disabled={isSelected}
-                      title={isSelected ? "Selected" : `Add ${option.label}`}
-                      aria-label={isSelected ? `${option.label} selected` : `Add ${option.label}`}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] disabled:bg-[var(--color-bg-2)] disabled:text-[var(--color-mute)]"
-                    >
-                      {isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    </button>
+                    <Tooltip label={isSelected ? `${option.label} selected` : `Add ${option.label}`}>
+                      <button
+                        type="button"
+                        onClick={() => addScope(option)}
+                        disabled={isSelected}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--color-line)] text-[var(--color-ink-2)] disabled:bg-[var(--color-bg-2)] disabled:text-[var(--color-mute)]"
+                      >
+                        {isSelected ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      </button>
+                    </Tooltip>
                   </li>
                 );
               })}

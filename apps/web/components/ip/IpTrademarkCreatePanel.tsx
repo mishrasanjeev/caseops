@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { ApiError, apiErrorMessage, apiFieldErrors, apiValidationIssues } from "@/lib/api/config";
 import {
   TRADEMARK_MARK_KINDS,
@@ -365,9 +366,9 @@ export function IpTrademarkCreatePanel({
     >
       <div className="mb-3 flex min-w-0 items-start justify-between gap-2">
         <h2 id={HEADING_ID} className="text-base font-semibold tracking-tight text-[var(--color-ink)]">New trademark application</h2>
-        <Button type="button" size="sm" variant="ghost" className="h-9 w-9 shrink-0 p-0" aria-label="Close new trademark application" onClick={onCancel}>
+        <IconButton label="Close new trademark application" type="button" size="sm" variant="ghost" className="h-9 w-9 shrink-0 p-0" onClick={onCancel}>
           <X className="h-4 w-4" aria-hidden />
-        </Button>
+        </IconButton>
       </div>
       <form
         className="grid min-w-0 gap-4 md:grid-cols-2"
@@ -424,17 +425,15 @@ export function IpTrademarkCreatePanel({
                   ) : null}
                 </div>
                 <div className="flex items-start md:pt-6">
-                  <Button
+                  <IconButton label={`Remove class row ${index + 1}`}
                     type="button"
                     size="sm"
                     variant="outline"
-                    aria-label={`Remove class row ${index + 1}`}
-                    title={rows.length === 1 ? "An application needs at least one class" : undefined}
                     disabled={rows.length === 1}
                     onClick={() => removeRow(row.key)}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden /> <span className="md:sr-only">Remove</span>
-                  </Button>
+                  </IconButton>
                 </div>
               </div>
             );

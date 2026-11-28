@@ -24,11 +24,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // smaller than its content; ``overflow-x-hidden`` on the outer
   // wrapper is the belt-and-suspenders so future regressions stay
   // contained.
+  // The wrapper clips (overflow-x-clip) rather than hides, so it never
+  // becomes a scroll container of its own: the window scrolls the main column
+  // while the fixed sidebar (components/app/Sidebar.tsx) keeps its place.
   return (
     <AppProviders>
       <RequireAuth>
         <SkipLink />
-        <div className="flex min-h-screen overflow-x-hidden bg-[var(--color-bg)]">
+        <div data-app-shell className="flex min-h-screen overflow-x-clip bg-[var(--color-bg)]">
           <Sidebar />
           <div className="flex min-h-screen min-w-0 flex-1 flex-col">
             <OfflineBanner />

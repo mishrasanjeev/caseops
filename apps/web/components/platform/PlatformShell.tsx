@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { SkipLink } from "@/components/ui/SkipLink";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 import { consoleErrorMessage } from "@/lib/platform/client";
 import { usePlatformSession } from "@/lib/platform/session";
@@ -43,11 +44,11 @@ export function PlatformShell({ children }: {
               </Link>
             ))}
           </nav>
-          {session.auth ? <button type="button" aria-label="Sign out of platform" title="Sign out of platform" disabled={signingOut}
+          {session.auth ? <Tooltip label="Sign out of platform"><button type="button" disabled={signingOut}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[var(--color-line)] disabled:opacity-50"
             onClick={async () => { setSigningOut(true); setError(null); try { await session.signOut(); } catch (failure) { setError(consoleErrorMessage(failure)); } finally { setSigningOut(false); } }}>
             <LogOut className="h-4 w-4" aria-hidden />
-          </button> : null}
+          </button></Tooltip> : null}
         </div>
       </header>
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[90rem] min-w-0 px-4 py-6 focus:outline-none sm:px-6 lg:px-8">

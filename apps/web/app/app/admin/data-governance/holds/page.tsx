@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/Label";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { completeMfaStepUp, createTenantScopedDataOperationDryRun, fetchTenantDataClassCatalog } from "@/lib/api/endpoints";
 import { activateLegalHold, approveHoldRelease, createLegalHold, listHoldReleaseRequests, listLegalHolds, requestHoldRelease, type LegalHold } from "@/lib/api/legal-holds";
@@ -111,9 +112,9 @@ export default function LegalHoldsPage() {
         </li>)}</ul>
       </>}
       <nav aria-label="Preservation register pages" className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
-        <Button title="Newer holds" aria-label="Newer holds" disabled={busy || holds.isFetching || holdPages.length === 1} onClick={() => { setHoldPages((pages) => pages.slice(0, -1)); setSelectedId(null); }}><ChevronLeft size={16} /></Button>
+        <IconButton label="Newer holds" disabled={busy || holds.isFetching || holdPages.length === 1} onClick={() => { setHoldPages((pages) => pages.slice(0, -1)); setSelectedId(null); }}><ChevronLeft size={16} /></IconButton>
         <span className="text-sm">Page {holdPages.length}</span>
-        <Button title="Older holds" aria-label="Older holds" disabled={busy || holds.isFetching || holds.isError || !holds.data?.next_before_id} onClick={() => { setHoldPages((pages) => [...pages, holds.data!.next_before_id]); setSelectedId(null); }}><ChevronRight size={16} /></Button>
+        <IconButton label="Older holds" disabled={busy || holds.isFetching || holds.isError || !holds.data?.next_before_id} onClick={() => { setHoldPages((pages) => [...pages, holds.data!.next_before_id]); setSelectedId(null); }}><ChevronRight size={16} /></IconButton>
       </nav>
     </section>
     {selected && <section aria-labelledby="hold-detail" className="min-w-0 border-t border-[var(--color-line)] pt-6">
@@ -132,9 +133,9 @@ export default function LegalHoldsPage() {
           <Button disabled={busy || !context || proposal.requester_membership_id === context?.membership.id} onClick={() => approve.mutate(proposal)}><Check size={16} />Approve release</Button>
         </div>)}
         <nav aria-label="Release request pages" className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
-          <Button title="Newer release requests" aria-label="Newer release requests" disabled={busy || proposals.isFetching || proposalPages.length === 1} onClick={() => setProposalPages((pages) => pages.slice(0, -1))}><ChevronLeft size={16} /></Button>
+          <IconButton label="Newer release requests" disabled={busy || proposals.isFetching || proposalPages.length === 1} onClick={() => setProposalPages((pages) => pages.slice(0, -1))}><ChevronLeft size={16} /></IconButton>
           <span className="text-sm">Page {proposalPages.length}</span>
-          <Button title="Older release requests" aria-label="Older release requests" disabled={busy || proposals.isFetching || proposals.isError || !proposals.data?.next_before_id} onClick={() => setProposalPages((pages) => [...pages, proposals.data!.next_before_id])}><ChevronRight size={16} /></Button>
+          <IconButton label="Older release requests" disabled={busy || proposals.isFetching || proposals.isError || !proposals.data?.next_before_id} onClick={() => setProposalPages((pages) => [...pages, proposals.data!.next_before_id])}><ChevronRight size={16} /></IconButton>
         </nav>
       </>}
     </section>}

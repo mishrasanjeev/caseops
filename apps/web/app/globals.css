@@ -172,6 +172,14 @@
     border-radius: var(--radius-xs);
   }
 
+  /* The app sidebar is fixed to the viewport at md and up; keep the site
+     footer that follows the app shell clear of it. */
+  @media (min-width: 48rem) {
+    body:has([data-app-shell]) > aside[aria-label="CaseOps product ownership"] {
+      padding-left: 16rem;
+    }
+  }
+
   /* Skip-link: hidden off-screen until keyboard-focused, then anchored
    * top-left so the first Tab on any page lands here and jumps the
    * keyboard user past the sidebar. */

@@ -36,6 +36,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import portal_matters as portal_matter_service
+from tests.kyc_test_support import portal_upload_complete_kyc_pack
 from tests.test_auth_company import auth_headers
 
 
@@ -479,6 +480,9 @@ def test_portal_kyc_submit_marks_one_client_and_audits(
     client_id = _seed_client_and_link(boot["company"]["id"], matter_id)
     _, debug = _invite_client_portal_user(client, token, matter_id)
     _verify_and_session(client, debug)
+    portal_upload_complete_kyc_pack(
+        client, matter_id, client_id, _portal_csrf_headers(client),
+    )
 
     resp = client.post(
         f"/api/portal/matters/{matter_id}/kyc",
@@ -541,6 +545,7 @@ def test_portal_kyc_404_when_client_not_linked_to_matter(
     _verify_and_session(client, debug)
 
     headers = _portal_csrf_headers(client)
+    portal_upload_complete_kyc_pack(client, matter_id, my_client_id, headers)
     # Submitting for MY client → 201
     ok = client.post(
         f"/api/portal/matters/{matter_id}/kyc",

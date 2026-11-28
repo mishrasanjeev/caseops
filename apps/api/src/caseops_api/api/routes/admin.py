@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
@@ -50,6 +50,7 @@ from caseops_api.schemas.microsoft365 import (
     Microsoft365TenantConfigurationResponse,
     Microsoft365TenantConfigurationUpdateRequest,
 )
+from caseops_api.schemas.oauth_redirect import public_origin
 from caseops_api.schemas.production_safety import TenantEnterpriseReadinessResponse
 from caseops_api.schemas.security import (
     TenantSecurityPolicyRecord,
@@ -86,6 +87,7 @@ from caseops_api.services.google_workspace import (
     update_google_workspace_tenant_configuration,
 )
 from caseops_api.services.microsoft365 import (
+    microsoft365_redirect_uri,
     microsoft365_tenant_configuration_status,
     test_microsoft365_tenant_configuration,
     update_microsoft365_tenant_configuration,
@@ -524,16 +526,31 @@ def get_enterprise_readiness(
     return tenant_enterprise_readiness(session, context=context)
 
 
+def _microsoft_redirect_uri(request: Request) -> str:
+    """The Microsoft redirect URI for the API origin this request reached.
+
+    Outlook and Microsoft 365 setup pages both show this one value, and it is
+    the callback the Outlook OAuth flow serves (OUTLOOK_OAUTH_CALLBACK_PATH).
+    """
+
+    return microsoft365_redirect_uri(
+        public_origin(request.url.scheme, request.url.hostname, request.url.port)
+    )
+
+
 @router.get(
     "/outlook-configuration",
     response_model=OutlookTenantConfigurationResponse,
     summary=("Read the tenant Outlook provider readiness gate without exposing credential values."),
 )
 def get_outlook_configuration(
+    request: Request,
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> OutlookTenantConfigurationResponse:
-    return outlook_tenant_configuration_status(session, context=context)
+    status_response = outlook_tenant_configuration_status(session, context=context)
+    status_response.expected_redirect_uri = _microsoft_redirect_uri(request)
+    return status_response
 
 
 @router.patch(
@@ -627,21 +644,25 @@ def post_google_workspace_configuration_test(
 @router.get(
     "/microsoft365-configuration",
     response_model=Microsoft365TenantConfigurationResponse,
-    summary="Read tenant Microsoft 365 readiness without exposing OAuth values.",
+    summary="Read the saved Microsoft 365 app-registration values without exposing secrets.",
 )
 def get_microsoft365_configuration(
+    request: Request,
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> Microsoft365TenantConfigurationResponse:
-    return microsoft365_tenant_configuration_status(session, context=context)
+    return microsoft365_tenant_configuration_status(
+        session, context=context, expected_redirect_uri=_microsoft_redirect_uri(request)
+    )
 
 
 @router.patch(
     "/microsoft365-configuration",
     response_model=Microsoft365TenantConfigurationResponse,
-    summary="Configure tenant Microsoft 365 Graph OAuth values without echoing secrets.",
+    summary="Save Microsoft 365 app-registration values; connects no account.",
 )
 def patch_microsoft365_configuration(
+    request: Request,
     payload: Microsoft365TenantConfigurationUpdateRequest,
     context: WorkspaceAdmin,
     session: DbSession,
@@ -655,19 +676,23 @@ def patch_microsoft365_configuration(
         session,
         context=context,
         payload=payload,
+        expected_redirect_uri=_microsoft_redirect_uri(request),
     )
 
 
 @router.post(
     "/microsoft365-configuration/test",
     response_model=Microsoft365ReadinessTestResponse,
-    summary="Run a safe Microsoft 365 readiness probe without calling Graph.",
+    summary="Check saved Microsoft 365 values and approvals without calling Microsoft.",
 )
 def post_microsoft365_configuration_test(
+    request: Request,
     context: WorkspaceAdmin,
     session: DbSession,
 ) -> Microsoft365ReadinessTestResponse:
-    return test_microsoft365_tenant_configuration(session, context=context)
+    return test_microsoft365_tenant_configuration(
+        session, context=context, expected_redirect_uri=_microsoft_redirect_uri(request)
+    )
 
 
 @router.post(

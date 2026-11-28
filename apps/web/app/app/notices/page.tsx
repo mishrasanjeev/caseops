@@ -56,6 +56,7 @@ import {
   createNotice,
   downloadNoticeFile,
   getNotice,
+  getNoticeUploadPolicy,
   listNotices,
   listNoticeOwners,
   type NoticeDirection,
@@ -68,6 +69,23 @@ import {
 } from "@/lib/api/notices";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate, todayLocalDateInput } from "@/lib/dates";
+import {
+  NOTICE_FIELD_ORDER,
+  NOTICE_MAX_DATE,
+  NOTICE_MIN_DATE,
+  acceptAttribute,
+  noticeDuplicateFromApi,
+  noticeDuplicateHref,
+  noticeErrorsFromApi,
+  parseAmountMinor,
+  uploadPolicyHint,
+  validateNoticeDraft,
+  validateNoticeFile,
+  type NoticeFieldErrors,
+  type NoticeFieldKey,
+  type NoticeFilePolicy,
+  type NoticeRuleInput,
+} from "@/lib/notice-rules";
 import { getStoredContext } from "@/lib/session";
 
 type NoticeFilters = {
@@ -188,12 +206,42 @@ function noticeDraft(notice: NoticeRecord): NoticeDraft {
   };
 }
 
-function amountToMinor(value: string): number | null {
-  const normalized = value.trim().replace(/,/g, "");
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
+function amountToMinor(value: string, label: string): number | null {
+  const parsed = parseAmountMinor(value, label);
+  return parsed.ok ? parsed.minor : null;
 }
+
+function ruleInput(draft: NoticeDraft, unparsableDates?: ReadonlySet<NoticeFieldKey>): NoticeRuleInput {
+  // Mirror toPayload: reply fields are not sent unless a reply is required.
+  return {
+    ...draft,
+    replyDueOn: draft.replyRequired ? draft.replyDueOn : "",
+    replySent: draft.replyRequired && draft.replySent,
+    unparsableDates,
+  };
+}
+
+/** Inputs each rule anchors to, in form order, for focus and aria wiring. */
+const REGISTER_FIELD_INPUT_ID: Partial<Record<NoticeFieldKey, string>> = {
+  received_on: "new-notice-date",
+  sent_on: "new-notice-date",
+  subject: "new-notice-subject",
+  type: "new-notice-type",
+  amount_minor: "new-notice-amount",
+  reply_due_on: "new-notice-reply-due",
+  reply_sent_on: "new-notice-reply-sent-on",
+  dispute_amount_minor: "new-notice-dispute-amount",
+  recovered_amount_minor: "new-notice-recovered-amount",
+  currency: "new-notice-currency",
+  file: "new-notice-file",
+};
+
+const REGISTER_FIELD_KEY_BY_INPUT: Record<string, NoticeFieldKey[]> = Object.entries(
+  REGISTER_FIELD_INPUT_ID,
+).reduce<Record<string, NoticeFieldKey[]>>((byInput, [key, id]) => {
+  if (id) (byInput[id] ??= []).push(key as NoticeFieldKey);
+  return byInput;
+}, {});
 
 function toPayload(draft: NoticeDraft, matterIds: string[]): CreateNoticeInput {
   const received = draft.direction === "received";
@@ -219,9 +267,11 @@ function toPayload(draft: NoticeDraft, matterIds: string[]): CreateNoticeInput {
       received && draft.replyRequired && draft.replySent
         ? draft.replySentOn || null
         : null,
-    amount_minor: received ? amountToMinor(draft.amount) : null,
-    dispute_amount_minor: received ? null : amountToMinor(draft.disputeAmount),
-    recovered_amount_minor: received ? null : amountToMinor(draft.recoveredAmount),
+    amount_minor: received ? amountToMinor(draft.amount, "Amount") : null,
+    dispute_amount_minor: received ? null : amountToMinor(draft.disputeAmount, "Dispute amount"),
+    recovered_amount_minor: received
+      ? null
+      : amountToMinor(draft.recoveredAmount, "Recovered amount"),
     currency: draft.currency.trim().toUpperCase(),
     counsel_engaged: draft.counselEngaged.trim() || null,
     internal_spoc: draft.internalSpoc.trim() || null,
@@ -301,6 +351,9 @@ function NoticeFormDialog({
   owners,
   canAssignOwner,
   submitting,
+  filePolicy,
+  serverError,
+  onOpenExisting,
   onSubmit,
 }: {
   open: boolean;
@@ -321,29 +374,77 @@ function NoticeFormDialog({
   owners: OwnerOption[];
   canAssignOwner: boolean;
   submitting: boolean;
+  /** The upload allow-list and cap from the API; null while loading. */
+  filePolicy: NoticeFilePolicy | null;
+  /** The last refusal of this dialog's save, anchored inline when possible. */
+  serverError: unknown;
+  onOpenExisting: (noticeId: string) => void;
   onSubmit: (input: { payload: CreateNoticeInput; file: File | null }) => void;
 }) {
   const [draft, setDraft] = useState<NoticeDraft>(emptyDraft);
   const [matterIds, setMatterIds] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [clientErrors, setClientErrors] = useState<NoticeFieldErrors>({});
+  const [unparsableDates, setUnparsableDates] = useState<Set<NoticeFieldKey>>(new Set());
 
   useEffect(() => {
     if (!open) return;
     setDraft(notice ? noticeDraft(notice) : emptyDraft());
     setMatterIds(notice?.matter_links.map((matter) => matter.matter_id) ?? []);
     setFile(null);
+    setClientErrors({});
+    setUnparsableDates(new Set());
   }, [notice, open]);
+
+  // An edit is refused only for problems it introduces, like the API: a
+  // legacy notice saved before these rules can still be corrected piecemeal.
+  const baselineErrors = useMemo<NoticeFieldErrors>(
+    () => (notice ? validateNoticeDraft(ruleInput(noticeDraft(notice))) : {}),
+    [notice],
+  );
+  const serverErrors = useMemo(() => noticeErrorsFromApi(serverError), [serverError]);
+  const duplicate = useMemo(() => noticeDuplicateFromApi(serverError), [serverError]);
+  const errors: NoticeFieldErrors = { ...serverErrors, ...clientErrors };
+  const errorFor = (inputId: string): string | undefined =>
+    (REGISTER_FIELD_KEY_BY_INPUT[inputId] ?? [])
+      .filter((key) => !(draft.direction === "received" ? key === "sent_on" : key === "received_on"))
+      .map((key) => errors[key])
+      .find(Boolean);
+
+  const validate = (): NoticeFieldErrors => {
+    // A partly typed date may fire no change event; read the controls too.
+    const unparsable = new Set(unparsableDates);
+    for (const [inputId, keys] of Object.entries(REGISTER_FIELD_KEY_BY_INPUT)) {
+      const input = document.getElementById(inputId) as HTMLInputElement | null;
+      if (input?.type === "date" && input.validity?.badInput) keys.forEach((key) => unparsable.add(key));
+    }
+    const found = validateNoticeDraft(ruleInput(draft, unparsable));
+    for (const key of Object.keys(found) as NoticeFieldKey[]) {
+      if (baselineErrors[key] && baselineErrors[key] === found[key]) delete found[key];
+    }
+    const fileError = notice ? null : validateNoticeFile(file, filePolicy, { required: false });
+    if (fileError) found.file = fileError;
+    return found;
+  };
+
+  const submit = (allowDuplicate: boolean) => {
+    const found = validate();
+    setClientErrors(found);
+    const first = NOTICE_FIELD_ORDER.find((key) => found[key]);
+    if (first) {
+      const inputId = REGISTER_FIELD_INPUT_ID[first];
+      if (inputId) document.getElementById(inputId)?.focus();
+      return;
+    }
+    onSubmit({
+      payload: { ...toPayload(draft, matterIds), ...(allowDuplicate ? { allow_duplicate: true } : {}) },
+      file,
+    });
+  };
 
   const linkedIds = new Set(linkedMatters.map((matter) => matter.id));
   // Search results only; a linked Matter is listed once, in the linked group.
   const searchMatters = matters.filter((matter) => !linkedIds.has(matter.id));
-  const invalidAmount = [draft.amount, draft.disputeAmount, draft.recoveredAmount].some(
-    (value) => value.trim() !== "" && amountToMinor(value) === null,
-  );
-  const valid =
-    Boolean(draft.subject.trim()) &&
-    /^[A-Za-z]{3}$/.test(draft.currency.trim()) &&
-    !invalidAmount;
 
   const toggleMatter = (matterId: string, checked: boolean) => {
     setMatterIds((current) =>
@@ -359,23 +460,65 @@ function NoticeFormDialog({
     id: string,
     label: string,
     key: keyof NoticeDraft,
-    options: { required?: boolean; type?: string; placeholder?: string; maxLength?: number } = {},
-  ) => (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        required={options.required}
-        type={options.type}
-        placeholder={options.placeholder}
-        maxLength={options.maxLength}
-        value={String(draft[key])}
-        onChange={(event) =>
-          setDraft((current) => ({ ...current, [key]: event.target.value }))
-        }
-      />
-    </div>
-  );
+    options: {
+      required?: boolean;
+      type?: string;
+      placeholder?: string;
+      maxLength?: number;
+      min?: string;
+      max?: string;
+    } = {},
+  ) => {
+    const error = errorFor(id);
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline gap-0.5">
+          <Label htmlFor={id}>{label}</Label>
+          {options.required ? (
+            <span className="text-sm text-[var(--color-danger-text)]" aria-hidden>*</span>
+          ) : null}
+        </div>
+        <Input
+          id={id}
+          required={options.required}
+          type={options.type}
+          placeholder={options.placeholder}
+          maxLength={options.maxLength}
+          min={options.min}
+          max={options.max}
+          value={String(draft[key])}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          onChange={(event) => {
+            const input = event.target;
+            const keys = REGISTER_FIELD_KEY_BY_INPUT[id] ?? [];
+            if (options.type === "date") {
+              setUnparsableDates((current) => {
+                const next = new Set(current);
+                for (const fieldKey of keys) {
+                  if (input.validity?.badInput) next.add(fieldKey);
+                  else next.delete(fieldKey);
+                }
+                return next;
+              });
+            }
+            setClientErrors((current) => {
+              const next = { ...current };
+              for (const fieldKey of keys) delete next[fieldKey];
+              return next;
+            });
+            setDraft((current) => ({ ...current, [key]: input.value }));
+          }}
+        />
+        {error ? (
+          <p id={`${id}-error`} className="text-xs text-[var(--color-danger-text)]" data-testid={`${id}-error`}>
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  };
+  const today = todayLocalDateInput();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -389,10 +532,11 @@ function NoticeFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form
+          noValidate
           className="flex flex-col gap-5"
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault();
-            if (valid) onSubmit({ payload: toPayload(draft, matterIds), file });
+            submit(false);
           }}
         >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -417,7 +561,7 @@ function NoticeFormDialog({
               "new-notice-date",
               draft.direction === "received" ? "Received on" : "Sent on",
               draft.direction === "received" ? "receivedOn" : "sentOn",
-              { type: "date" },
+              { type: "date", required: true, min: NOTICE_MIN_DATE, max: today },
             )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="new-notice-status">Status</Label>
@@ -441,7 +585,7 @@ function NoticeFormDialog({
                 placeholder: "Short, identifiable notice subject",
               })}
             </div>
-            {textField("new-notice-type", "Notice type", "noticeType")}
+            {textField("new-notice-type", "Notice type", "noticeType", { required: true, maxLength: 120 })}
             {textField("new-notice-authority", "Authority / counterparty", "authority")}
             {textField("new-notice-mode", "Mode", "mode", { placeholder: "Email, post, portal..." })}
             {draft.direction === "received"
@@ -489,7 +633,12 @@ function NoticeFormDialog({
                 </div>
                 {draft.replyRequired ? (
                   <>
-                    {textField("new-notice-reply-due", "Reply due on", "replyDueOn", { type: "date" })}
+                    {textField("new-notice-reply-due", "Reply due on", "replyDueOn", {
+                      type: "date",
+                      required: !draft.replySent,
+                      min: draft.receivedOn || NOTICE_MIN_DATE,
+                      max: NOTICE_MAX_DATE,
+                    })}
                     <div className="flex items-center gap-2 pt-7">
                       <input
                         id="new-notice-reply-sent"
@@ -502,7 +651,11 @@ function NoticeFormDialog({
                       <Label htmlFor="new-notice-reply-sent">Reply sent</Label>
                     </div>
                     {draft.replySent
-                      ? textField("new-notice-reply-sent-on", "Reply sent on", "replySentOn", { type: "date" })
+                      ? textField("new-notice-reply-sent-on", "Reply sent on", "replySentOn", {
+                          type: "date",
+                          min: draft.receivedOn || NOTICE_MIN_DATE,
+                          max: today,
+                        })
                       : null}
                   </>
                 ) : null}
@@ -599,15 +752,71 @@ function NoticeFormDialog({
           {!notice ? (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="new-notice-file">Notice document (optional)</Label>
-              <Input id="new-notice-file" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-              <p className="text-xs text-[var(--color-mute)]">The JSON record is saved first; a failed file step can be retried without duplicating the notice.</p>
+              <Input
+                id="new-notice-file"
+                type="file"
+                className="h-auto"
+                accept={acceptAttribute(filePolicy)}
+                aria-invalid={errors.file ? true : undefined}
+                aria-describedby={errors.file ? "new-notice-file-error new-notice-file-hint" : "new-notice-file-hint"}
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                  setClientErrors((current) => {
+                    const next = { ...current };
+                    delete next.file;
+                    return next;
+                  });
+                }}
+              />
+              <p id="new-notice-file-hint" className="text-xs text-[var(--color-mute)]">
+                {uploadPolicyHint(filePolicy) ? `${uploadPolicyHint(filePolicy)} ` : ""}
+                The record is saved first; a failed file step can be retried without duplicating the notice.
+              </p>
+              {errors.file ? (
+                <p id="new-notice-file-error" className="text-xs text-[var(--color-danger-text)]" data-testid="new-notice-file-error">
+                  {errors.file}
+                </p>
+              ) : null}
             </div>
           ) : null}
-          {invalidAmount ? <p className="text-sm text-red-700">Amounts must be zero or a positive number.</p> : null}
-          {!/^[A-Za-z]{3}$/.test(draft.currency.trim()) ? <p className="text-sm text-red-700">Currency must be a three-letter code.</p> : null}
+          {duplicate ? (
+            <div
+              role="alert"
+              className="rounded-md border border-[var(--color-warning)] bg-[var(--color-warn-bg)] p-3 text-sm text-[var(--color-ink)]"
+              data-testid="notice-duplicate"
+            >
+              <p className="font-medium">{duplicate.message}</p>
+              <p className="mt-1 text-xs text-[var(--color-ink-2)]">
+                Existing notice: {duplicate.existing.subject ?? duplicate.existing.filename ?? "Untitled notice"}
+                {duplicate.existing.notice_date ? `, ${formatDate(duplicate.existing.notice_date)}` : ""}.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {duplicate.existing.source_kind === "legacy_attachment" && noticeDuplicateHref(duplicate.existing) ? (
+                  // A matter notice is read-only here; it opens as that matter's document.
+                  <Button href={noticeDuplicateHref(duplicate.existing) ?? ""} size="sm" variant="outline" data-testid="notice-duplicate-open">
+                    Open the existing notice on its matter
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" onClick={() => onOpenExisting(duplicate.existing.id)} data-testid="notice-duplicate-open">
+                    Open the existing notice
+                  </Button>
+                )}
+                {duplicate.overrideAllowed ? (
+                  <Button type="button" size="sm" variant="outline" disabled={submitting} onClick={() => submit(true)} data-testid="notice-duplicate-create-anyway">
+                    {notice ? "Save changes anyway" : "Save anyway as a separate notice"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {Object.keys(errors).length > 0 ? (
+            <p role="alert" className="text-sm text-[var(--color-danger-text)]" data-testid="notice-form-error">
+              Fix the highlighted fields to save this notice.
+            </p>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !valid}>
+            <Button type="submit" disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : notice ? <Pencil className="h-4 w-4" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
               {submitting ? "Saving..." : notice ? "Save changes" : "Create notice"}
             </Button>
@@ -708,6 +917,14 @@ export default function NoticesPage() {
   const formOpen = createOpen || Boolean(editingNotice);
   const deferredMatterSearch = useDeferredValue(matterSearch);
   const currentContext = useMemo(() => getStoredContext(), []);
+  // ?notice=<id>: the matter Notices duplicate link opens that register notice.
+  useEffect(() => {
+    const noticeId = new URLSearchParams(window.location.search).get("notice");
+    if (!noticeId) return;
+    void getNotice(noticeId)
+      .then(setEditingNotice)
+      .catch((error) => toast.error(apiErrorMessage(error, "Could not open the notice.")));
+  }, []);
 
   const registerParams = useMemo<NoticeListParams>(
     () => ({
@@ -755,6 +972,15 @@ export default function NoticesPage() {
     queryFn: listNoticeOwners,
     enabled: canManage,
   });
+  // The API's own upload allow-list and cap; the dialog never keeps a copy.
+  const uploadPolicyQuery = useQuery({
+    queryKey: ["notices", "upload-policy"],
+    queryFn: getNoticeUploadPolicy,
+    enabled: canCreate,
+    staleTime: 5 * 60_000,
+  });
+  // The last refusal of the open dialog's save, shown inline in the dialog.
+  const [formError, setFormError] = useState<unknown>(null);
 
   const createMutation = useMutation({
     // A register read that started before this mutation cannot know about the
@@ -855,7 +1081,14 @@ export default function NoticesPage() {
       if (fileError) toast.error(`Notice saved, but its document was not attached. ${apiErrorMessage(fileError, "Use Attach document on the saved notice to retry.")}`);
       else toast.success("Notice created.");
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not create the notice.")),
+    onError: (error) => {
+      // Rule refusals and duplicates stay in the open dialog, on the field.
+      if (Object.keys(noticeErrorsFromApi(error)).length > 0 || noticeDuplicateFromApi(error)) {
+        setFormError(error);
+        return;
+      }
+      toast.error(apiErrorMessage(error, "Could not create the notice."));
+    },
   });
   const updateMutation = useMutation({
     mutationFn: ({ noticeId, input }: { noticeId: string; input: UpdateNoticeInput; closeDialog?: boolean }) => updateNotice(noticeId, input),
@@ -885,6 +1118,15 @@ export default function NoticesPage() {
     },
     onError: (error, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["notices"] });
+      if (
+        variables.closeDialog &&
+        (Object.keys(noticeErrorsFromApi(error)).length > 0 || noticeDuplicateFromApi(error))
+      ) {
+        // A rule refusal or a duplicate leaves the dialog open with the
+        // user's edits, the field marked or the matched notice named, as on create.
+        setFormError(error);
+        return;
+      }
       if (variables.closeDialog) {
         void getNotice(variables.noticeId)
           .then(setEditingNotice)
@@ -1032,7 +1274,7 @@ export default function NoticesPage() {
           </CardContent>
         </Card>
       </>
-      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); setMatterSearch(""); } }} notice={editingNotice} matters={formMatterOptions} linkedMatters={linkedMatterOptions} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError && !mattersQuery.isFetchNextPageError} mattersHasMore={Boolean(mattersQuery.hasNextPage)} mattersLoadingMore={mattersQuery.isFetchingNextPage} onLoadMoreMatters={() => void mattersQuery.fetchNextPage()} matterSearch={matterSearch} onMatterSearchChange={setMatterSearch} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} onSubmit={({ payload, file }) => { if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
+      {(canCreate || canManage) ? <NoticeFormDialog open={formOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditingNotice(null); setMatterSearch(""); setFormError(null); } }} notice={editingNotice} matters={formMatterOptions} linkedMatters={linkedMatterOptions} mattersPending={mattersQuery.isPending && formOpen} mattersError={mattersQuery.isError && !mattersQuery.isFetchNextPageError} mattersHasMore={Boolean(mattersQuery.hasNextPage)} mattersLoadingMore={mattersQuery.isFetchingNextPage} onLoadMoreMatters={() => void mattersQuery.fetchNextPage()} matterSearch={matterSearch} onMatterSearchChange={setMatterSearch} owners={directoryOwners} canAssignOwner={canManage || Boolean(currentContext?.membership.id)} submitting={createMutation.isPending || updateMutation.isPending} filePolicy={uploadPolicyQuery.data ?? null} serverError={formError} onOpenExisting={(noticeId) => { setFormError(null); setCreateOpen(false); void getNotice(noticeId).then(setEditingNotice).catch((error) => toast.error(apiErrorMessage(error, "Could not open the existing notice."))); }} onSubmit={({ payload, file }) => { setFormError(null); if (editingNotice) { updateMutation.mutate({ noticeId: editingNotice.id, input: { ...payload, expected_updated_at: editingNotice.updated_at }, closeDialog: true }); } else { createMutation.mutate({ payload, file }); } }} /> : null}
     </div>
   );
 }

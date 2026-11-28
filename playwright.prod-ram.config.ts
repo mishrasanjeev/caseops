@@ -33,6 +33,22 @@ const BATCH5_SPECS = /ram-2026-11-11-(?:statutes|drafting|contracts|bugs)\.spec\
 const NOV24_SPECS = /ram-2026-11-24-bugs\.spec\.ts$/;
 // Nov 25 workbook (2): rows 1-3 run as the nova-legal tester.
 const NOV25_SPECS = /nova-2026-11-25-(?:statutes|client-links|ask-workspace)\.spec\.ts$/;
+// Nov 27 workbook BUG-001: OCR of JPG, JPEG and PNG uploads, as the test-legal tester.
+const NOV27_OCR_SPEC = /ram-2026-11-27-ocr-images\.spec\.ts$/;
+// Nov 27 workbook rows 1 and 4 (reported in nova-legal) run as the test-legal tester.
+const NOV27_BENCH_STATUTES_SPECS = /bugs7-2026-11-27-bench-statutes\.spec\.ts$/;
+// Nov 27 workbook Case Tracking rows 6 and 10: read-only as the test-legal tester.
+const NOV27_TRACKING_SPEC = /ram-2026-11-27-case-tracking\.spec\.ts$/;
+// Nov 27 workbook rows 2-3 (notice validation): run as the test-legal tester
+// (owner decision 2026-11-27), on a per-run matter the journey disposes.
+const NOV27_NOTICE_SPECS = /notice-validation-2026-11-27\.spec\.ts$/;
+// Nov 27 workbook ENH-001: branded, verifiable billing PDFs, as the test-legal tester.
+const NOV27_INVOICE_SPECS = /ram-2026-11-27-invoice-branding\.spec\.ts$/;
+// Nov 27 workbook rows 5, 7, 8, 9 (reported in nova-legal): production runs as
+// the test-legal tester only, per the owner's decision of 27 Nov 2026.
+const NOV27_MATTER_SPEC = /nova-2026-11-27-matter\.spec\.ts$/;
+// Nov 27 workbook BUG-003: KYC documents, run as the test-legal tester (Ram).
+const NOV27_KYC_SPEC = /ram-2026-11-27-kyc-documents\.spec\.ts$/;
 const BATCH3_DRAFT_READONLY_SPEC = /ram-2026-10-22-drafting\.prod\.spec\.ts$/;
 const NOTES22_PROD_SPEC = /ram-2026-10-22-prod\.spec\.ts$/;
 const OFFICIAL_REFERENCE_PROD_SPEC = /ram-2026-11-14-prod\.spec\.ts$/;
@@ -78,6 +94,8 @@ export default defineConfig({
     WORKSPACE_REQUIREMENTS_SPECS,
     BATCH5_SPECS,
     NOV24_SPECS,
+    NOV27_NOTICE_SPECS,
+    NOV27_INVOICE_SPECS,
     /google-workspace-token-refresh-2026-10-07\.prod\.spec\.ts$/,
   ],
   timeout: 120_000,
@@ -128,6 +146,21 @@ export default defineConfig({
       },
     },
     {
+      name: "nov27-notices-prod-chromium",
+      testMatch: NOV27_NOTICE_SPECS,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
       name: "nov25-prod-chromium",
       testMatch: NOV25_SPECS,
       grepInvert: /\[mobile\]/,
@@ -156,6 +189,147 @@ export default defineConfig({
         storageState: { cookies: [], origins: [] },
         extraHTTPHeaders: noPaidProviderHeaders,
         trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "nov27-ocr-prod-chromium",
+      testMatch: NOV27_OCR_SPEC,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov27-statutes-prod-chromium",
+      testMatch: NOV27_BENCH_STATUTES_SPECS,
+      grepInvert: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov27-statutes-prod-mobile",
+      testMatch: NOV27_BENCH_STATUTES_SPECS,
+      grep: /\[mobile\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "nov27-tracking-prod-chromium",
+      testMatch: NOV27_TRACKING_SPEC,
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov27-invoice-prod-chromium",
+      testMatch: NOV27_INVOICE_SPECS,
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov27-invoice-prod-mobile",
+      testMatch: NOV27_INVOICE_SPECS,
+      grep: /\[mobile\]/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "nov27-matter-prod-chromium",
+      testMatch: NOV27_MATTER_SPEC,
+      grepInvert: /\[mobile\]|\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1366, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "nov27-matter-prod-mobile",
+      testMatch: NOV27_MATTER_SPEC,
+      grep: /\[mobile\]/,
+      grepInvert: /\[local-only\]/,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Pixel 5"],
+        viewport: { width: 393, height: 851 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+      },
+    },
+    {
+      name: "nov27-kyc-prod-chromium",
+      testMatch: NOV27_KYC_SPEC,
+      fullyParallel: false,
+      retries: 0,
+      dependencies: [],
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1365, height: 900 },
+        storageState: { cookies: [], origins: [] },
+        extraHTTPHeaders: noPaidProviderHeaders,
+        trace: "off", screenshot: "off", video: "off",
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
       },
     },
     {

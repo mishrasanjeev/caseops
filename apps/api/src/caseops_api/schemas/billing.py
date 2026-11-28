@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # EH-SGR-02: must admit every InvoiceStatus member. `needs_review` is written by
 # the outside-counsel portal on invoice submission; omitting it here made the
@@ -87,6 +87,12 @@ class InvoiceCreateRequest(BaseModel):
     payment_adjustment_minor: int = Field(default=0)
     include_uninvoiced_time_entries: bool = True
     manual_items: list[InvoiceManualItemCreateRequest] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def due_not_before_issue(self) -> InvoiceCreateRequest:
+        if self.due_on is not None and self.due_on < self.issued_on:
+            raise ValueError("Due date cannot be earlier than the issue date.")
+        return self
 
 
 class InvoiceLineItemRecord(BaseModel):

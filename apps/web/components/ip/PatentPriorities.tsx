@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { fetchIpDocumentsForDocket } from "@/lib/api/endpoints";
 import {
@@ -174,8 +175,8 @@ function PriorityForm({ record, sequence, initial, withdrawn = false, onCancel, 
         <div className="flex min-w-0 flex-wrap items-end gap-2">
           <div className="min-w-0 flex-1 basis-48"><Label htmlFor="priority-parent-search">Parent title or exact identifier</Label>
             <Input id="priority-parent-search" maxLength={200} value={search} onChange={(event) => setSearch(event.target.value)} /></div>
-          <Button type="button" variant="secondary" title="Search parent applications" aria-label="Search parent applications"
-            onClick={() => { setQuery(search.trim()); setCursor(undefined); }}><Search size={16} /></Button>
+          <IconButton label="Search parent applications" type="button" variant="secondary"
+            onClick={() => { setQuery(search.trim()); setCursor(undefined); }}><Search size={16} /></IconButton>
         </div>
         <div className="min-w-0"><Label htmlFor="priority-parent">Parent application</Label>
           <select id="priority-parent" className={selectClass} required value={parentId} disabled={parents.isPending || parents.isError}

@@ -75,6 +75,8 @@ def _png() -> bytes:
 class FakeSarvam:
     def __init__(self) -> None:
         self.submissions: list[dict] = []
+        # job id -> the uploaded file part exactly as Sarvam receives it
+        self.uploads: dict[str, dict] = {}
         self.polls: Counter[str] = Counter()
         self.running_polls = 1
         self.terminal = "completed"
@@ -103,10 +105,17 @@ class FakeSarvam:
                 pages = 1
             language = re.search(rb'name="language"\r\n\r\n([^\r]+)', body).group(1).decode()
             output = re.search(rb'name="output_format"\r\n\r\n([^\r]+)', body).group(1).decode()
+            part = re.search(
+                rb'name="file"; filename="([^"]+)"\r\nContent-Type: ([^\r]+)\r\n\r\n', body,
+            )
             job = f"job-{len(self.submissions) + 1}"
             self.submissions.append(
                 {"job": job, "pages": pages, "language": language, "output": output}
             )
+            self.uploads[job] = {
+                "filename": part.group(1).decode(), "content_type": part.group(2).decode(),
+                "content": body[part.end():body.rfind(b"\r\n--")],
+            }
             return httpx.Response(201, json={"job_id": job, "status": "pending", "run_id": "r"})
         status_match = re.search(r"/job/([^/]+)/status$", url)
         if status_match:
@@ -138,22 +147,48 @@ class FakeSarvam:
         raise AssertionError(f"unexpected Sarvam call {request.method} {url}")
 
     def _archive(self, job: str) -> bytes:
+        # The documented ``output_format=json`` layout: ``manifest.json`` plus
+        # ``<uploaded name>/<uploaded stem>.json`` holding every page's blocks
+        # (no ``metadata/`` folder; that is only written for html and md).
         submission = next(item for item in self.submissions if item["job"] == job)
         number = int(job.split("-")[1])
+        assert submission["output"] == "json"
+        name = self.uploads[job]["filename"]
+        page_entries = []
+        for page in range(1, submission["pages"] + 1):
+            text = self.text_for(number, page)
+            page_entries.append({
+                "page_num": page,
+                "status": "completed" if text is not None else "failed",
+                "image_width": 1654,
+                "image_height": 2339,
+                "blocks": [] if not text else [{
+                    "block_id": f"p{page}-b1",
+                    "text": text,
+                    "layout_tag": "paragraph",
+                    "reading_order": 1,
+                    "coordinates": {"x1": 80, "y1": 74, "x2": 1500, "y2": 400},
+                    "bbox_norm": [0.0484, 0.0316, 0.9069, 0.171],
+                    "confidence": 0.97,
+                }],
+            })
+        failed = sum(1 for entry in page_entries if entry["status"] == "failed")
+        document = {
+            "filename": name,
+            "page_count": submission["pages"],
+            "language": submission["language"],
+            "status": "partially_completed" if failed else "completed",
+            "partial": bool(failed),
+            "warnings": [],
+            "pages": page_entries,
+        }
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("manifest.json", json.dumps({"job_id": job}))
-            for page in range(1, submission["pages"] + 1):
-                text = self.text_for(number, page)
-                if text is None:
-                    continue
-                archive.writestr(
-                    f"doc/metadata/page_{page:03d}.json",
-                    json.dumps({"blocks": [
-                        {"tag": "paragraph", "text": text, "confidence": 0.97,
-                         "bbox": [0, 0, 10, 10]},
-                    ]}, ensure_ascii=False),
-                )
+            archive.writestr("manifest.json", json.dumps({"job_id": job, "files": [name]}))
+            archive.writestr(
+                f"{name}/{name.rsplit('.', 1)[0]}.json",
+                json.dumps(document, ensure_ascii=False),
+            )
         return buffer.getvalue()
 
 

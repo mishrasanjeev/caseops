@@ -38,6 +38,7 @@ import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   API_FORM_ERROR_KEY,
   apiErrorMessage,
@@ -778,7 +779,7 @@ function CreateRecordal({
                       className={SELECT_CLASS}
                       onChange={(event) => updateParty(index, { evidence_reference: event.target.value })}
                     />
-                    <Button className="w-8 px-0 md:mt-6" type="button" size="sm" variant="ghost" aria-label={`Remove party ${index + 1}`} title="Remove party" disabled={parties.length === 1} onClick={() => setParties((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" aria-hidden /></Button>
+                    <IconButton label={`Remove party ${index + 1}`} className="w-8 px-0 md:mt-6" type="button" size="sm" variant="ghost" disabled={parties.length === 1} onClick={() => setParties((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>
                   </fieldset>
                 ))}
               </div>

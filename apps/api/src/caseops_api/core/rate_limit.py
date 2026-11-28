@@ -78,10 +78,21 @@ def ai_route_rate_limit() -> str:
     return f"{get_settings().ai_route_rate_limit_per_minute}/minute"
 
 
+DOCUMENT_VERIFICATION_PER_MINUTE = 30
+
+
+def document_verification_rate_limit() -> str:
+    """ENH-001: the public billing-document verification lookup. A person
+    checking printed invoices needs a few lookups a minute; a script trying to
+    guess tokens is cut off long before 2**256 makes any difference."""
+    return f"{DOCUMENT_VERIFICATION_PER_MINUTE}/minute"
+
+
 __all__ = [
     "RateLimitExceeded",
     "ai_route_rate_limit",
     "bootstrap_rate_limit",
+    "document_verification_rate_limit",
     "configure_limiter",
     "limiter",
     "login_rate_limit",

@@ -53,6 +53,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpPortfolioExport,
@@ -319,35 +320,28 @@ export default function IpPortfolioPage() {
         actions={
           <>
             <div className="flex rounded-md border border-[var(--color-line)] p-0.5">
-              <Button
+              <IconButton label="List view"
                 size="sm"
                 variant={viewMode === "list" ? "secondary" : "ghost"}
-                aria-label="List view"
-                title="List view"
                 onClick={() => setViewMode("list")}
               >
                 <List className="h-4 w-4" aria-hidden />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton label="Grid view"
                 size="sm"
                 variant={viewMode === "grid" ? "secondary" : "ghost"}
-                aria-label="Grid view"
-                title="Grid view"
                 onClick={() => setViewMode("grid")}
               >
                 <LayoutGrid className="h-4 w-4" aria-hidden />
-              </Button>
-              <Button
+              </IconButton>
+              <IconButton label="Family view"
                 size="sm"
                 variant={viewMode === "families" ? "secondary" : "ghost"}
-                aria-label="Family view"
-                title="Family view"
                 onClick={() => setViewMode("families")}
               >
                 <Network className="h-4 w-4" aria-hidden />
-              </Button>
-              <Button size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"}
-                aria-label="Deadline tracker view" title="Deadline tracker view" onClick={() => {
+              </IconButton>
+              <IconButton label="Deadline tracker view" size="sm" variant={viewMode === "tracker" ? "secondary" : "ghost"} onClick={() => {
                   setClassDraft(null);
                   setFilters({ query: filters.query ?? null, renewal_tracker_state: filters.renewal_tracker_state?.slice(0, 1) ?? [],
                     application_date_from: filters.application_date_from, application_date_to: filters.application_date_to,
@@ -356,7 +350,7 @@ export default function IpPortfolioPage() {
                   setViewMode("tracker");
                 }}>
                 <CalendarClock className="h-4 w-4" aria-hidden />
-              </Button>
+              </IconButton>
             </div>
             <Select value={selectedViewId} onValueChange={applyView}>
               <SelectTrigger aria-label="Saved view" className="w-full min-w-0 sm:w-44">
@@ -413,9 +407,9 @@ export default function IpPortfolioPage() {
                 placeholder="Mark, application number, opposition number"
               />
             </div>
-            <Button type="submit" variant="outline" aria-label="Search portfolio">
+            <IconButton label="Search portfolio" type="submit" variant="outline">
               <Search className="h-4 w-4" aria-hidden />
-            </Button>
+            </IconButton>
           </form>
 
           <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:w-auto">
@@ -1173,15 +1167,15 @@ function ExportQueue({
               {job.error ? <span className="ml-2 text-red-700">{job.error}</span> : null}
             </div>
             {job.download_ready ? (
-              <Button size="sm" variant="ghost" onClick={() => onDownload(job.id)} aria-label="Download export">
+              <IconButton label="Download export" size="sm" variant="ghost" onClick={() => onDownload(job.id)}>
                 <Download className="h-4 w-4" aria-hidden />
-              </Button>
+              </IconButton>
             ) : job.status === "pending" || job.status === "running" ? (
               <LoaderCircle className="h-4 w-4 animate-spin text-[var(--color-mute)]" aria-label="Export running" />
             ) : job.status === "failed" ? (
-              <Button size="sm" variant="ghost" onClick={() => onRetry(job.id)} aria-label="Retry export">
+              <IconButton label="Retry export" size="sm" variant="ghost" onClick={() => onRetry(job.id)}>
                 <RotateCcw className="h-4 w-4" aria-hidden />
-              </Button>
+              </IconButton>
             ) : null}
           </div>
         ))}

@@ -34,6 +34,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RecordSelect } from "@/components/ui/RecordSelect";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import {
   API_FORM_ERROR_KEY,
   apiErrorMessage,
@@ -841,7 +842,7 @@ function RecipientsField({
           {recipients.map((id) => (
             <li key={id} className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-[var(--color-line)] px-3 py-1.5 text-sm">
               <span id={`recipient-${id}`} className="min-w-0 break-words"><PersonName membershipId={id} /></span>
-              <Button type="button" size="sm" variant="ghost" aria-label="Remove recipient" aria-describedby={`recipient-${id}`} onClick={() => onRemove(id)}><X className="h-4 w-4" /></Button>
+              <IconButton label="Remove recipient" type="button" size="sm" variant="ghost" aria-describedby={`recipient-${id}`} onClick={() => onRemove(id)}><X className="h-4 w-4" /></IconButton>
             </li>
           ))}
         </ul>
@@ -1240,7 +1241,7 @@ function RecordedSummary({ result, onReviewHits, onDismiss }: { result: IpJourna
             <p className="font-semibold">Run {result.run.status.replaceAll("_", " ")}; no journal entry was recorded.</p>
           )}
         </div>
-        <Button type="button" size="sm" variant="ghost" aria-label="Dismiss intake result" onClick={onDismiss}><X className="h-4 w-4" /></Button>
+        <IconButton label="Dismiss intake result" type="button" size="sm" variant="ghost" onClick={onDismiss}><X className="h-4 w-4" /></IconButton>
       </div>
       {result.hits.length ? <Button type="button" size="sm" className="mt-3" onClick={() => onReviewHits(result.hits[0].id)}>Review {result.hits.length === 1 ? "the hit" : `${result.hits.length} hits`}</Button> : null}
     </section>

@@ -32,7 +32,7 @@ from tests.test_postgres_validation import (
 )
 
 pytestmark = pytest.mark.postgres
-_DERIVED = {"tags", "has_stay", "has_interim_order"}
+_DERIVED = {"tags", "has_stay", "has_interim_order", "court_website_url"}
 _QUERY_TABLES = Counter({
     ("matters",): 1,
     ("matter_tag_assignments", "matter_tags"): 1,
@@ -199,6 +199,8 @@ def _assert_record(record, expected, *, has_stay, has_interim):
     assert actual["tags"] == expected["tags"]
     assert actual["has_stay"] is has_stay
     assert actual["has_interim_order"] is has_interim
+    # The seeded court has no catalogue identity, so no official website.
+    assert actual["court_website_url"] is None
 
 
 @pytest.mark.parametrize("expire_on_commit", [False, True], ids=["retained", "expired"])

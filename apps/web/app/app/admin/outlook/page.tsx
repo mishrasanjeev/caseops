@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyField } from "@/components/ui/CopyField";
 import {
   Card,
   CardContent,
@@ -243,6 +244,31 @@ export default function AdminOutlookConfigurationPage() {
                   onChange={(value) => setForm((f) => ({ ...f, tenantId: value }))}
                   placeholder="organizations"
                 />
+                {query.data?.expected_redirect_uri ? (
+                  <div className="md:col-span-2" data-testid="outlook-expected-redirect">
+                    <CopyField
+                      id="outlook-redirect-uri-expected"
+                      label="Redirect URI to register in Microsoft Entra"
+                      value={query.data.expected_redirect_uri}
+                      description="Add it under Authentication > Web in the app registration, then save the same address below. This is the only address CaseOps's Microsoft sign-in returns to."
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          redirectUri: query.data?.expected_redirect_uri ?? f.redirectUri,
+                        }))
+                      }
+                      data-testid="outlook-use-expected-redirect"
+                    >
+                      Use this address
+                    </Button>
+                  </div>
+                ) : null}
                 <Field
                   id="outlook-redirect-uri"
                   label="Redirect URI"

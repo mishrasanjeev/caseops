@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import {
+  type BenchIdentityRecord,
   createBenchAlias,
   createJudgeAlias,
   listCuratorBenches,
@@ -73,6 +74,7 @@ export default function JudgeAliasesAdminPage() {
       queryClient.invalidateQueries({ queryKey: ["admin", "judge-aliases"] }),
       queryClient.invalidateQueries({ queryKey: ["admin", "judge-mapping-reviews"] }),
       queryClient.invalidateQueries({ queryKey: ["admin", "judge-curator-catalog"] }),
+      queryClient.invalidateQueries({ queryKey: ["admin", "bench-curator-catalog"] }),
     ]);
   };
 
@@ -142,6 +144,12 @@ export default function JudgeAliasesAdminPage() {
             <AliasForms
               judges={judgesQuery.data?.judges ?? []}
               benches={benchesQuery.data?.benches ?? []}
+              judgeStatus={catalogStatus(judgesQuery, deferredJudgeSearch)}
+              benchStatus={{
+                ...catalogStatus(benchesQuery, deferredBenchSearch),
+                courtsWithoutEntries: benchesQuery.data?.courts_without_benches ?? [],
+                courtsWithoutEntriesTotal: benchesQuery.data?.courts_without_benches_total ?? 0,
+              }}
               judgeSearch={judgeCatalogSearch}
               benchSearch={benchCatalogSearch}
               onJudgeSearch={setJudgeCatalogSearch}
@@ -154,6 +162,7 @@ export default function JudgeAliasesAdminPage() {
           <TabsContent value="merge">
             <MergeForm
               judges={judgesQuery.data?.judges ?? []}
+              status={catalogStatus(judgesQuery, deferredJudgeSearch)}
               search={judgeCatalogSearch}
               onSearch={setJudgeCatalogSearch}
               onChanged={refreshCuratorData}
@@ -334,6 +343,27 @@ function ReviewJudgeSelect({
         value={value}
         onChange={onChange}
         options={Array.from(options.values())}
+        status={
+          catalogQuery.data || catalogQuery.error || catalogQuery.fetchStatus !== "idle"
+            ? catalogStatus(catalogQuery, deferredSearch)
+            : {
+                // Nothing searched yet: the review's own candidates are the options.
+                isPending: false,
+                error: null,
+                onRetry: () => undefined,
+                search: "",
+                totalCount: review.candidates.length,
+                hasMore: false,
+              }
+        }
+        noun={{
+          ...JUDGE_NOUN,
+          searchHint: "Type at least two letters of the name to search this court's judges.",
+          emptyCatalog: review.court_id
+            ? "No candidate judge for this evidence. Type at least two letters of the name to search this court's canonical judges."
+            : "This evidence has no resolved court, so no canonical judge can be offered. Reprocess the authority once its court is catalogued.",
+        }}
+        testId={`review-catalog-${review.id}`}
       />
     </div>
   );
@@ -342,6 +372,8 @@ function ReviewJudgeSelect({
 function AliasForms({
   judges,
   benches,
+  judgeStatus,
+  benchStatus,
   judgeSearch,
   benchSearch,
   onJudgeSearch,
@@ -349,7 +381,9 @@ function AliasForms({
   onChanged,
 }: {
   judges: JudgeIdentityRecord[];
-  benches: { id: string; name: string; court_id: string }[];
+  benches: BenchIdentityRecord[];
+  judgeStatus: CatalogStatus;
+  benchStatus: CatalogStatus;
   judgeSearch: string;
   benchSearch: string;
   onJudgeSearch: (value: string) => void;
@@ -409,16 +443,17 @@ function AliasForms({
             value={judgeSearch}
             onChange={(event) => onJudgeSearch(event.target.value)}
             maxLength={120}
+            placeholder="Judge name or court"
           />
         </label>
         <CatalogSelect
           label="Canonical judge"
           value={judgeId}
           onChange={setJudgeId}
-          options={judges.map((judge) => ({
-            id: judge.id,
-            label: `${judge.full_name} · ${judge.court_id}`,
-          }))}
+          options={judges.map((judge) => ({ id: judge.id, label: judgeLabel(judge) }))}
+          status={judgeStatus}
+          noun={JUDGE_NOUN}
+          testId="judge-alias-catalog"
         />
         <label className={FIELD_CLASS}>
           Alias
@@ -468,6 +503,7 @@ function AliasForms({
             value={benchSearch}
             onChange={(event) => onBenchSearch(event.target.value)}
             maxLength={120}
+            placeholder="Court, seat city or bench"
           />
         </label>
         <CatalogSelect
@@ -476,8 +512,11 @@ function AliasForms({
           onChange={setBenchId}
           options={benches.map((bench) => ({
             id: bench.id,
-            label: `${bench.name} · ${bench.court_id}`,
+            label: `${bench.name} · ${bench.court_short_name}`,
           }))}
+          status={benchStatus}
+          noun={BENCH_NOUN}
+          testId="bench-alias-catalog"
         />
         <label className={FIELD_CLASS}>
           Alias
@@ -518,11 +557,13 @@ function AliasForms({
 
 function MergeForm({
   judges,
+  status,
   search,
   onSearch,
   onChanged,
 }: {
   judges: JudgeIdentityRecord[];
+  status: CatalogStatus;
   search: string;
   onSearch: (value: string) => void;
   onChanged: () => Promise<void>;
@@ -552,7 +593,7 @@ function MergeForm({
   });
   const options = judges.map((judge) => ({
     id: judge.id,
-    label: `${judge.full_name} · ${judge.court_id} · v${judge.record_version}`,
+    label: `${judgeLabel(judge)} · v${judge.record_version}`,
   }));
   return (
     <form
@@ -575,12 +616,18 @@ function MergeForm({
         value={sourceId}
         onChange={setSourceId}
         options={options}
+        status={status}
+        noun={JUDGE_NOUN}
+        testId="merge-source-catalog"
       />
       <CatalogSelect
         label="Canonical destination"
         value={destinationId}
         onChange={setDestinationId}
         options={options.filter((option) => option.id !== sourceId)}
+        status={status}
+        noun={JUDGE_NOUN}
+        testId="merge-destination-catalog"
       />
       <label className={`${FIELD_CLASS} lg:col-span-2`}>
         Merge reason
@@ -701,18 +748,132 @@ function AliasCatalog({ grouped }: { grouped: Map<string, JudgeAliasRecord[]> })
   );
 }
 
+type CatalogStatus = {
+  isPending: boolean;
+  error: unknown;
+  onRetry: () => void;
+  search: string;
+  totalCount: number;
+  hasMore: boolean;
+  // Bench catalogue only: courts the search names that hold no catalogued
+  // seat, as reported by the server with the same search.
+  courtsWithoutEntries?: { id: string; name: string }[];
+  courtsWithoutEntriesTotal?: number;
+};
+
+type CatalogNoun = {
+  singular: string;
+  plural: string;
+  searchHint: string;
+  emptyCatalog: string;
+  courtNotCatalogued?: string;
+};
+
+// Benches and judges are shared, server-owned catalogues. The picker states
+// why it is empty (nothing catalogued, nothing matches, or a failed read) and
+// how many rows the server holds, so an empty list is never a silent dead end.
+const BENCH_NOUN: CatalogNoun = {
+  singular: "canonical bench",
+  plural: "canonical benches",
+  searchHint:
+    "Search by court (Delhi), seat city (Nagpur) or bench name. A court that sits " +
+    "only at its principal seat lists one Principal Seat.",
+  emptyCatalog:
+    "No canonical benches are catalogued yet. Benches are a shared catalogue taken " +
+    "from official court sources and added with platform releases; ask your platform " +
+    "administrator to have the court's seats catalogued.",
+  courtNotCatalogued:
+    "Its seats have not been catalogued from an official court source yet, so no bench " +
+    "alias can be added for it. Ask your platform administrator to have its benches " +
+    "catalogued; do not record its aliases against another court's bench.",
+};
+
+const JUDGE_NOUN: CatalogNoun = {
+  singular: "canonical judge",
+  plural: "canonical judges",
+  searchHint: "Search by judge name or court.",
+  emptyCatalog:
+    "No canonical judges are catalogued yet. Judge identities come from official court " +
+    "rosters through the court sync and judge refresh jobs.",
+};
+
+function judgeLabel(judge: JudgeIdentityRecord): string {
+  return `${judge.full_name} · ${judge.court_short_name ?? judge.court_id}`;
+}
+
+function catalogStatus(
+  query: {
+    isPending: boolean;
+    error: unknown;
+    refetch: () => unknown;
+    data?: { returned_count: number; total_count?: number; has_more: boolean };
+  },
+  search: string,
+): CatalogStatus {
+  return {
+    isPending: query.isPending,
+    error: query.error,
+    onRetry: () => void query.refetch(),
+    search,
+    totalCount: query.data?.total_count ?? query.data?.returned_count ?? 0,
+    hasMore: query.data?.has_more ?? false,
+  };
+}
+
+function uncataloguedCourtNames(status: CatalogStatus): string {
+  const courts = status.courtsWithoutEntries ?? [];
+  const total = Math.max(status.courtsWithoutEntriesTotal ?? 0, courts.length);
+  const names = courts.map((court) => court.name).join(", ");
+  return total > courts.length ? `${names} and ${total - courts.length} more` : names;
+}
+
+function catalogMessage(
+  status: CatalogStatus,
+  noun: CatalogNoun,
+  optionCount: number,
+): string {
+  if (status.isPending) return `Loading ${noun.plural}…`;
+  if (status.error) return `The ${noun.plural} could not be loaded.`;
+  if (optionCount === 0) {
+    if (noun.courtNotCatalogued && (status.courtsWithoutEntries ?? []).length > 0) {
+      return `No ${noun.plural} are catalogued for ${uncataloguedCourtNames(status)} yet. ${noun.courtNotCatalogued}`;
+    }
+    return status.search
+      ? `No ${noun.singular} matches “${status.search}”. ${noun.searchHint}`
+      : noun.emptyCatalog;
+  }
+  if (status.hasMore) {
+    return `Showing ${optionCount} of ${status.totalCount} ${noun.plural}. Refine the search to reach the rest.`;
+  }
+  return `${optionCount} of ${Math.max(status.totalCount, optionCount)} ${noun.plural} shown. ${noun.searchHint}`;
+}
+
 function CatalogSelect({
   label,
   value,
   onChange,
   options,
+  status,
+  noun,
+  testId,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { id: string; label: string }[];
+  status: CatalogStatus;
+  noun: CatalogNoun;
+  testId: string;
 }) {
   const controlId = useId();
+  const statusId = useId();
+  const placeholder = status.isPending
+    ? `Loading ${noun.plural}…`
+    : status.error
+      ? `Could not load ${noun.plural}`
+      : options.length === 0
+        ? `No matching ${noun.plural}`
+        : "Select";
   return (
     <div className={FIELD_CLASS}>
       <label htmlFor={controlId}>{label}</label>
@@ -721,14 +882,45 @@ function CatalogSelect({
         className={SELECT_CLASS}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        aria-describedby={statusId}
+        data-testid={`${testId}-select`}
       >
-        <option value="">Select</option>
+        <option value="">{placeholder}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.label}
           </option>
         ))}
       </select>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <p
+          id={statusId}
+          role="status"
+          data-testid={`${testId}-status`}
+          className={`min-w-0 font-normal ${
+            status.error ? "text-[var(--color-danger-700)]" : "text-[var(--color-mute)]"
+          }`}
+        >
+          {catalogMessage(status, noun, options.length)}
+        </p>
+        {!status.isPending &&
+        !status.error &&
+        options.length > 0 &&
+        noun.courtNotCatalogued &&
+        (status.courtsWithoutEntries ?? []).length > 0 ? (
+          <p
+            data-testid={`${testId}-uncatalogued`}
+            className="min-w-0 font-normal text-[var(--color-mute)]"
+          >
+            {`No ${noun.plural} are catalogued yet for ${uncataloguedCourtNames(status)}.`}
+          </p>
+        ) : null}
+        {status.error ? (
+          <Button type="button" variant="ghost" size="sm" onClick={status.onRetry}>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Retry
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

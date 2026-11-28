@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 767, "app-mobile": 70}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 750, "app-mobile": 60}
+APP_PROJECT_COUNTS = {"app-chromium": 792, "app-mobile": 74}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 775, "app-mobile": 64}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -137,6 +137,18 @@ NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
 NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
 NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
+NOV27_OCR_FILE = "ram-2026-11-27-ocr-images.spec.ts"
+NOV27_BENCH_STATUTES_FILE = "bugs7-2026-11-27-bench-statutes.spec.ts"
+# November 27 workbook Case Tracking rows 6 and 10 (read-only as test-legal).
+NOV27_TRACKING_FILE = "ram-2026-11-27-case-tracking.spec.ts"
+# November 27 workbook rows 2-3: matter notice form validation.
+NOV27_NOTICE_FILE = "notice-validation-2026-11-27.spec.ts"
+# November 27 workbook ENH-001 (branded, verifiable billing PDFs).
+NOV27_INVOICE_FILE = "ram-2026-11-27-invoice-branding.spec.ts"
+# November 27 workbook rows 5, 7, 8, 9 (nova-legal report; production as test-legal).
+NOV27_MATTER_FILE = "nova-2026-11-27-matter.spec.ts"
+# November 27 workbook BUG-003 (test-legal): KYC documents are uploaded files.
+NOV27_KYC_FILE = "ram-2026-11-27-kyc-documents.spec.ts"
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -263,6 +275,119 @@ APP_REQUIRED_CASES = (
     )),
     ("app-mobile", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded JPG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded JPEG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_OCR_FILE, (
+        NOV27_OCR_FILE, "BUG-001 OCR reads an uploaded PNG image instead of page_missing",
+    )),
+    ("app-chromium", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "row 1 the Canonical bench picker offers the searched court's benches",
+    )),
+    ("app-chromium", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "row 4 a disabled Act says why, and a verified provision still attaches",
+    )),
+    ("app-mobile", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "[mobile] row 1 the Canonical bench picker offers the searched court's benches",
+    )),
+    ("app-mobile", NOV27_BENCH_STATUTES_FILE, (
+        NOV27_BENCH_STATUTES_FILE,
+        "[mobile] row 4 a disabled Act says why, and a verified provision still attaches",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE, "row 6 bookmark search finds a Matter Code on an unloaded page",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE,
+        "row 10 delete bookmark icon shows its tooltip on hover and keyboard focus",
+    )),
+    ("app-chromium", NOV27_TRACKING_FILE, (
+        NOV27_TRACKING_FILE, "[local-only] row 10 delete bookmark still deletes the bookmark",
+    )),
+    ("app-chromium", NOV27_NOTICE_FILE, (
+        NOV27_NOTICE_FILE,
+        "row 2 Notice Received refuses incomplete details and creates nothing",
+    )),
+    ("app-chromium", NOV27_NOTICE_FILE, (
+        NOV27_NOTICE_FILE,
+        "row 3 Notice Sent refuses invalid details and files, and handles duplicates",
+    )),
+    ("app-chromium", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 [local-only] admin uploads a logo and signature and the issued invoice carries "
+        "both with a verifiable QR code",
+    )),
+    ("app-chromium", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 draft invoice PDF carries the letterhead, DRAFT watermark and a QR code that "
+        "verifies until voided",
+    )),
+    ("app-mobile", NOV27_INVOICE_FILE, (
+        NOV27_INVOICE_FILE,
+        "ENH-001 [mobile] draft invoice QR code verifies and the verification page fits a phone",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 5 court badge opens the official court website in a new tab",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 5 a court without a verified website is plain text, not a dead link",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 7 mock hearing shows its prerequisites, runs affidavit intelligence, then starts",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 8 Microsoft 365 setup shows the redirect URI the flow uses and tenant ID guidance",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 8 [local-only] saving valid values and Test reports a complete setup",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366x768",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1280x720",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1920x1080",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 80%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 125%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 sidebar stays fixed and scrolls independently at 1366 at 150%",
+    )),
+    ("app-chromium", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "row 9 full-height pages keep the sidebar fixed without horizontal overflow",
+    )),
+    ("app-mobile", NOV27_MATTER_FILE, (
+        NOV27_MATTER_FILE,
+        "[mobile] row 9 the phone navigation drawer still opens and scrolls to its last item",
+    )),
+    ("app-chromium", NOV27_KYC_FILE, (
+        NOV27_KYC_FILE,
+        "BUG-003 upload PAN and masked Aadhaar, re-submit, open each document and approve",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete
@@ -430,6 +555,43 @@ BATCH4_MANDATORY_CASES = {
         (_B4("governance-ui"), "[mobile] BUG-005 governance card controls fit 393px with a "
          "computed source hash"),
     )),
+}
+# Nov 27 workbook production roles, run by prod-verify as the test-legal tester
+# in this order. Each role owes exactly the App-pinned cases of its file at its
+# width, less the [local-only] ones its prod-ram project never selects.
+NOV27_CONTRACT_VERSION = 1
+NOV27_ROLES = {
+    "nov27-tracking": ("nov27-tracking-prod-chromium", NOV27_TRACKING_FILE, "app-chromium"),
+    "nov27-ocr": ("nov27-ocr-prod-chromium", NOV27_OCR_FILE, "app-chromium"),
+    "nov27-statutes-desktop": (
+        "nov27-statutes-prod-chromium", NOV27_BENCH_STATUTES_FILE, "app-chromium",
+    ),
+    "nov27-statutes-mobile": (
+        "nov27-statutes-prod-mobile", NOV27_BENCH_STATUTES_FILE, "app-mobile",
+    ),
+    "nov27-notices": ("nov27-notices-prod-chromium", NOV27_NOTICE_FILE, "app-chromium"),
+    "nov27-invoice-desktop": ("nov27-invoice-prod-chromium", NOV27_INVOICE_FILE, "app-chromium"),
+    "nov27-invoice-mobile": ("nov27-invoice-prod-mobile", NOV27_INVOICE_FILE, "app-mobile"),
+    "nov27-matter-desktop": ("nov27-matter-prod-chromium", NOV27_MATTER_FILE, "app-chromium"),
+    "nov27-matter-mobile": ("nov27-matter-prod-mobile", NOV27_MATTER_FILE, "app-mobile"),
+    "nov27-kyc": ("nov27-kyc-prod-chromium", NOV27_KYC_FILE, "app-chromium"),
+}
+# prod-verify matrix suites; each stays well inside the 38-minute job bound
+# (the OCR role alone may wait on the document-processing cadence).
+NOV27_PARTITIONS = {
+    "nov27-a": ("nov27-tracking", "nov27-ocr"),
+    "nov27-b": (
+        "nov27-statutes-desktop", "nov27-statutes-mobile", "nov27-notices",
+        "nov27-invoice-desktop", "nov27-invoice-mobile", "nov27-matter-desktop",
+        "nov27-matter-mobile", "nov27-kyc",
+    ),
+}
+NOV27_MANDATORY_CASES = {
+    invocation: (project, tuple(
+        (name, title_path[-1]) for app, name, title_path in APP_REQUIRED_CASES
+        if app == app_project and name == file and "[local-only]" not in title_path[-1]
+    ))
+    for invocation, (project, file, app_project) in NOV27_ROLES.items()
 }
 GOVERNANCE_STATE = Path("deploy/ip-rule-governance-state.json")
 GOVERNANCE_STATE_KEYS = {
@@ -935,6 +1097,40 @@ def _check_batch4_evidence(binding, document, *, execution=False):
         return
     project, cases = expected
     _check_mandatory_cases("batch4", project, cases, binding, document, execution=execution)
+
+
+def _check_nov27_evidence(binding, document, *, execution=False):
+    expected = NOV27_MANDATORY_CASES.get(binding["invocation"])
+    if expected is None:
+        if binding["invocation"].startswith("nov27") or binding.get("project") in {
+            project for project, _, _ in NOV27_ROLES.values()
+        }:
+            raise EvidenceError("unreviewed_nov27_invocation")
+        return
+    project, cases = expected
+    _check_mandatory_cases("nov27", project, cases, binding, document, execution=execution)
+
+
+def nov27_contract(root: Path):
+    """Prove the serving checkout owns every Nov 27 spec and production project."""
+    for file in dict.fromkeys(file for _, file, _ in NOV27_ROLES.values()):
+        path = root / "tests/e2e" / file
+        if path.is_symlink() or not path.is_file():
+            raise EvidenceError("missing_or_linked_nov27_source")
+    config = root / "playwright.prod-ram.config.ts"
+    if config.is_symlink() or not config.is_file():
+        raise EvidenceError("missing_or_linked_nov27_source")
+    source = config.read_text(encoding="utf-8")
+    roles = {}
+    for invocation, (project, _, _) in NOV27_ROLES.items():
+        cases = NOV27_MANDATORY_CASES[invocation][1]
+        if source.count(f'name: "{project}"') != 1 or not cases:
+            raise EvidenceError("unreviewed_nov27_role")
+        roles[invocation] = {"project": project, "cases": len(cases)}
+    if sorted(role for members in NOV27_PARTITIONS.values() for role in members) != sorted(roles):
+        raise EvidenceError("unreviewed_nov27_partition")
+    return {"nov27_contract": NOV27_CONTRACT_VERSION, "partitions": NOV27_PARTITIONS,
+            "roles": roles}
 
 
 def batch4_governance_state(root: Path) -> bool:
@@ -1632,6 +1828,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
         _write(destination / "discovery.json", discovery)
         _check_batch3_evidence(binding, discovery)
         _check_batch4_evidence(binding, discovery)
+        _check_nov27_evidence(binding, discovery)
         _check_notes22_evidence(binding, discovery)
         partition = _tester_partition(binding)
         app_partition = _app_project_partition(binding)
@@ -1715,6 +1912,7 @@ def run(root: Path, invocation: str, args, env=None, launch=subprocess.run) -> i
             _check_batch5_selection(binding, result, canonical, execution=True)
         _check_batch3_evidence(binding, result, execution=True)
         _check_batch4_evidence(binding, result, execution=True)
+        _check_nov27_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, result, execution=True)
         if (
             process.returncode < 0
@@ -2131,6 +2329,8 @@ def validate(root: Path, required, expected: str) -> None:
         _check_batch3_evidence(binding, result, execution=True)
         _check_batch4_evidence(binding, discovery)
         _check_batch4_evidence(binding, result, execution=True)
+        _check_nov27_evidence(binding, discovery)
+        _check_nov27_evidence(binding, result, execution=True)
         _check_notes22_evidence(binding, discovery)
         _check_notes22_evidence(binding, result, execution=True)
         _junit(directory / "native-results.xml", None, {}, result)
@@ -2285,6 +2485,7 @@ def main() -> int:
     contract.add_argument("--required-version", type=int, choices=[TESTER_PARTITION_CONTRACT])
     modes.add_parser("batch4-governance")
     modes.add_parser("batch5-contract")
+    modes.add_parser("nov27-contract")
     options = parser.parse_args()
     try:
         if options.mode == "tester-partition-contract":
@@ -2301,6 +2502,9 @@ def main() -> int:
             print(json.dumps({"batch5_contract": BATCH5_CONTRACT_VERSION, "files": counts,
                               "roles": BATCH5_PROJECTS, "proof_scopes": BATCH5_PROOF_SCOPES,
                               "case_proof_scopes": BATCH5_CASE_PROOF_SCOPES}))
+            return 0
+        if options.mode == "nov27-contract":
+            print(json.dumps(nov27_contract(ROOT)))
             return 0
         if options.mode == "validate":
             validation = (

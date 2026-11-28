@@ -1,3 +1,93 @@
+## November 28 - workbooks "CaseOps_Bugs(ll) (1)" (Ram, test-legal, 4 rows) and "Caseops Bugs (4)" (nova-legal, 10 rows), 27 Nov
+
+Branch `fix/bugs7-20261127` (seven fix lanes, an independent review of the
+integrated diff, five review follow-up lanes). Production specs sign in only as
+the test-legal tester (owner decision 2026-11-27). Every row stays
+Inconclusive until its `nov27-*-prod-*` project passes on the deployed release.
+
+Triage and fixes:
+
+- Ram BUG-001 OCR fails for JPG/JPEG/PNG with page_missing - valid bug. Images
+  were uploaded to Sarvam as `page-1.<ext>`; the archive's primary JSON
+  `page-1.<ext>/page-1.json` matched the per-page regex, was not page-shaped,
+  and was dropped. Images now use the `pages-<first>-<last>` naming that the
+  2026-11-26 live PDF run proved, per-page files are read only from
+  `metadata/`, and a non-page-shaped match falls back to primary parsing.
+  `test_document_renditions_image_ocr_20261127.py` (25 of 27 failed on old
+  code), emulator journey `ram-2026-11-27-ocr-images.spec.ts` (3/3 failed on
+  old code). Production automation can only assert the no-paid block; a
+  signed-in owner OCR of the reported JPG is required before closure.
+- Ram BUG-002 13 OCR source languages - valid; owned by PR #676 (not in this
+  branch). Provider research: Sarvam OCR supports all 13; Google
+  translation-llm lacks Assamese and has Odia only as experimental.
+- Ram BUG-003 KYC accepts only document names - valid bug. New
+  `client_kyc_documents` (20261127_0001): typed files through the Matter upload
+  checks, ClamAV, quota and a never-indexed `client-kyc` namespace. Submit,
+  matter verification PATCH and portal submit require PAN plus an
+  identity/address proof; approval must name every current file, refuses a
+  changed pack, and (review follow-up) refuses files this reviewer has not
+  opened since upload (audit-backed, every path). UNDER_REVIEW also needs the
+  pack. Full Aadhaar refused in KYC text and rejection reasons, masked in
+  PAN/GSTIN, legacy JSON and file names. The PDF preview had never rendered
+  (app CSP blocked the iframe; the e2e only asserted visibility); it now uses
+  the shared pdf.js viewer and the e2e asserts the rendered canvas and text.
+  Siblings: create/PATCH can no longer set workflow statuses; the portal can
+  no longer reset a verified client.
+- Ram ENH-001 professional, verifiable invoices and receipts - valid
+  enhancement. One `render_billing_document` layout for matter invoices,
+  receipts, outside-counsel invoices and the CaseOps invoice/statement:
+  letterhead, status watermark, authorised signatory, QR to `/verify/<token>`
+  (20261127_0002; token SHA-256 and PDF SHA-256 only). Review follow-up: draft
+  and review copies verify as "Not an issued document" (one issued-status
+  set shared with the watermark and signature); counsel GSTIN/PAN validated;
+  unprintable text refused at save; first branding save race-safe. Fixed-fee
+  lines print type and amount; SaaS money prints as currency.
+- nova row 1 bench alias picker empty - valid bug. No bench row existed in any
+  environment. 20261127_0006 seeds every seat of each migrated High Court from
+  the eCourts bench list (single-seat courts as one Principal Seat) and fails
+  on a missing parent court; picker and validator share
+  `curatable_bench_predicate`; a searched court with no catalogued seat is
+  named with the next step. Allahabad, Calcutta, Gauhati court rows: owner
+  decision (no migration creates them).
+- nova row 2 Notice Received accepts incomplete details, row 3 Notice Sent
+  accepts invalid inputs - valid bugs. `services/notice_rules.py` is the one
+  rule set for all four notice writers (matter upload, matter PATCH, register
+  create, register PATCH); typed invalid dates are refused (browsers complete
+  "023020" to year 0020). Duplicates: same bytes 409; same details 409 with an
+  audited override, on create and on both PATCH paths, across both stores,
+  serialized on PostgreSQL. Allow-list and size cap come from one API policy.
+  Siblings: reversed date ranges refused on invoice, contract, billing-rate,
+  outside-counsel invoice and OC spend create.
+- nova row 4 disabled Act gives no reason - valid UX defect (repeat of the
+  Nov 26 data gap): the picker now says why an Act is disabled, and a verified
+  provision still attaches; recommendations use the verified-section rule.
+- nova row 5 court badge not clickable - valid enhancement. 20261127_0007 adds
+  official website URLs (https on .gov.in/.nic.in only) from catalogue
+  identity, never display text; one `CourtName` component everywhere.
+- nova row 6 bookmark search misses unloaded pages - valid bug. Server-side
+  q/limit/cursor search, wall-aware Matter code.
+- nova row 7 Start Session fails on missing affidavit run - valid bug. Read-only
+  `/mock-hearing-readiness` uses the start path's checks; Start is disabled
+  until ready; review follow-up: a run predating readable or changed text is
+  offered as a re-run instead of a dead-end "upload".
+- nova row 8 Microsoft 365 setup lacks Tenant ID and Redirect URI details -
+  valid bug, Partially fixed: server-computed Redirect URI equal to the
+  Outlook flow's, GUID/domain validation, truthful copy. No Microsoft 365
+  OAuth flow consumes this configuration (owner decision).
+- nova row 9 sidebar scrolls with the page - valid bug. Fixed to the viewport
+  with its own scroll; geometry proven at four sizes and three zoom levels.
+- nova row 10 delete bookmark icon has no tooltip - valid bug. Shared
+  `Tooltip`/`IconButton`, 90 icon-only sites swept, and
+  `lib/icon-only-controls.test.ts` fails on any new unlabeled icon control (it
+  caught two KYC buttons during integration).
+
+Open owner decisions: global alias writes via `court_sync:run` for any
+tenant's staff; portal users not bound to one client (co-client KYC); KYC files
+not wall-aware; `internal_notes` Aadhaar; Allahabad/Calcutta/Gauhati court
+rows; Microsoft 365 OAuth flow; GSTIN checksum; KYC required-document set.
+
+Verdicts (recorded after production verification): pending.
+
 ## November 26 - workbook "Caseops Bugs (2)" (25 Nov, three rows, nova-legal)
 
 Triage (all three reproduce on production release 1ed725ce2 and on main):

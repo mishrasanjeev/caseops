@@ -16,6 +16,7 @@ import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   fetchIpRenewalTracker,
@@ -69,10 +70,10 @@ export function PortfolioDateEditButton({ row, onEdit, disabled = false }: {
   const canWrite = useCapability("ip:write");
   if (!canWrite) return null;
   return (
-    <Button size="sm" variant="ghost" aria-label={`Edit dates for ${row.docket_title}`} title="Edit dates"
+    <IconButton label={`Edit dates for ${row.docket_title}`} size="sm" variant="ghost"
       disabled={disabled} onClick={() => onEdit(row)}>
       <Pencil className="h-4 w-4" aria-hidden />
-    </Button>
+    </IconButton>
   );
 }
 
@@ -191,15 +192,15 @@ export function IpPortfolioRenewalTracker({ category, query = null, dateFilters 
               {CATEGORIES.map(([key, title]) => <SelectItem key={key} value={key}>{title}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button size="sm" className="h-9 w-9 shrink-0 p-0" variant="outline" aria-label="Refresh deadline tracker" title="Refresh deadline tracker"
-            disabled={listing.isFetching} onClick={() => listing.refetch()}><RefreshCw className="h-4 w-4" aria-hidden /></Button>
+          <IconButton label="Refresh deadline tracker" size="sm" className="h-9 w-9 shrink-0 p-0" variant="outline"
+            disabled={listing.isFetching} onClick={() => listing.refetch()}><RefreshCw className="h-4 w-4" aria-hidden /></IconButton>
         </div>
       </div>
       <form className="flex w-full min-w-0 gap-2" onSubmit={(event) => { event.preventDefault(); onQueryChange(searchDraft.trim() || null); }}>
         <div className="min-w-0 flex-1"><Label htmlFor="ip-renewal-tracker-search" className="sr-only">Search renewal tracker</Label>
           <Input id="ip-renewal-tracker-search" maxLength={200} value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} />
         </div>
-        <Button type="submit" variant="outline" aria-label="Search renewal tracker"><Search className="h-4 w-4" aria-hidden /></Button>
+        <IconButton label="Search renewal tracker" type="submit" variant="outline"><Search className="h-4 w-4" aria-hidden /></IconButton>
       </form>
       {onDateFiltersChange ? <div className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
         {([

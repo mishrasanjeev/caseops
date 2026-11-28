@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import { listRecipientNotifications, updateRecipientNotification, type RecipientNotification } from "@/lib/api/in-app-notifications";
 
@@ -58,8 +59,8 @@ export function InAppNotificationCenter({ docketId, membershipId }: { docketId: 
         </li>)}
       </ul>
       <div className="flex items-center gap-2">
-        <Button type="button" size="sm" variant="ghost" aria-label="Previous alerts" title="Previous alerts" disabled={cursors.length === 1 || query.isFetching} onClick={() => setCursors((current) => current.slice(0, -1))}><ArrowLeft className="h-4 w-4" aria-hidden /></Button>
-        <Button type="button" size="sm" variant="ghost" aria-label="Next alerts" title="Next alerts" disabled={!query.data?.next_cursor || query.isFetching} onClick={() => setCursors((current) => [...current, query.data!.next_cursor])}><ArrowRight className="h-4 w-4" aria-hidden /></Button>
+        <IconButton label="Previous alerts" type="button" size="sm" variant="ghost" disabled={cursors.length === 1 || query.isFetching} onClick={() => setCursors((current) => current.slice(0, -1))}><ArrowLeft className="h-4 w-4" aria-hidden /></IconButton>
+        <IconButton label="Next alerts" type="button" size="sm" variant="ghost" disabled={!query.data?.next_cursor || query.isFetching} onClick={() => setCursors((current) => [...current, query.data!.next_cursor])}><ArrowRight className="h-4 w-4" aria-hidden /></IconButton>
       </div>
       </TabsContent>
       </Tabs>

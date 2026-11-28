@@ -30,6 +30,12 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateMatterBillingProfile: updateMatterBillingProfileMock,
 }));
 
+// ENH-001: the branding card on this page has its own test; keep it inert here.
+vi.mock("@/components/billing/DocumentBrandingCard", () => ({
+  DocumentBrandingCard: () => null,
+  documentBrandingKey: ["admin", "document-branding"],
+}));
+
 vi.mock("@/lib/capabilities", () => ({
   useCapability: useCapabilityMock,
 }));
@@ -173,6 +179,22 @@ describe("AdminMatterBillingPage", () => {
     expect(updateMatterBillingProfileMock.mock.calls[0][0].body).not.toHaveProperty(
       "next_invoice_sequence",
     );
+  });
+
+  it("ENH-001 refreshes the invoice letterhead after the firm name is saved", async () => {
+    const client = makeClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />, client));
+    const save = screen.getByRole("button", { name: /Save default profile/i });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.clear(screen.getByLabelText("Firm legal name"));
+    await user.type(screen.getByLabelText("Firm legal name"), "Gupta Legal Chambers LLP");
+    await user.click(save);
+    await waitFor(() => expect(updateMatterBillingProfileMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["admin", "document-branding"], exact: true,
+    }));
   });
 
   it("creates a default billing profile when none exists yet", async () => {

@@ -13,7 +13,13 @@ from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session, joinedload, lazyload, raiseload, selectinload
+from sqlalchemy.orm import (
+    Session,
+    joinedload,
+    lazyload,
+    raiseload,
+    selectinload,
+)
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -26,7 +32,6 @@ from caseops_api.db.models import (
     DocumentProcessingJob,
     DocumentProcessingJobStatus,
     DocumentProcessingTargetType,
-    ForumCatalogAlias,
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
@@ -117,6 +122,10 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.billing_document_verification import (
+    SOURCE_MATTER_INVOICE,
+    revoke_verifications,
+)
 from caseops_api.services.calendar_projection_safety import (
     calendar_sync_upsert_claim_state,
     materialize_expired_calendar_sync_upsert_claim,
@@ -133,8 +142,8 @@ from caseops_api.services.document_storage import (
     sanitize_filename,
 )
 from caseops_api.services.forum_catalog import (
-    forum_entry_identity_keys,
-    normalize_forum_catalog_value,
+    active_entries_matching_name,
+    matter_court_website_urls,
 )
 from caseops_api.services.matter_access import (
     _operational_ip_docket_role_membership_ids,
@@ -158,6 +167,14 @@ from caseops_api.services.matter_write_fence import (
     require_read_only_upload_session,
 )
 from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
+from caseops_api.services.notice_rules import (
+    NoticeState,
+    attachment_notice_duplicate_key,
+    new_notice_violations,
+    notice_duplicate_conflict,
+    notice_rule_violations,
+    raise_notice_violations,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import (
     StorageQuotaExceeded,
@@ -374,7 +391,20 @@ def _matter_record(matter: Matter) -> MatterRecord:
     orders = list(getattr(matter, "court_orders", []) or [])
     record.has_stay = any(_order_has_active_stay(order) for order in orders)
     record.has_interim_order = any(_order_is_interim(order) for order in orders)
+    # court_website_url stays None here: mutation responses and dashboards do
+    # not render the court badge, and resolving it per record would add
+    # catalogue queries to every pinned matter read. Badge read paths call
+    # _with_court_websites, one batched lookup per response.
     return record
+
+
+def _with_court_websites(
+    session: Session, pairs: list[tuple[Matter, MatterRecord]]
+) -> list[MatterRecord]:
+    urls = matter_court_website_urls(session, [matter for matter, _ in pairs])
+    for matter, record in pairs:
+        record.court_website_url = urls[matter.id]
+    return [record for _, record in pairs]
 
 
 def _clean_optional_str(value: str | None) -> str | None:
@@ -559,29 +589,10 @@ def _resolve_forum_selection(
         }
 
     if clean_court_name:
-        normalized_court_name = normalize_forum_catalog_value(clean_court_name)
         alias_candidates = [
             candidate
-            for candidate in session.scalars(
-                select(ForumCatalogEntry)
-                .options(selectinload(ForumCatalogEntry.aliases))
-                .where(
-                    ForumCatalogEntry.is_active.is_(True),
-                    or_(
-                        ForumCatalogEntry.normalized_name == normalized_court_name,
-                        ForumCatalogEntry.id.in_(
-                            select(ForumCatalogAlias.forum_catalog_entry_id).where(
-                                ForumCatalogAlias.normalized_alias == normalized_court_name,
-                                ForumCatalogAlias.is_active.is_(True),
-                                ForumCatalogAlias.verification_status == "verified",
-                            )
-                        ),
-                    ),
-                )
-                .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
-            )
-            if normalized_court_name in forum_entry_identity_keys(candidate)
-            and (not clean_forum_level or candidate.forum_level == clean_forum_level)
+            for candidate in active_entries_matching_name(session, clean_court_name)
+            if (not clean_forum_level or candidate.forum_level == clean_forum_level)
             and (not clean_state or (candidate.state or "").casefold() == clean_state.casefold())
             and (
                 not clean_district
@@ -970,6 +981,112 @@ def _clean_notice_document_role(value: str | None) -> str | None:
             detail="Notice document role must be notice, reply, or supporting.",
         )
     return cleaned
+
+
+def _is_primary_notice_role(role: str | None, parent_attachment_id: str | None) -> bool:
+    return (role or "notice") == "notice" and not parent_attachment_id
+
+
+def _is_primary_notice_attachment(attachment: MatterAttachment) -> bool:
+    return attachment.document_type == "notice" and _is_primary_notice_role(
+        attachment.notice_document_role, attachment.notice_parent_attachment_id,
+    )
+
+
+def _attachment_notice_state(attachment: MatterAttachment) -> NoticeState:
+    return NoticeState(
+        direction=attachment.notice_direction or "received",
+        subject=attachment.notice_subject,
+        notice_type=attachment.notice_type,
+        received_on=attachment.notice_received_on,
+        sent_on=attachment.notice_sent_on,
+        reply_required=bool(attachment.notice_reply_required),
+        reply_sent=bool(attachment.notice_reply_sent),
+        reply_due_on=attachment.notice_reply_due_on,
+        reply_sent_on=attachment.notice_reply_sent_on,
+        amount_minor=attachment.notice_amount_minor,
+        dispute_amount_minor=attachment.notice_dispute_amount_minor,
+        recovered_amount_minor=attachment.notice_recovered_amount_minor,
+    )
+
+
+def _notice_business_date(attachment: MatterAttachment) -> date | None:
+    if (attachment.notice_direction or "received") == "sent":
+        return attachment.notice_sent_on
+    return attachment.notice_received_on
+
+
+def _assert_notice_not_duplicate(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    attachment: MatterAttachment,
+    allow_duplicate: bool,
+    check_same_file: bool = True,
+) -> str | None:
+    """Refuse a primary notice already on this matter.
+
+    Returns the matched notice ID when the caller overrode a same-details match.
+    "On this matter" covers both stores the matter Notices view lists: the
+    matter's own notice attachments and register notices linked to it.
+
+    Called under the exclusive Matter lock taken by every notice writer on this
+    matter (upload, metadata PATCH, and register writes that link it), so two
+    concurrent identical writes serialize and the second sees the first.
+    """
+    from caseops_api.services.notices import (
+        register_notice_duplicate_conflict,
+        register_notice_duplicate_on_matter,
+    )
+
+
+    existing = list(
+        session.scalars(
+            select(MatterAttachment)
+            .where(
+                MatterAttachment.matter_id == matter_id,
+                MatterAttachment.document_type == "notice",
+                MatterAttachment.notice_parent_attachment_id.is_(None),
+                or_(
+                    MatterAttachment.notice_document_role.is_(None),
+                    MatterAttachment.notice_document_role == "notice",
+                ),
+                MatterAttachment.id != attachment.id,
+            )
+            .order_by(MatterAttachment.created_at.asc(), MatterAttachment.id.asc())
+        )
+    )
+
+    def conflict(kind: str, row: MatterAttachment) -> HTTPException:
+        return notice_duplicate_conflict(
+            kind=kind,
+            existing_id=row.id,
+            existing_subject=row.notice_subject,
+            existing_direction=row.notice_direction or "received",
+            existing_date=_notice_business_date(row),
+            existing_filename=row.original_filename,
+            existing_matter_id=matter_id,
+        )
+
+    if check_same_file:
+        for row in existing:
+            if row.sha256_hex == attachment.sha256_hex:
+                raise conflict("same_file", row)
+    key = attachment_notice_duplicate_key(attachment)
+    for row in existing:
+        if attachment_notice_duplicate_key(row) == key:
+            if allow_duplicate:
+                return row.id
+            raise conflict("same_details", row)
+    register_row = register_notice_duplicate_on_matter(
+        session, context=context, matter_id=matter_id, key=key,
+    )
+    if register_row is not None:
+        if allow_duplicate:
+            return register_row.id
+        raise register_notice_duplicate_conflict(register_row)
+    return None
 
 
 def _notice_reply_tracking_status(
@@ -2435,7 +2552,9 @@ def list_matters(
     next_cursor = encode_cursor(rows[-1].updated_at, rows[-1].id) if has_more and rows else None
     return MatterListResponse(
         company_id=context.company.id,
-        matters=[_matter_record(matter) for matter in rows],
+        matters=_with_court_websites(
+            session, [(matter, _matter_record(matter)) for matter in rows]
+        ),
         next_cursor=next_cursor,
         total_count=total_count,
     )
@@ -2726,7 +2845,8 @@ def list_matter_hearing_follow_up(
 
 
 def get_matter(session: Session, *, context: SessionContext, matter_id: str) -> MatterRecord:
-    return _matter_record(_get_matter_model(session, context=context, matter_id=matter_id))
+    matter = _get_matter_model(session, context=context, matter_id=matter_id)
+    return _with_court_websites(session, [(matter, _matter_record(matter))])[0]
 
 
 def matter_code_available(
@@ -3903,7 +4023,7 @@ def get_matter_workspace(
         if membership.is_active and membership.user.is_active
     ]
     return MatterWorkspaceResponse(
-        matter=_matter_record(matter),
+        matter=_with_court_websites(session, [(matter, _matter_record(matter))])[0],
         assignee=(
             _membership_summary(matter.assignee_membership) if matter.assignee_membership else None
         ),
@@ -5930,6 +6050,7 @@ def create_matter_attachment(
     sequence_index: int | None = None,
     linked_court_order_id: str | None = None,
     hearing_id: str | None = None,
+    allow_duplicate: bool = False,
 ) -> tuple[MatterAttachmentRecord, str]:
     from caseops_api.services.compliance_participants import lock_compliance_participants
     from caseops_api.services.identity import get_session_context
@@ -5937,6 +6058,30 @@ def create_matter_attachment(
     require_read_only_upload_session(
         session, detail="Matter upload requires a read-only session before its I/O boundary.",
     )
+    primary_notice = document_type == "notice" and _is_primary_notice_role(
+        _clean_notice_document_role(notice_document_role), notice_parent_attachment_id,
+    )
+    if primary_notice:
+        # Refuse an incomplete or contradictory notice before any lock or byte
+        # I/O. The Notices form, the Documents upload and any API client all
+        # reach this one check.
+        notice_state = NoticeState(
+            direction=_clean_notice_direction(notice_direction) or "received",
+            subject=notice_subject,
+            notice_type=notice_type,
+            received_on=notice_received_on,
+            sent_on=notice_sent_on,
+            reply_required=bool(notice_reply_required),
+            reply_sent=bool(notice_reply_sent),
+            reply_due_on=notice_reply_due_on,
+            reply_sent_on=notice_reply_sent_on,
+            amount_minor=notice_amount_minor,
+            dispute_amount_minor=notice_dispute_amount_minor,
+            recovered_amount_minor=notice_recovered_amount_minor,
+        )
+        raise_notice_violations(
+            notice_rule_violations(notice_state), field_prefix="notice_",
+        )
     if expected_lifecycle_version is not None and (
         type(expected_lifecycle_version) is not int or expected_lifecycle_version < 0
     ):
@@ -6127,8 +6272,11 @@ def create_matter_attachment(
             session, context.membership.id, token_issued_at=context.token_issued_at,
         )
         context.native_session_id = native_session_id
+        # A primary notice takes the Matter exclusively so concurrent identical
+        # uploads serialize through the duplicate check below.
         matter = _get_matter_model(
-            session, context=context, matter_id=audit_matter_id, lock_for_share=True,
+            session, context=context, matter_id=audit_matter_id,
+            lock_for_share=not primary_notice, lock_for_update=primary_notice,
         )
         _assert_matter_not_disposed(matter, operation="upload an attachment")
         if matter.lifecycle_version != upload_lifecycle_version:
@@ -6148,8 +6296,31 @@ def create_matter_attachment(
         attachment.storage_key = stored.storage_key
         attachment.size_bytes = stored.size_bytes
         attachment.sha256_hex = stored.sha256_hex
+        overridden_notice_id = None if not primary_notice else _assert_notice_not_duplicate(
+            session,
+            context=context,
+            matter_id=matter.id,
+            attachment=attachment,
+            allow_duplicate=allow_duplicate,
+        )
         session.add(attachment)
         session.flush()
+        if overridden_notice_id is not None:
+            record_from_context(
+                session,
+                context,
+                action="matter_attachment.notice_duplicate_override",
+                target_type="matter_attachment",
+                target_id=attachment.id,
+                matter_id=matter.id,
+                metadata={
+                    "matter_code": matter.matter_code,
+                    "existing_notice_id": overridden_notice_id,
+                    "notice_direction": attachment.notice_direction,
+                    "notice_subject": attachment.notice_subject,
+                    "filename": attachment.original_filename,
+                },
+            )
         job = enqueue_processing_job(
             session,
             company_id=context.company.id,
@@ -6328,7 +6499,16 @@ def update_matter_attachment_metadata(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
 
     before = _attachment_metadata_snapshot(attachment)
+    notice_before = (
+        _attachment_notice_state(attachment)
+        if _is_primary_notice_attachment(attachment)
+        else None
+    )
+    duplicate_key_before = (
+        attachment_notice_duplicate_key(attachment) if notice_before is not None else None
+    )
     updates = payload.model_dump(exclude_unset=True)
+    allow_duplicate = bool(updates.pop("allow_duplicate", False))
     if "document_type" in updates:
         attachment.document_type = updates["document_type"]
         if "lifecycle_stage" not in updates:
@@ -6421,6 +6601,54 @@ def update_matter_attachment_metadata(
             matter_id=matter.id,
             hearing_id=updates["hearing_id"],
         )
+
+    if _is_primary_notice_attachment(attachment):
+        # The same rules as upload, judged on the merged record. Only a
+        # violation this edit introduces is refused, so a legacy notice that
+        # predates the rules can still be marked replied or annotated.
+        introduced = new_notice_violations(notice_before, _attachment_notice_state(attachment))
+        if introduced:
+            session.rollback()
+            raise_notice_violations(introduced, field_prefix="notice_")
+        # The upload duplicate rule, judged only when this edit changes the
+        # compared details or makes the document a primary notice. The Matter
+        # is already locked for update, as on upload. A document that becomes
+        # a notice is also checked for identical bytes; an existing notice's
+        # bytes do not change here, so a legacy same-file pair is left alone.
+        overridden_notice_id = None
+        if (
+            notice_before is None
+            or attachment_notice_duplicate_key(attachment) != duplicate_key_before
+        ):
+            try:
+                overridden_notice_id = _assert_notice_not_duplicate(
+                    session,
+                    context=context,
+                    matter_id=matter.id,
+                    attachment=attachment,
+                    allow_duplicate=allow_duplicate,
+                    check_same_file=notice_before is None,
+                )
+            except HTTPException:
+                session.rollback()
+                raise
+        if overridden_notice_id is not None:
+            record_from_context(
+                session,
+                context,
+                action="matter_attachment.notice_duplicate_override",
+                target_type="matter_attachment",
+                target_id=attachment.id,
+                matter_id=matter.id,
+                metadata={
+                    "matter_code": matter.matter_code,
+                    "existing_notice_id": overridden_notice_id,
+                    "notice_direction": attachment.notice_direction,
+                    "notice_subject": attachment.notice_subject,
+                    "filename": attachment.original_filename,
+                    "operation": "metadata_update",
+                },
+            )
 
     if attachment.document_type == "notice":
         _sync_notice_reply_deadline(
@@ -7310,6 +7538,14 @@ def void_matter_invoice_draft(
     previous_balance_minor = invoice.balance_due_minor
     invoice.status = InvoiceStatus.VOID
     invoice.balance_due_minor = 0
+    # ENH-001: a QR code on any copy printed before the void now says so.
+    revoked_verifications = revoke_verifications(
+        session,
+        company_id=invoice.company_id,
+        source_type=SOURCE_MATTER_INVOICE,
+        source_id=invoice.id,
+        reason="The invoice was voided.",
+    )
     _append_activity(
         session,
         matter_id=matter.id,
@@ -7330,6 +7566,7 @@ def void_matter_invoice_draft(
             "previous_status": InvoiceStatus.DRAFT.value,
             "previous_balance_due_minor": previous_balance_minor,
             "released_time_entries": released,
+            "revoked_verifications": revoked_verifications,
         },
     )
     session.commit()

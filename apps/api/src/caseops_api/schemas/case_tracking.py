@@ -266,6 +266,8 @@ class CaseTrackingBookmarkRecord(BaseModel):
     tracked_case_id: str
     created_by_membership_id: str
     matter_id: str | None
+    # Code of the linked Matter, only while the reader can see that Matter.
+    matter_code: str | None = None
     name: str | None
     notification_enabled: bool
     is_archived: bool
@@ -278,6 +280,10 @@ class CaseTrackingBookmarkRecord(BaseModel):
 
 class CaseTrackingBookmarkListResponse(BaseModel):
     bookmarks: list[CaseTrackingBookmarkRecord]
+    # Set only for a paged read (limit or cursor) with more matches after it.
+    next_cursor: str | None = None
+    # Every bookmark matching `q` across all pages; only with include_total=true.
+    total_count: int | None = None
 
 
 class CaseTrackingBookmarkUpdateRequest(BaseModel):

@@ -7,13 +7,18 @@ Flow, per the Sarvam Document Intelligence docs (checked 2026-11-23):
 * ``GET /doc-ai/v1/job/{job_id}/status`` -> ``status`` in
   pending|running|completed|partially_completed|failed|rejected plus
   ``usage.pages_*`` counters.
-* ``GET /doc-ai/v1/job/{job_id}/download-url`` -> a short-lived URL to a ZIP
-  holding the parsed output and one ``metadata/page_NNN.json`` per page.
+* ``GET /doc-ai/v1/job/{job_id}/download-url`` -> a short-lived URL to a ZIP.
+  Its members are named after the uploaded file: ``manifest.json`` and
+  ``<name>/<stem>.<format>``. With ``output_format=json`` (what CaseOps asks
+  for) every page's blocks are inside that primary JSON file; only html and md
+  output add one ``<name>/metadata/page_NNN.json`` per page (Parse how-to,
+  "Read the output", checked 2026-11-27).
 
 A job accepts at most 20 PDF pages, so callers split documents and restore the
-original page numbers themselves. The per-page JSON schema is not published;
-``parse_output_archive`` reads it defensively and never invents text: a page
-it cannot map is reported as missing, not filled.
+original page numbers themselves. The primary JSON file's exact top level is
+not published (the ``/results`` endpoint nests ``documents[].pages[]``);
+``parse_output_archive`` reads both shapes and never invents text: a page it
+cannot map is reported as missing, not filled.
 """
 
 from __future__ import annotations
@@ -38,7 +43,10 @@ MAX_OUTPUT_ARCHIVE_BYTES = 200 * 1024 * 1024
 MAX_OUTPUT_MEMBER_BYTES = 50 * 1024 * 1024
 MAX_OUTPUT_TOTAL_BYTES = 400 * 1024 * 1024
 LOW_CONFIDENCE = 0.6
-_PAGE_FILE = re.compile(r"(?:^|/)page[_-]?0*(\d{1,4})\.json$", re.IGNORECASE)
+# Per-page files live only in the archive's ``metadata/`` folder. Matching any
+# ``page-N.json`` also caught the primary file of an upload named ``page-1.png``
+# (``page-1.png/page-1.json``), so every image OCR came back page_missing.
+_PAGE_FILE = re.compile(r"(?:^|/)metadata/page[_-]?0*(\d{1,4})\.json$", re.IGNORECASE)
 
 
 class SarvamError(Exception):
@@ -265,14 +273,23 @@ def _block_confidence(block: dict[str, Any]) -> float | None:
     return None
 
 
+def _in_reading_order(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def key(item: tuple[int, dict[str, Any]]) -> tuple[float, int]:
+        order = item[1].get("reading_order")
+        valid = isinstance(order, int) and not isinstance(order, bool)
+        return (float(order) if valid else float("inf"), item[0])
+
+    return [block for _, block in sorted(enumerate(blocks), key=key)]
+
+
 def _blocks(payload: object) -> list[dict[str, Any]] | None:
     if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
+        return _in_reading_order([item for item in payload if isinstance(item, dict)])
     if isinstance(payload, dict):
         for key in ("blocks", "elements", "layout", "items", "content"):
             value = payload.get(key)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+                return _in_reading_order([item for item in value if isinstance(item, dict)])
     return None
 
 
@@ -287,7 +304,10 @@ def _page_from_payload(payload: object) -> ParsedPage | None:
             text = _block_text(block).strip()
             if not text:
                 continue
-            tag = block.get("tag") or block.get("type") or block.get("label") or "paragraph"
+            tag = (
+                block.get("layout_tag") or block.get("tag") or block.get("type")
+                or block.get("label") or "paragraph"
+            )
             confidence = _block_confidence(block)
             if confidence is not None:
                 confidences.append(confidence)
@@ -312,6 +332,30 @@ def _page_from_payload(payload: object) -> ParsedPage | None:
             value = payload.get(key)
             if isinstance(value, str):
                 return ParsedPage(text=value.strip())
+        # A page the provider completed with no text block is an empty page
+        # (reviewed as such), not a missing one; a failed page stays missing.
+        status = payload.get("status")
+        if isinstance(payload.get("blocks"), list) and (
+            status is None or str(status).strip().lower() == "completed"
+        ):
+            return ParsedPage(text="")
+    return None
+
+
+def _page_entries(payload: object) -> list[object] | None:
+    """Page entries of a primary JSON file: ``pages`` or ``documents[].pages``."""
+
+    if not isinstance(payload, dict):
+        return None
+    if isinstance(payload.get("pages"), list):
+        return list(payload["pages"])
+    documents = payload.get("documents")
+    if isinstance(documents, list):
+        entries: list[object] = []
+        for document in documents:
+            if isinstance(document, dict) and isinstance(document.get("pages"), list):
+                entries.extend(document["pages"])
+        return entries if entries else None
     return None
 
 
@@ -359,6 +403,10 @@ def parse_output_archive(archive_bytes: bytes, *, page_count: int) -> dict[int, 
                 parsed = _page_from_payload(payload)
                 if parsed is not None:
                     pages[number] = parsed
+                else:
+                    # Not page-shaped: read it like a primary file rather than
+                    # silently dropping what may be every page's text.
+                    main_json.append(info)
             elif info.filename.lower().endswith(".json") and not info.filename.lower().endswith(
                 "manifest.json"
             ):
@@ -369,8 +417,8 @@ def parse_output_archive(archive_bytes: bytes, *, page_count: int) -> dict[int, 
                     payload = json.loads(_read_member(archive, info, budget))
                 except (ValueError, UnicodeDecodeError):
                     continue
-                page_list = payload.get("pages") if isinstance(payload, dict) else None
-                if isinstance(page_list, list):
+                page_list = _page_entries(payload)
+                if page_list is not None:
                     for index, item in enumerate(page_list, start=1):
                         number = index
                         if isinstance(item, dict):

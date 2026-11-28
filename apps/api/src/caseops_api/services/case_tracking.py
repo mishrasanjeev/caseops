@@ -16,9 +16,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select, text, tuple_
+from sqlalchemy import String, and_, cast, exists, func, or_, select, text, tuple_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, contains_eager, joinedload, selectinload
 
 from caseops_api.core.automated_test_context import provider_replay_requested
 from caseops_api.core.redaction import redact_provider_error
@@ -120,6 +120,7 @@ from caseops_api.services.next_hearing import (
     clear_next_hearing,
 )
 from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
+from caseops_api.services.pagination import DEFAULT_PAGE_SIZE, decode_cursor, encode_cursor
 from caseops_api.services.paid_provider_safety import (
     assert_paid_provider_call_allowed,
     paid_provider_block_reason,
@@ -2477,7 +2478,7 @@ def link_matter_case(
     if mutation.created or reconciled:
         session.commit()
         session.refresh(mutation.bookmark)
-    return _bookmark_record(session, mutation.bookmark)
+    return _bookmark_record(session, mutation.bookmark, context=context)
 
 
 def _reconcile_legacy_matter_links(
@@ -2699,7 +2700,46 @@ def _tracked_case_record(
     )
 
 
-def _bookmark_record(session: Session, bookmark: TrackedCaseBookmark) -> CaseTrackingBookmarkRecord:
+def _visible_bookmark_matter_codes(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_ids: set[str],
+) -> dict[str, str]:
+    """Matter codes for linked Matters the signed-in member may currently see.
+
+    A bookmark keeps its Matter link after an ethical wall or team scope hides
+    that Matter; its code is then withheld rather than leaked.
+    """
+
+    if not matter_ids:
+        return {}
+    rows = session.execute(
+        select(Matter.id, Matter.matter_code).where(
+            Matter.company_id == context.company.id,
+            Matter.id.in_(sorted(matter_ids)),
+            visible_matters_filter(session, context=context),
+        )
+    ).all()
+    return {row.id: row.matter_code for row in rows}
+
+
+def _bookmark_record(
+    session: Session,
+    bookmark: TrackedCaseBookmark,
+    *,
+    context: SessionContext,
+    matter_codes: dict[str, str] | None = None,
+) -> CaseTrackingBookmarkRecord:
+    if matter_codes is None:
+        matter_codes = _visible_bookmark_matter_codes(
+            session,
+            context=context,
+            matter_ids={bookmark.matter_id} if bookmark.matter_id else set(),
+        )
+    # Auto-linked bookmarks carry the Matter code as their name; withhold it
+    # with the code while a wall or team scope hides that Matter.
+    linked_matter_hidden = bool(bookmark.matter_id) and bookmark.matter_id not in matter_codes
     update_count = session.scalar(
         select(func.count()).where(
             TrackedCaseUpdate.company_id == bookmark.company_id,
@@ -2712,7 +2752,8 @@ def _bookmark_record(session: Session, bookmark: TrackedCaseBookmark) -> CaseTra
         tracked_case_id=bookmark.tracked_case_id,
         created_by_membership_id=bookmark.created_by_membership_id,
         matter_id=bookmark.matter_id,
-        name=bookmark.name,
+        matter_code=matter_codes.get(bookmark.matter_id) if bookmark.matter_id else None,
+        name=None if linked_matter_hidden else bookmark.name,
         notification_enabled=bookmark.notification_enabled,
         is_archived=bookmark.is_archived,
         created_at=bookmark.created_at,
@@ -2924,7 +2965,7 @@ def create_bookmark(
     bookmark = mutation.bookmark
     tracked_case = mutation.tracked_case
     if not mutation.created:
-        return _bookmark_record(session, bookmark)
+        return _bookmark_record(session, bookmark, context=context)
     record_from_context(
         session,
         context,
@@ -2942,7 +2983,7 @@ def create_bookmark(
     )
     session.commit()
     session.refresh(bookmark)
-    return _bookmark_record(session, bookmark)
+    return _bookmark_record(session, bookmark, context=context)
 
 
 def auto_link_matter_case_tracking(
@@ -3068,27 +3109,149 @@ def _get_bookmark(
     return bookmark
 
 
+BOOKMARK_SEARCH_MAX_LENGTH = 120
+BOOKMARK_PAGE_MAX_SIZE = 100
+
+
+def _bookmark_search_clause(
+    session: Session, *, context: SessionContext, needle: str
+) -> Any:
+    """One search box over every field a lawyer recognises a bookmark by.
+
+    Matter code (only for Matters the member can see), CNR in any spelling,
+    case number, case title, bookmark name and party names. It runs in SQL
+    over every active bookmark, so a match on a page the browser never loaded
+    is still found.
+    """
+
+    def visible_linked_matter(*conditions: Any) -> Any:
+        return exists(
+            select(Matter.id).where(
+                Matter.id == TrackedCaseBookmark.matter_id,
+                Matter.company_id == context.company.id,
+                visible_matters_filter(session, context=context),
+                *conditions,
+            )
+        )
+
+    clauses: list[Any] = [
+        TrackedCase.case_title.icontains(needle, autoescape=True),
+        TrackedCase.case_number.icontains(needle, autoescape=True),
+        TrackedCase.cnr_number.icontains(needle, autoescape=True),
+        # Auto-linked bookmarks are named after the Matter code; a hidden
+        # Matter's bookmark name is withheld, so it must not match either.
+        and_(
+            TrackedCaseBookmark.name.icontains(needle, autoescape=True),
+            or_(TrackedCaseBookmark.matter_id.is_(None), visible_linked_matter()),
+        ),
+        visible_linked_matter(Matter.matter_code.icontains(needle, autoescape=True)),
+    ]
+    cnr_key = normalize_cnr(needle)
+    if cnr_key and cnr_key != needle:
+        clauses.append(TrackedCase.normalized_cnr_number.icontains(cnr_key, autoescape=True))
+    # Party names are matched in their stored JSON text, so a needle carrying
+    # JSON punctuation would match the array syntax of every row.
+    if not set(needle) & set('"[],\\'):
+        party_text = cast(TrackedCase.party_names_json, String)
+        clauses.append(party_text.icontains(needle, autoescape=True))
+        # JSON storage escapes non-ASCII names; match that spelling as well.
+        escaped = json.dumps(needle)[1:-1]
+        if escaped != needle:
+            clauses.append(party_text.icontains(escaped, autoescape=True))
+    return or_(*clauses)
+
+
 def list_bookmarks(
     session: Session,
     *,
     context: SessionContext,
+    q: str | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+    include_total: bool = False,
 ) -> CaseTrackingBookmarkListResponse:
-    rows = list(
-        session.scalars(
-            select(TrackedCaseBookmark)
-            .options(
-                joinedload(TrackedCaseBookmark.tracked_case), joinedload(TrackedCaseBookmark.matter)
-            )
-            .where(
-                TrackedCaseBookmark.company_id == context.company.id,
-                TrackedCaseBookmark.created_by_membership_id == context.membership.id,
-                TrackedCaseBookmark.is_archived.is_(False),
-            )
-            .order_by(TrackedCaseBookmark.updated_at.desc())
+    """Active bookmarks for the signed-in member.
+
+    Without ``limit`` or ``cursor`` the response is the complete (optionally
+    searched) list, as earlier clients expect. With either, it is one keyset
+    page ordered newest-updated first; ``next_cursor`` continues it and
+    ``include_total`` adds the server count of every match.
+    """
+
+    needle = (q or "").strip()
+    if len(needle) > BOOKMARK_SEARCH_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Bookmark search is limited to {BOOKMARK_SEARCH_MAX_LENGTH} characters.",
         )
+    paged = limit is not None or cursor is not None
+    decoded = decode_cursor(cursor) if cursor else None
+    if cursor and decoded is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The bookmark page cursor is invalid. Reload the bookmark list.",
+        )
+    scope: list[Any] = [
+        TrackedCaseBookmark.company_id == context.company.id,
+        TrackedCaseBookmark.created_by_membership_id == context.membership.id,
+        TrackedCaseBookmark.is_archived.is_(False),
+        TrackedCase.company_id == context.company.id,
+    ]
+    if needle:
+        scope.append(_bookmark_search_clause(session, context=context, needle=needle))
+    total_count = (
+        int(
+            session.scalar(
+                select(func.count(TrackedCaseBookmark.id))
+                .join(TrackedCase, TrackedCase.id == TrackedCaseBookmark.tracked_case_id)
+                .where(*scope)
+            )
+            or 0
+        )
+        if include_total
+        else None
+    )
+    statement = (
+        select(TrackedCaseBookmark)
+        .join(TrackedCase, TrackedCase.id == TrackedCaseBookmark.tracked_case_id)
+        .options(
+            contains_eager(TrackedCaseBookmark.tracked_case),
+            joinedload(TrackedCaseBookmark.matter),
+        )
+        .where(*scope)
+        .order_by(TrackedCaseBookmark.updated_at.desc(), TrackedCaseBookmark.id.desc())
+    )
+    if decoded is not None:
+        statement = statement.where(
+            or_(
+                TrackedCaseBookmark.updated_at < decoded.updated_at,
+                and_(
+                    TrackedCaseBookmark.updated_at == decoded.updated_at,
+                    TrackedCaseBookmark.id < decoded.id,
+                ),
+            )
+        )
+    next_cursor: str | None = None
+    if paged:
+        page_size = min(limit or DEFAULT_PAGE_SIZE, BOOKMARK_PAGE_MAX_SIZE)
+        rows = list(session.scalars(statement.limit(page_size + 1)).unique())
+        if len(rows) > page_size:
+            rows = rows[:page_size]
+            next_cursor = encode_cursor(rows[-1].updated_at, rows[-1].id)
+    else:
+        rows = list(session.scalars(statement).unique())
+    matter_codes = _visible_bookmark_matter_codes(
+        session,
+        context=context,
+        matter_ids={row.matter_id for row in rows if row.matter_id},
     )
     return CaseTrackingBookmarkListResponse(
-        bookmarks=[_bookmark_record(session, row) for row in rows]
+        bookmarks=[
+            _bookmark_record(session, row, context=context, matter_codes=matter_codes)
+            for row in rows
+        ],
+        next_cursor=next_cursor,
+        total_count=total_count,
     )
 
 
@@ -3144,7 +3307,7 @@ def update_bookmark(
         },
     )
     session.commit()
-    return _bookmark_record(session, bookmark)
+    return _bookmark_record(session, bookmark, context=context)
 
 
 def _summary_for_update(
@@ -3854,7 +4017,7 @@ def refresh_bookmark(
     )
     session.commit()
     return CaseTrackingRefreshResponse(
-        bookmark=_bookmark_record(session, bookmark),
+        bookmark=_bookmark_record(session, bookmark, context=context),
         created_updates=[_update_record(update, bookmark_id=bookmark.id) for update in created],
     )
 
@@ -4286,6 +4449,7 @@ def _create_cached_release_smoke_operation(
 def _release_smoke_response(
     session: Session,
     *,
+    context: SessionContext,
     bookmark: TrackedCaseBookmark,
     operation: TrackedCaseProviderOperation,
     release_sha: str,
@@ -4344,7 +4508,7 @@ def _release_smoke_response(
         provider_evidence_completed_at=evidence_completed_at,
         provider_evidence_age_seconds=max(0, int((_now() - evidence_completed_at).total_seconds())),
         source_text_sha256=source_update.source_text_sha256,
-        bookmark=_bookmark_record(session, bookmark),
+        bookmark=_bookmark_record(session, bookmark, context=context),
         source_update=_update_record(source_update, bookmark_id=bookmark.id),
         reused=reused,
     )
@@ -4399,6 +4563,7 @@ def run_release_smoke(
             )
         return _release_smoke_response(
             session,
+            context=context,
             bookmark=bookmark,
             operation=existing,
             release_sha=release_sha,
@@ -4450,6 +4615,7 @@ def run_release_smoke(
     session.commit()
     return _release_smoke_response(
         session,
+        context=context,
         bookmark=bookmark,
         operation=operation,
         release_sha=release_sha,

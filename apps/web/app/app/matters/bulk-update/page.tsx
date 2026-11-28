@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { IconButton } from "@/components/ui/IconButton";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   applyMatterBulkUpdate,
@@ -252,7 +253,7 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
                       <td data-label="Rows" className="px-3 py-2">{operation.total_rows}</td>
                       <td data-label="Updated" className="px-3 py-2">{operation.applied_rows}</td>
                       <td data-label="Skipped / failed" className="px-3 py-2">{operation.skipped_rows} / {operation.failed_rows}</td>
-                      <td data-label="Results" className="px-3 py-2"><div className="flex gap-1"><Button type="button" variant="outline" aria-label={`View results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} aria-expanded={expandedOperationId === operation.id} onClick={() => setExpandedOperationId(expandedOperationId === operation.id ? null : operation.id)}><Eye className="h-4 w-4" /></Button><Button type="button" variant="outline" aria-label={`Download results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} onClick={() => downloadResult(operation)}><Download className="h-4 w-4" /></Button></div></td>
+                      <td data-label="Results" className="px-3 py-2"><div className="flex gap-1"><IconButton label={`View results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} type="button" variant="outline" aria-expanded={expandedOperationId === operation.id} onClick={() => setExpandedOperationId(expandedOperationId === operation.id ? null : operation.id)}><Eye className="h-4 w-4" /></IconButton><IconButton label={`Download results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} type="button" variant="outline" onClick={() => downloadResult(operation)}><Download className="h-4 w-4" /></IconButton></div></td>
                     </tr>
                     {expandedOperationId === operation.id ? <tr data-testid={`bulk-update-operation-results-${operation.id}`}><td colSpan={8} className="px-3 py-2"><ul className="space-y-1 text-sm">{operation.rows.map((row) => <li key={row.row_number}>Row {row.row_number}: {row.matter_code ?? "Restricted matter"} — {row.status}{row.changed_fields.length ? ` (${row.changed_fields.join(", ")})` : ""}{row.errors.length ? ` — ${row.errors.join("; ")}` : ""}</li>)}</ul></td></tr> : null}
                   </Fragment>

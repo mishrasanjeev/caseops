@@ -3,7 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { platformApi } from "@/lib/platform/client";
 import { usePlatformLoad } from "@/lib/platform/use-load";
 
@@ -42,9 +42,9 @@ function LeadDirectory() {
   return <div className="min-w-0 space-y-5">
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
       <h1 className="text-2xl font-bold">Leads</h1>
-      <Button type="button" variant="outline" aria-label="Reload leads" title="Reload leads" disabled={result.pending} onClick={result.reload}>
+      <IconButton label="Reload leads" type="button" variant="outline" disabled={result.pending} onClick={result.reload}>
         <RefreshCw className="h-4 w-4" aria-hidden />
-      </Button>
+      </IconButton>
     </div>
     {result.pending ? <p role="status">Loading leads...</p> : null}
     {result.error ? <p role="alert">{result.error}</p> : null}

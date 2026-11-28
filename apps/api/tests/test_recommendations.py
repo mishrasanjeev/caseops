@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -25,6 +25,19 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
+
+_VERIFIED_SECTION_FIELDS = {
+    "section_text_fetched_at": datetime.now(UTC),
+    "verification_status": "verified_official",
+    "source_sha256": "a" * 64,
+    "source_publisher": "India Code",
+    "issuing_body": "Legislative Department",
+    "source_status": "official",
+    "legal_status": "enacted",
+    "exact_source_version": "consolidated-2026-11-27",
+    "source_locator_type": "section_deep_link",
+    "link_health_status": "available",
+}
 
 
 def _seed_authorities(records: Iterable[dict]) -> None:
@@ -1334,8 +1347,19 @@ def test_matter_intelligence_prompt_includes_orders_statutes_and_excludes_other_
             section_label="Reply filing procedure",
             section_text="A bounded section excerpt for reply filing context.",
             ordinal=1,
+            **_VERIFIED_SECTION_FIELDS,
         )
-        session.add(section)
+        # Attached while verified, later withdrawn from verification: the
+        # recommendation prompt must not quote it (same predicate as drafting).
+        lapsed = StatuteSection(
+            statute_id=statute.id,
+            section_number="Section 100",
+            section_label="Lapsed provision",
+            section_text="LAPSED_STATUTE_SENTINEL text that lost source verification.",
+            ordinal=2,
+            **{**_VERIFIED_SECTION_FIELDS, "verification_status": "quarantined"},
+        )
+        session.add_all([section, lapsed])
         session.flush()
         session.add(
             MatterStatuteReference(
@@ -1343,6 +1367,14 @@ def test_matter_intelligence_prompt_includes_orders_statutes_and_excludes_other_
                 section_id=section.id,
                 relevance="cited",
                 notes="Reply filing reference",
+            )
+        )
+        session.add(
+            MatterStatuteReference(
+                matter_id=matter_id,
+                section_id=lapsed.id,
+                relevance="cited",
+                notes="Lapsed reference",
             )
         )
         session.add(
@@ -1422,6 +1454,8 @@ def test_matter_intelligence_prompt_includes_orders_statutes_and_excludes_other_
     assert "Context Act" in prompt
     assert "Section 99" in prompt
     assert "UNRELATED_TENANT_SENTINEL" not in prompt
+    assert "LAPSED_STATUTE_SENTINEL" not in prompt
+    assert "Section 100" not in prompt
 
 
 def test_custom_goal_is_ignored_for_non_custom_objective_context(

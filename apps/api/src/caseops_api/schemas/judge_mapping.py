@@ -109,32 +109,50 @@ class JudgeIdentityRecord(BaseModel):
     record_version: int
     merged_into_judge_id: str | None
     is_active: bool
+    # Filled by catalogue listings so a picker can name the court; absent on
+    # mutation responses that return the bare identity.
+    court_name: str | None = None
+    court_short_name: str | None = None
 
 
 class JudgeCatalogListResponse(BaseModel):
     judges: list[JudgeIdentityRecord]
     returned_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
     limit: int = Field(ge=1, le=200)
     has_more: bool
 
 
 class BenchIdentityRecord(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: str
     court_id: str
+    court_name: str
+    court_short_name: str
     name: str
+    seat_city: str | None
     source_name: str | None
     source_url: str | None
     source_reference: str | None
     record_version: int
 
 
+class CourtWithoutBenchesRecord(BaseModel):
+    id: str
+    name: str
+    short_name: str
+
+
 class BenchCatalogListResponse(BaseModel):
     benches: list[BenchIdentityRecord]
     returned_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
     limit: int = Field(ge=1, le=200)
     has_more: bool
+    # Active courts named by the same search that have no catalogued bench
+    # yet (bounded by ``limit``; the total is exact). A curator who searches
+    # such a court is told so instead of facing an unexplained empty picker.
+    courts_without_benches: list[CourtWithoutBenchesRecord]
+    courts_without_benches_total: int = Field(ge=0)
 
 
 class AuthorityRemapResponse(BaseModel):

@@ -64,8 +64,8 @@ OUTBOXES = (
     "notification_delivery_events",
 )
 
-# Current head 20261126_0101 (statute section embeddings) refuses downgrade first.
-HEAD_REFUSAL = "Statute section embeddings are retained; restore-forward only."
+# Current head 20261127_0007 (forum official websites) refuses downgrade first.
+HEAD_REFUSAL = "Forum official websites are public reference data; restore-forward only."
 
 
 def identity(number):
@@ -551,8 +551,8 @@ def test_actual_current_head_restore_refusal_preserves_rows_classifications_cata
     with fresh_engine(kind, tmp_path) as engine:
         config = migration_config(engine, monkeypatch)
         current = ScriptDirectory.from_config(config).get_current_head()
-        assert current == "20261126_0101"
-        # The current head refuses on its retained statute embeddings
+        assert current == "20261127_0007"
+        # The current head refuses (restore-forward reference data)
         # before touching any row. The named retained-read migration is
         # rehearsed separately above.
         expected_refusal = HEAD_REFUSAL

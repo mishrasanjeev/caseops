@@ -92,6 +92,24 @@ ALLOWED_UPLOADS: tuple[UploadKind, ...] = (
 DEFAULT_MAX_BYTES = 50 * 1024 * 1024  # 50 MiB
 
 
+def allowed_upload_extensions() -> list[str]:
+    """The allow-list as clients see it; web pickers read this, never a copy."""
+
+    return sorted({kind.extension for kind in ALLOWED_UPLOADS})
+
+
+def effective_max_upload_bytes() -> int:
+    """The smaller of this module's cap and the configured persistence cap.
+
+    ``verify_upload`` refuses above ``DEFAULT_MAX_BYTES`` and the storage writer
+    refuses above ``max_attachment_size_bytes``; a client must use the lower.
+    """
+
+    from caseops_api.core.settings import get_settings
+
+    return min(DEFAULT_MAX_BYTES, get_settings().max_attachment_size_bytes)
+
+
 def _match_signature(head: bytes, kind: UploadKind) -> bool:
     if not kind.signatures:
         return True
@@ -293,5 +311,7 @@ __all__ = [
     "ALLOWED_UPLOADS",
     "DEFAULT_MAX_BYTES",
     "UploadKind",
+    "allowed_upload_extensions",
+    "effective_max_upload_bytes",
     "verify_upload",
 ]

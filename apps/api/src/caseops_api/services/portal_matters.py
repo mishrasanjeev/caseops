@@ -38,7 +38,11 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.clients import KycDocumentRecord
 from caseops_api.services.audit import record_audit
-from caseops_api.services.clients import lock_client_provenance_references
+from caseops_api.services.client_kyc_documents import assert_kyc_pack_complete
+from caseops_api.services.clients import (
+    _ensure_verification_transition,
+    lock_client_provenance_references,
+)
 from caseops_api.services.matter_operational_guard import require_operational_matter
 
 
@@ -402,6 +406,11 @@ def submit_matter_kyc(
         matter = require_operational_matter(
             session, matter=matter, operation="submit KYC",
         )
+        # BUG-003: the portal follows the firm's submit rules. A verified or
+        # under-review pack cannot be reset from the portal, and a pack is
+        # the client's uploaded files, which must meet the KYC requirements.
+        _ensure_verification_transition(target.kyc_status, ClientKycStatus.SUBMITTED.value)
+        pack = assert_kyc_pack_complete(session, client=target, action="submitted")
     now = datetime.now(UTC)
     safe_documents: list[dict] = []
     for doc in documents or []:
@@ -424,6 +433,10 @@ def submit_matter_kyc(
     target.kyc_status = ClientKycStatus.SUBMITTED.value
     target.kyc_submitted_at = now
     target.kyc_documents_json = safe_documents
+    # A fresh cycle: clear the previous decision, as the firm's submit does.
+    target.kyc_rejection_reason = None
+    target.kyc_verified_at = None
+    target.kyc_verified_by_membership_id = None
     session.flush()
     from caseops_api.services.private_retrieval import (
         private_source_version,
@@ -460,6 +473,7 @@ def submit_matter_kyc(
             "portal_user_id": portal_user.id,
             "client_id": target.id,
             "doc_count": len(documents or []),
+            "uploaded_document_ids": [doc.id for doc in pack],
         },
         ip=request_ip,
         commit=True,
