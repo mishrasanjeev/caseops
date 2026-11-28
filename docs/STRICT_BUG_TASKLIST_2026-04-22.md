@@ -34,9 +34,60 @@ Triage (all three reproduce on production release 1ed725ce2 and on main):
   cited facts with a Research hand-off, and "Hindu Marriage Act, 1955" no
   longer parsed as "Section 1955". New tests: 65 failed on the old code.
 
-Verdicts (recorded after production verification): rows 1-3 Inconclusive until
-`nov25-prod-*` passes on the deployed release and row 3 is repeated with the
-real model on the reporting tester's MAT-003.
+Verdicts (production release e492d6472, PR #668, API caseops-api-00538-7p7,
+web caseops-web-00514-k4g). The `nov25-prod-*` journeys passed 6/6 as the
+nova-legal tester:
+
+- Row 1: **Partially fixed.** Constitution Article 21 attaches on desktop and
+  phone. The Income-tax Act, 1961 is still unattachable in production; its
+  official 2026 consolidated edition (Income Tax Department PDF, pinned
+  GitHub release asset) is compiled in PR #670, which is not yet released.
+- Row 2: **Properly fixed.** A client is linked from the Matter and from the
+  client profile, and the link shows on both sides.
+- Row 3: **Properly fixed.** The nine workbook questions were rerun in a
+  2026-11-26 session as the tester on MAT-003 with the production model
+  (openai gpt-5.1). Parties, pending actions, documents, key facts and
+  chronology are answered with Matter-record citations. The Hindu Marriage Act
+  question gets the factual reply that no HMA section is linked to MAT-003,
+  plus a hand-off to Research. Interpreting statutes from the assistant is out
+  of scope by design. Tester note: the answer still calls the 2026-11-21
+  hearing the "next hearing", because the record has no outcome entered.
+
+Adjacent defect, found in prod-verify 45856740774 on the same release (it
+predates #668): the Section 138 research answer phone case ended
+`failed/internal_error`. The answer job runs as a BackgroundTask after the 202
+response. caseops-api runs with `cpu-throttling=true` and concurrency 1, and
+only 5 of the 29 polls reached the job's instance, so retrieval was starved of
+CPU. PostgreSQL then killed its read transaction at the 60 s
+idle-in-transaction limit. The rerun the owner approved failed the same way,
+on the desktop case this time, so the owner chose to release the fix instead.
+That fix is PR #675, which reads retrieval on an autocommit connection. It was
+released as 53384c2ad (API `caseops-api-00539-5fm`, web `caseops-web-00515-2sx`).
+prod-verify 45920226662 passed every suite. The projection executions
+`-5g764` and `-vr45b` rebuilt 4 and then 0, and the guarded scheduler resume
+passed. Release verdict: GO with caveat. Neither research job was starved in
+that run, so the evidence that #675 works is its PostgreSQL test. CPU
+allocation for background work stays open under EH-RA-01.
+
+Observed on the e492d6472 rerun only: the BUG-012 registry journey
+(`ram-2026-10-31-registry.spec.ts:404`) failed once, then passed locally and
+in 45920226662. Production held the expected link (version 5, retired).
+Suspected cause: after Retire the page refetches the registry list, and the
+reopen goes to the same URL, so its listener can catch the older read.
+Inconclusive. Proposed test fix: load `about:blank` before the reopen.
+
+Adjacent defect, found while compiling the Income-tax Act, 1961 for row 1:
+retained repealed-law editions (CrPC 1973, IPC, Evidence Act, and the
+Income-tax Act, 1961) are attachable by design, but the drafting and
+litigation strategy prompts quoted their text with no repeal status, so a
+draft could present repealed law as current. Fix: one caution in
+`services/statute_selection.py` that both prompts print beside every quoted
+repealed provision, and only there.
+`tests/test_repealed_statute_prompt_status_20261126.py` attaches repealed
+CrPC s.482 and current Article 21. Both tests failed on the old code (no
+`legal_status` in drafting references, no strategy status note). Research
+answers are being reworked in a parallel branch and adopt the same caution
+there.
 
 Nov 26 row 1 follow-up (Income-tax Act, 1961): the owner chose the Income Tax
 Department consolidation "as amended by Finance Act, 2026" (India Code holds
@@ -7867,3 +7918,18 @@ acceptance remains pending. Existing Android version 3 went live November
 17; fresh signed-in Play Console confirms100% production rollout and no
 unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+## November 28 — BUG-012 production reopen race (test harness)
+
+**Inconclusive until an exact-release prod-verify passes.** J08/M08, BUG-012.
+Exact-release prod-verify 46051558103 for 4232db62a failed batch4 BUG-012 on
+both attempts, and 45856740774 (e492d6472) failed it the same way. All three
+retained error locations are `tests/e2e/ram-2026-10-31-registry.spec.ts:404:36`,
+the reopen's `reopened.json()`. Production API logs for both attempts show every
+registry call returning 200/201 through create, confirm, manual snapshot, diff
+reject and retire. The reopen listener was registered while the page's
+post-retire workspace read was still in flight, so it caught that read and lost
+its body to the deep-link navigation. The product path is not implicated. The
+spec now waits for that post-retire read and asserts it shows the identity
+retired at version 5 before reopening; any other read fails the assertion.
+Recorded by Sanjeev Kumar.

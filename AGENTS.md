@@ -3331,6 +3331,16 @@ requirements when using the fallback.
   verify before any use and cache by digest, and keep the cache outside the
   checkout and Docker context. The compiler must refuse a missing or unverified
   file rather than skip the Act; never fall back to a repository copy.
+- A FastAPI BackgroundTask on caseops-api, which runs request-based billing
+  (`cpu-throttling=true`) with concurrency 1, gets CPU only while its own
+  instance is serving a request. Its speed therefore depends on where the
+  polls happen to land, and a green production run proves nothing about it.
+  The Nov 26 research answer phone case got 5 of 29 polls, starved, and lost
+  its connection at the 60 s idle-in-transaction limit. In background work,
+  never hold a transaction across a provider call or CPU-heavy work; read on
+  autocommit or commit first. Judge such a job from production logs (instance
+  of the job vs instances of the polls, and the error line), not by rerunning
+  until green.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

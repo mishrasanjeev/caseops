@@ -366,6 +366,9 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     try { await currentRead.dispose(); } catch (error) { reviewErrors.push(error); }
     if (reviewErrors.length === 1) throw reviewErrors[0];
     if (reviewErrors.length > 1) throw new AggregateError(reviewErrors, "Registry review and read cleanup failures retained separately");
+    // The page re-reads the workspace after the retire. That read must finish here:
+    // left in flight, the reopen below can catch it and lose its body to the navigation.
+    const retiredRead = page.waitForResponse(isWorkspaceRead);
     const retired = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/api/ip/registry-links/${link.id}/match-decision`));
     await main.getByRole("button", { name: "Retire", exact: true }).click();
     const retiredResponse = await retired;
@@ -373,6 +376,10 @@ async function journey(page: Page, request: APIRequestContext, rt: TesterRuntime
     expect(retiredResponse.status()).toBe(200); expect(await retiredResponse.finished()).toBeNull();
     expect(await retiredResponse.json()).toMatchObject({ id: link.id, version: 5, match_status: "retired" });
     liveLinkId = null;
+    const settled = await retiredRead;
+    expect(settled.status()).toBe(200);
+    expect((await settled.json()).items.find((item: { link: { id: string } }) => item.link.id === link.id)?.link)
+      .toMatchObject({ id: link.id, version: 5, match_status: "retired" });
   } catch (error) { workflowErrors.push(error); }
   finally {
     if (liveLinkId) {
