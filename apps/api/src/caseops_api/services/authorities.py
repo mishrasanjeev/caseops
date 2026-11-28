@@ -1822,6 +1822,15 @@ _CASE_NAME_STOPWORDS = frozenset({
     "Pvt", "Corporation", "Committee", "Council", "Authority", "Board",
     "Government", "Gov", "Govt", "High", "Supreme", "Dist", "District",
     "Civil", "Criminal", "Crime", "Police", "Station",
+    # Provision designators are never party names. The contextual planner
+    # appends a capitalised "Section 138" to every section question, so
+    # "Section" became a name token and, on PostgreSQL without a usable query
+    # vector, narrowed the candidates to judgments whose titles contain
+    # "section" (Ram BUG-002 "explain the section 138?", Docker acceptance
+    # 2026-11-28). With vectors it promoted those titles ahead of the rest.
+    "Section", "Sections", "Article", "Articles", "Rule", "Rules", "Order",
+    "Orders", "Schedule", "Chapter", "Clause", "Regulation", "Regulations",
+    "Code", "Sanhita", "Adhiniyam",
 })
 
 

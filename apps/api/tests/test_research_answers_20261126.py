@@ -1132,3 +1132,23 @@ def test_a_provision_an_act_does_not_have_is_never_the_focus(
 
     assert "Section 482, Negotiable Instruments Act, 1881" not in record["answer"]["question_focus"]
     assert record["answer"]["question_focus"][0] == FOCUS_138
+
+
+@pytest.mark.parametrize(
+    ("query", "tokens"),
+    [
+        # The planner appends a capitalised provision to section questions.
+        ("explain the section 138? Section 138", []),
+        ("Order 39 Rule 1 and Section 151 Code", []),
+        ("Article 21 Articles Sections Rules Orders Schedule Chapter Clause", []),
+        ("Regulation 5 Regulations Sanhita Adhiniyam", []),
+        # Party names still narrow a case-name search.
+        ("Pradeep Kumar v. State of Chhattisgarh", ["Pradeep", "Kumar"]),
+        ("Rohit Traders v. State of Maharashtra under Section 138", ["Rohit", "Traders"]),
+    ],
+)
+def test_provision_words_are_never_party_name_tokens(query: str, tokens: list[str]) -> None:
+    from caseops_api.services.authorities import _proper_noun_tokens
+
+    assert _proper_noun_tokens(query) == tokens
+
