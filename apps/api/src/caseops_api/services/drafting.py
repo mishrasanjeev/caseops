@@ -107,6 +107,7 @@ from caseops_api.services.private_retrieval import (
     private_saved_source_manifests_are_current,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.statute_selection import repealed_edition_caution
 
 logger = logging.getLogger(__name__)
 
@@ -950,6 +951,9 @@ def _build_messages(
             text = ref.get("section_text") or ""
             text_excerpt = (text[:600] + "…") if len(text) > 600 else text
             parts.append(f"\n[{relevance}] {short} {num}{' — ' + label if label else ''}")
+            caution = repealed_edition_caution(ref.get("legal_status"))
+            if caution:
+                parts.append(f"  status: {caution}")
             if text_excerpt:
                 parts.append(f"  bare text: {text_excerpt}")
             else:
@@ -1723,6 +1727,7 @@ def _attached_statute_refs(session: Session, matter_id: str) -> list[dict]:
             "section_text": section.section_text,
             "section_url": section.section_url,
             "relevance": ref.relevance,
+            "legal_status": section.legal_status,
         }
         for ref, section, statute in rows
     ]

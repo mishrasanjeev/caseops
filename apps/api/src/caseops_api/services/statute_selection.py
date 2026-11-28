@@ -36,6 +36,18 @@ def selectable_statute_section_sql() -> ColumnElement[bool]:
     )
 
 
+REPEALED_EDITION_CAUTION = (
+    "REPEALED LAW: retained historical edition. Rely on it only for matters "
+    "governed by the earlier law, say expressly that it has been repealed, and "
+    "check the successor Act, its savings and commencement for the relevant date."
+)
+
+
+def repealed_edition_caution(legal_status: str | None) -> str | None:
+    """Caution every prompt carries beside the text of a repealed provision."""
+    return REPEALED_EDITION_CAUTION if legal_status == "repealed" else None
+
+
 def is_selectable_statute_section(section: StatuteSection) -> bool:
     return bool(
         section.is_active
