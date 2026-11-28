@@ -6785,8 +6785,9 @@ reads are not available to the verifier.
 
 ## November 26 - Complete CI suite off main pushes (EH-CI-2026-11-26)
 
-- **Status:** Partially implemented. Landed in `.github/workflows/ci.yml`;
-  not yet proven on `main`.
+- **Status:** Implemented. Landed in `.github/workflows/ci.yml` (PR #673,
+  merge commit `daf095f7`) and proven on `main` by a push run and a nightly
+  run.
 - **Measured cost (7 days to 2026-11-26, runner time only):** about 88,000
   billable Actions minutes. CI on pull requests was 72% and CI re-run on the
   25 merges to `main` was 17% (about 15,100 minutes). The release tooling does
@@ -6808,6 +6809,16 @@ reads are not available to the verifier.
   it to the nightly or dispatched run before enabling staging deploys.
 - **Proof:** `apps/api/tests/test_ci_main_push_trim_20261126.py` fails on the
   previous workflow and passes on this one. The three aggregator condition
-  pins were updated. Still required for Implemented: the first push to `main`
-  after merge skips the heavy suites, and the first nightly run executes all of
-  them.
+  pins were updated.
+- **Push proof (CI run 45925688831, push of `daf095f7`, 2026-11-27):**
+  succeeded. Only API ruff and the web job ran. Every API pytest and
+  PostgreSQL shard, both aggregators, Windows web, both Playwright app suite
+  jobs and the staging deploy were skipped.
+- **Nightly proof (CI run 46099154141, schedule on `main` at `3eeaa069`, which
+  contains `daf095f7`, 2026-11-28):** succeeded with 53 jobs passing: all 13
+  API pytest shards, all 32 PostgreSQL shards, both aggregators, Windows web,
+  web, API ruff and both Playwright projects with their aggregate. Only the
+  staging deploy was skipped, since it runs only on a push. The run was
+  created at 02:39 UTC, about 6 hours after its 20:17 UTC cron time, because
+  GitHub delays scheduled runs under load, so treat the nightly time as
+  approximate.
