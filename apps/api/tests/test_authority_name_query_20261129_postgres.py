@@ -278,10 +278,10 @@ def test_contextual_search_returns_every_judgment_on_the_question(
     payload = _search(client, token, question)
 
     assert planner_words in payload["contextual_plan"]["planned_query"]
-    assert name_queries == [question]
     returned = {row["authority_document_id"] for row in payload["results"]}
     missing = sorted(key for key in expected if ids[key] not in returned)
     assert not missing, missing
+    assert name_queries == [question]
 
 
 def test_research_answer_offers_every_section_138_judgment(
@@ -298,13 +298,13 @@ def test_research_answer_offers_every_section_138_judgment(
 
     record = _ask(client, token, query=CHEQUE_QUESTION)
 
-    # Every retrieval reads party names from the question, or from nothing.
-    assert name_queries and set(name_queries) <= {CHEQUE_QUESTION, ""}, name_queries
     with get_session_factory()() as session:
         manifest = json.loads(session.get(ResearchAnswer, record["id"]).source_manifest_json)
     offered = {item["id"] for item in manifest if item["kind"] == "judgment"}
     missing = sorted(key for key in {*SECTION_138, "benchmark"} if ids[key] not in offered)
     assert not missing, (missing, record["status"], record["error_code"])
+    # Every retrieval reads party names from the question, or from nothing.
+    assert name_queries and set(name_queries) <= {CHEQUE_QUESTION, ""}, name_queries
 
 
 @pytest.mark.parametrize("mode", ["contextual", "keyword"])
