@@ -21,6 +21,8 @@ import hashlib
 import json
 import logging
 import re
+import time
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -29,16 +31,22 @@ from urllib.parse import quote
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from caseops_api.core.automated_test_context import (
+    paid_providers_blocked_for_request,
+    restored_no_paid_marker,
+)
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     AuditActorType,
     AuditResult,
     AuthorityDocument,
     AuthorityDocumentChunk,
+    CompanyMembership,
     Matter,
+    MatterStatuteReference,
     ModelRun,
     ResearchAnswer,
     Statute,
@@ -63,6 +71,7 @@ from caseops_api.schemas.research_answers import (
     ResearchVerification,
 )
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.corpus_title_validation import title_is_case_name
 from caseops_api.services.llm import (
     PURPOSE_RESEARCH,
     LLMCallContext,
@@ -76,23 +85,35 @@ from caseops_api.services.llm import (
     max_tokens_for_purpose,
 )
 from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.retrieval import STOPWORDS, _tokenize
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     authority_source_verified,
     inspect_source_target_action,
 )
-from caseops_api.services.statute_resolver import parse_section_string
+from caseops_api.services.statute_resolver import (
+    bare_section_numbers,
+    base_section,
+    parse_section_references,
+    parse_section_strings,
+)
 from caseops_api.services.statute_selection import is_selectable_statute_section
 
 logger = logging.getLogger(__name__)
 
-ANALYSIS_VERSION = "caseops-research-answer-v1-2026-11-26"
+ANALYSIS_VERSION = "caseops-research-answer-v2-2026-11-26"
 PROMPT_MARKER = "caseops_research_answer_v1"
 DISCLAIMER = (
     "Source-bounded research support, not legal advice and not exhaustive. Verify each "
     "authority, the current statutory text and any amendment before relying on it."
 )
 MAX_JUDGMENTS = 8
+# Candidate pool before judgments are checked against the question's focus.
+JUDGMENT_CANDIDATES = MAX_JUDGMENTS * 4
+MAX_FOCUS_REFS = 4
+# Fewer focus-engaging judgments than this triggers one supplementary search
+# anchored on the focus provision itself.
+MIN_FOCUSED_JUDGMENTS = 3
 MAX_STATUTE_SECTIONS = 6
 MAX_EXCERPT_CHARS = 2_400
 _PASSAGE_MIN_CHARS = 20
@@ -109,12 +130,21 @@ SECTION_TITLES: dict[str, str] = {
     "application": "Application, conclusion and checklist",
 }
 SECTION_ORDER = list(SECTION_TITLES)
+# What a lawyer expects any answer about a provision to cover (Ram, BUG-002).
+CORE_PROVISION_SECTIONS = ("applicable_law", "ingredients", "time_limits", "procedure",
+                           "jurisdiction")
 
 STATUS_MESSAGES = {
     "no_sources": (
-        "CaseOps found no indexed statute section or judgment for this question, so no "
-        "answer was generated. Rephrase with the Act, section or legal issue, or search "
-        "authorities directly."
+        "CaseOps has no verified statute text or indexed judgment for the provision this "
+        "question is about, so no answer was generated rather than an unsourced one. Try "
+        "one of the suggested questions, or search authorities directly."
+    ),
+    "needs_detail": (
+        "CaseOps could not tell which law or legal issue this question is about. "
+        "Name the Act and section or the legal issue (for example, "
+        "\"essential ingredients of Section 138 of the Negotiable Instruments Act\"), or "
+        "start the research from a matter so its recorded facts and statutes are used."
     ),
     "ungrounded": (
         "The draft answer could not be tied to the retrieved sources, so it was withheld. "
@@ -125,10 +155,28 @@ STATUS_MESSAGES = {
     "ai_not_permitted": "AI research is not enabled for this workspace or plan.",
     "internal_error": "The research answer could not be completed. Try again.",
     "timed_out": "The research run did not finish. Ask the question again.",
+    "matter_access_revoked": (
+        "You no longer have access to the matter this research started from, so it was "
+        "not run."
+    ),
 }
 # The job runs in-process after the response. If the instance is recycled the
 # row would stay pending forever; a read settles it instead.
 STALE_AFTER = timedelta(minutes=10)
+# A running row is judged by its claim time (``updated_at``), never by when it
+# was asked: a run claimed at minute 9 must not be settled at minute 10 while
+# it is still working. Longer than the job's 600 s task timeout.
+RUN_LEASE = timedelta(minutes=11)
+
+
+def _stale_research_filter(now: datetime) -> Any:
+    """Rows whose executor is gone: never claimed in time, or claimed and lost."""
+    from sqlalchemy import and_, or_
+
+    return or_(
+        and_(ResearchAnswer.status == "queued", ResearchAnswer.created_at <= now - STALE_AFTER),
+        and_(ResearchAnswer.status == "running", ResearchAnswer.updated_at <= now - RUN_LEASE),
+    )
 
 _MARKER_RE = re.compile(r"\[(\d{1,2})\]")
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.I)
@@ -229,11 +277,41 @@ class _Source:
     in_app_href: str | None = None
     treatment: tuple[str | None, int] | None = None
     aliases: list[str] = field(default_factory=list)
+    # Provisions outside the question's focus that this judgment cites, e.g.
+    # "Section 482 (crpc-1973)" on a petition to quash a Section 138 complaint.
+    other_provisions: list[str] = field(default_factory=list)
+    # cites / names / context_only, against the question's focus; None when the
+    # question has no focus (or for statute sections).
+    focus_engagement: str | None = None
     # Statute sources only: how the section was found and the verified source
     # identity the excerpt was taken from.
     retrieval: str | None = None
     source_sha256: str | None = None
     source_version: int | None = None
+
+
+@dataclass(frozen=True)
+class _Focus:
+    """The provisions a question is about, and where CaseOps found them.
+
+    ``question``: named in the question. ``inferred``: implied by the facts the
+    question states (cheque dishonour -> Section 138 NI Act). ``matter``: the
+    statutes recorded on the matter the research started from.
+    """
+
+    refs: tuple[tuple[str, str], ...] = ()
+    origin: Literal["question", "inferred", "matter", "none"] = "none"
+    labels: tuple[str, ...] = ()
+    # Shown as an assumption when CaseOps had to choose the Act itself.
+    note: str | None = None
+    # Section numbers the question names without an Act of their own, for the
+    # retrieved judgments to place ("Can Section 482 CrPC quash a Section 138
+    # complaint?": CrPC is 482's, 138 is pending).
+    pending: tuple[str, ...] = ()
+
+    @property
+    def acts(self) -> frozenset[str]:
+        return frozenset(statute_id for statute_id, _section in self.refs)
 
 
 def _weight(forum_level: str | None, court: str | None) -> str:
@@ -271,6 +349,7 @@ def _judgment_excerpt(
 
 
 def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchResult]:
+    """Readable, de-duplicated judgment candidates for ``query``, best first."""
     from caseops_api.services.authorities import (
         _build_contextual_query_plan,
         _filter_unreadable_authority_results,
@@ -282,7 +361,7 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
     raw = search_authority_catalog(
         session,
         query=plan.planned_query,
-        limit=MAX_JUDGMENTS * 4,
+        limit=JUDGMENT_CANDIDATES,
         search_mode="contextual",
         suppress_unreadable=False,
     )
@@ -296,13 +375,251 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
             continue
         seen.add(row.authority_document_id)
         picked.append(row)
-        if len(picked) >= MAX_JUDGMENTS:
-            break
     return picked
 
 
 def _is_citable_section(section: StatuteSection) -> bool:
     return is_selectable_statute_section(section)
+
+
+def _ref_label(session: Session, ref: tuple[str, str]) -> str:
+    statute = session.get(Statute, ref[0])
+    return f"{ref[1]}, {statute.long_name}" if statute is not None else f"{ref[1]} ({ref[0]})"
+
+
+def _matter_statute_refs(session: Session, matter: Matter | None) -> list[tuple[str, str]]:
+    if matter is None:
+        return []
+    rows = session.execute(
+        select(StatuteSection.statute_id, StatuteSection.section_number)
+        .join(MatterStatuteReference, MatterStatuteReference.section_id == StatuteSection.id)
+        .where(MatterStatuteReference.matter_id == matter.id)
+        .order_by(MatterStatuteReference.created_at, MatterStatuteReference.id)
+    ).all()
+    refs: list[tuple[str, str]] = []
+    for statute_id, section_number in rows:
+        if (statute_id, section_number) not in refs:
+            refs.append((statute_id, section_number))
+    return refs
+
+
+# Words that ask for an explanation or point at a record without saying what
+# it is about. "Explain about this matter/case." names no law, issue or fact.
+_ASKING_WORDS = frozenset(
+    """
+    about above again all also any anything aspect aspects brief briefly can case cases could
+    current describe detail details did discuss do does document elaborate everything explain
+    explanation facts file give help her here his how issue issues its just kindly know law legal
+    matter matters may me might more must my need now our overview please point points position
+    present question record regarding related relating said same shall should situation some
+    something summarise summarize summary tell their there these this those understand want what
+    when where which who why will would you your
+    """.split()
+)
+
+
+def _names_a_subject(query: str) -> bool:
+    """Whether the question says what it is about, beyond asking and pointing."""
+    return any(
+        token.isalpha() and len(token) >= 3
+        and token not in STOPWORDS and token not in _ASKING_WORDS
+        for token in _tokenize(query)
+    )
+
+
+def _resolve_focus(session: Session, query: str, matter: Matter | None) -> _Focus:
+    """What the question is about: named provisions first, then implied, then the matter's.
+
+    Provisions that do not exist in a catalogued Act are dropped (no "Section
+    482, Negotiable Instruments Act"). A section named without an Act of its
+    own is placed from the question's stated facts when they imply one, else
+    left pending for the retrieved judgments.
+    """
+    from caseops_api.services.authorities import _build_contextual_query_plan
+
+    bare = bare_section_numbers(query)
+    implied = [
+        _base_ref(ref)
+        for ref in parse_section_strings(_build_contextual_query_plan(query).statutes_or_sections)
+    ]
+    refs = list(parse_section_references(query))
+    origin: Literal["question", "inferred", "matter", "none"] = "question"
+    if refs:
+        refs.extend(ref for ref in implied if ref[1] in bare and ref not in refs)
+    else:
+        origin = "inferred"
+        # A named section number limits the implied Acts to that number.
+        refs = [ref for ref in implied if not bare or ref[1] in bare]
+    if not refs:
+        origin = "matter"
+        refs = _matter_statute_refs(session, matter)
+        if bare:
+            # "explain the section 138?" from a matter that records only BNSS 8
+            # is about Section 138, not about Section 8. Keep the matter's
+            # same-numbered provision, else let the judgments place the Act.
+            refs = [ref for ref in refs if ref[1] in bare]
+    if not refs and matter is not None and not bare:
+        # No statute is linked to the matter: read the provisions its own record
+        # names or implies (title, description), never the model's guess.
+        matter_text = " ".join(
+            str(value) for value in (matter.title, matter.description) if value
+        )
+        refs = parse_section_references(matter_text) or [
+            _base_ref(ref)
+            for ref in parse_section_strings(
+                _build_contextual_query_plan(matter_text).statutes_or_sections
+            )
+        ]
+    refs = [ref for ref in refs if _known_provision(session, ref)][:MAX_FOCUS_REFS]
+    pending = tuple(number for number in bare if number not in {ref[1] for ref in refs})
+    if not refs:
+        return _Focus(pending=pending)
+    return _Focus(
+        refs=tuple(refs),
+        origin=origin,
+        labels=tuple(_ref_label(session, ref) for ref in refs),
+        pending=pending,
+    )
+
+
+def _known_provision(session: Session, ref: tuple[str, str]) -> bool:
+    """False for a section an otherwise catalogued Act does not have.
+
+    An Act CaseOps holds no sections for cannot be checked and is kept; its
+    sources will simply be judgments.
+    """
+    if ref[1].startswith("Article"):
+        return True
+    catalogued = session.scalar(
+        select(StatuteSection.id).where(StatuteSection.statute_id == ref[0]).limit(1)
+    )
+    if catalogued is None:
+        return True
+    return (
+        session.scalar(
+            select(StatuteSection.id)
+            .where(StatuteSection.statute_id == ref[0], StatuteSection.section_number == ref[1])
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _retrieval_query(query: str, focus: _Focus, matter: Matter | None) -> str:
+    """The text judgments are retrieved for.
+
+    A question that names its provision is searched as asked. A vague one
+    ("explain this matter") borrows the matter's recorded facts and statutes,
+    so the search has something legal to match. The matter facts are shown to
+    the model separately and labelled; this only steers retrieval.
+    """
+    parts: list[str] = [query]
+    if focus.origin in {"inferred", "matter"}:
+        parts.extend(focus.labels)
+    if matter is not None and focus.origin in {"matter", "none"}:
+        parts.extend(
+            str(value)
+            for value in (
+                matter.title,
+                matter.matter_type,
+                matter.practice_area,
+                (matter.description or "")[:500],
+            )
+            if value
+        )
+    return " ".join(part for part in parts if part)
+
+
+# A bench line ("HON'BLE SRI JUSTICE B. CHANDRA KUMAR", "CORAM: ...") names the
+# judge, not the case, though it passes the corpus proper-noun test.
+_JUDGE_HEADER_RE = re.compile(r"^(?:HON.?BLE|THE\s+HONOU?RABLE|HONOU?RABLE|CORAM|BEFORE)\b", re.I)
+
+
+def _named_in_text(document: AuthorityDocument, *names: str) -> bool:
+    """Each party name (its longest word) appears in the judgment's own text.
+
+    Party names come from model extraction; they are shown as the authority's
+    title only when the judgment itself bears them out.
+    """
+    text = _collapse(document.document_text or "").casefold()
+    if not text:
+        return False
+    for name in names:
+        words = [word for word in re.findall(r"[A-Za-z]{3,}", name)]
+        if not words or max(words, key=len).casefold() not in text:
+            return False
+    return True
+
+
+def _judgment_identity(document: AuthorityDocument) -> tuple[str, bool]:
+    """A title a lawyer can recognise, and whether the record names the case.
+
+    Some ingested judgments carry a page header as their title ("AT HYDERABAD",
+    "Court No. - 25", a file name or a URL). Shown as-is, the authority cannot
+    be identified or cited. The recorded parties name the case instead; failing
+    that, the case number, court and date identify it, marked as unnamed.
+    """
+    title = _collapse(document.title or "")
+    if title_is_case_name(title)[0] and not _JUDGE_HEADER_RE.match(title):
+        return title, True
+    try:
+        parties = json.loads(document.parties_json or "{}")
+    except (TypeError, ValueError):
+        parties = {}
+    if not isinstance(parties, dict):
+        parties = {}
+    appellant = str(parties.get("appellant") or "").strip()
+    respondents = parties.get("respondents")
+    if not isinstance(respondents, list):
+        respondents = []
+    respondent = str(respondents[0]).strip() if respondents else ""
+    if appellant and respondent and _named_in_text(document, appellant, respondent):
+        suffix = " & Ors." if len(respondents) > 1 else ""
+        return f"{appellant} v. {respondent}{suffix}"[:500], True
+    reference = document.case_reference or document.case_number or document.neutral_citation
+    when = document.decision_date.isoformat() if document.decision_date else None
+    parts = [part for part in (reference, document.court_name, when) if part]
+    return ("Case name not recorded: " + ", ".join(parts))[:500], False
+
+
+def _cited_refs(document: AuthorityDocument) -> list[tuple[str, str]]:
+    try:
+        cited = json.loads(document.sections_cited_json or "[]")
+    except (TypeError, ValueError):
+        cited = []
+    if not isinstance(cited, list):
+        return []
+    refs: list[tuple[str, str]] = []
+    for ref in parse_section_strings(str(item) for item in cited):
+        if _base_ref(ref) not in refs:
+            refs.append(_base_ref(ref))
+    return refs
+
+
+def _base_ref(ref: tuple[str, str]) -> tuple[str, str]:
+    """('ni-act-1881', 'Section 138(1)') -> ('ni-act-1881', 'Section 138')."""
+    return (ref[0], ref[1] if ref[1].startswith("Article") else base_section(ref[1]))
+
+
+def _engagement(
+    document: AuthorityDocument, excerpt: str, focus: _Focus
+) -> tuple[int, list[tuple[str, str]]]:
+    """How directly a judgment deals with the focus provision.
+
+    0: it cites a focus provision. 1: its retrieved text names a focus
+    provision. 2: neither, so it is about something else and is not offered to
+    the model. Also returns the provisions outside the focus that it cites.
+    """
+    cited = _cited_refs(document)
+    others = [ref for ref in cited if ref[0] not in focus.acts]
+    if any(ref in focus.refs for ref in cited):
+        return 0, others
+    named = parse_section_references(
+        " ".join(part for part in (document.title, excerpt, document.summary) if part)
+    )
+    if any(ref in focus.refs for ref in named):
+        return 1, others
+    return 2, others
 
 
 @dataclass(frozen=True)
@@ -316,45 +633,37 @@ class _StatuteMatch:
 
 
 def _statute_sections(
-    session: Session, query: str, documents: Iterable[AuthorityDocument]
+    session: Session,
+    query: str,
+    documents: Iterable[AuthorityDocument],
+    focus: _Focus | None = None,
 ) -> list[_StatuteMatch]:
     """Statute sources in fixed priority, at most ``MAX_STATUTE_SECTIONS``.
 
-    1. The section the question names, when it has verified text.
-    2. Sections the retrieved judgments cite, within the named Act if any.
+    1. The focus provisions, when they have verified text.
+    2. Sections the chosen judgments cite, within the focus Acts.
     3. Verified sections that match the question's meaning (semantic
-       retrieval, limited to the named Act when one is named).
+       retrieval), within the focus Acts when the question has a focus.
 
-    A question that names a section without verified text gets no substitute
-    section from steps 1 or 3.
+    Sections from other Acts are never added. Before 26 Nov 2026 a question
+    whose Act was not recognised let every section the retrieved judgments
+    cited through, so quashing petitions could make Section 482 CrPC the lead
+    statutory source of a Section 138 answer (BUG-002). A question that names
+    a section without verified text gets no substitute section.
     """
     from caseops_api.services.statute_vectors import search_statute_sections
 
-    primary = parse_section_string(query)
+    focus = focus if focus is not None else _resolve_focus(session, query, None)
     # Read the citations before retrieval: semantic retrieval releases its
     # read transaction around the provider call.
-    statutes_in_scope = {primary[0]} if primary else set()
-    refs: list[tuple[str, str]] = []
+    refs: list[tuple[tuple[str, str], str]] = [(ref, "exact_reference") for ref in focus.refs]
     for document in documents:
-        try:
-            cited = json.loads(document.sections_cited_json or "[]")
-        except (TypeError, ValueError):
-            cited = []
-        for item in cited if isinstance(cited, list) else []:
-            parsed = parse_section_string(str(item))
-            if parsed and (not statutes_in_scope or parsed[0] in statutes_in_scope):
-                refs.append(parsed)
-
-    hits = search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS)
-    exact = [hit for hit in hits if hit.match == "exact_reference"]
-    semantic = [hit for hit in hits if hit.match == "semantic"]
-    found: list[_StatuteMatch] = [
-        _StatuteMatch(section=hit.section, statute=hit.statute, retrieval=hit.match)
-        for hit in exact
-    ]
-    seen_ids = {match.section.id for match in found}
+        refs.extend(
+            (ref, "judgment_citation") for ref in _cited_refs(document) if ref[0] in focus.acts
+        )
+    found: list[_StatuteMatch] = []
     seen: set[tuple[str, str]] = set()
-    for statute_id, section_number in refs:
+    for (statute_id, section_number), retrieval in refs:
         if len(found) >= MAX_STATUTE_SECTIONS:
             break
         if (statute_id, section_number) in seen:
@@ -368,16 +677,21 @@ def _statute_sections(
                 StatuteSection.section_number == section_number,
             )
         ).first()
-        if row is None or not _is_citable_section(row[0]) or row[0].id in seen_ids:
+        if row is None or not _is_citable_section(row[0]):
             continue
-        seen_ids.add(row[0].id)
-        found.append(
-            _StatuteMatch(section=row[0], statute=row[1], retrieval="judgment_citation")
-        )
-    for hit in semantic:
+        found.append(_StatuteMatch(section=row[0], statute=row[1], retrieval=retrieval))
+    named_unverified = focus.origin == "question" and not any(
+        match.retrieval == "exact_reference" for match in found
+    )
+    if len(found) >= MAX_STATUTE_SECTIONS or named_unverified or focus.pending:
+        return found
+    seen_ids = {match.section.id for match in found}
+    for hit in search_statute_sections(session, query, limit=MAX_STATUTE_SECTIONS):
         if len(found) >= MAX_STATUTE_SECTIONS:
             break
-        if hit.section.id in seen_ids:
+        if hit.match != "semantic" or hit.section.id in seen_ids:
+            continue
+        if focus.refs and hit.statute.id not in focus.acts:
             continue
         seen_ids.add(hit.section.id)
         found.append(
@@ -430,20 +744,178 @@ def _statute_excerpt(section_text: str, span: tuple[int, int] | None) -> str:
     return f"{opening}{gap}{body}"[:MAX_EXCERPT_CHARS]
 
 
-def _build_sources(session: Session, query: str) -> list[_Source]:
-    from caseops_api.services.authority_treatments import compute_search_result_treatments
+@dataclass
+class _Candidate:
+    result: AuthoritySearchResult
+    document: AuthorityDocument
+    excerpt: str
+    tier: int
+    others: list[tuple[str, str]]
+    rank: int
 
-    judgments = _retrieve_judgments(session, query)
+
+_ENGAGEMENT = {0: "cites", 1: "names", 2: "context_only"}
+# When no retrieved judgment deals with the focus provision, this many of the
+# best-ranked ones are kept, each marked as not citing it, rather than none.
+CONTEXT_ONLY_JUDGMENTS = 3
+
+
+def _candidates(
+    session: Session, results: list[AuthoritySearchResult], focus: _Focus, offset: int = 0
+) -> list[_Candidate]:
     documents = {
         row.id: row
         for row in session.scalars(
             select(AuthorityDocument).where(
-                AuthorityDocument.id.in_([item.authority_document_id for item in judgments])
+                AuthorityDocument.id.in_([item.authority_document_id for item in results])
             )
         )
     }
+    picked: list[_Candidate] = []
+    for rank, item in enumerate(results, start=offset):
+        document = documents.get(item.authority_document_id)
+        if document is None:
+            continue
+        excerpt = _judgment_excerpt(session, item, document.document_text)
+        if not excerpt:
+            continue
+        tier, others = _engagement(document, excerpt, focus) if focus.refs else (0, [])
+        picked.append(_Candidate(item, document, excerpt, tier, others, rank))
+    return picked
+
+
+def _infer_bare_section_focus(
+    session: Session, query: str, pool: list[_Candidate], *, numbers: tuple[str, ...] = ()
+) -> _Focus | None:
+    """The Act a bare "section 138" means, read from the judgments that apply it.
+
+    "explain the section 138?" names no Act. Section 138 exists in several
+    Acts, and guessing one from model knowledge is not allowed. The retrieved
+    judgments say which one practitioners mean: the Act whose same-numbered
+    section most of them cite or name wins, provided no other Act's section of
+    that number ties it. The choice is shown to the user as an assumption.
+    """
+    numbers = numbers or tuple(bare_section_numbers(query))
+    if not numbers:
+        return None
+    counts: Counter[tuple[str, str]] = Counter()
+    for item in pool:
+        refs = set(_cited_refs(item.document)) | set(
+            parse_section_references(
+                " ".join(
+                    part for part in (item.document.title, item.excerpt, item.document.summary)
+                    if part
+                )
+            )
+        )
+        counts.update(
+            ref for ref in refs if ref[1] in numbers and _known_provision(session, ref)
+        )
+    chosen: list[tuple[str, str]] = []
+    for number in numbers:
+        ranked = sorted(
+            ((count, ref) for ref, count in counts.items() if ref[1] == number), reverse=True
+        )
+        if ranked and (len(ranked) == 1 or ranked[0][0] > ranked[1][0]):
+            chosen.append(ranked[0][1])
+    if not chosen:
+        return None
+    labels = tuple(_ref_label(session, ref) for ref in chosen)
+    return _Focus(
+        refs=tuple(chosen),
+        origin="inferred",
+        labels=labels,
+        note=(
+            "The question names "
+            + ", ".join(ref[1] for ref in chosen)
+            + " without an Act. It was researched as "
+            + "; ".join(labels)
+            + ", the provision most of the matching judgments apply. Name the Act if you "
+            "meant another."
+        ),
+    )
+
+
+def _select_judgments(
+    session: Session, query: str, focus: _Focus, matter: Matter | None
+) -> tuple[list[_Candidate], _Focus]:
+    """Judgments that deal with the question's focus, binding authority first."""
+    pool = _candidates(
+        session, _retrieve_judgments(session, _retrieval_query(query, focus, matter)), focus
+    )
+    if focus.pending:
+        inferred = _infer_bare_section_focus(session, query, pool, numbers=focus.pending)
+        if inferred is not None:
+            refs = tuple(dict.fromkeys(focus.refs + inferred.refs))
+            focus = _Focus(
+                refs=refs,
+                origin=focus.origin if focus.refs else inferred.origin,
+                labels=tuple(_ref_label(session, ref) for ref in refs),
+                note=inferred.note,
+            )
+            for item in pool:
+                item.tier, item.others = _engagement(item.document, item.excerpt, focus)
+    if focus.refs and sum(1 for item in pool if item.tier < 2) < MIN_FOCUSED_JUDGMENTS:
+        # The question's wording pulled in neighbouring topics. Search once more
+        # on the focus provision itself before settling for fewer authorities.
+        seen = {item.result.authority_document_id for item in pool}
+        anchored = [
+            row
+            for row in _retrieve_judgments(session, " ".join(focus.labels))
+            if row.authority_document_id not in seen
+        ]
+        pool.extend(_candidates(session, anchored, focus, offset=len(pool)))
+    if focus.refs:
+        on_focus = [item for item in pool if item.tier < 2]
+        # Never filter down to nothing: a wrong or narrow focus (a new-code
+        # section the corpus cites under its old number, an unusual sub-section)
+        # would otherwise answer from the statute alone. Keep the best-ranked
+        # few, each labelled as not citing the focus provision.
+        pool = on_focus or sorted(pool, key=lambda item: item.rank)[:CONTEXT_ONLY_JUDGMENTS]
+    # Choose by relevance first: deals with the focus, named, not mainly about
+    # another provision, then retrieval rank. Binding authority only reorders
+    # what was chosen, so an off-point Supreme Court judgment at rank 31 never
+    # displaces an on-point High Court judgment at rank 1.
+    chosen = sorted(
+        pool,
+        key=lambda item: (
+            item.tier,
+            # A judgment that cites more of the focus (both Section 482 and
+            # Section 138 for a quashing-of-a-138-complaint question) is closer
+            # to the question than one citing only part of it.
+            -len(set(_cited_refs(item.document)) & set(focus.refs)),
+            not _judgment_identity(item.document)[1],
+            bool(item.others),
+            item.rank,
+        ),
+    )[:MAX_JUDGMENTS]
+    chosen.sort(
+        key=lambda item: (
+            item.tier,
+            -len(set(_cited_refs(item.document)) & set(focus.refs)),
+            item.result.forum_level != "supreme_court",
+            item.rank,
+        )
+    )
+    return chosen, focus
+
+
+def _build_sources(
+    session: Session, query: str, focus: _Focus | None = None, matter: Matter | None = None
+) -> tuple[list[_Source], _Focus]:
+    """Sources for the question and the focus they were chosen for.
+
+    The focus can change here: a bare section number gets its Act from the
+    retrieved judgments (``_infer_bare_section_focus``).
+    """
+    from caseops_api.services.authority_treatments import compute_search_result_treatments
+
+    focus = focus if focus is not None else _resolve_focus(session, query, matter)
+    judgments, focus = _select_judgments(session, query, focus, matter)
     sources: list[_Source] = []
-    for match in _statute_sections(session, query, documents.values()):
+    for match in _statute_sections(
+        session, query, [item.document for item in judgments], focus
+    ):
         section, statute = match.section, match.statute
         label = section.section_label or ""
         title = f"{section.section_number}, {statute.long_name}"
@@ -482,29 +954,24 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
             )
         )
     treatments = compute_search_result_treatments(
-        session, [item.authority_document_id for item in judgments]
+        session, [item.result.authority_document_id for item in judgments]
     )
-    for item in judgments:
-        document = documents.get(item.authority_document_id)
-        if document is None:
-            continue
-        excerpt = _judgment_excerpt(session, item, document.document_text)
-        if not excerpt:
-            continue
+    for candidate in judgments:
+        item, document = candidate.result, candidate.document
         citation = item.neutral_citation or item.case_reference
         sources.append(
             _Source(
                 number=len(sources) + 1,
                 kind="judgment",
                 id=item.authority_document_id,
-                title=item.title,
+                title=_judgment_identity(document)[0],
                 citation=citation,
                 court=item.court_name,
                 bench=item.bench_name,
                 decision_date=item.decision_date,
                 weight=_weight(item.forum_level, item.court_name),
-                excerpt=excerpt,
-                full_text=document.document_text or excerpt,
+                excerpt=candidate.excerpt,
+                full_text=document.document_text or candidate.excerpt,
                 retrieved_at=document.retrieved_at,
                 source_action=inspect_source_target_action(
                     item.source_reference,
@@ -514,9 +981,11 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 ).model_dump(mode="json"),
                 treatment=treatments.get(item.authority_document_id),
                 aliases=[value for value in (item.case_reference, item.neutral_citation) if value],
+                other_provisions=[f"{ref[1]} ({ref[0]})" for ref in candidate.others[:4]],
+                focus_engagement=_ENGAGEMENT[candidate.tier] if focus.refs else None,
             )
         )
-    return sources
+    return sources, focus
 
 
 # --------------------------------------------------------------------------- #
@@ -544,7 +1013,9 @@ def _build_messages(
     sources: list[_Source],
     matter_facts: list[ResearchMatterFact],
     retry_note: str | None = None,
+    focus: _Focus | None = None,
 ) -> list[LLMMessage]:
+    focus = focus or _Focus()
     system = (
         "You are CaseOps legal research for Indian lawyers. Return only one JSON object "
         "matching the schema. Write in plain legal English.\n"
@@ -571,10 +1042,24 @@ def _build_messages(
         "8. authorities: for each source you relied on, give the proposition it supports, "
         "why it matters to this question, disposition (supporting, contrary or context) "
         "and, where possible, a short passage copied verbatim from that source's excerpt.\n"
-        "9. No outcome odds, no judge favourability, no claims of exhaustive research."
+        "9. No outcome odds, no judge favourability, no claims of exhaustive research.\n"
+        "10. QUESTION_FOCUS lists the provisions the question is about. Keep short_answer, "
+        "key_points and every section on those provisions. A judgment whose "
+        "other_provisions shows it mainly concerns a different provision (for example a "
+        "power to quash proceedings) may be cited only for what it says about the focus "
+        "provision. Do not make that other provision the subject of the answer unless the "
+        "question asks about it.\n"
+        "11. When QUESTION_FOCUS is not empty, cover applicable_law, ingredients, "
+        "time_limits, procedure and jurisdiction wherever the SOURCES support them. Leave "
+        "out a topic the SOURCES do not support instead of answering it from general "
+        "knowledge.\n"
+        "12. A source whose focus_engagement is context_only does not cite the focus "
+        "provision. Never state the focus provision's rule, ingredients or time limits from "
+        "it; cite it only for what it says itself, and say it is related context."
     )
     payload = {
         "question": query,
+        "question_focus": list(focus.labels),
         "matter_facts": [fact.model_dump() for fact in matter_facts],
         "sources": [
             {
@@ -584,6 +1069,8 @@ def _build_messages(
                 "citation": source.citation,
                 "court": source.court,
                 "decision_date": source.decision_date.isoformat() if source.decision_date else None,
+                "other_provisions": source.other_provisions,
+                "focus_engagement": source.focus_engagement,
                 "untrusted_excerpt": source.excerpt,
             }
             for source in sources
@@ -715,21 +1202,76 @@ def _prohibited(parsed: _LLMResearchAnswer) -> str | None:
     return None
 
 
-def _retry_note(parsed: _LLMResearchAnswer, verifier: _Verifier) -> str | None:
-    texts = [parsed.short_answer, *parsed.key_points]
+def _off_focus(short_answer: str, focus: _Focus, query: str) -> list[str]:
+    """Provisions a short answer is about instead of the one asked about.
+
+    Drift is a short answer that names other provisions and never the focus
+    provision ("The High Court may quash under Section 482 CrPC ..." for a
+    Section 138 question). Naming the procedure alongside the focus ("a Section
+    138 complaint under Section 200 CrPC") is the answer, not drift.
+    """
+    if not focus.refs:
+        return []
+    named = parse_section_references(short_answer)
+    if any(ref in focus.refs for ref in named):
+        return []
+    asked = set(parse_section_references(query))
+    found: list[str] = []
+    for ref in named:
+        if ref not in asked and ref not in focus.refs:
+            label = f"{ref[1]} ({ref[0]})"
+            if label not in found:
+                found.append(label)
+    return found
+
+
+# A second full generation roughly doubles the wait (BUG-003). Detail
+# paragraphs that fail verification are dropped deterministically and the drop
+# is reported, so they only justify a retry when they would gut the answer.
+_RETRY_DROP_SHARE = 0.25
+
+
+def _retry_note(
+    parsed: _LLMResearchAnswer,
+    verifier: _Verifier,
+    focus: _Focus | None = None,
+) -> str | None:
+    """Why the draft needs a second generation, or None when it can be verified as is."""
+    focus = focus or _Focus()
+    headline = [parsed.short_answer, *parsed.key_points]
+    detail: list[str] = []
     for section in parsed.sections:
-        texts.extend(section.paragraphs)
-        texts.extend(section.steps)
-        texts.extend(f"{row.period} {row.starts} {row.detail}" for row in section.timeline)
-    mentions = sorted({item for text in texts for item in verifier.unverified_mentions(text)})
+        detail.extend(section.paragraphs)
+        detail.extend(section.steps)
+        detail.extend(f"{row.period} {row.starts} {row.detail}" for row in section.timeline)
+    headline_mentions = sorted(
+        {item for text in headline for item in verifier.unverified_mentions(text)}
+    )
+    flagged_detail = [text for text in detail if verifier.unverified_mentions(text)]
     problems: list[str] = []
-    if mentions:
+    if headline_mentions or (
+        detail and len(flagged_detail) / len(detail) > _RETRY_DROP_SHARE
+    ):
+        mentions = sorted(
+            {
+                item
+                for text in [*headline, *flagged_detail]
+                for item in verifier.unverified_mentions(text)
+            }
+        )
         problems.append(
             "Remove these names, citations, quotations or links that are not in the SOURCES: "
             + "; ".join(mentions[:12])
         )
     if not any(int(n) in verifier.numbers for n in _MARKER_RE.findall(parsed.short_answer)):
         problems.append("The short_answer must cite at least one supplied source marker.")
+    drifted = _off_focus(parsed.short_answer, focus, verifier.query)
+    if drifted:
+        problems.append(
+            "The question is about " + "; ".join(focus.labels) + ". The short_answer is about "
+            + "; ".join(drifted) + " instead, which the question did not ask about. Answer the "
+            "question on the focus provisions."
+        )
     category = _prohibited(parsed)
     if category:
         problems.append(f"Remove {category.replace('_', ' ')} language.")
@@ -742,6 +1284,7 @@ def _verify(
     sources: list[_Source],
     query: str,
     matter_facts: list[ResearchMatterFact],
+    focus: _Focus | None = None,
 ) -> ResearchAnswerBody | None:
     verifier = _Verifier(sources=sources, query=query)
     short = verifier.cited(parsed.short_answer, requires_source=True)
@@ -842,11 +1385,30 @@ def _verify(
             number,
             ResearchAuthorityEntry(source=number, disposition="supporting", cited_inline=True),
         )
+    # A judgment the answer never cites inline and whose claimed passage could
+    # not be found in its text is a loose association, not an authority for
+    # anything shown. Listing it is how unrelated precedents reached the
+    # authorities section (BUG-002), so it is dropped and counted.
+    unsupported = [
+        number
+        for number, entry in entries.items()
+        if not entry.cited_inline
+        and not entry.passage_verified
+        and by_number[number].kind == "judgment"
+    ]
+    for number in unsupported:
+        del entries[number]
+    verifier.verification.unlinked_authorities = len(unsupported)
     ordered = [entries[number] for number in cited_inline] + [
         entry for number, entry in entries.items() if number not in cited_inline
     ]
 
     verification = verifier.verification
+    if verification.unlinked_authorities:
+        verification.notes.append(
+            f"{verification.unlinked_authorities} retrieved judgment(s) were not listed because "
+            "the answer neither cites them nor quotes a passage found in their text."
+        )
     if verification.removed_unverified_mentions:
         verification.notes.append(
             f"{verification.removed_unverified_mentions} passage(s) were withheld because they "
@@ -868,10 +1430,19 @@ def _verify(
         key_points=key_points,
         facts_insufficient=parsed.facts_insufficient,
         missing_facts=[item.strip() for item in parsed.missing_facts if item.strip()],
-        assumptions=[item.strip() for item in parsed.assumptions if item.strip()],
+        assumptions=([focus.note] if focus and focus.note else [])
+        + [item.strip() for item in parsed.assumptions if item.strip()],
         sections=sections,
         authorities=ordered,
         matter_facts=matter_facts,
+        question_focus=list(focus.labels) if focus else [],
+        # Deterministic, never model text: the core topics of a provision
+        # question that no verified section of this answer covers.
+        coverage_gaps=[
+            SECTION_TITLES[key]
+            for key in CORE_PROVISION_SECTIONS
+            if focus and focus.refs and key not in {section.key for section in sections}
+        ],
         verification=verification,
         law_checked_as_of=datetime.now(UTC).date(),
         sources_retrieved_from=min(retrieved) if retrieved else None,
@@ -899,6 +1470,7 @@ def _manifest(sources: list[_Source]) -> list[dict[str, Any]]:
             "weight": source.weight,
             "source_action": source.source_action,
             "in_app_href": source.in_app_href,
+            "focus_engagement": source.focus_engagement,
             "treatment_signal": (
                 {"worst_treatment": source.treatment[0], "adverse_count": source.treatment[1]}
                 if source.treatment and (source.treatment[0] or source.treatment[1])
@@ -926,18 +1498,41 @@ def _finish(
     body: ResearchAnswerBody | None = None,
     manifest: list[dict[str, Any]] | None = None,
     model_run_id: str | None = None,
-) -> None:
+    expected: tuple[str, ...] = ("running",),
+) -> bool:
+    """Settle the answer only if it is still in an ``expected`` state.
+
+    A compare-and-set, so a late run can never overwrite an answer that was
+    already settled (for example as ``timed_out``), and a settle never
+    overwrites a finished run. Returns False, and records nothing, when
+    another path got there first.
+    """
     now = datetime.now(UTC)
-    answer.status = state
-    answer.error_code = error_code
+    values: dict[str, Any] = {
+        "status": state,
+        "error_code": error_code,
+        "updated_at": now,
+        "completed_at": now,
+    }
     if body is not None:
-        answer.answer_json = body.model_dump_json()
+        values["answer_json"] = body.model_dump_json()
     if manifest is not None:
-        answer.source_manifest_json = json.dumps(manifest, ensure_ascii=False)
+        values["source_manifest_json"] = json.dumps(manifest, ensure_ascii=False)
     if model_run_id is not None:
-        answer.model_run_id = model_run_id
-    answer.updated_at = now
-    answer.completed_at = now
+        values["model_run_id"] = model_run_id
+    moved = session.execute(
+        update(ResearchAnswer)
+        .where(ResearchAnswer.id == answer.id, ResearchAnswer.status.in_(expected))
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if moved != 1:
+        # Keep anything else this transaction recorded (a ModelRun row).
+        session.commit()
+        logger.warning(
+            "research answer %s was already settled; %s was not recorded", answer.id, state
+        )
+        return False
     record_audit(
         session,
         company_id=answer.company_id,
@@ -955,6 +1550,8 @@ def _finish(
         },
     )
     session.commit()
+    session.expire(answer)
+    return True
 
 
 def _model_run(
@@ -1034,21 +1631,58 @@ def _matter_in_company(session: Session, *, context: SessionContext, matter_id: 
     return matter
 
 
+def _normalised_query(query: str) -> str:
+    return " ".join(query.split()).casefold()
+
+
 def create_research_answer(
     session: Session, *, context: SessionContext, payload: ResearchAnswerCreateRequest
-) -> ResearchAnswer:
+) -> tuple[ResearchAnswer, bool]:
+    """Queue an answer, or return the requester's identical one still in flight.
+
+    The second element is False when an existing queued or running answer was
+    returned; the caller must not dispatch it again.
+    """
     matter = (
         _matter_in_company(session, context=context, matter_id=payload.context_matter_id)
         if payload.context_matter_id
         else None
     )
+    # Serialise this requester's submissions so a double submit cannot race
+    # past the duplicate check. NO KEY UPDATE leaves foreign-key readers free.
+    session.execute(
+        select(CompanyMembership.id)
+        .where(CompanyMembership.id == context.membership.id)
+        .with_for_update(key_share=True)
+    )
     now = datetime.now(UTC)
+    in_flight = session.scalars(
+        select(ResearchAnswer)
+        .where(
+            ResearchAnswer.company_id == context.company.id,
+            ResearchAnswer.created_by_membership_id == context.membership.id,
+            ResearchAnswer.status.in_(("queued", "running")),
+            ResearchAnswer.created_at > now - STALE_AFTER,
+            # A human must never receive the offline answer of an automated run
+            # that asked the same words, nor the reverse.
+            ResearchAnswer.no_paid_providers.is_(paid_providers_blocked_for_request()),
+            ResearchAnswer.context_matter_id.is_(None)
+            if matter is None
+            else ResearchAnswer.context_matter_id == matter.id,
+        )
+        .order_by(ResearchAnswer.created_at.desc())
+    )
+    query_key = _normalised_query(payload.query)
+    for existing in in_flight:
+        if _normalised_query(existing.query) == query_key:
+            return existing, False
     answer = ResearchAnswer(
         company_id=context.company.id,
         created_by_membership_id=context.membership.id,
         context_matter_id=matter.id if matter else None,
         query=payload.query,
         status="queued",
+        no_paid_providers=paid_providers_blocked_for_request(),
         analysis_version=ANALYSIS_VERSION,
         created_at=now,
         updated_at=now,
@@ -1066,49 +1700,109 @@ def create_research_answer(
     )
     session.commit()
     session.refresh(answer)
-    return answer
+    return answer, True
 
 
-def run_research_answer_job(answer_id: str) -> None:
+def run_research_answer_job(answer_id: str) -> bool:
+    """Run one queued answer; False when another executor owns or settled it."""
     with get_session_factory()() as session:
-        answer = session.get(ResearchAnswer, answer_id)
-        if answer is None or answer.status != "queued":
-            return
-        answer.status = "running"
-        answer.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        # Compare-and-set is the claim on every dialect: exactly one executor
+        # moves a fresh queued row to running. A stale row is left to settle.
+        claimed = session.execute(
+            update(ResearchAnswer)
+            .where(
+                ResearchAnswer.id == answer_id,
+                ResearchAnswer.status == "queued",
+                ResearchAnswer.created_at > now - STALE_AFTER,
+            )
+            .values(status="running", updated_at=now)
+            .execution_options(synchronize_session=False)
+        ).rowcount
         session.commit()
-        try:
-            _run(session, answer)
-        except Exception:  # noqa: BLE001 - a background job must end in a terminal state.
-            logger.exception("research answer job failed")
-            session.rollback()
-            answer = session.get(ResearchAnswer, answer_id)
-            if answer is not None and answer.status in {"queued", "running"}:
-                _finish(session, answer, state="failed", error_code="internal_error")
+        if claimed != 1:
+            return False
+        answer = session.get(ResearchAnswer, answer_id)
+        if answer is None:
+            return True
+        if answer.context_matter_id and not _creator_can_still_access(session, answer):
+            # A wall or role change after submission must stop the run before
+            # the matter's facts reach retrieval or the model.
+            _finish(session, answer, state="failed", error_code="matter_access_revoked")
+            return True
+        with restored_no_paid_marker(answer.no_paid_providers):
+            try:
+                _run(session, answer)
+            except Exception:  # noqa: BLE001 - a background job must end in a terminal state.
+                logger.exception("research answer job failed")
+                session.rollback()
+                answer = session.get(ResearchAnswer, answer_id)
+                if answer is not None and answer.status in {"queued", "running"}:
+                    _finish(session, answer, state="failed", error_code="internal_error")
+        return True
+
+
+def _creator_can_still_access(session: Session, answer: ResearchAnswer) -> bool:
+    from caseops_api.services.intelligent_reviews import _load_context_for_worker
+
+    if not answer.created_by_membership_id:
+        return False
+    try:
+        context = _load_context_for_worker(session, answer.created_by_membership_id)
+    except HTTPException:
+        return False
+    matter = session.get(Matter, answer.context_matter_id)
+    return bool(
+        matter is not None
+        and matter.company_id == answer.company_id
+        and can_access(session, context=context, matter=matter)
+    )
 
 
 def _run(session: Session, answer: ResearchAnswer) -> None:
     from caseops_api.services.embeddings import EmbeddingProviderError
 
-    query = answer.query
-    # Retrieval only reads, but between its queries it embeds the question and
-    # reranks candidates on the CPU. Inside a transaction that idle time counts
-    # against the server's idle-in-transaction timeout (60 s in production),
-    # which killed the connection mid-retrieval on 2026-11-26. Read without a
-    # transaction, then return the connection before any write.
+    started = time.perf_counter()
+    timings: dict[str, int] = {}
+    query, matter_id = answer.query, answer.context_matter_id
+    # Retrieval reads, then embeds the question and reranks candidates on the
+    # CPU. Inside a transaction that idle time counts against the server's
+    # idle-in-transaction timeout (60 s in production), which killed the
+    # connection mid-retrieval on 2026-11-26 (prod-verify 45856740774). End the
+    # claim's read transaction first: autocommit is only applied to a fresh
+    # connection, and is silently ignored on one already in a transaction.
+    session.commit()
     session.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+    matter = session.get(Matter, matter_id) if matter_id else None
     try:
-        sources = _build_sources(session, query)
+        focus = _resolve_focus(session, query, matter)
+        # Without a matter, a question that names no provision and no subject
+        # cannot be placed. Retrieval would still match something in a large
+        # corpus and the answer would be about an unrelated case (BUG-004).
+        vague = matter is None and not (focus.refs or focus.pending) and not _names_a_subject(query)
+        sources: list[_Source] = []
+        if not vague:
+            sources, focus = _build_sources(session, query, focus=focus, matter=matter)
     except EmbeddingProviderError:
         session.rollback()
         _finish(session, answer, state="failed", error_code="retrieval_unavailable")
         return
+    # Return the autocommit connection before anything below writes.
     session.commit()
+    timings["retrieval_ms"] = int((time.perf_counter() - started) * 1000)
     manifest = _manifest(sources)
     if not sources:
-        _finish(session, answer, state="abstained", error_code="no_sources", manifest=manifest)
+        # A question CaseOps could place but has no source for is different from
+        # one it could not place at all: the second needs the user to say more.
+        # A named provision CaseOps does not hold ("Section 999 of the NI Act")
+        # was placed by the lawyer, so it is a missing source, not vagueness.
+        from caseops_api.services.statute_vectors import names_a_provision
+
+        placed = bool(focus.refs or focus.pending) or names_a_provision(query)
+        code = "no_sources" if placed else "needs_detail"
+        _log_timings(answer.id, code, focus, sources, timings, attempts=0)
+        _finish(session, answer, state="abstained", error_code=code, manifest=manifest)
         return
-    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
     matter_facts = _matter_facts(matter)
     answer_id = answer.id
     call_context = LLMCallContext(
@@ -1117,38 +1811,55 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
         actor_membership_id=answer.created_by_membership_id,
         purpose=PURPOSE_RESEARCH,
     )
-    messages = _build_messages(query=answer.query, sources=sources, matter_facts=matter_facts)
+    messages = _build_messages(
+        query=answer.query, sources=sources, matter_facts=matter_facts, focus=focus
+    )
     # Retrieval can write (for example query telemetry); the model call
     # releases the session and requires a clean transaction.
     session.commit()
+    attempts = 0
     try:
         provider = build_provider(purpose=PURPOSE_RESEARCH)
+        generation_started = time.perf_counter()
         parsed, completion = _generate(
             provider, session=session, messages=messages, context=call_context
         )
-        note = _retry_note(parsed, _Verifier(sources=sources, query=answer.query))
+        attempts = 1
+        timings["first_generation_ms"] = int((time.perf_counter() - generation_started) * 1000)
+        note = _retry_note(parsed, _Verifier(sources=sources, query=answer.query), focus)
         if note:
             messages = _build_messages(
-                query=answer.query, sources=sources, matter_facts=matter_facts, retry_note=note
+                query=answer.query,
+                sources=sources,
+                matter_facts=matter_facts,
+                retry_note=note,
+                focus=focus,
             )
+            retry_started = time.perf_counter()
             parsed, completion = _generate(
                 provider, session=session, messages=messages, context=call_context
             )
+            attempts = 2
+            timings["retry_generation_ms"] = int((time.perf_counter() - retry_started) * 1000)
     except HTTPException as exc:
         session.rollback()
         answer = session.get(ResearchAnswer, answer_id)
         code = "ai_not_permitted" if exc.status_code in {402, 403, 429} else "provider_unavailable"
+        _log_timings(answer_id, code, focus, sources, timings, attempts=attempts)
         _finish(session, answer, state="failed", error_code=code, manifest=manifest)
         return
     except LLMProviderError as exc:
         session.rollback()
         answer = session.get(ResearchAnswer, answer_id)
         logger.warning("research answer provider failure: %s", redact_provider_error(str(exc)))
+        _log_timings(answer_id, "provider_unavailable", focus, sources, timings, attempts=attempts)
         _finish(session, answer, state="failed", error_code="provider_unavailable",
                 manifest=manifest)
         return
     answer = session.get(ResearchAnswer, answer_id)
-    body = _verify(parsed, sources=sources, query=answer.query, matter_facts=matter_facts)
+    body = _verify(
+        parsed, sources=sources, query=answer.query, matter_facts=matter_facts, focus=focus
+    )
     run_id = _model_run(
         session,
         answer,
@@ -1156,11 +1867,39 @@ def _run(session: Session, answer: ResearchAnswer) -> None:
         messages=messages,
         status_label="ok" if body else "rejected_unverified_citations",
     )
+    timings["total_ms"] = int((time.perf_counter() - started) * 1000)
+    _log_timings(
+        answer_id, "answered" if body else "ungrounded", focus, sources, timings, attempts=attempts
+    )
     if body is None:
         _finish(session, answer, state="abstained", error_code="ungrounded", manifest=manifest,
                 model_run_id=run_id)
         return
     _finish(session, answer, state="answered", body=body, manifest=manifest, model_run_id=run_id)
+
+
+def _log_timings(
+    answer_id: str,
+    outcome: str,
+    focus: _Focus,
+    sources: list[_Source],
+    timings: dict[str, int],
+    *,
+    attempts: int,
+) -> None:
+    """One structured line per run, so latency and focus can be read from logs."""
+    logger.info(
+        "research_answer_timing answer_id=%s outcome=%s focus_origin=%s focus_refs=%d "
+        "statute_sources=%d judgment_sources=%d attempts=%d %s",
+        answer_id,
+        outcome,
+        focus.origin,
+        len(focus.refs),
+        sum(1 for source in sources if source.kind == "statute_section"),
+        sum(1 for source in sources if source.kind == "judgment"),
+        attempts,
+        " ".join(f"{key}={value}" for key, value in timings.items()),
+    )
 
 
 def _readable(session: Session, *, context: SessionContext, answer: ResearchAnswer) -> bool:
@@ -1213,6 +1952,7 @@ def serialize_research_answer(session: Session, answer: ResearchAnswer) -> Resea
             weight=item["weight"],
             source_action=item.get("source_action"),
             in_app_href=item.get("in_app_href"),
+            focus_engagement=item.get("focus_engagement"),
             treatment_signal=(
                 ResearchTreatmentSignal(**item["treatment_signal"])
                 if item.get("treatment_signal")
@@ -1237,17 +1977,77 @@ def serialize_research_answer(session: Session, answer: ResearchAnswer) -> Resea
         saved_at=answer.saved_at,
         answer=body,
         sources=sources,
+        suggestions=_suggestions(session, answer),
     )
 
 
+def _suggestions(session: Session, answer: ResearchAnswer) -> list[str]:
+    """Questions CaseOps can answer instead of one it abstained on.
+
+    Only provisions CaseOps holds citable text for are suggested: the
+    question's own provisions when the answer was withheld for grounding, and
+    the matter's recorded provisions. A provision that just produced
+    "no_sources" is never suggested back. Matter titles are never included,
+    because suggestions travel in links.
+    """
+    if answer.status != "abstained" or answer.error_code not in {
+        "no_sources",
+        "needs_detail",
+        "ungrounded",
+    }:
+        return []
+    matter = session.get(Matter, answer.context_matter_id) if answer.context_matter_id else None
+    question_refs = _resolve_focus(session, answer.query, None).refs
+    candidates: list[tuple[str, str]] = []
+    if answer.error_code == "ungrounded":
+        candidates.extend(question_refs)
+    candidates.extend(ref for ref in _matter_statute_refs(session, matter) if ref not in candidates)
+    asked = _collapse(answer.query).casefold()
+    suggestions: list[str] = []
+    for ref in candidates:
+        if answer.error_code == "no_sources" and ref in question_refs:
+            continue
+        if not _ref_is_citable(session, ref):
+            continue
+        label = _ref_label(session, ref)
+        suggestions.append(
+            f"What are the essential ingredients, time limits and procedure under {label}?"
+        )
+        if matter is not None:
+            suggestions.append(f"How does {label} apply to this matter's recorded facts?")
+    unique: list[str] = []
+    for item in suggestions:
+        if _collapse(item).casefold() != asked and item not in unique:
+            unique.append(item)
+    return unique[:3]
+
+
+def _ref_is_citable(session: Session, ref: tuple[str, str]) -> bool:
+    row = session.scalar(
+        select(StatuteSection).where(
+            StatuteSection.statute_id == ref[0], StatuteSection.section_number == ref[1]
+        )
+    )
+    return row is not None and _is_citable_section(row)
+
+
 def _settle_stale(session: Session, answer: ResearchAnswer) -> None:
+    """Settle a row whose executor is gone; the same rule the worker's recovery uses."""
     if answer.status not in {"queued", "running"}:
         return
-    created = answer.created_at
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=UTC)
-    if datetime.now(UTC) - created > STALE_AFTER:
-        _finish(session, answer, state="failed", error_code="timed_out")
+    stale = session.scalar(
+        select(ResearchAnswer.id).where(
+            ResearchAnswer.id == answer.id, _stale_research_filter(datetime.now(UTC))
+        )
+    )
+    if stale is not None:
+        _finish(
+            session,
+            answer,
+            state="failed",
+            error_code="timed_out",
+            expected=(answer.status,),
+        )
 
 
 def get_research_answer(

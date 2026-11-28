@@ -1,3 +1,30 @@
+## November 26 - BUG-001 research answer layout (Ram, Medium)
+
+Report: /app/research/answers/<id> shows the content on the left with
+excessive space on the right, and spacing between headings, paragraphs and
+sections is inconsistent. Valid bug, reproduced in code: the app shell `<main>`
+has no width cap and each answer block set its own (`max-w-prose` = 65ch of
+16px, 14px or 12px text, `max-w-3xl` on the timeline, none on authority cards
+and actions), with mixed `mt-*` margins. The same view nested cards inside the
+question card on /app/research.
+
+Fix (J05/M04): one shared `components/ui/ReadingColumn.tsx` (centred, 70ch of
+the 16px body face) holds the page header, document and actions; no block sets
+its own width; spacing is gap-8 between parts, gap-4 between blocks, gap-2
+inside a block; part headings 20px, numbered sub-sections 16px, authority
+titles 14px. On /app/research the answer renders below the question card. The
+pending state (BUG-003 frontend) shows the step, an mm:ss counter from
+`created_at` and "usually take one to two minutes". Sweep: other inventory
+items were acceptable or uncapped-line issues (not changed). The Matter File
+Q&A width change was reverted after independent review: removing its cap made
+lines unbounded at wide viewports, and that page was not reported.
+
+Tests: vitest layout/pending contracts (7 failed on the old code) and
+`tests/e2e/research-answer-layout-2026-11-26.spec.ts` (geometry at
+1280/1440/1920, 1440 at 80-150% zoom, 375 phone), registered in the App and
+research-answer production configs. Verdict: Inconclusive until that spec
+passes on the deployed release as the test-legal tester.
+
 ## November 26 - workbook "Caseops Bugs (2)" (25 Nov, three rows, nova-legal)
 
 Triage (all three reproduce on production release 1ed725ce2 and on main):
@@ -7893,6 +7920,146 @@ acceptance remains pending. Existing Android version 3 went live November
 17; fresh signed-in Play Console confirms100% production rollout and no
 unpublished changes. Managed publishing remains on for future updates. Historical private-only status
 entries describe earlier dates. See [contract, evidence and remaining gates](mobile/NATIVE_LOGIN_SIMPLIFICATION_2026-11-22.md).
+
+## November 26 - BUG-003 research answers stall after the 202
+
+**Inconclusive** (fix on a branch, not released). J05/M04. Production logs (2026-11-26) show `POST
+/api/research/answers` queued its job in API BackgroundTasks under
+request-based billing: polls spread over 4 instances, answer efea077b ran 9
+minutes and crashed after polling stopped, and only the 10-minute settle-on-read
+recovered it. Intelligent reviews and async audit exports shared the defect.
+Branch `fix/bugs6-jobs-20261126` runs all three in the `caseops-ai-jobs` Cloud
+Run job (wake on create, per-minute scheduler backstop), with compare-and-set
+claims, lease recovery, the requester's persisted no-paid marker (migration
+`20261126_0201`) and idempotent research submission (an identical in-flight
+question returns the same answer). Regressions:
+`apps/api/tests/test_ai_jobs_20261126.py` and
+`apps/api/tests/test_background_task_allowlist_20261126.py`, each shown failing
+on `e492d6472`. Closure needs a release that creates the job and a production
+answer measured completing in it.
+
+
+## November 26 - BUG-002 Section 138 research drifts to Section 482 and cites unrelated judgments (Ram, Critical)
+
+**Inconclusive** until the production journey passes on the deployed release
+and a signed-in human repeats Ram's questions (the paid model's prose cannot be
+proven by the offline-model automation). J05/M04, US-067..069.
+
+Evidence read from Ram's own production history (20 answers, 26 Nov):
+`a26e66ed` "explain the section 138?" named no Act, so every section the
+retrieved judgments cited was admitted: CrPC s.482 was statutory source [1]
+and four of five judgments were Section 482 applications. Four "Rs 5 lakh ...
+Section 138" runs cited NI Act **Section 5** (the deployed section pattern read
+"Rs 5" as "S 5"; main already had the word boundary). Judgments were titled
+"AT HYDERABAD", "931.WP.96.17.doc", "Court No. - 25" and a bare URL. The
+automated acceptance passed on all of this because it asserted structure only.
+
+Fix (branch `fix/bugs6-research-20261126`, PR #674): the answer is scoped to
+the question's focus (provisions named, implied by stated facts, or recorded
+on the matter); each section binds to its own Act (following Act, else a
+single unclaimed preceding Act, else placed by the facts or the judgments);
+money is never a section; sub-sections reduce to their section; provisions an
+Act does not have are dropped. Statute sources stay in the focus Acts;
+judgments that neither cite nor name the focus are not offered (the best three
+are kept and labelled context only when none does); judgments citing more of
+the focus rank first, binding authority reorders the chosen set, unnamed
+judgments are shown by verified party names or "Case name not recorded"; a
+short answer that never reaches the focus is redrafted; uncited judgments with
+no verified passage are not listed; each judgment shows whether it cites the
+provision researched. Independent adversarial review ran four rounds; every
+finding (wrong Act binding, matter override, slash lists, two-Act questions,
+Evidence Act s.139) is a regression in
+`apps/api/tests/test_research_answers_20261126.py`, each shown failing on the
+code before it. Production proof: `tests/e2e/research-answer-2026-11-26.spec.ts`
+and the strengthened `research-answer-2026-11-24.spec.ts` (Section 138 leads,
+every judgment cites or names it, identifiable titles).
+
+2026-11-28, adjacent defect found by Docker acceptance on 4d359eadd: the
+browser journey asked Ram's "explain the section 138?" on PostgreSQL and it
+abstained with `no_sources` (answer 7b3cb024, `focus_origin=none`, 0 judgments
+in 20 ms). The contextual planner appends a capitalised "Section 138"; the
+PostgreSQL-only exact-name prefilter took "Section" for a party name and,
+with no usable query vector, its one non-qualifying title became the whole
+candidate set. SQLite skips that prefilter, so the pytest and the CI journey
+passed. With vectors in production the same token force-included judgments
+titled with "Section" (a likely contributor to the Section 482 drift above).
+Fix: provision designators (Section, Article, Rule, Order, Schedule, Chapter,
+Clause, Regulation, Code, Sanhita, Adhiniyam and plurals) are never case-name
+tokens. Regressions: `test_research_answer_bare_section_20261128_postgres.py`
+(Ram's question on PostgreSQL without vectors) and
+`test_provision_words_are_never_party_name_tokens`; both fail on the old
+prefilter. Open: Act names and place names the planner adds ("Negotiable",
+"Delhi") still act as name tokens; the production retrieval probe
+(`caseops-eval-hnsw-recall`) has not been run for this change. Recorded by
+Sanjeev Kumar.
+
+## November 26 - BUG-003 research answers slow, and failing (Ram, High)
+
+**Inconclusive** until the release creates `caseops-ai-jobs` and a production
+answer is measured inside the promised bound. Two defects besides the
+CPU-starved BackgroundTasks entry above: every verification retry crashed with
+"The caller transaction contains writes and cannot be released" for every
+subscribed tenant (11 of Ram's 20 runs failed), because `generate_structured`
+debited credits into the released session without committing and no test
+tenant had a subscription; and one unverifiable detail paragraph cost a full
+second generation. Fixed: a released LLM call commits its own debit; retries
+only for headline problems or a material share of dropped paragraphs; a
+running answer is judged by claim time (11-minute lease) and settling is a
+compare-and-set; duplicate submissions never cross the no-paid boundary.
+Docker acceptance then caught the new worker rejecting the Cloud Run string
+"1" for its admission protocol (every scheduled run would have crashed);
+fixed and regressed in `test_ai_jobs_20261126.py`.
+Retrieval also held a transaction open while it embedded and reranked, so
+PostgreSQL's 60 s idle-in-transaction limit could kill the connection
+(prod-verify 45856740774 on e492d6472; PR #675 fixes it on main). In the worker
+path the claim's reads have already opened a transaction, where SQLAlchemy
+ignores an autocommit request with only a warning (checked on pg17); `_run`
+commits, then reads on an autocommit connection, then commits before any
+write. `test_research_answer_idle_transaction_20261126_postgres.py` (from #675)
+fails on the branch before the port with the production `internal_error` and
+passes after it. Adjacent, not changed: drafting, strategy, recommendations,
+authorities and matters also rerank inside request transactions; no timeout
+has been observed there (request CPU is not throttled).
+
+## November 26 - BUG-004 "Explain about this matter/case" dead-ends (Ram, High)
+
+**Inconclusive** until the production journey passes on the deployed release.
+`7429a1af` (matter "Sh. Satish Kumar Mehani Vs Punjab National Bank", statutes
+BNSS 8 and 66) abstained with "no indexed statute section or judgment" because
+retrieval used only the question text; `90354019` "what is act and section
+under this matter" crashed (BUG-003). Fixed: a vague question takes the
+matter's recorded statutes (only same-numbered ones when it names a bare
+section), else provisions its title or description names or implies, and the
+matter facts steer retrieval; an unplaceable question abstains with
+`needs_detail` guidance; suggestions are deterministic, name only provisions
+with citable text, never repeat one that just had no sources, and never carry
+the matter title. The worker rechecks matter access before using matter facts.
+
+## November 26 - BUG-005 OCR & Translate: few languages, Translate To disabled, scanned pages unread (Ram, High)
+
+Missed in the first triage pass (the workbook dump crashed on this row; see
+the bug-fixing skill, item 11) and triaged on 27 Nov. Three claims:
+
+1. **Translate To disabled; scanned pages may stay unread.** Valid at report
+   time and operational: both providers answered `cost_not_verified` ("paused
+   until its pricing is verified") until the owner recorded the provider cost
+   profiles later on 26 Nov. Read live as Ram on 27 Nov (read-only readiness,
+   matter 40ca1c24, courtorder.pdf): OCR provider available, translation
+   available, English -> Hindi/Marathi and Hindi/Marathi -> English offered.
+   **Inconclusive** until a scanned document is run end to end as Ram on the
+   deployed release (paid; recorded with its result).
+2. **Source languages limited.** Valid enhancement, not a defect: the shipped
+   scope is English, Hindi and Marathi (PRD MOD-TS-002/003, US-066; "other
+   pairs" is an open PRD item). The dialog now states the supported set and the
+   translation pairs, built only from the server's readiness payload
+   (`supportedLanguagesSummary`, three regressions in
+   `OcrTranslateDialog.test.tsx`, shown failing on the old dialog). Adding
+   further Indian languages needs pinned fonts per script, provider language
+   verification, per-script digit normalisation and a paid live run per
+   language; owner chose (27 Nov) to ship it as the next PR. **Partially
+   fixed** until then.
+3. **Original must stay unchanged.** Already true (renditions are new files;
+   the dialog says so); no change.
 
 ## November 28 — BUG-012 production reopen race (test harness)
 

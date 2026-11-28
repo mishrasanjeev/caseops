@@ -49,7 +49,9 @@ def test_slow_retrieval_outlives_the_idle_transaction_timeout(
 
     record = _ask(client, token)
 
-    assert calls == [1], calls
+    # Retrieval ran (and was slow) at least once; a focus-label retrieval may
+    # follow the first one, and each must outlive the idle timeout.
+    assert calls and set(calls) == {1}, calls
     assert record["status"] == "answered", (record["error_code"], record["message"])
     kinds = {source["kind"] for source in record["sources"]}
     assert kinds == {"statute_section", "judgment"}

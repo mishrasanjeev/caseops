@@ -2274,6 +2274,10 @@ def test_research_answer_acceptance_runs_as_the_test_legal_tester_after_notice()
     ) in step["run"]
     config = (REPO_ROOT / "playwright.research-answer-prod.config.ts").read_text(encoding="utf-8")
     assert r"/research-answer-2026-11-24\.spec\.ts$/" in config
+    # BUG-001 (2026-11-26) layout geometry runs on the same deployed answer page.
+    assert r"/research-answer-layout-2026-11-26\.spec\.ts$/" in config
+    # BUG-002/003/004 (2026-11-26) focus, timing and guidance as the tester.
+    assert r"/research-answer-2026-11-26\.spec\.ts$/" in config
     assert "extraHTTPHeaders: noPaidProviderHeaders" in config
 
 

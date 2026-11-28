@@ -44,8 +44,8 @@ APP_PROJECT_PARTITIONS = {
     "ci-app-chromium": "app-chromium",
     "ci-app-mobile": "app-mobile",
 }
-APP_PROJECT_COUNTS = {"app-chromium": 767, "app-mobile": 70}
-APP_BASE_PROJECT_COUNTS = {"app-chromium": 750, "app-mobile": 60}
+APP_PROJECT_COUNTS = {"app-chromium": 770, "app-mobile": 72}
+APP_BASE_PROJECT_COUNTS = {"app-chromium": 753, "app-mobile": 62}
 COMPACT_MATTER_FILE = "matter-compact-cards.spec.ts"
 COMPACT_MATTER_SUITE = "BUG-016 compact Matter cards"
 COMPACT_MATTER_TITLES = {
@@ -137,6 +137,10 @@ NOV24_FILE = "ram-2026-11-24-bugs.spec.ts"
 NOV25_STATUTES_FILE = "nova-2026-11-25-statutes.spec.ts"
 NOV25_CLIENTS_FILE = "nova-2026-11-25-client-links.spec.ts"
 NOV25_ASSISTANT_FILE = "nova-2026-11-25-ask-workspace.spec.ts"
+# November 26 workbook BUG-001 research answer layout geometry.
+NOV26_LAYOUT_FILE = "research-answer-layout-2026-11-26.spec.ts"
+# November 26 workbook BUG-002/003/004 research focus, timing and guidance.
+NOV26_RESEARCH_FILE = "research-answer-2026-11-26.spec.ts"
 APP_REQUIRED_CASES = (
     ("app-chromium", "control-crawl-contract.spec.ts", (
         "control-crawl-contract.spec.ts",
@@ -263,6 +267,31 @@ APP_REQUIRED_CASES = (
     )),
     ("app-mobile", NOV25_CLIENTS_FILE, (
         NOV25_CLIENTS_FILE, "[mobile] row 2 links a client from the matter overview on a phone",
+    )),
+    ("app-chromium", NOV26_LAYOUT_FILE, (
+        NOV26_LAYOUT_FILE,
+        "BUG-001 research answer column is centred with shared edges and even spacing at "
+        "1280-1920px and 80-150% zoom",
+    )),
+    ("app-mobile", NOV26_LAYOUT_FILE, (
+        NOV26_LAYOUT_FILE,
+        "[mobile] BUG-001 research answer fills a 375px phone with shared edges, a stacked "
+        "timeline and no sideways scroll",
+    )),
+    ("app-chromium", NOV26_RESEARCH_FILE, (
+        NOV26_RESEARCH_FILE,
+        "BUG-002/003 an unnamed-Act cheque question is researched on Section 138 only, once, "
+        "inside the promised time",
+    )),
+    ("app-mobile", NOV26_RESEARCH_FILE, (
+        NOV26_RESEARCH_FILE,
+        "[mobile] BUG-002/003 an unnamed-Act cheque question is researched on Section 138 only, "
+        "once, inside the promised time",
+    )),
+    ("app-chromium", NOV26_RESEARCH_FILE, (
+        NOV26_RESEARCH_FILE,
+        "BUG-004 a vague question asks for detail without a matter and is researched from the "
+        "matter record",
     )),
 )
 # Exact pre-existing capability/provider skips retained from the complete

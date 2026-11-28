@@ -134,6 +134,43 @@ export function translationTargets(
     .map((pair) => pair.target);
 }
 
+function joinLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels.join("");
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+/**
+ * The languages the server accepts, stated in words, so a short list reads as
+ * the supported set rather than a broken dropdown (Ram BUG-005, 2026-11-26).
+ * Built only from the readiness payload: it can never name a language the
+ * server would reject, and grows with it.
+ */
+export function supportedLanguagesSummary(
+  providers: RenditionProviderReadiness | undefined,
+): { ocr: string; translation: string | null } | null {
+  if (!providers || providers.ocr_languages.length === 0) return null;
+  const ocr = `OCR reads documents in ${joinLabels(providers.ocr_languages.map(languageLabel))}.`;
+  if (!providers.translation_available || providers.translation_pairs.length === 0) {
+    return { ocr, translation: null };
+  }
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+  for (const pair of providers.translation_pairs) {
+    const key = [pair.source, pair.target].sort().join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const both = providers.translation_pairs.some(
+      (other) => other.source === pair.target && other.target === pair.source,
+    );
+    phrases.push(
+      both
+        ? `${languageLabel(pair.source)} ↔ ${languageLabel(pair.target)}`
+        : `${languageLabel(pair.source)} → ${languageLabel(pair.target)}`,
+    );
+  }
+  return { ocr, translation: `Translation: ${phrases.join(", ")}.` };
+}
+
 const PAGE_REASONS: Record<string, string> = {
   empty_page: "No text found",
   short_text: "Very little text",

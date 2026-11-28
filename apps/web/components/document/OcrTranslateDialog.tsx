@@ -27,6 +27,7 @@ import {
   RENDITION_LANGUAGES,
   languageLabel,
   providerReasonLabel,
+  supportedLanguagesSummary,
   translationTargets,
 } from "@/lib/renditions";
 
@@ -149,6 +150,7 @@ function OcrTranslateForm({
       ? (target as RenditionLanguage)
       : null;
   const canSubmit = source !== "" && !startMutation.isPending;
+  const supported = supportedLanguagesSummary(providers);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -169,6 +171,7 @@ function OcrTranslateForm({
           value={source}
           required
           aria-required="true"
+          aria-describedby={supported ? "ocr-supported-languages" : undefined}
           onChange={(event) => {
             const next = event.target.value as RenditionLanguage | "";
             setSource(next);
@@ -187,6 +190,16 @@ function OcrTranslateForm({
             </option>
           ))}
         </select>
+        {supported ? (
+          <p
+            id="ocr-supported-languages"
+            className="mt-1.5 text-xs text-[var(--color-mute)]"
+            data-testid="ocr-supported-languages"
+          >
+            {supported.ocr}
+            {supported.translation ? ` ${supported.translation}` : null}
+          </p>
+        ) : null}
       </div>
       <div>
         <Label htmlFor="ocr-target-language">Translate to</Label>

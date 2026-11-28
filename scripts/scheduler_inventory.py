@@ -82,6 +82,7 @@ def hold_schedulers_paused(
             admission_key = {
                 "caseops-document-processing": "CASEOPS_DOCUMENT_WORKER_ADMISSION_ENABLED",
                 "caseops-court-sync": "CASEOPS_COURT_SYNC_WORKER_ADMISSION_ENABLED",
+                "caseops-ai-jobs": "CASEOPS_AI_JOB_WORKER_ADMISSION_ENABLED",
             }.get(job["run_job_name"])
             if admission_key:
                 job["bootstrap"]["environment"][admission_key] = "false"

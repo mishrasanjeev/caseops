@@ -6718,6 +6718,18 @@ reads are not available to the verifier.
     workflow), a starved run can still reach the 10-minute `timed_out`
     settle.
   - Status stays Partially implemented.
+- **2026-11-26 (BUG-003):** production logs confirmed the risk: polls spread
+  over 4 instances, answer efea077b ran 9 minutes and crashed, typical answers
+  took 50-105 s. Branch `fix/bugs6-jobs-20261126` moves research answers,
+  intelligent reviews and async audit exports to a new `caseops-ai-jobs` Cloud
+  Run job (woken on create, per-minute `caseops-ai-jobs-cadence` backstop,
+  600 s task timeout, 240 s claim window). Claims are compare-and-set on
+  every dialect, stale work settles by lease, and migration `20261126_0201`
+  persists the requester's no-paid marker for the worker to restore. A
+  structural test (`test_background_task_allowlist_20261126.py`) rejects any
+  new non-trivial `BackgroundTasks.add_task`. Status stays **Partially
+  implemented** until a release creates the job and a production answer is
+  measured completing in the job.
 
 ### EH-RA-02 - Model output cannot introduce an authority
 

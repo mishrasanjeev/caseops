@@ -10493,6 +10493,10 @@ class ResearchAnswer(Base):
     saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     query: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    # The requester's no-paid marker, restored by the independent worker.
+    no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(),
+    )
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -11373,6 +11377,9 @@ class Recommendation(Base):
     """Explainable decision-support output for exactly one legal target."""
 
     __tablename__ = "recommendations"
+    # Never read server defaults back at INSERT: rows written without
+    # review_no_paid_providers must not name it in RETURNING.
+    __mapper_args__ = {"eager_defaults": False}
     __table_args__ = (
         ForeignKeyConstraint(
             ["matter_id", "company_id"],
@@ -11529,6 +11536,12 @@ class Recommendation(Base):
         Integer, nullable=False, default=100, server_default="100"
     )
     review_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # The requester's no-paid marker for a queued intelligent review. Deferred
+    # and server-defaulted so ORM reads and writes of other recommendation
+    # types never name it; the worker selects it explicitly.
+    review_no_paid_providers: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), deferred=True,
+    )
     review_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)

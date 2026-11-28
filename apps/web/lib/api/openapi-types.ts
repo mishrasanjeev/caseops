@@ -49163,6 +49163,8 @@ export interface components {
             assumptions?: string[];
             /** Authorities */
             authorities?: components["schemas"]["ResearchAuthorityEntry"][];
+            /** Coverage Gaps */
+            coverage_gaps?: string[];
             /** Disclaimer */
             disclaimer: string;
             /**
@@ -49181,6 +49183,8 @@ export interface components {
             matter_facts?: components["schemas"]["ResearchMatterFact"][];
             /** Missing Facts */
             missing_facts?: string[];
+            /** Question Focus */
+            question_focus?: string[];
             /** Sections */
             sections?: components["schemas"]["ResearchSection"][];
             short_answer: components["schemas"]["ResearchCitedText"];
@@ -49233,6 +49237,8 @@ export interface components {
              * @enum {string}
              */
             status: "queued" | "running" | "answered" | "abstained" | "failed";
+            /** Suggestions */
+            suggestions?: string[];
         };
         /** ResearchAnswerSaveRequest */
         ResearchAnswerSaveRequest: {
@@ -49341,6 +49347,8 @@ export interface components {
             court?: string | null;
             /** Decision Date */
             decision_date?: string | null;
+            /** Focus Engagement */
+            focus_engagement?: ("cites" | "names" | "context_only") | null;
             /** Id */
             id: string;
             /** In App Href */
@@ -49398,6 +49406,11 @@ export interface components {
              * @default 0
              */
             uncited_paragraphs: number;
+            /**
+             * Unlinked Authorities
+             * @default 0
+             */
+            unlinked_authorities: number;
             /**
              * Unverified Passages
              * @default 0

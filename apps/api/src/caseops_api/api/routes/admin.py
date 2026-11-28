@@ -80,6 +80,7 @@ from caseops_api.services.calendar_sync import (
     update_outlook_tenant_configuration,
 )
 from caseops_api.services.csv_security import csv_safe_mapping
+from caseops_api.services.document_dispatch import dispatch_ai_job
 from caseops_api.services.google_workspace import (
     google_workspace_tenant_configuration_status,
     test_google_workspace_tenant_configuration,
@@ -414,11 +415,16 @@ def enqueue_audit_export(
         action_filter=payload.action,
         row_limit=payload.row_limit,
     )
-    # BackgroundTasks runs after the response is returned. A separate
-    # caseops-audit-exporter CLI (or Cloud Tasks / Temporal) can also
-    # drive run_export_job against the same row.
-    background_tasks.add_task(run_export_job, job.id)
-    return _job_record(job)
+    record = _job_record(job)
+    # Production wakes the independent AI job, which also drains pending
+    # exports every minute; a failed wake leaves the committed row pending.
+    dispatch_ai_job(
+        session=session,
+        background_tasks=background_tasks,
+        job_id=record.id,
+        runner=run_export_job,
+    )
+    return record
 
 
 @router.get(

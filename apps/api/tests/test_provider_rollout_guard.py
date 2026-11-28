@@ -284,7 +284,8 @@ def test_release_orders_provider_drain_hold_and_resume():
     assert (
         "SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist\n"
         "  --hold-scheduler-paused caseops-document-processing-cadence\n"
-        "  --hold-scheduler-paused caseops-court-sync-cadence)"
+        "  --hold-scheduler-paused caseops-court-sync-cadence\n"
+        "  --hold-scheduler-paused caseops-ai-jobs-cadence)"
         in script
     )
     assert script.index("pre-provider-scheduler-resume gate") > script.index(

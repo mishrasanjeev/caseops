@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `fa3469bc1cc4a01505661d418ade2e875bc9f1cb6d79dd759b3117d2766ace00`
+- Canonical map SHA-256: `5c985798b87643a264ae6a85a10c32a4145a3812b5efc3e3a9759a79e485aff4`
 - SQL tables: `374`
-- SQL columns: `5986`
+- SQL columns: `5988`
 - ORM indexes: `1861`
 - Alembic/raw index declarations: `1639`
 - Non-SQL data classes: `19`
@@ -349,9 +349,9 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `provider_spend_reservations` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
 | `recommendation_decisions` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `recommendation_options` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
-| `recommendations` | `tenant_restricted_legal_content` | 35 | `registry_fail_closed` |
+| `recommendations` | `tenant_restricted_legal_content` | 36 | `registry_fail_closed` |
 | `report_artifacts` | `tenant_operational_record` | 22 | `registry_fail_closed` |
-| `research_answers` | `tenant_operational_record` | 17 | `registry_fail_closed` |
+| `research_answers` | `tenant_operational_record` | 18 | `registry_fail_closed` |
 | `source_link_reports` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `statute_change_events` | `public_or_licensed_legal_reference` | 12 | `registry_fail_closed` |
 | `statute_section_chunks` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |

@@ -2256,8 +2256,10 @@ def generate_structured[T: BaseModel](
     ``release_session_before_provider`` after completing all of their own
     read-only retrieval. That closes the transaction before network latency;
     the session is reusable and billing starts a fresh transaction only after
-    a schema-valid response. The caller must revalidate mutable source state
-    before persisting the result.
+    a schema-valid response, which this call commits before returning, so the
+    session is clean again for the caller (and for a second released call).
+    The caller must revalidate mutable source state before persisting the
+    result.
     """
     provider_time_remaining()
     estimated_billing_credits = 0
@@ -2453,6 +2455,14 @@ def generate_structured[T: BaseModel](
             source_object_type="llm_completion",
             source_object_id=hashlib.sha256(completion.text.encode("utf-8")).hexdigest()[:32],
         )
+        if release_session_before_provider:
+            # The caller handed this call a clean session, so the debit is the
+            # only write in it. Commit it here so the session leaves as clean
+            # as it arrived: a second released call on the same session (a
+            # verification retry) must not find a caller-owned write, and a
+            # failure later in the caller must not roll back the charge for
+            # tokens the provider already returned.
+            session.commit()
     return validated, completion
 
 

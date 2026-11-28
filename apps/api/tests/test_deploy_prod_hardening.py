@@ -2625,6 +2625,9 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_COURT_MODE='cloud_run_job'
   FAKE_COURT_REGION='asia-south1'
   FAKE_COURT_JOB='caseops-court-sync'
+  FAKE_AI_MODE='cloud_run_job'
+  FAKE_AI_REGION='asia-south1'
+  FAKE_AI_JOB='caseops-ai-jobs'
   FAKE_SCANNER_REQUIRED='true'
   FAKE_API_PROBE_PERIOD='2'
   FAKE_STARTUP_DEPENDENCIES='{}'
@@ -2702,6 +2705,12 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_COURT_REGION='other-region'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "court-job-drift" ]]; then
     FAKE_COURT_JOB='other-job'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "ai-mode-drift" ]]; then
+    FAKE_AI_MODE='local_background'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "ai-region-drift" ]]; then
+    FAKE_AI_REGION='other-region'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "ai-job-drift" ]]; then
+    FAKE_AI_JOB='other-job'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
@@ -2726,6 +2735,9 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_COURT_SYNC_DISPATCH_MODE","value":"' "${FAKE_COURT_MODE}" '"},' \
     '{"name":"CASEOPS_COURT_SYNC_RUN_REGION","value":"' "${FAKE_COURT_REGION}" '"},' \
     '{"name":"CASEOPS_COURT_SYNC_RUN_JOB","value":"' "${FAKE_COURT_JOB}" '"},' \
+    '{"name":"CASEOPS_AI_JOB_DISPATCH_MODE","value":"' "${FAKE_AI_MODE}" '"},' \
+    '{"name":"CASEOPS_AI_JOB_RUN_REGION","value":"' "${FAKE_AI_REGION}" '"},' \
+    '{"name":"CASEOPS_AI_JOB_RUN_JOB","value":"' "${FAKE_AI_JOB}" '"},' \
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
@@ -3579,6 +3591,9 @@ _API_RUNTIME_CONTRACT_ERRORS = {
     "court-mode-drift": "CASEOPS_COURT_SYNC_DISPATCH_MODE is missing or stale",
     "court-region-drift": "CASEOPS_COURT_SYNC_RUN_REGION is missing or stale",
     "court-job-drift": "CASEOPS_COURT_SYNC_RUN_JOB is missing or stale",
+    "ai-mode-drift": "CASEOPS_AI_JOB_DISPATCH_MODE is missing or stale",
+    "ai-region-drift": "CASEOPS_AI_JOB_RUN_REGION is missing or stale",
+    "ai-job-drift": "CASEOPS_AI_JOB_RUN_JOB is missing or stale",
     "sarvam-secret-drift": (
         "CASEOPS_SARVAM_API_KEY is not bound to the dedicated latest Secret Manager version"
     ),
@@ -3754,6 +3769,18 @@ def test_document_worker_bridge_precedes_migration_and_activation_follows_exact_
     assert index("document_worker_release.py activate --worker court") < index(
         "scheduler_inventory.py resume"
     )
+    assert index("document_worker_release.py prepare --worker ai") < index(
+        "scheduler_inventory.py quiesce --scheduler caseops-ai-jobs-cadence"
+    )
+    assert index("scheduler_inventory.py quiesce --scheduler caseops-ai-jobs-cadence") < index(
+        "run jobs execute caseops-migrate-job"
+    )
+    assert index("run deploy caseops-api") < index(
+        "document_worker_release.py activate --worker ai"
+    )
+    assert index("document_worker_release.py activate --worker ai") < index(
+        "scheduler_inventory.py resume --scheduler caseops-ai-jobs-cadence"
+    )
 
 
 def test_qa_queue_quiescence_precedes_bootstrap_rebuild_and_dispatch(tmp_path: Path) -> None:
@@ -3769,7 +3796,7 @@ def test_qa_queue_quiescence_precedes_bootstrap_rebuild_and_dispatch(tmp_path: P
     resumes = [
         offset for offset, call in enumerate(calls) if "scheduler_inventory.py resume" in call
     ]
-    assert len(resumes) == 3
+    assert len(resumes) == 4
     assert max(resumes) < index("document_worker_release.py quiesce-qa")
     assert index("document_worker_release.py quiesce-qa") < index(
         "run jobs execute caseops-ip-qa-bootstrap"

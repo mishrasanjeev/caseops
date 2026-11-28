@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ResearchAnswerRecord } from "@/lib/api/research-answers";
 
@@ -21,6 +21,7 @@ vi.mock("@/lib/api/research-answers", async (load) => ({
   saveResearchAnswerToMatter: saveMock,
 }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: (name: string) => capabilityMock(name) }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "ans-1" }) }));
 vi.mock("@/components/app/MatterPicker", () => ({
   OPERATIONAL_MATTER_STATUSES: new Set(["active"]),
   MatterName: ({ matterId }: { matterId: string }) => <span>{matterId}</span>,
@@ -29,7 +30,9 @@ vi.mock("@/components/app/MatterPicker", () => ({
   ),
 }));
 
-import { ResearchAnswerPanel } from "./ResearchAnswerPanel";
+import ResearchAnswerPage from "@/app/app/research/answers/[id]/page";
+
+import { ResearchAnswerPanel, ResearchAnswerStatus } from "./ResearchAnswerPanel";
 import { ResearchAnswerView, researchAnswerToHtml, researchAnswerToText } from "./ResearchAnswerView";
 
 const action = {
@@ -70,16 +73,19 @@ function answered(overrides: Partial<ResearchAnswerRecord> = {}): ResearchAnswer
         { source: 2, disposition: "supporting", proposition: "Notice timing.", relevance: "Same facts.", passage: "held the notice must be issued within thirty days", passage_verified: true, paragraph: "14", cited_inline: true },
       ],
       matter_facts: [],
-      verification: { removed_citation_markers: 1, unverified_passages: 0, uncited_paragraphs: 1, removed_unverified_mentions: 1, notes: ["1 passage(s) were withheld because they named a case that is not in the verified source set."] },
+      question_focus: [],
+      coverage_gaps: [],
+      verification: { removed_citation_markers: 1, unverified_passages: 0, uncited_paragraphs: 1, removed_unverified_mentions: 1, unlinked_authorities: 0, notes: ["1 passage(s) were withheld because they named a case that is not in the verified source set."] },
       law_checked_as_of: "2026-11-24",
       sources_retrieved_from: "2026-11-01T00:00:00Z",
       sources_retrieved_to: "2026-11-01T00:00:00Z",
       disclaimer: "Source-bounded research support, not legal advice.",
     },
     sources: [
-      { number: 1, kind: "statute_section", id: "sec-138", title: "Section 138, Negotiable Instruments Act, 1881", citation: "NI Act, Section 138", court: null, bench: null, decision_date: null, weight: "Statutory provision (verified text)", source_action: { ...action, target_type: "statute_section", target_id: "sec-138" }, in_app_href: "/app/statutes/ni-act-1881/sections/Section%20138", treatment_signal: null, retrieved_at: null },
-      { number: 2, kind: "judgment", id: "doc-1", title: "Cheque dishonour <notice> limitation", citation: "2026:DHC:1380", court: "High Court of Delhi", bench: "Justice A. Rao", decision_date: "2026-05-01", weight: "Binding within High Court of Delhi's jurisdiction; persuasive elsewhere", source_action: action, in_app_href: null, treatment_signal: { worst_treatment: "distinguished", adverse_count: 2 }, retrieved_at: "2026-11-01T00:00:00Z" },
+      { number: 1, kind: "statute_section", id: "sec-138", title: "Section 138, Negotiable Instruments Act, 1881", citation: "NI Act, Section 138", court: null, bench: null, decision_date: null, weight: "Statutory provision (verified text)", source_action: { ...action, target_type: "statute_section", target_id: "sec-138" }, in_app_href: "/app/statutes/ni-act-1881/sections/Section%20138", focus_engagement: null, treatment_signal: null, retrieved_at: null },
+      { number: 2, kind: "judgment", id: "doc-1", title: "Cheque dishonour <notice> limitation", citation: "2026:DHC:1380", court: "High Court of Delhi", bench: "Justice A. Rao", decision_date: "2026-05-01", weight: "Binding within High Court of Delhi's jurisdiction; persuasive elsewhere", source_action: action, in_app_href: null, focus_engagement: "cites", treatment_signal: { worst_treatment: "distinguished", adverse_count: 2 }, retrieved_at: "2026-11-01T00:00:00Z" },
     ],
+    suggestions: [],
     ...overrides,
   };
 }
@@ -194,5 +200,179 @@ describe("ResearchAnswerPanel", () => {
     render(withClient(<ResearchAnswerPanel initialQuestion="" contextMatterId={null} />));
     expect(screen.queryByRole("form", { name: "Ask a research question" })).not.toBeInTheDocument();
     expect(screen.getByText(/cannot generate AI research answers/)).toBeVisible();
+  });
+});
+
+// BUG-001 (Ram, 2026-11-26): the answer page put each block under its own
+// width cap (65ch of three font sizes, max-w-3xl, none), so the document
+// hugged the left of an uncapped <main> with ragged right edges.
+describe("research answer layout contract", () => {
+  const record = () => {
+    const base = answered();
+    return answered({
+      answer: { ...base.answer!, matter_facts: [{ label: "Cheque amount", value: "Rs 5 lakh" }] },
+    });
+  };
+  const classes = (element: Element) => (element.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+  const cappedIn = (root: Element) => [...root.querySelectorAll("[class]")]
+    .filter((element) => classes(element).some((name) => name.startsWith("max-w-")))
+    .map((element) => `${element.tagName.toLowerCase()}.${classes(element).join(".")}`);
+
+  it("sets no per-block width cap inside the document, so every block shares the column's edges", () => {
+    const { container } = render(<ResearchAnswerView record={record()} />);
+    expect(cappedIn(container)).toEqual([]);
+  });
+
+  it("spaces parts, blocks and lines with one gap scale and no vertical sibling margins", () => {
+    const { container } = render(<ResearchAnswerView record={record()} />);
+    const article = screen.getByTestId("research-answer");
+    expect(article).toHaveClass("flex", "flex-col", "gap-8");
+    for (const id of ["research-short-answer", "research-detailed", "research-authorities"]) {
+      const part = screen.getByTestId(id);
+      expect(part.parentElement).toBe(article);
+      expect(part).toHaveClass("flex", "flex-col", "gap-4");
+    }
+    for (const section of ["applicable_law", "time_limits", "ingredients", "procedure"]) {
+      expect(screen.getByTestId(`research-section-${section}`)).toHaveClass("flex", "flex-col", "gap-2");
+    }
+    expect(screen.getAllByTestId("research-authority-card")[0].parentElement).toHaveClass("flex", "flex-col", "gap-4");
+    const margins = [...container.querySelectorAll("[class]")]
+      .flatMap((element) => classes(element).filter((name) => /^-?m[tby]-/.test(name)));
+    expect(margins).toEqual([]);
+  });
+
+  it("gives part headings, numbered sub-sections and authority titles three distinct sizes", () => {
+    render(<ResearchAnswerView record={record()} />);
+    const size = (element: Element) => classes(element).filter((name) => /^text-(xs|sm|base|lg|xl|2xl)$/.test(name)).join();
+    const parts = screen.getAllByRole("heading", { level: 3 });
+    const subSections = within(screen.getByTestId("research-detailed")).getAllByRole("heading", { level: 4 });
+    const authorityTitles = within(screen.getByTestId("research-authorities")).getAllByRole("heading", { level: 4 });
+    expect(new Set(parts.map(size))).toEqual(new Set(["text-xl"]));
+    expect(new Set(subSections.map(size))).toEqual(new Set(["text-base"]));
+    expect(new Set(authorityTitles.map(size))).toEqual(new Set(["text-sm"]));
+  });
+
+  it("renders the permanent page's header, document and actions inside one reading column", async () => {
+    capabilityMock.mockReturnValue(true);
+    fetchMock.mockResolvedValue(record());
+    render(withClient(<ResearchAnswerPage />));
+    const column = await screen.findByTestId("research-answer-column");
+    await waitFor(() => expect(within(column).getByTestId("research-answer")).toBeVisible());
+    expect(column).toHaveClass("mx-auto", "w-full", "max-w-[70ch]", "flex", "flex-col", "gap-8");
+    expect(within(column).getByRole("heading", { level: 1, name: "Research answer" })).toBeVisible();
+    expect(within(column).getByTestId("research-answer-actions")).toBeVisible();
+    expect(cappedIn(within(column).getByTestId("research-answer"))).toEqual([]);
+    expect(cappedIn(within(column).getByTestId("research-answer-actions"))).toEqual([]);
+  });
+
+  it("renders the answer below the question card on /app/research, never as a card inside the card", async () => {
+    capabilityMock.mockReturnValue(true);
+    listMock.mockResolvedValue({ items: [] });
+    createMock.mockResolvedValue(record());
+    render(withClient(<ResearchAnswerPanel initialQuestion="Section 138 notice period and procedure?" contextMatterId={null} />));
+    fireEvent.submit(screen.getByRole("form", { name: "Ask a research question" }));
+    const document = await screen.findByTestId("research-answer");
+    const card = screen.getByTestId("research-answer-panel");
+    expect(card).not.toContainElement(document);
+    expect(card).not.toContainElement(screen.getByTestId("research-answer-actions"));
+    const column = screen.getByTestId("research-answer-column");
+    expect(column).toContainElement(document);
+    expect(column).toHaveClass("mx-auto", "max-w-[70ch]");
+  });
+});
+
+// BUG-003 (Ram, 2026-11-26): a pending answer must say what it is doing, for
+// how long, and what to expect, and survive leaving the page and coming back.
+describe("ResearchAnswerStatus pending state", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("counts mm:ss from the record's creation time, names the step and sets the expectation", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-24T10:01:05Z"));
+    const running = answered({ status: "running", answer: null, sources: [] });
+    const first = render(<ResearchAnswerStatus record={running} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("01:05");
+    expect(screen.getByTestId("research-answer-step")).toHaveTextContent("Retrieving statutes and judgments");
+    expect(screen.getByTestId("research-answer-expectation")).toHaveTextContent("Research answers usually take one to two minutes.");
+    expect(screen.getByRole("link", { name: "its permanent link" })).toHaveAttribute("href", "/app/research/answers/ans-1");
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("01:08");
+    first.unmount();
+
+    // Navigating away and back mounts a new component: the count still
+    // comes from created_at, not from the new mount.
+    vi.setSystemTime(new Date("2026-11-24T10:03:30Z"));
+    render(<ResearchAnswerStatus record={running} onPermalinkPage />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("03:30");
+    expect(screen.getByTestId("research-answer-expectation")).toHaveTextContent("taking longer than usual");
+    expect(screen.queryByRole("link", { name: "its permanent link" })).not.toBeInTheDocument();
+  });
+
+  it("reads an API timestamp without a zone as UTC and names the queued step", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-24T10:00:42Z"));
+    render(<ResearchAnswerStatus record={answered({ status: "queued", answer: null, sources: [], created_at: "2026-11-24T10:00:00.123456" })} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveTextContent("00:41");
+    expect(screen.getByTestId("research-answer-step")).toHaveTextContent("Queued");
+  });
+});
+
+describe("Nov 26 focus, coverage and abstention guidance", () => {
+  it("shows what the question was researched as and what the sources did not cover", () => {
+    const record = answered();
+    record.answer!.question_focus = ["Section 138, Negotiable Instruments Act, 1881"];
+    record.answer!.coverage_gaps = ["Territorial jurisdiction is not addressed by the retrieved sources."];
+    render(<ResearchAnswerView record={record} />);
+    expect(screen.getByTestId("research-question-focus")).toHaveTextContent(
+      "Researched as: Section 138, Negotiable Instruments Act, 1881",
+    );
+    expect(screen.getByTestId("research-coverage-gaps")).toHaveTextContent("Territorial jurisdiction");
+    const text = researchAnswerToText(record);
+    expect(text).toContain("Researched as: Section 138, Negotiable Instruments Act, 1881");
+    expect(text).toContain("This answer does not cover:");
+  });
+
+  it("turns an abstention into usable next questions that fill the question box", () => {
+    const onUse = vi.fn();
+    const suggestion = "What are the essential ingredients, time limits and procedure under Section 9, Arbitration and Conciliation Act, 1996?";
+    const record = answered({
+      status: "abstained", error_code: "needs_detail", answer: null, sources: [],
+      message: "CaseOps could not tell which law this question is about. Name the Act and section.",
+      suggestions: [suggestion],
+    });
+    render(<ResearchAnswerStatus record={record} onUseSuggestion={onUse} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Name the Act and section");
+    fireEvent.click(screen.getByRole("button", { name: /Section 9, Arbitration/ }));
+    expect(onUse).toHaveBeenCalledWith(suggestion);
+  });
+
+  it("links suggestions back to Research with the matter on the permanent page", () => {
+    const record = answered({
+      status: "abstained", error_code: "no_sources", answer: null, sources: [],
+      context_matter: { id: "m-1", title: "Supplier cheque complaint" },
+      message: "No verified source.", suggestions: ["How does Section 9 apply?"],
+    });
+    render(<ResearchAnswerStatus record={record} onPermalinkPage />);
+    expect(screen.getByRole("link", { name: "How does Section 9 apply?" })).toHaveAttribute(
+      "href", "/app/research?tab=answer&q=How%20does%20Section%209%20apply%3F&matter=m-1",
+    );
+  });
+});
+
+describe("focus engagement on authority cards", () => {
+  it("says whether each judgment cites the provision researched, and flags context-only ones", () => {
+    const record = answered();
+    record.sources[1] = { ...record.sources[1], focus_engagement: "context_only" };
+    render(<ResearchAnswerView record={record} />);
+    const badge = screen.getByTestId("research-focus-engagement");
+    expect(badge).toHaveAttribute("data-engagement", "context_only");
+    expect(badge).toHaveTextContent("Related context only: does not cite the provision researched");
+  });
+
+  it("keeps the elapsed counter out of the screen-reader status announcements", () => {
+    render(<ResearchAnswerStatus record={answered({ status: "running", answer: null, sources: [] })} />);
+    expect(screen.getByTestId("research-answer-elapsed")).toHaveAttribute("aria-hidden", "true");
   });
 });

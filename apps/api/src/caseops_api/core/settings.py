@@ -187,6 +187,14 @@ class Settings(BaseSettings):
     court_sync_run_job: str = Field(default="caseops-court-sync", pattern=r"^[a-z][a-z0-9-]{0,62}$")
     court_sync_worker_admission_protocol_version: Literal[0, 1] = 0
     court_sync_worker_admission_enabled: bool | None = None
+    # Research answers, intelligent reviews and audit exports outlive the
+    # request; production runs them in an independent Cloud Run job.
+    ai_job_dispatch_mode: Literal["local_background", "cloud_run_job"] = "local_background"
+    ai_job_run_region: str = Field(default="asia-south1", pattern=r"^[a-z]+-[a-z]+[0-9]$")
+    ai_job_run_job: str = Field(default="caseops-ai-jobs", pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    ai_job_worker_batch_size: int = Field(default=3, ge=1, le=10)
+    ai_job_worker_admission_protocol_version: Literal[0, 1] = 0
+    ai_job_worker_admission_enabled: bool | None = None
     pine_labs_env: str = Field(default="disabled")
     pine_labs_api_base_url: str | None = Field(default=None)
     pine_labs_client_id: str | None = Field(default=None)
@@ -677,6 +685,7 @@ class Settings(BaseSettings):
     @field_validator(
         "document_worker_admission_protocol_version",
         "court_sync_worker_admission_protocol_version",
+        "ai_job_worker_admission_protocol_version",
         mode="before",
     )
     @classmethod

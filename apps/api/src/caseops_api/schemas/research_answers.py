@@ -86,6 +86,9 @@ class ResearchVerification(BaseModel):
     unverified_passages: int = 0
     uncited_paragraphs: int = 0
     removed_unverified_mentions: int = 0
+    # Retrieved judgments left out of the authorities because the answer
+    # neither cited them inline nor quoted a passage found in their text.
+    unlinked_authorities: int = 0
     notes: list[str] = Field(default_factory=list)
 
 
@@ -98,6 +101,13 @@ class ResearchAnswerBody(BaseModel):
     sections: list[ResearchSection] = Field(default_factory=list)
     authorities: list[ResearchAuthorityEntry] = Field(default_factory=list)
     matter_facts: list[ResearchMatterFact] = Field(default_factory=list)
+    # The provisions CaseOps identified as the subject of the question, e.g.
+    # "Section 138, Negotiable Instruments Act, 1881". Shown so a lawyer can
+    # see what was researched before reading the answer.
+    question_focus: list[str] = Field(default_factory=list)
+    # Material topics (ingredients, time limits, procedure, jurisdiction) the
+    # retrieved sources did not support, so the answer does not cover them.
+    coverage_gaps: list[str] = Field(default_factory=list)
     verification: ResearchVerification = Field(default_factory=ResearchVerification)
     law_checked_as_of: date
     sources_retrieved_from: datetime | None = None
@@ -123,6 +133,10 @@ class ResearchSource(BaseModel):
     weight: str
     source_action: SourceActionRecord | None = None
     in_app_href: str | None = None
+    # For a judgment, against the question's focus provision: "cites" (its
+    # recorded citations include it), "names" (its retrieved text names it) or
+    # "context_only" (it does neither; kept only because nothing else did).
+    focus_engagement: Literal["cites", "names", "context_only"] | None = None
     treatment_signal: ResearchTreatmentSignal | None = None
     retrieved_at: datetime | None = None
 
@@ -146,6 +160,9 @@ class ResearchAnswerRecord(BaseModel):
     saved_at: datetime | None = None
     answer: ResearchAnswerBody | None = None
     sources: list[ResearchSource] = Field(default_factory=list)
+    # For an abstained answer: rephrased questions the user can run instead,
+    # built from the question and the matter record. Never model-generated.
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class ResearchAnswerSummary(BaseModel):

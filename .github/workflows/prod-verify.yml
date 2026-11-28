@@ -798,8 +798,11 @@ jobs:
         # J05/M04 US-067..069 on desktop and phone as the test-legal tester.
         # The no-paid marker reaches the background answer job, so retrieval
         # and the model call use the deterministic offline providers.
+        # Nov 26: the layout (BUG-001) and focus/timing/guidance (BUG-002..004)
+        # journeys run about nine answers at ~65 s each (measured 26 Nov), plus
+        # the caseops-ai-jobs cold start; the whole suite stays far below 38 min.
         if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.research-answer-prerequisites.outputs.configured == 'true'
-        timeout-minutes: 12
+        timeout-minutes: 20
         env:
           NODE_OPTIONS: ${{ steps.node_trust.outputs.NODE_OPTIONS }}
           SSL_CERT_FILE: ${{ steps.node_trust.outputs.SSL_CERT_FILE }}

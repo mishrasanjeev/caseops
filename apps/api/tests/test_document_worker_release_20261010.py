@@ -20,7 +20,7 @@ OLD_IMAGE = "registry.invalid/caseops-api@sha256:" + "a" * 64
 IMAGE = "registry.invalid/caseops-api@sha256:" + "b" * 64
 
 
-@pytest.fixture(params=["document", "court"])
+@pytest.fixture(params=["document", "court", "ai"])
 def harness(monkeypatch, request):
     monkeypatch.syspath_prepend(str(ROOT / "scripts"))
     module = importlib.import_module("document_worker_release")
@@ -60,6 +60,7 @@ def harness(monkeypatch, request):
                             {"name": executor.target_key, "value": executor.job},
                             {"name": executor.region_key, "value": REGION},
                             {"name": "CASEOPS_GCP_PROJECT_ID", "value": PROJECT},
+                            *(state.get("api_env", []) if new else []),
                         ],
                     }
                 ]
@@ -146,6 +147,7 @@ def harness(monkeypatch, request):
                 "env": [
                     {"name": executor.protocol, "value": state["protocol"]},
                     {"name": executor.admission, "value": state["admission"]},
+                    *state.get("job_env", []),
                 ],
             }
             if state["contract"] == "bad_command":
@@ -178,6 +180,10 @@ def harness(monkeypatch, request):
         preflight=module.preflight,
         prepare=partial(module.prepare, executor=executor),
         activate=partial(module.activate, executor=executor),
+        executor=executor,
+        is_ai=executor is module.AI,
+        parity_values=module.AI_PARITY_VALUES,
+        parity_secrets=module.AI_PARITY_SECRETS,
     ), state
 
 
@@ -360,3 +366,78 @@ def test_expired_history_requires_actual_request_based_runtime_bounds(harness, c
     with pytest.raises(module.inventory.InventoryError, match="runtime bounds"):
         prepare(module)
     assert not any("update" in call or "delete" in call for call in state["calls"])
+
+
+# Production values of 27 Nov 2026 (read from caseops-api); the secret rows carry
+# only a reference.
+RETRIEVAL_ENV = {
+    "CASEOPS_RERANK_ENABLED": "true",
+    "CASEOPS_RERANK_BACKEND": "fastembed",
+    "CASEOPS_EMBEDDING_PROVIDER": "voyage",
+    "CASEOPS_EMBEDDING_MODEL": "voyage-4-large",
+    "CASEOPS_EMBEDDING_DIMENSIONS": "1024",
+    "CASEOPS_LLM_PROVIDER": "openai",
+    "CASEOPS_LLM_MODEL": "gpt-5.1",
+    "CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini",
+    "CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS": "16384",
+    "CASEOPS_DB_STATEMENT_TIMEOUT_MS": "60000",
+    "CASEOPS_DB_LOCK_TIMEOUT_MS": "5000",
+    "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
+    "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal",
+}
+
+
+def _rows(values: dict, secrets=("CASEOPS_EMBEDDING_API_KEY", "CASEOPS_LLM_API_KEY")) -> list:
+    rows = [{"name": key, "value": value} for key, value in values.items()]
+    return rows + [
+        {"name": key, "valueFrom": {"secretKeyRef": {"name": "s", "key": "latest"}}}
+        for key in secrets
+    ]
+
+
+def test_ai_admission_requires_the_api_research_settings_on_the_job(harness):
+    module, state = harness
+    assert set(RETRIEVAL_ENV) < set(module.parity_values)
+    state.update(api_env=_rows(RETRIEVAL_ENV), job_env=_rows(RETRIEVAL_ENV))
+    receipt = activate(module, state, prepare(module))
+    assert state["admission"] == "true" and receipt["worker_image"] == IMAGE
+
+
+@pytest.mark.parametrize(
+    ("label", "job"),
+    [
+        (
+            "rerank missing",
+            {k: v for k, v in RETRIEVAL_ENV.items() if k != "CASEOPS_RERANK_ENABLED"},
+        ),
+        ("other embedding model", {**RETRIEVAL_ENV, "CASEOPS_EMBEDDING_MODEL": "voyage-3"}),
+        ("other model", {**RETRIEVAL_ENV, "CASEOPS_LLM_MODEL": "gpt-5-mini"}),
+        ("semantic statutes on one side", {**RETRIEVAL_ENV,
+         "CASEOPS_STATUTE_SEMANTIC_RETRIEVAL_ENABLED": "true"}),
+    ],
+)
+def test_ai_admission_refuses_a_job_whose_research_settings_differ(harness, label, job):
+    module, state = harness
+    if not module.is_ai:
+        pytest.skip("parity applies to the AI job only")
+    state.update(api_env=_rows(RETRIEVAL_ENV), job_env=_rows(job))
+    capture = prepare(module)
+    with pytest.raises(module.inventory.InventoryError, match="research settings differ"):
+        activate(module, state, capture)
+    assert state["admission"] == "false", label
+    assert not [call for call in state["calls"] if call[:3] == ["run", "jobs", "update"]
+                and "=true" in call[call.index("--update-env-vars") + 1]], label
+
+
+def test_ai_admission_refuses_a_job_without_the_model_key(harness):
+    module, state = harness
+    if not module.is_ai:
+        pytest.skip("parity applies to the AI job only")
+    state.update(
+        api_env=_rows(RETRIEVAL_ENV),
+        job_env=_rows(RETRIEVAL_ENV, secrets=("CASEOPS_EMBEDDING_API_KEY",)),
+    )
+    capture = prepare(module)
+    with pytest.raises(module.inventory.InventoryError, match="CASEOPS_LLM_API_KEY"):
+        activate(module, state, capture)
+    assert state["admission"] == "false"

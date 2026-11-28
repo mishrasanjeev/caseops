@@ -366,11 +366,13 @@ Both the API service and every job run as
        --update-env-vars CASEOPS_LLM_FALLBACK_ENABLED=true,CASEOPS_LLM_GEMINI_PROJECT=perfect-period-305406
      ```
 
-   - `caseops-document-processing` and `caseops-court-sync`: their environment
+   - `caseops-document-processing`, `caseops-court-sync` and
+     `caseops-ai-jobs` (research answers and intelligent reviews run there,
+     not in `caseops-api`): their environment
      is owned by `infra/cloudrun/scheduler-inventory.json` and is reset to it,
      exactly, on every release; a manual `gcloud run jobs update` would be
      reverted. Add `"CASEOPS_LLM_FALLBACK_ENABLED": "true"` and
-     `"CASEOPS_LLM_GEMINI_PROJECT": "perfect-period-305406"` to both jobs'
+     `"CASEOPS_LLM_GEMINI_PROJECT": "perfect-period-305406"` to each job's
      `bootstrap.environment` in a reviewed commit (update
      `apps/api/tests/test_scheduler_inventory.py` if it pins the map) and
      release it.

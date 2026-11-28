@@ -121,6 +121,50 @@ describe("OcrTranslateDialog", () => {
     expect(target).toHaveValue("none");
   });
 
+  // Ram BUG-005 (2026-11-26): a three-item list read as a broken dropdown. The
+  // dialog states the supported set, taken from the server's readiness payload.
+  it("states the supported OCR languages and translation pairs from the server", async () => {
+    renderDialog();
+    const source = await screen.findByLabelText("Source language");
+    const supported = screen.getByTestId("ocr-supported-languages");
+    expect(supported).toHaveTextContent(
+      "OCR reads documents in English, Hindi and Marathi. Translation: Hindi ↔ English, Marathi ↔ English.",
+    );
+    expect(source).toHaveAccessibleDescription(supported.textContent ?? "");
+  });
+
+  it("names only what the server reports, and drops translation when it is off", async () => {
+    listMock.mockResolvedValue({
+      attachment_id: "a1",
+      providers: providers({
+        ocr_languages: ["en", "hi"],
+        translation_available: false,
+        translation_unavailable_reason: "cost_not_verified",
+        translation_pairs: [{ source: "hi", target: "en" }],
+      }),
+      renditions: [],
+    });
+    renderDialog();
+    await screen.findByLabelText("Source language");
+    const supported = screen.getByTestId("ocr-supported-languages");
+    expect(supported).toHaveTextContent(/^OCR reads documents in English and Hindi\.$/);
+    expect(supported).not.toHaveTextContent("Marathi");
+    expect(supported).not.toHaveTextContent("Translation:");
+  });
+
+  it("marks a one-way pair with a single arrow", async () => {
+    listMock.mockResolvedValue({
+      attachment_id: "a1",
+      providers: providers({ translation_pairs: [{ source: "mr", target: "en" }] }),
+      renditions: [],
+    });
+    renderDialog();
+    await screen.findByLabelText("Source language");
+    expect(screen.getByTestId("ocr-supported-languages")).toHaveTextContent(
+      "Translation: Marathi → English.",
+    );
+  });
+
   it("disables translation with the plain reason when it is unavailable", async () => {
     listMock.mockResolvedValue({
       attachment_id: "a1",
