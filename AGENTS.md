@@ -3372,6 +3372,23 @@ requirements when using the fallback.
   crashed on zero-width spaces in BUG-005, the traceback was buried below
   BUG-004, and BUG-005 went untriaged until the summary step. A reader that
   fails mid-file is a stop, never a partial input.
+- A FastAPI BackgroundTask on caseops-api, which runs request-based billing
+  (`cpu-throttling=true`) with concurrency 1, gets CPU only while its own
+  instance is serving a request. Its speed therefore depends on where the
+  polls happen to land, and a green production run proves nothing about it.
+  The Nov 26 research answer phone case got 5 of 29 polls, starved, and lost
+  its connection at the 60 s idle-in-transaction limit. In background work,
+  never hold a transaction across a provider call or CPU-heavy work; read on
+  autocommit or commit first. Judge such a job from production logs (instance
+  of the job vs instances of the polls, and the error line), not by rerunning
+  until green.
+- A retrieval path that exists only on PostgreSQL (the exact-name prefilter,
+  pgvector) is invisible to SQLite tests and to CI journeys. Ram's own
+  "explain the section 138?" passed both and abstained on PostgreSQL: the
+  planner's capitalised "Section" was read as a party name and, with no
+  usable query vector, became the whole candidate set. Ask the tester's exact
+  question on PostgreSQL, with and without vectors, before calling a research
+  fix done; Docker acceptance is the gate that runs it.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
