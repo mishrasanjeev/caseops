@@ -700,7 +700,7 @@ def test_scheduled_prod_verification_is_read_only() -> None:
         REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts"
     ).read_bytes()
     spec_digest = hashlib.sha256(statute_spec).hexdigest()
-    assert spec_digest == "d8343f94192d01a92f9c4c222a552a74225a3d770093ae0a2575e78549f8af73"
+    assert spec_digest == "7d261c6a8ee6e8bc20bf8c798e1b545005346b52ab9fc6afb67985573c5d3fdd"
 
 
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:

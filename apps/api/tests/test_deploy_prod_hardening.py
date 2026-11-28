@@ -1679,9 +1679,11 @@ def test_ci_web_builder_contract_rejects_context_or_target_drift(old: str, new: 
 def test_ci_aggregate_fails_closed_without_retaining_cancelled_runs(job_id: str) -> None:
     aggregate = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))["jobs"][job_id]
     assert aggregate["if"] == "github.event_name != 'push' && always() && !cancelled()"
-    expected_needs = ["api-ruff", "api-test-shards"] if job_id == "api" else [
-        "postgres-validation-shards",
-    ]
+    expected_needs = (
+        ["api-ruff", "api-test-shards", "statute-evidence"]
+        if job_id == "api"
+        else ["postgres-validation-shards"]
+    )
     assert aggregate["needs"] == expected_needs
     failure_guard = aggregate["steps"][0]
     for prerequisite in expected_needs:

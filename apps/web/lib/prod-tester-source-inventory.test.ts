@@ -257,24 +257,31 @@ const nov24Cases = [
 const nov24Keys = new Set(nov24Cases.map(([project, title]) => JSON.stringify([project, [nov24File, title]])));
 const isNov24 = (row: Case) => row.file === nov24File;
 // November 25 workbook (2) regressions (rows 1-3, nova-legal) plus the source
-// batches for the newly admitted Constitution, matched by exact identity.
+// batches for the newly admitted Constitution and Income-tax Act, 1961,
+// matched by exact identity.
 const nov25ConstitutionPrefix = "Nov25 Constitution source records ";
+const nov25IncomeTaxPrefix = "Nov25 Income-tax source records ";
+const nov25IncomeTaxRanges = ["1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-280", "281-320", "321-360", "361-400", "401-440", "441-480", "481-520", "521-560", "561-600", "601-640", "641-680", "681-720", "721-760", "761-800", "801-840", "841-880", "881-920", "921-960", "961-966"];
 const nov25Cases = [
   ...[
     "1-40", "41-80", "81-120", "121-160", "161-200", "201-240", "241-280",
     "281-320", "321-360", "361-400", "401-440", "441-480", "481-519",
   ].map(range => ["app-chromium", motorStatuteFile, `${nov25ConstitutionPrefix}${range} of 519`] as const),
+  ...nov25IncomeTaxRanges.map(range => ["app-chromium", motorStatuteFile, `${nov25IncomeTaxPrefix}${range} of 966`] as const),
   ["app-chromium", "nova-2026-11-25-statutes.spec.ts", "row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog"],
+  ["app-chromium", "nova-2026-11-25-statutes.spec.ts", "row 1 Income-tax Act Section 80C is chosen and attached from the Add Reference dialog"],
   ["app-chromium", "nova-2026-11-25-client-links.spec.ts", "row 2 links a client from the client page and from the matter overview"],
   ["app-chromium", "nova-2026-11-25-client-links.spec.ts", "row 2 new matter links an existing client at creation"],
   ["app-chromium", "nova-2026-11-25-ask-workspace.spec.ts", "row 3 Ask Workspace answers parties, pending actions, documents and Act sections from the cited Matter record"],
   ["app-mobile", "nova-2026-11-25-statutes.spec.ts", "[mobile] row 1 Constitution Article 21 is chosen and attached from the Add Reference dialog"],
+  ["app-mobile", "nova-2026-11-25-statutes.spec.ts", "[mobile] row 1 Income-tax Act Section 80C is chosen and attached from the Add Reference dialog"],
   ["app-mobile", "nova-2026-11-25-client-links.spec.ts", "[mobile] row 2 links a client from the matter overview on a phone"],
 ] as const;
 const nov25Keys = new Set(nov25Cases.map(([project, file, title]) => JSON.stringify([project, [file, title]])));
 const nov25Files = new Set<string>(nov25Cases.map(([, file]) => file).filter(file => file !== motorStatuteFile));
 const isNov25 = (row: Case) => nov25Files.has(row.file)
-  || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25ConstitutionPrefix)));
+  || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25ConstitutionPrefix)))
+  || (row.file === motorStatuteFile && Boolean(row.titles.at(-1)?.startsWith(nov25IncomeTaxPrefix)));
 const batch5BugsFile = "ram-2026-11-11-bugs.spec.ts";
 const batch5BugsProofCases = [
   ["BUG-003 communications resolved preview and missing-value guard desktop", "preview-no-paid-guard"],
@@ -495,7 +502,7 @@ describe("complete independent App CI project inventory", () => {
     const reviewed = [...canonical, ...batch5, ...nov14, ...nov15, ...motorStatutes, ...compactMatter, ...nov22, ...nov24, ...nov25];
     expect(new Set(reviewed.map(row => row.id))).toEqual(new Set(all.map(row => row.id)));
     expect(new Set(all.map(row => row.id)).size).toBe(all.length);
-    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 767, "app-mobile": 70 });
+    expect(counts(reviewed.map(row => row.project))).toEqual({ "app-chromium": 793, "app-mobile": 71 });
   });
 
   it("requires every exact Nov22 release identity outside the unchanged prior cohorts", () => {
@@ -515,12 +522,12 @@ describe("complete independent App CI project inventory", () => {
     expect(counts(nov24.map(row => row.project))).toEqual({ "app-chromium": 11, "app-mobile": 2 });
   });
 
-  it("requires every exact Nov25 workbook identity and Constitution source batch outside the prior cohorts", () => {
+  it("requires every exact Nov25 workbook identity and Constitution and Income-tax source batch outside the prior cohorts", () => {
     expect(nov25.map(row => JSON.stringify([row.project, row.titles])).sort())
       .toEqual([...nov25Keys].sort());
     expect(new Set(nov25.map(row => row.id)).size).toBe(nov25Cases.length);
     expect(nov25.every(row => row.retries === 0 && row.repeat === 0 && row.results.length === 0 && row.expectedStatus === "passed")).toBe(true);
-    expect(counts(nov25.map(row => row.project))).toEqual({ "app-chromium": 17, "app-mobile": 2 });
+    expect(counts(nov25.map(row => row.project))).toEqual({ "app-chromium": 43, "app-mobile": 3 });
   });
 
   it("reconciles every additive B5 identity with its dedicated exact-production role", () => {

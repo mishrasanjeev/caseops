@@ -375,5 +375,284 @@ class RealTableReconciliationTests(unittest.TestCase):
                 compiler.compile_table(pdf, layout)
 
 
+BOLD = "LiberationSerif-Bold"
+HEADER = ["Income Tax Department", "Ministry of Finance, Government of India"]
+
+
+def file_line(text, y, x=27.6, font="LiberationSerif", gap=2.0):
+    return {"text": text, "y": y, "x": x, "x1": x + 100, "font": font, "gap": gap}
+
+
+def file_page(number, lines, note_rule=None):
+    head = [file_line(text, 20 + index * 15, x=76.5) for index, text in enumerate(HEADER)]
+    return {
+        "page": number,
+        "lines": head + lines,
+        "note_rules": [note_rule] if note_rule else [],
+        "footer_rules": [],
+    }
+
+
+class SectionFileEditionTests(unittest.TestCase):
+    """Out-of-order per-section files: identities come from printed numbers."""
+
+    def setUp(self):
+        self.pages = [
+            file_page(
+                1,
+                [
+                    file_line("Heading of the second section.", 66, font=BOLD),
+                    file_line("2. (1) The complete second provision", 81, font=BOLD),
+                    file_line("continues on its first page.", 94),
+                    file_line("1. Ins. by Act No. 1 of 2025.", 700, x=29.7),
+                ],
+                note_rule=690,
+            ),
+            file_page(2, [file_line("2. Sub. by Act No. 2 of 2025.", 66, x=29.7)]),
+            file_page(
+                3,
+                [
+                    file_line("CHAPTER I", 66, x=270, font="LiberationSerif-BoldItalic"),
+                    file_line("Heading of the first section.", 81, font=BOLD),
+                    file_line(
+                        "1. The complete first provision text, without endnotes.", 97, font=BOLD
+                    ),
+                ],
+            ),
+            file_page(4, [file_line("and its second page.", 66)]),
+            file_page(
+                5,
+                [
+                    file_line("Omitted heading.", 66, font=BOLD),
+                    file_line(
+                        "3. to 4. [Omitted by the Synthetic Act, 1990, w.e.f. 1-4-1990.]",
+                        81,
+                        font=BOLD,
+                    ),
+                ],
+            ),
+            file_page(
+                6,
+                [
+                    file_line("THE FIRST SCHEDULE", 66, x=250, font="LiberationSerif-BoldItalic"),
+                    file_line("[See section 2]", 81, x=260),
+                    file_line("1. A schedule item that is not a section.", 97, font=BOLD),
+                ],
+            ),
+        ]
+        self.spec = {
+            "statute_id": "test-section-files",
+            "layout": "section_files",
+            "file": "test.pdf",
+            "sha256": "a" * 64,
+            "page_count": 6,
+            "body_pages": [1, 6],
+            "page_header": HEADER,
+            "page_footer": r"Downloaded/Printed on .+",
+            "section_start": {"font": BOLD, "x_range": [27.5, 27.75]},
+            "schedule_heading": r"THE (?:FIRST|SECOND) SCHEDULE",
+            "column_gap": 7.0,
+            "note_min_x": 29,
+            "section_count": 3,
+            "identity_ranges": {"3-4": ["3", "4"]},
+            "omitted_provisions": ["3-4"],
+            "supplements": [
+                {
+                    "key": "first-schedule",
+                    "kind": "schedule",
+                    "section_number": "First Schedule",
+                    "label": "First Schedule",
+                    "heading": "THE FIRST SCHEDULE",
+                    "page": 6,
+                }
+            ],
+            "source_url": "https://www.incometaxindia.gov.in/documents/1/2/test.pdf/x?version=1.0",
+            "retrieved_at": "2026-11-26T10:17:14+00:00",
+            "source_publisher": "Test publisher",
+            "issuing_body": "Test issuing body",
+            "source_version": "Test edition",
+            "legal_status": "repealed",
+        }
+
+    def compile(self):
+        return compiler._compile_section_files(self.spec, self.pages)
+
+    def test_printed_numbers_order_rows_and_endnotes_stay_outside_the_body(self):
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(
+            list(rows), ["Section 1", "Section 2", "Section 3", "Section 4", "First Schedule"]
+        )
+        first, second = rows["Section 1"], rows["Section 2"]
+        self.assertEqual(
+            first["section_text"],
+            "1. The complete first provision text, without endnotes.\n\nand its second page.",
+        )
+        self.assertEqual(first["section_label"], "Heading of the first section")
+        self.assertEqual(first["source_policy"]["official_pdf_page"], 3)
+        self.assertEqual(first["source_policy"]["official_pdf_end_page"], 4)
+        self.assertNotIn("Ins. by", second["section_text"])
+        self.assertEqual(
+            [note["page"] for note in second["source_policy"]["publisher_page_notes"]], [1, 2]
+        )
+        self.assertIn("Sub. by Act No. 2", second["editorial_notes"])
+        self.assertEqual(second["verification_status"], "verified_official")
+        self.assertEqual(second["source_policy"]["edition_scope"], "historical_repealed_law")
+        # The repeal is legal status and context, never a blanket end date.
+        self.assertNotIn("effective_to", second)
+        for number in ("Section 3", "Section 4"):
+            self.assertEqual(rows[number]["verification_status"], "retired")
+            self.assertEqual(rows[number]["source_policy"]["arrangement_identity"], "3-4")
+        schedule = rows["First Schedule"]
+        self.assertTrue(schedule["section_text"].startswith("THE FIRST SCHEDULE\n"))
+        self.assertEqual(schedule["source_policy"]["provision_kind"], "schedule")
+
+    def test_a_provision_file_must_open_at_a_page_top(self):
+        self.pages[2]["lines"].insert(2, file_line("Body text left over from another file.", 60))
+        with self.assertRaisesRegex(ValueError, "does not open at a page top"):
+            self.compile()
+
+    def test_undeclared_omission_is_rejected_both_ways(self):
+        self.spec["omitted_provisions"] = []
+        with self.assertRaisesRegex(ValueError, "Omission inventory disagrees"):
+            self.compile()
+        self.spec["omitted_provisions"] = ["3-4", "1"]
+        with self.assertRaisesRegex(ValueError, "Omission inventory disagrees"):
+            self.compile()
+
+    def test_multi_column_body_must_be_quarantined_with_a_reason(self):
+        self.pages[3]["lines"].append(file_line("1. Upto Rs. 2,50,000 Nil", 80, gap=120.0))
+        with self.assertRaisesRegex(ValueError, r"Unreconciled bodies differ.*'1'"):
+            self.compile()
+        self.spec["blocked_sections"] = {"1": "Multi-column table not reconciled."}
+        row = next(row for row in self.compile() if row["section_number"] == "Section 1")
+        self.assertEqual(row["verification_status"], "quarantined")
+        self.assertEqual(row["quarantine_reason"], "Multi-column table not reconciled.")
+
+    def test_changed_page_header_or_second_endnote_block_is_rejected(self):
+        self.pages[3]["lines"][0]["text"] = "Another publisher"
+        with self.assertRaisesRegex(ValueError, "page header changed: page 4"):
+            self.compile()
+        self.setUp()
+        self.pages[1]["note_rules"] = [60]
+        with self.assertRaisesRegex(ValueError, "Second endnote block"):
+            self.compile()
+
+    def test_range_members_must_equal_the_printed_range(self):
+        self.spec["identity_ranges"] = {"3-4": ["3"]}
+        with self.assertRaisesRegex(ValueError, "Undeclared printed identity range"):
+            self.compile()
+
+    def test_chapter_heading_on_a_page_without_a_start_fails_closed_unless_declared(self):
+        # An omitted chapter printed with no section must not extend Section 1.
+        self.pages[3]["lines"][2:2] = [
+            file_line("CHAPTER II", 50.5, x=270, font="LiberationSerif-BoldItalic"),
+            file_line("[Chapter II, consisting of section 2Z, omitted by the Synthetic", 52),
+            file_line("Act, 1990.]", 54, font="LiberationSerif-Italic"),
+        ]
+        self.pages[3]["lines"][5]["y"] = 66
+        with self.assertRaisesRegex(ValueError, r"declared chapter blocks: \[\(4, 0\)\]"):
+            self.compile()
+        self.spec["chapter_blocks"] = [[4, 0]]
+        self.spec["section_count"] = 4
+        self.spec["omission_evidence"] = {
+            "2Z": {
+                "page": 4,
+                "first_line": 1,
+                "end_line": 3,
+                "text": "[Chapter II, consisting of section 2Z, omitted by the Synthetic\n"
+                "Act, 1990.]",
+            }
+        }
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(
+            rows["Section 1"]["section_text"],
+            "1. The complete first provision text, without endnotes.",
+        )
+        self.assertEqual(rows["Section 2Z"]["verification_status"], "retired")
+        self.assertEqual(rows["Section 2Z"]["legal_status"], "repealed")
+
+    def test_repeal_notice_is_an_omission_that_must_be_inventoried_and_whole(self):
+        omitted = self.pages[4]["lines"][3]
+        omitted["text"] = "3. to 4. [Repealed by the Synthetic Repeal Act, 1990.]"
+        rows = {row["section_number"]: row for row in self.compile()}
+        self.assertEqual(rows["Section 3"]["verification_status"], "retired")
+        self.spec["omitted_provisions"] = []
+        with self.assertRaisesRegex(ValueError, "Omission inventory disagrees"):
+            self.compile()
+        self.spec["omitted_provisions"] = ["3-4"]
+        omitted["text"] += " Operative text printed after the notice."
+        with self.assertRaisesRegex(ValueError, "not the whole printed body"):
+            self.compile()
+
+    def test_stacked_fraction_formula_must_be_quarantined(self):
+        page = self.pages[2]
+        page["lines"].extend(
+            [
+                file_line("B", 120, x=116.8),
+                file_line("A x", 127, x=91.3),
+                file_line("C", 134, x=116.8),
+            ]
+        )
+        for line in page["lines"][-3:]:
+            line["x1"] = line["x"] + 6
+        page["short_rules"] = [(106.12, 133.18, 131.0)]
+        with self.assertRaisesRegex(ValueError, r"Unreconciled bodies differ.*'1'"):
+            self.compile()
+        self.spec["blocked_sections"] = {"1": "Stacked fraction formula not reconciled."}
+        row = next(row for row in self.compile() if row["section_number"] == "Section 1")
+        self.assertEqual(row["verification_status"], "quarantined")
+
+    def test_inventory_count_is_pinned(self):
+        self.spec["section_count"] = 4
+        with self.assertRaisesRegex(ValueError, "Incomplete section inventory"):
+            self.compile()
+
+
+class ReleaseAssetEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self.directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.directory.name)
+        self.payload = b"%PDF-1.7 synthetic release asset"
+        (self.root / "asset.pdf").write_bytes(self.payload)
+        self.spec = {
+            "statute_id": "test-asset",
+            "file": "asset.pdf",
+            "sha256": compiler.digest(self.payload),
+            "release_asset": {"name": "asset.pdf", "size": len(self.payload), "url": "https://x"},
+        }
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def test_verified_asset_is_returned(self):
+        self.assertEqual(
+            compiler.release_asset_path(self.spec, self.root), self.root / "asset.pdf"
+        )
+
+    def test_missing_directory_size_or_digest_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "--evidence-dir"):
+            compiler.release_asset_path(self.spec, None)
+        self.spec["release_asset"]["size"] += 1
+        with self.assertRaisesRegex(ValueError, "size mismatch"):
+            compiler.release_asset_path(self.spec, self.root)
+        self.spec["release_asset"]["size"] -= 1
+        self.spec["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+            compiler.release_asset_path(self.spec, self.root)
+        (self.root / "asset.pdf").unlink()
+        with self.assertRaisesRegex(ValueError, "Missing release-asset evidence"):
+            compiler.release_asset_path(self.spec, self.root)
+
+    def test_evidence_inside_the_repository_build_context_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "outside the repository"):
+            compiler.release_asset_path(self.spec, compiler.ROOT / "tests")
+
+    def test_release_asset_document_never_falls_back_to_repository_pdfs(self):
+        with self.assertRaisesRegex(ValueError, "reviewed layout"):
+            compiler.compile_document(self.spec, self.root)
+
+
 if __name__ == "__main__":
     unittest.main()

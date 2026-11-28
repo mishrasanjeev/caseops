@@ -12,6 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 PUSH_SKIPPED = {
     "api-test-shards",
+    "statute-evidence",
     "api",
     "postgres-validation-shards",
     "postgres-validation",
@@ -57,6 +58,6 @@ def test_only_the_heavy_suites_skip_a_push_to_main() -> None:
             assert event not in condition, (name, condition)
     for name in ("api", "postgres-validation", "e2e"):
         assert jobs[name]["if"] == f"{PUSH_GATE} && always() && !cancelled()"
-    assert jobs["api"]["needs"] == ["api-ruff", "api-test-shards"]
+    assert jobs["api"]["needs"] == ["api-ruff", "api-test-shards", "statute-evidence"]
     assert jobs["postgres-validation"]["needs"] == ["postgres-validation-shards"]
     assert jobs["e2e"]["needs"] == ["api", "web", "postgres-validation", "e2e-projects"]

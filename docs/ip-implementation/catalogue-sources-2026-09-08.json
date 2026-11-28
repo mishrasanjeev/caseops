@@ -240,9 +240,19 @@
           "checked_at": "2026-11-22T07:49:00.8991875+00:00",
           "status": "official_listing_identified",
           "sha256": null
+        },
+        {
+          "url": "https://www.incometaxindia.gov.in/documents/20117/43006/Income-tax-Act-1961_2026_2026-06-18_02-47-37_b9326c_en.pdf/f596386d-b8fa-4fdf-2618-77d628ee2200?version=2.0",
+          "checked_at": "2026-11-26T10:17:14+00:00",
+          "status": "retained_release_document",
+          "sha256": "73d264fd05bc3b19ee003f399aeb50faf7ea36a42f345fa94ebb9b3a2ad0cb93",
+          "bytes": 179141656,
+          "error": null,
+          "release_asset": "https://github.com/mishrasanjeev/caseops/releases/download/statute-evidence-income-tax-1961-fa2026/income-tax-1961-fa2026.pdf",
+          "source_version": "ITD edition as amended by Finance Act, 2026; retained repealed-law edition"
         }
       ],
-      "remaining_work": "India Code's migrated item 123456789/620179 exposes the as-enacted Gazette. The delivered PDF's length and checksum differ from its catalogue metadata. The complete amended 1961 edition, 2025 successor and 2026 amendment and transition packs remain open."
+      "remaining_work": "The Income Tax Department consolidation (as amended by the Finance Act, 2026) is pinned as a hash-checked release asset and reproduces every printed section, omitted identity and the fourteen Schedules as a retained repealed-law edition. Sections whose bodies hold multi-column tables, section 44DB (stacked fraction formulas), the elided section 282B and the Thirteenth and Fourteenth Schedules stay quarantined; section 186 is not printed and stays an unverified placeholder. The 2025 successor Act, its transition mapping and relevant-date applicability remain open."
     },
     {
       "statute_id": "gst-cgst-2017",

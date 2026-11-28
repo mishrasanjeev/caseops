@@ -80,13 +80,17 @@ const test = baseTest.extend<{}, { sourceApi: APIRequestContext }>({
 });
 
 // Keep the original source cases and add separately named batches for each Act
-// admitted later (Motor Vehicles for BUG-018, the Constitution for the Nov 25 workbook).
+// admitted later (Motor Vehicles for BUG-018, the Constitution and the
+// Income-tax Act, 1961 for the Nov 25 workbook).
 const motorAct = "motor-vehicles-1988";
 const constitution = "constitution-india";
+const incomeTax = "income-tax-1961";
+const laterActs = [motorAct, constitution, incomeTax];
 const sourceBatches = [
-  { label: "BUG-010 source records", provisions: rows.filter(row => row.statute_id !== motorAct && row.statute_id !== constitution) },
+  { label: "BUG-010 source records", provisions: rows.filter(row => !laterActs.includes(row.statute_id)) },
   { label: "BUG-018 Motor Vehicles source records", provisions: rows.filter(row => row.statute_id === motorAct) },
   { label: "Nov25 Constitution source records", provisions: rows.filter(row => row.statute_id === constitution) },
+  { label: "Nov25 Income-tax source records", provisions: rows.filter(row => row.statute_id === incomeTax) },
 ];
 for (const { label, provisions } of sourceBatches) {
   for (let offset = 0; offset < provisions.length; offset += 40) {
