@@ -1206,8 +1206,12 @@ _RETRIEVAL_PACKS: dict[str, list[str]] = {
         "abuse of process of court quashing proceedings",
     ],
 }
+# Seed packs are CaseOps text, not a person's words, so they name no party.
+# "BNSS" and "CrPC" otherwise read as party names on PostgreSQL and narrow a
+# pack's candidates to judgments whose titles carry the abbreviation.
+_SEED_PACK_QUERIES = frozenset(query for pack in _RETRIEVAL_PACKS.values() for query in pack)
 
-_BAIL_HINTS = re.compile(r"\b(bail|BNSS\s*4[78]\d|CrPC\s*(438|439|167)|custody|undertrial)\b", re.I)
+_BAIL_HINTS =re.compile(r"\b(bail|BNSS\s*4[78]\d|CrPC\s*(438|439|167)|custody|undertrial)\b", re.I)
 _ANTICIPATORY_HINTS = re.compile(r"\banticipatory\s*bail\b|pre-arrest\s*bail", re.I)
 _QUASHING_HINTS = re.compile(r"\bquash(ing)?\b|\bFIR\s*quash", re.I)
 
@@ -1274,7 +1278,12 @@ def _retrieve_for_draft(
     for query in queries:
         if not query or len(seen) >= overfetch_limit:
             continue
-        hits = search_authority_catalog(session, query=query, limit=per_query_limit)
+        hits = search_authority_catalog(
+            session,
+            query=query,
+            limit=per_query_limit,
+            name_query="" if query in _SEED_PACK_QUERIES else None,
+        )
         for hit in hits:
             if hit.authority_document_id in seen:
                 continue

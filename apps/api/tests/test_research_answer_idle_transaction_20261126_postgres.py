@@ -38,8 +38,8 @@ def test_slow_retrieval_outlives_the_idle_transaction_timeout(
     original = service._retrieve_judgments
     calls = []
 
-    def slow_retrieval(session, query):
-        judgments = original(session, query)
+    def slow_retrieval(session, query, **kwargs):
+        judgments = original(session, query, **kwargs)
         # The reranker's CPU time after the last corpus read.
         time.sleep(IDLE_TIMEOUT_MS / 1000 * 2)
         calls.append(len(judgments))
