@@ -270,7 +270,16 @@ def _judgment_excerpt(
     return text[:MAX_EXCERPT_CHARS]
 
 
-def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchResult]:
+def _retrieve_judgments(
+    session: Session, query: str, *, name_query: str
+) -> list[AuthoritySearchResult]:
+    """Judgment candidates for ``query``.
+
+    ``name_query`` is the person's own question: only its words can name a
+    party. The contextual plan of ``query`` adds Act and jurisdiction words
+    ("Negotiable Instruments Act", "Delhi") that must never narrow the
+    candidates to judgments whose titles happen to contain them.
+    """
     from caseops_api.services.authorities import (
         _build_contextual_query_plan,
         _filter_unreadable_authority_results,
@@ -285,6 +294,7 @@ def _retrieve_judgments(session: Session, query: str) -> list[AuthoritySearchRes
         limit=MAX_JUDGMENTS * 4,
         search_mode="contextual",
         suppress_unreadable=False,
+        name_query=name_query,
     )
     readable, _ = _filter_unreadable_authority_results(
         [row for row in raw if _title_is_predominantly_ascii(row.title)]
@@ -433,7 +443,7 @@ def _statute_excerpt(section_text: str, span: tuple[int, int] | None) -> str:
 def _build_sources(session: Session, query: str) -> list[_Source]:
     from caseops_api.services.authority_treatments import compute_search_result_treatments
 
-    judgments = _retrieve_judgments(session, query)
+    judgments = _retrieve_judgments(session, query, name_query=query)
     documents = {
         row.id: row
         for row in session.scalars(

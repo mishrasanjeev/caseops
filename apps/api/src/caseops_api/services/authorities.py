@@ -1022,6 +1022,7 @@ def search_authority_catalog(
     document_type: str | None = None,
     search_mode: str = "keyword",
     suppress_unreadable: bool = True,
+    name_query: str | None = None,
 ) -> list[AuthoritySearchResult]:
     # Parties / title exact-match boost: case-name queries ("Wahid State
     # Govt of NCT of Delhi") carry a distinctive proper noun that
@@ -1030,6 +1031,13 @@ def search_authority_catalog(
     # search eliminates the class of probe misses where cosine walks
     # away from a short, semantically-thin case name. Topic queries
     # ("bail triple test") return zero exact hits → fall through.
+    #
+    # Party names come only from the words a person typed. ``name_query`` is
+    # that text when ``query`` is not: the contextual planner appends Act long
+    # names ("Negotiable Instruments Act") and jurisdiction words ("Delhi",
+    # "Tribunal", "NCLT") that are not parties, and on PostgreSQL without a
+    # usable query vector their name matches became the whole candidate set.
+    # ``None`` means ``query`` is the person's own text; ``""`` names no party.
     structured_mode = search_mode not in {"keyword", "contextual"}
     candidate_limit = min(
         max(
@@ -1047,7 +1055,7 @@ def search_authority_catalog(
         if structured_mode
         else _exact_name_match_document_ids(
             session,
-            query=query,
+            query=query if name_query is None else name_query,
             forum_level=forum_level,
             court_name=court_name,
             document_type=document_type,
@@ -1464,6 +1472,9 @@ def search_authorities(
             document_type=payload.document_type,
             search_mode=payload.mode,
             suppress_unreadable=False,
+            # The contextual plan adds Act and jurisdiction words; party names
+            # are read from what the person typed.
+            name_query=payload.query,
         )
     except EmbeddingProviderError:
         raw = []

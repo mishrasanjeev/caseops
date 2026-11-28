@@ -464,7 +464,7 @@ def test_an_unrelated_question_gets_no_statute_and_the_answer_abstains(
         raise AssertionError("no model call without sources")
 
     monkeypatch.setattr(research, "build_provider", refuse)
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     record = _ask(client, token, query=unrelated)
     assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
     assert record["sources"] == [] and record["answer"] is None
@@ -526,7 +526,7 @@ def test_research_answer_cites_semantic_statute_sources_with_their_verified_hash
     token = bootstrap_company(client)["access_token"]
     provider = _Scripted(_semantic_answer())
     monkeypatch.setattr(research, "build_provider", lambda **_: provider)
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     record = _ask(client, token, query=PARAPHRASE)
     assert record["status"] == "answered", (record["error_code"], record["message"])
     assert record["sources"][0]["id"] == ids["Section 195"]
@@ -569,7 +569,7 @@ def test_a_long_section_is_quoted_from_the_passage_that_matched(
     _sync()
     provider = _Scripted(_semantic_answer())
     monkeypatch.setattr(research, "build_provider", lambda **_: provider)
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     token = bootstrap_company(client)["access_token"]
     record = _ask(client, token, query=PARAPHRASE)
     assert record["sources"][0]["id"] == section_id
@@ -609,7 +609,7 @@ def test_instructions_inside_statute_text_are_treated_as_data(
     assert stored == hostile  # stored verbatim, never acted on
     provider = _Scripted(_semantic_answer())
     monkeypatch.setattr(research, "build_provider", lambda **_: provider)
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     token = bootstrap_company(client)["access_token"]
     record = _ask(client, token, query=PARAPHRASE)
     prompt = provider.prompts[0]
@@ -669,7 +669,7 @@ def test_the_statute_index_is_global_and_never_holds_tenant_material(
     )
     assert matter.status_code == 200, matter.text
     monkeypatch.setattr(research, "build_provider", lambda **_: _Scripted(_semantic_answer()))
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     mine = _ask(client, owner, query=PARAPHRASE, context_matter_id=matter.json()["id"])
     theirs = _ask(client, other, query=PARAPHRASE)
     statute_ids = set(ids.values())
@@ -910,7 +910,7 @@ def test_a_named_section_without_verified_text_is_never_substituted(
         raise AssertionError("no model call without sources")
 
     monkeypatch.setattr(research, "build_provider", refuse)
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     record = _ask(client, token, query=query)
     assert (record["status"], record["error_code"]) == ("abstained", "no_sources"), label
 
@@ -1040,7 +1040,7 @@ def test_a_vector_query_failure_degrades_to_the_exact_reference(
         key_points=[], authorities=[],
         sections=[{"key": "applicable_law", "paragraphs": ["The offence is defined [1]."]}],
     )))
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     record = _ask(client, token, query=query)
     assert record["status"] == "answered", (record["error_code"], record["message"])
     assert [source["kind"] for source in record["sources"]] == ["statute_section"]
@@ -1184,7 +1184,7 @@ def test_the_no_paid_http_marker_reaches_the_background_statute_embedding(
 
     monkeypatch.setattr(vectors, "build_provider", spying_build)
     monkeypatch.setattr(research, "build_provider", lambda **_: _Scripted(_semantic_answer()))
-    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(research, "_retrieve_judgments", lambda session, query, **_: [])
     token = bootstrap_company(client)["access_token"]
     headers = auth_headers(token)
     headers["X-CaseOps-Automated-Test"] = "no-paid-providers"

@@ -306,7 +306,7 @@ def test_no_sources_abstains_without_any_model_call(
         raise AssertionError("no model call without sources")
 
     monkeypatch.setattr(service, "build_provider", refuse)
-    monkeypatch.setattr(service, "_retrieve_judgments", lambda session, query: [])
+    monkeypatch.setattr(service, "_retrieve_judgments", lambda session, query, **_: [])
     record = _ask(client, token, query="What is the limitation for an unindexed remedy?")
     assert (record["status"], record["error_code"]) == ("abstained", "no_sources")
     assert record["answer"] is None and record["sources"] == []

@@ -7933,3 +7933,45 @@ its body to the deep-link navigation. The product path is not implicated. The
 spec now waits for that post-retire read and asserts it shows the identity
 retired at version 5 before reopening; any other read fails the assertion.
 Recorded by Sanjeev Kumar.
+
+## November 29 — planner Act and place words read as party names (PostgreSQL retrieval)
+
+**Inconclusive until released and rated.** J05/M04 (US-010, US-067..US-069),
+J07. This is the open item of the BUG-002 Docker-acceptance entry (PR #674). On
+PostgreSQL, `search_authority_catalog` read party names for its exact-name
+prefilter from the query it searched. The authority search route (contextual
+mode) and research answers search the contextual planner's expansion, which
+appends Act long names ("Section 138 Negotiable Instruments Act") and
+jurisdiction words ("Delhi", "Bombay", "Tribunal", "NCLT"). `_proper_noun_tokens`
+took them for party names. Without a usable query vector, the judgments whose
+parties, title or bench carried those words became the whole candidate set.
+With vectors they were force-included first, and a full candidate page of them
+displaced every vector hit. Drafting's fixed seed packs had the same defect
+through "BNSS" and "CrPC".
+
+Fix (branch `fix/exact-name-user-words-20261129`, draft PR #681):
+`search_authority_catalog` takes `name_query`. The route and research answers
+pass the question as typed; drafting's seed packs pass "" because CaseOps text
+names no party. Briefing, litigation strategy, recommendations, the IP draft
+query and the drafting matter query are unchanged: they search matter-record
+text in keyword mode, not the planner's expansion.
+
+Tests: `apps/api/tests/test_authority_name_query_20261129_postgres.py`
+(PostgreSQL, no embeddings, mixed corpus). "section 138 cheque dishonour" now
+returns all five Section 138 judgments through the route and offers all six,
+with the benchmark judgment, in a research answer. On main 3eeaa069 the route
+returned one of the five and the research answer said "answered" without four
+of them. "anticipatory bail in delhi" returns all three anticipatory-bail
+judgments; before the fix, only "Sushila Aggarwal v. State (NCT of Delhi)". The
+quashing seed pack retrieves State of Haryana v. Bhajan Lal; before the fix,
+only the order titled with CrPC and BNSS. "Pradeep Kumar v. State of
+Chhattisgarh" still name-matches that judgment alone in contextual and keyword
+modes. The four bug tests failed on main 3eeaa069 and on #674's head 56b00a47,
+where both research retrievals read party names from "Negotiable Instruments
+Act, 1881"; the two controls passed. All six pass with the fix.
+
+Still open: words a person types remain candidate party names, so a typed
+"Negotiable Instruments Act" or "Delhi High Court" can still narrow the
+candidates; briefing reads its court and judge fields the same way. Retrieval
+quality is not rated: `caseops-eval-hnsw-recall` on production needs the
+owner's approval for paid Voyage calls. Recorded by Sanjeev Kumar.
