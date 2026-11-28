@@ -82,7 +82,10 @@ from caseops_api.services.source_actions import (
     inspect_source_target_action,
 )
 from caseops_api.services.statute_resolver import parse_section_string
-from caseops_api.services.statute_selection import is_selectable_statute_section
+from caseops_api.services.statute_selection import (
+    is_selectable_statute_section,
+    repealed_edition_caution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +237,8 @@ class _Source:
     retrieval: str | None = None
     source_sha256: str | None = None
     source_version: int | None = None
+    # Repealed provisions only: the caution quoted beside the excerpt.
+    status_note: str | None = None
 
 
 def _weight(forum_level: str | None, court: str | None) -> str:
@@ -479,6 +484,7 @@ def _build_sources(session: Session, query: str) -> list[_Source]:
                 retrieval=match.retrieval,
                 source_sha256=section.source_sha256,
                 source_version=section.source_version,
+                status_note=repealed_edition_caution(section.legal_status),
             )
         )
     treatments = compute_search_result_treatments(
@@ -584,6 +590,8 @@ def _build_messages(
                 "citation": source.citation,
                 "court": source.court,
                 "decision_date": source.decision_date.isoformat() if source.decision_date else None,
+                # Beside the text it qualifies, and only for a repealed provision.
+                **({"status": source.status_note} if source.status_note else {}),
                 "untrusted_excerpt": source.excerpt,
             }
             for source in sources

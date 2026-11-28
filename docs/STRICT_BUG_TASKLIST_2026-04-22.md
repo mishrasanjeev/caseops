@@ -89,6 +89,29 @@ CrPC s.482 and current Article 21. Both tests failed on the old code (no
 answers are being reworked in a parallel branch and adopt the same caution
 there.
 
+Adjacent defect of PR #672, found on 2026-11-29: two more prompts quoted
+statute text with no repeal status. Research answers sent each statute
+source's verbatim excerpt, and recommendations quoted the matter's linked
+provisions in its context. A question on Section 482 CrPC, or a matter with
+CrPC s.482 linked, reached the model with nothing saying the Code is
+repealed. The parallel research branch did not adopt the caution: PR #674 at
+56b00a47 does not carry it, and its fixtures mark CrPC s.482 and IPC s.420
+as enacted. Fix: both prompts now carry the #672 caution beside each repealed
+provision's text, and only there. Research answers add it as a `status`
+field just before that source's excerpt. Recommendations put it after the
+provision's name and before its note and text, outside the line's
+700-character limit, so a long note cannot cut it off. Four services quote
+`section_text` to a model: drafting, litigation strategy, research answers
+and recommendations. Six read it without one: judgment alerts, legal
+updates, statute enrichment, statute selection, source governance and
+statute vectors. `test_every_service_reading_statute_text_is_accounted_for`
+fails when a new service reads statute text without being listed. Three of
+the four new tests failed on 3eeaa069. The fourth is the current NI Act
+s.138 control, and it passes before and after. Verdict: Inconclusive. The
+fix is not released, and the tests prove only the prompt each model call
+receives, not that the production model then says the law is repealed.
+Recorded by Sanjeev Kumar.
+
 ## November 25 - workbook "Caseops Bugs (1)" (24 Nov, six rows)
 
 Triage (all six reproduce against `origin/main` a430c593c):

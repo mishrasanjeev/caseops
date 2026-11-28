@@ -79,6 +79,7 @@ from caseops_api.services.llm import (
 )
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.statute_selection import repealed_edition_caution
 
 logger = logging.getLogger(__name__)
 
@@ -1195,19 +1196,29 @@ def _build_matter_intelligence_context(session: Session, matter: Matter) -> str:
     if statute_rows:
         lines.append("Linked statute references:")
         for ref, section, statute in statute_rows:
+            caution = repealed_edition_caution(section.legal_status)
             section_summary = " | ".join(
                 part
                 for part in (
                     statute.short_name,
                     section.section_number,
                     section.section_label or "",
+                    # Ahead of the note and the text, the parts the limit cuts.
+                    caution or "",
                     f"relevance={ref.relevance}",
                     ref.notes or "",
                     section.section_text or "",
                 )
                 if part
             )
-            _append_context_line(lines, "statute", section_summary, limit=700)
+            # The caution is outside the line's budget, so a repealed
+            # provision keeps the same room for its note and text.
+            _append_context_line(
+                lines,
+                "statute",
+                section_summary,
+                limit=700 + (len(f"{caution} | ") if caution else 0),
+            )
 
     attachments = list(
         session.scalars(
