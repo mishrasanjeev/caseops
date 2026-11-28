@@ -557,6 +557,7 @@ def test_mandatory_titles_survive_both_redactors_unchanged():
     """
     cases = [(row[1], row[2]) for row in evidence.BATCH3_MANDATORY_CASES.values()]
     cases += [case for _, rows in evidence.BATCH4_MANDATORY_CASES.values() for case in rows]
+    cases += [case for _, rows in evidence.NOV27_MANDATORY_CASES.values() for case in rows]
     browser_redacted = re.compile(
         r"https?://|\S*\?\S+|\bBearer\s|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}"
         r"|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b",
@@ -655,8 +656,9 @@ def _restat_capture(state):
     state.junit_count = sum(len(suite["specs"]) for suite in state.runtime["suites"])
 
 
-def _batch4_capture(state, invocation):
-    project, cases = evidence.BATCH4_MANDATORY_CASES[invocation]
+def _batch4_capture(state, invocation, table=None):
+    table = evidence.BATCH4_MANDATORY_CASES if table is None else table
+    project, cases = table[invocation]
     config = state.root / "playwright.prod-ram.config.ts"
     config.write_text("// synthetic offline Batch4 evidence contract\n", encoding="utf-8")
     state.args[:2] = [f"--config={config.name}", f"--project={project}"]
@@ -825,6 +827,162 @@ def test_batch4_validation_rejects_a_missing_required_role(capture):
     evidence.validate(state.root, ["batch4-desktop"], BASE)
     with pytest.raises(evidence.EvidenceError, match="^missing_or_oversized_report$"):
         evidence.validate(state.root, ["batch4-desktop", "batch4-mobile"], BASE)
+
+
+# Reviewed against `npx playwright test --list --config playwright.prod-ram.config.ts`
+# for each Nov27 project on 2026-11-28 (26 production cases in all).
+NOV27_REVIEWED_ROLES = {
+    "nov27-tracking": ("nov27-tracking-prod-chromium", "ram-2026-11-27-case-tracking.spec.ts", 2),
+    "nov27-ocr": ("nov27-ocr-prod-chromium", "ram-2026-11-27-ocr-images.spec.ts", 3),
+    "nov27-statutes-desktop": (
+        "nov27-statutes-prod-chromium", "bugs7-2026-11-27-bench-statutes.spec.ts", 2,
+    ),
+    "nov27-statutes-mobile": (
+        "nov27-statutes-prod-mobile", "bugs7-2026-11-27-bench-statutes.spec.ts", 2,
+    ),
+    "nov27-notices": ("nov27-notices-prod-chromium", "notice-validation-2026-11-27.spec.ts", 2),
+    "nov27-invoice-desktop": (
+        "nov27-invoice-prod-chromium", "ram-2026-11-27-invoice-branding.spec.ts", 1,
+    ),
+    "nov27-invoice-mobile": (
+        "nov27-invoice-prod-mobile", "ram-2026-11-27-invoice-branding.spec.ts", 1,
+    ),
+    "nov27-matter-desktop": ("nov27-matter-prod-chromium", "nova-2026-11-27-matter.spec.ts", 11),
+    "nov27-matter-mobile": ("nov27-matter-prod-mobile", "nova-2026-11-27-matter.spec.ts", 1),
+    "nov27-kyc": ("nov27-kyc-prod-chromium", "ram-2026-11-27-kyc-documents.spec.ts", 1),
+}
+
+
+def test_nov27_roles_are_exactly_the_reviewed_production_cases():
+    assert evidence.NOV27_CONTRACT_VERSION == 1
+    assert list(evidence.NOV27_MANDATORY_CASES) == list(NOV27_REVIEWED_ROLES)
+    assert evidence.NOV27_PARTITIONS == {
+        "nov27-a": ("nov27-tracking", "nov27-ocr"),
+        "nov27-b": (
+            "nov27-statutes-desktop", "nov27-statutes-mobile", "nov27-notices",
+            "nov27-invoice-desktop", "nov27-invoice-mobile", "nov27-matter-desktop",
+            "nov27-matter-mobile", "nov27-kyc",
+        ),
+    }
+    config = (ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
+    for invocation, (project, file, count) in NOV27_REVIEWED_ROLES.items():
+        owned, cases = evidence.NOV27_MANDATORY_CASES[invocation]
+        assert owned == project and config.count(f'name: "{project}"') == 1
+        assert len(cases) == count and len(set(cases)) == count
+        assert {name for name, _ in cases} == {file}
+        assert all(("[mobile]" in title) is invocation.endswith("-mobile") for _, title in cases)
+        assert not any("[local-only]" in title for _, title in cases)
+        source = (ROOT / "tests/e2e" / file).read_text(encoding="utf-8")
+        for _, title in cases:
+            # Looped titles share their literal stem with the source template.
+            assert title.removeprefix("[mobile] ")[:30] in source, (file, title)
+    assert sum(count for _, _, count in NOV27_REVIEWED_ROLES.values()) == 26
+    assert evidence.nov27_contract(ROOT)["roles"] == {
+        role: {"project": project, "cases": count}
+        for role, (project, _, count) in NOV27_REVIEWED_ROLES.items()
+    }
+
+
+@pytest.mark.parametrize("invocation", list(NOV27_REVIEWED_ROLES))
+def test_nov27_full_envelope_requires_every_owned_case_to_actually_pass(capture, invocation):
+    state = _batch4_capture(capture, invocation, evidence.NOV27_MANDATORY_CASES)
+    project, cases = evidence.NOV27_MANDATORY_CASES[invocation]
+    assert state.run() == 0
+    evidence.validate(state.root, [invocation], BASE)
+    rows = json.loads((state.path / "results.json").read_text(encoding="utf-8"))["tests"]
+    assert Counter((row["file"], row["title_path"][-1]) for row in rows) == Counter(cases)
+    assert all(
+        row["project_name"] == project and row["status"] == "expected"
+        and [result["status"] for result in row["results"]] == ["passed"]
+        for row in rows
+    )
+
+
+@pytest.mark.parametrize("invocation", ["nov27-tracking", "nov27-statutes-mobile",
+                                        "nov27-matter-desktop"])
+@pytest.mark.parametrize("damage", [
+    "expected_failure", "skipped", "missing_case", "duplicate", "extra_case", "substitution",
+    "wrong_title", "wrong_project", "wrong_config", "parallel_workers", "missing_retry_flag",
+])
+@pytest.mark.parametrize("phase", ["run", "validate"])
+def test_nov27_full_envelope_rejects_nonpositive_partial_or_substituted_evidence(
+    capture, monkeypatch, invocation, damage, phase,
+):
+    state = _batch4_capture(capture, invocation, evidence.NOV27_MANDATORY_CASES)
+    if damage in {"expected_failure", "skipped"}:
+        reason = "mandatory_nov27_case_not_passed"
+    elif damage in {"wrong_project", "wrong_config", "parallel_workers", "missing_retry_flag"}:
+        reason = "nov27_role_binding_mismatch"
+    else:
+        reason = "mandatory_nov27_case_inventory_mismatch"
+    _damage_batch4_capture(state, invocation, damage)
+    if phase == "run":
+        assert state.run() == 1
+        assert not (state.path / "completion.json").exists()
+        exit_marker = json.loads((state.path / "exit.json").read_text(encoding="utf-8"))
+        assert exit_marker["completed"] is False
+        assert exit_marker["incomplete_reason"] == reason
+        return
+    # A producer that skipped the role check is still refused by final validation.
+    with monkeypatch.context() as producer:
+        producer.setattr(evidence, "_check_nov27_evidence", lambda *a, **kw: None)
+        assert state.run() == 0
+    with pytest.raises(evidence.EvidenceError, match=f"^{reason}$"):
+        evidence.validate(state.root, [invocation], BASE)
+
+
+@pytest.mark.parametrize(("invocation", "project"), [
+    ("nov27-a", "nov27-ocr-prod-chromium"),
+    ("nov27-extra", "offline-project"),
+    ("legacy", "nov27-kyc-prod-chromium"),
+])
+def test_nov27_unreviewed_invocation_or_project_is_refused(invocation, project):
+    binding = {"invocation": invocation, "project": project}
+    with pytest.raises(evidence.EvidenceError, match="^unreviewed_nov27_invocation$"):
+        evidence._check_nov27_evidence(binding, {"tests": []})
+
+
+def _nov27_checkout(root):
+    for _, file, _ in NOV27_REVIEWED_ROLES.values():
+        (root / "tests/e2e").mkdir(parents=True, exist_ok=True)
+        (root / "tests/e2e" / file).touch()
+    (root / "playwright.prod-ram.config.ts").write_text("".join(
+        f'name: "{project}",\n' for project, _, _ in NOV27_REVIEWED_ROLES.values()
+    ), encoding="utf-8")
+    return root
+
+
+@pytest.mark.parametrize("damage", [None, "missing_spec", "linked_spec", "missing_project",
+                                    "duplicate_project", "missing_config"])
+def test_nov27_contract_requires_every_owned_source_and_project(tmp_path, damage):
+    root = _nov27_checkout(tmp_path)
+    spec = root / "tests/e2e/ram-2026-11-27-kyc-documents.spec.ts"
+    config = root / "playwright.prod-ram.config.ts"
+    if damage == "missing_spec":
+        spec.unlink()
+    elif damage == "linked_spec":
+        spec.unlink()
+        try:
+            spec.symlink_to(root / "tests/e2e/ram-2026-11-27-ocr-images.spec.ts")
+        except OSError:
+            pytest.skip("Symbolic links are unavailable to this account.")
+    elif damage == "missing_project":
+        config.write_text(config.read_text().replace('name: "nov27-kyc-prod-chromium",\n', ""))
+    elif damage == "duplicate_project":
+        config.write_text(config.read_text() + 'name: "nov27-ocr-prod-chromium",\n')
+    elif damage == "missing_config":
+        config.unlink()
+    if damage is None:
+        receipt = evidence.nov27_contract(root)
+        assert receipt["nov27_contract"] == 1
+        assert {role: row["cases"] for role, row in receipt["roles"].items()} == {
+            role: count for role, (_, _, count) in NOV27_REVIEWED_ROLES.items()
+        }
+        return
+    reason = ("unreviewed_nov27_role" if damage.endswith("_project")
+              else "missing_or_linked_nov27_source")
+    with pytest.raises(evidence.EvidenceError, match=f"^{reason}$"):
+        evidence.nov27_contract(root)
 
 
 def _damage_stored_mandatory_rows(document, damage):
