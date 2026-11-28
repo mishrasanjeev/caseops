@@ -26,6 +26,7 @@ import {
 import {
   RENDITION_LANGUAGES,
   languageLabel,
+  ocrOnlyLanguagesPhrase,
   providerReasonLabel,
   translationTargets,
 } from "@/lib/renditions";
@@ -95,6 +96,7 @@ function OcrTranslateForm({
   const providers = readiness.data?.providers;
   const targets = translationTargets(providers, source);
   const translationAvailable = providers?.translation_available ?? false;
+  const ocrOnly = ocrOnlyLanguagesPhrase(providers);
 
   const startMutation = useMutation({
     mutationFn: (input: { sourceLanguage: RenditionLanguage; targetLanguage: RenditionLanguage | null }) =>
@@ -219,7 +221,9 @@ function OcrTranslateForm({
               ? "Choose the source language to see translation options."
               : targets.length === 0
                 ? `No translation is offered from ${languageLabel(source)}.`
-                : "Machine translation is a draft for review, not a certified translation."}
+                : `Machine translation is a draft for review, not a certified translation.${
+                    ocrOnly ? ` ${ocrOnly} text can be read but not translated.` : ""
+                  }`}
         </p>
       </div>
       {providers && !providers.ocr_provider_available ? (

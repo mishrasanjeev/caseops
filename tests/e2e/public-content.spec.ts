@@ -520,8 +520,12 @@ test.describe("Public landing page and user guide", () => {
       await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute("content", "noindex, follow");
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://caseops.ai/third-party-notices");
       await expect(page.locator("article form, article input, article textarea")).toHaveCount(0);
-      await expect(page.locator("article h2")).toHaveCount(17);
-      await expect(page.locator("article details")).toHaveCount(23);
+      // One section per component and one disclosure per notice, counted from the
+      // shipped notices file: a new bundled licence must not need a test edit.
+      await expect(page.locator("article h2")).toHaveCount(thirdPartyNotices.components.length);
+      await expect(page.locator("article details")).toHaveCount(
+        thirdPartyNotices.components.reduce((total, component) => total + component.notices.length, 0),
+      );
       for (const component of thirdPartyNotices.components) {
         const section = page.getByRole("region", { name: component.name, exact: true });
         await expect(section).toContainText(component.packageName);

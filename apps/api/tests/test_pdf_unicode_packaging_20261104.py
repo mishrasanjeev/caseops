@@ -41,25 +41,25 @@ NOTICES = (
 
 def test_exact_runtime_assets_and_notices_retain_every_original_byte():
     raw = (ASSETS / "manifest.json").read_bytes()
-    assert len(raw) == 4604
+    assert len(raw) == 7864
     assert (
         hashlib.sha256(raw).hexdigest()
-        == "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4"
+        == "9eb801f0a80beffce6e295477566b89dcd817493f405884ef9f6833aa6a903b9"
     )
     manifest = json.loads(raw)
     pins = manifest["assets"] | manifest["notices"]
     names = {path.name for path in ASSETS.iterdir()}
     assert names == set(pins) | {"manifest.json", "NOTICE.txt"}
-    assert len(manifest["assets"]) == 18
+    assert len(manifest["assets"]) == 32
     for name, pin in pins.items():
         value = (ASSETS / name).read_bytes()
         assert len(value) == pin["bytes"]
         assert hashlib.sha256(value).hexdigest() == pin["sha256"]
     notice = (ASSETS / "NOTICE.txt").read_bytes()
-    assert len(notice) == 1020
+    assert len(notice) == 1592
     assert (
         hashlib.sha256(notice).hexdigest()
-        == "03f863636cd21d1f28b80d1450c257859bc0d2753ca0fc6aaa52f60c82a48a25"
+        == "29813e3654a1b713354699817f69e4eef4351387760c690516c4ce6eb7305c6f"
     )
 
 
@@ -168,6 +168,61 @@ def test_additive_noto_sans_bytes_match_official_git_blob_and_native_metadata(su
     )
 
 
+
+INDIC_BLOBS = {
+    "NotoSansGujarati-Regular.ttf": "6fd1b2fee38f43a1f5587a651b238f98703f5cf2",
+    "NotoSansGujarati-Bold.ttf": "298af930e76fd111dd2ebcd5fdbf1f3dd6015585",
+    "NotoSansTamil-Regular.ttf": "e64d13fe042ce2705eba95658c481552044f3476",
+    "NotoSansTamil-Bold.ttf": "a104b5c704a63045f74fd792a593203da55aaf8e",
+    "NotoSansTelugu-Regular.ttf": "9ee772d19118901a0ac93f3f7efe1d6b2c0b61f8",
+    "NotoSansTelugu-Bold.ttf": "98f48d063946245ef4d015c67fc63a516a017a76",
+    "NotoSansKannada-Regular.ttf": "c24dd3a5f3b98e3016527dfb0b088193c992ab83",
+    "NotoSansKannada-Bold.ttf": "f185c5b17f1e8436be55a3982fda3f75f93f106d",
+    "NotoSansBengali-Regular.ttf": "3e66c1a9ea885b999ce9736aa3b509cc51935fff",
+    "NotoSansBengali-Bold.ttf": "267c839f225d5c0e7c3f13f612427486ee3b2413",
+    "NotoSansMalayalam-Regular.ttf": "49312218c4b22396446706e76745c4027f6ae0ff",
+    "NotoSansMalayalam-Bold.ttf": "791db53b2aa308baf78b9cc07416a41a869b8d27",
+    "NotoSansGurmukhi-Regular.ttf": "196ae9fc62eb64ee05e981498d0f361fa7f782f5",
+    "NotoSansGurmukhi-Bold.ttf": "47b7feeaf4654a7863c8a2225b2fa45b9899b78f",
+}
+
+
+@pytest.mark.parametrize("name,blob", INDIC_BLOBS.items())
+def test_added_indic_bytes_match_official_git_blob_and_upright_native_metadata(name, blob):
+    from fontTools.ttLib import TTFont
+
+    provenance = json.loads((VENDOR / "SOURCE-AND-LICENSE.json").read_bytes())
+    manifest = json.loads((ASSETS / "manifest.json").read_bytes())
+    family, weight = name.removesuffix(".ttf").split("-")
+    pin = next(row for row in provenance["official_sources"] if row["path"] == name)
+    raw = (ASSETS / name).read_bytes()
+    assert len(raw) == pin["bytes"] == manifest["assets"][name]["bytes"]
+    assert hashlib.sha256(raw).hexdigest() == pin["sha256"] == manifest["assets"][name]["sha256"]
+    assert hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest() == blob
+    assert pin["git_blob"] == blob
+    assert pin["official_source"] == (
+        "https://raw.githubusercontent.com/notofonts/noto-fonts/"
+        f"ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/{family}/{name}"
+    )
+    profile = next(
+        row
+        for row in manifest["indic_fallbacks"]
+        if row["family"] == "CaseOps" + family.removeprefix("NotoSans")
+    )
+    assert profile["files"]["B" if weight == "Bold" else ""] == name
+    metadata = provenance["font_metadata"][name]
+    assert raw[:4].hex() == metadata["sfnt_header_hex"] == "00010000"
+    with TTFont(BytesIO(raw), recalcTimestamp=False, lazy=False) as font:
+        assert "fvar" not in font
+        assert font["OS/2"].fsType == metadata["embedding_fsType"] == 0
+        assert font["head"].macStyle == metadata["head_macStyle"] == (1 if weight == "Bold" else 0)
+        assert font["OS/2"].fsSelection == metadata["os2_fsSelection"]
+        assert len(font.getBestCmap()) == metadata["cmap_count"]
+        for name_id, expected in metadata["names"].items():
+            assert font["name"].getDebugName(int(name_id)) == expected
+        assert font["name"].getDebugName(6) == name.removesuffix(".ttf")
+        assert "SIL Open Font License, Version 1.1" in font["name"].getDebugName(13)
+
 def test_exact_shaper_lock_and_both_native_and_python_license_obligations():
     project = tomllib.loads((ROOT / "apps/api/pyproject.toml").read_text())
     lock = tomllib.loads((ROOT / "apps/api/uv.lock").read_text())
@@ -234,7 +289,7 @@ def test_api_image_and_wheel_source_keep_font_and_notice_closure():
     project = tomllib.loads((ROOT / "apps/api/pyproject.toml").read_text())
     assert project["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"] == ["src/caseops_api"]
     expected = [*ASSETS.iterdir(), *VENDOR.iterdir(), *SHAPER.iterdir()]
-    assert len(expected) == 29
+    assert len(expected) == 43
     for name in (".dockerignore", ".gcloudignore"):
         rules = (ROOT / "apps/api" / name).read_text()
         for path in expected:

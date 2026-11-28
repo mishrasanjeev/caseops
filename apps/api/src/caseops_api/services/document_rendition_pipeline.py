@@ -185,6 +185,23 @@ def translation_client() -> tuple[google_translation.GoogleTranslationClient, bo
 # ---------------------------------------------------------------- inspection
 
 
+# Unicode block of each Indic source language's script.
+SCRIPT_BLOCKS: dict[str, tuple[int, int]] = {
+    "hi": (0x0900, 0x097F),  # Devanagari
+    "mr": (0x0900, 0x097F),  # Devanagari
+    "bn": (0x0980, 0x09FF),  # Bengali
+    "as": (0x0980, 0x09FF),  # Bengali script (Assamese)
+    "pa": (0x0A00, 0x0A7F),  # Gurmukhi
+    "gu": (0x0A80, 0x0AFF),  # Gujarati
+    "od": (0x0B00, 0x0B7F),  # Oriya
+    "ta": (0x0B80, 0x0BFF),  # Tamil
+    "te": (0x0C00, 0x0C7F),  # Telugu
+    "kn": (0x0C80, 0x0CFF),  # Kannada
+    "ml": (0x0D00, 0x0D7F),  # Malayalam
+    "ur": (0x0600, 0x06FF),  # Arabic script (Urdu)
+}
+
+
 def usable_native_text(text: str, *, language: str) -> tuple[bool, str]:
     stripped = (text or "").strip()
     letters = sum(1 for char in stripped if char.isalpha())
@@ -198,10 +215,11 @@ def usable_native_text(text: str, *, language: str) -> tuple[bool, str]:
     )
     if bad > len(stripped) * 0.01:
         return False, "unreliable_text_layer"
-    if language in {"hi", "mr"}:
-        devanagari = sum(1 for char in stripped if "ऀ" <= char <= "ॿ")
-        # Legacy (non-Unicode) Hindi fonts extract as Latin garble; OCR those.
-        if devanagari < letters * 0.2:
+    block = SCRIPT_BLOCKS.get(language)
+    if block is not None:
+        in_script = sum(1 for char in stripped if block[0] <= ord(char) <= block[1])
+        # Legacy (non-Unicode) Indic fonts extract as Latin garble; OCR those.
+        if in_script < letters * 0.2:
             return False, "legacy_font_encoding_suspected"
     return True, ""
 

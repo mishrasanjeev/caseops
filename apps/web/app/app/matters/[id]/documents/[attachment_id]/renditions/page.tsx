@@ -748,6 +748,7 @@ function ProcessedPage({ detail, pageNumber }: { detail: RenditionDetail; pageNu
           <div
             className="max-w-[70ch] whitespace-pre-wrap text-[0.9375rem] leading-relaxed text-[var(--color-ink)] [overflow-wrap:anywhere]"
             lang={detail.source_language}
+            dir="auto"
             data-testid="renditions-ocr-text"
           >
             {page.text}

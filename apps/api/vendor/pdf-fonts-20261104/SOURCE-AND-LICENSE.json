@@ -82,6 +82,118 @@
       "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansDevanagari/NotoSansDevanagari-Bold.ttf",
       "git_blob": "6fdb1c1a31ae8cebadb3ca02878cfdacf75ddfe4",
       "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansGujarati-Regular.ttf",
+      "bytes": 208452,
+      "sha256": "8d5c22d7b729ef2839e6d1fe2cde77b2d083907be3659bca63676baa76e01fd6",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansGujarati/NotoSansGujarati-Regular.ttf",
+      "git_blob": "6fd1b2fee38f43a1f5587a651b238f98703f5cf2",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansGujarati-Bold.ttf",
+      "bytes": 208708,
+      "sha256": "dfa02697acd99735fab0082a0387ff7c2c9288227e80c0d277479cf29dd4cb4e",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansGujarati/NotoSansGujarati-Bold.ttf",
+      "git_blob": "298af930e76fd111dd2ebcd5fdbf1f3dd6015585",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansTamil-Regular.ttf",
+      "bytes": 74248,
+      "sha256": "6532db33b8b264abe3a098a40619feb489b5ddf5ab1d2b46e72b51eeb548001b",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansTamil/NotoSansTamil-Regular.ttf",
+      "git_blob": "e64d13fe042ce2705eba95658c481552044f3476",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansTamil-Bold.ttf",
+      "bytes": 77428,
+      "sha256": "61ccb56bafc7f8316644b91a91ebb3a878c238238ac14cb6ea2f19fa01e9d504",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansTamil/NotoSansTamil-Bold.ttf",
+      "git_blob": "a104b5c704a63045f74fd792a593203da55aaf8e",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansTelugu-Regular.ttf",
+      "bytes": 197228,
+      "sha256": "2c05072e8018a9be1cb0582953d9edf9a0cf129cdfb74e611de763b09c411f7f",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Regular.ttf",
+      "git_blob": "9ee772d19118901a0ac93f3f7efe1d6b2c0b61f8",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansTelugu-Bold.ttf",
+      "bytes": 205304,
+      "sha256": "e7c717097993e71944ef221f520a9d79db05e9c7652f4b037e1801c96379ca22",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansTelugu/NotoSansTelugu-Bold.ttf",
+      "git_blob": "98f48d063946245ef4d015c67fc63a516a017a76",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansKannada-Regular.ttf",
+      "bytes": 151940,
+      "sha256": "5c804033c57f2c2844b1cd425f45b9a78d81d2f71bf358351b24258ebe168aea",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansKannada/NotoSansKannada-Regular.ttf",
+      "git_blob": "c24dd3a5f3b98e3016527dfb0b088193c992ab83",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansKannada-Bold.ttf",
+      "bytes": 156124,
+      "sha256": "9eb680d4160918e4bf1e63183932c363d105548c05e0a5013f873ca56d781127",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansKannada/NotoSansKannada-Bold.ttf",
+      "git_blob": "f185c5b17f1e8436be55a3982fda3f75f93f106d",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansBengali-Regular.ttf",
+      "bytes": 200048,
+      "sha256": "6300c5370cd688b0641343de4c786de6d412bb6c578d129dae75e93a0322dcab",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansBengali/NotoSansBengali-Regular.ttf",
+      "git_blob": "3e66c1a9ea885b999ce9736aa3b509cc51935fff",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansBengali-Bold.ttf",
+      "bytes": 209084,
+      "sha256": "7ad632c41ae1ac0931bfffb703470df0fd03e76bcb78f1fcd023d35fbed5ea8e",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansBengali/NotoSansBengali-Bold.ttf",
+      "git_blob": "267c839f225d5c0e7c3f13f612427486ee3b2413",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansMalayalam-Regular.ttf",
+      "bytes": 111724,
+      "sha256": "42eb462ff13e820ebbeaaec4e7b426bd1de145d02cef8b634f5a3efd376b513c",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansMalayalam/NotoSansMalayalam-Regular.ttf",
+      "git_blob": "49312218c4b22396446706e76745c4027f6ae0ff",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansMalayalam-Bold.ttf",
+      "bytes": 117236,
+      "sha256": "bcc3ec37c2675a952fc336a5483c53f2f7e417c958b668cfeda170dc51bd998e",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansMalayalam/NotoSansMalayalam-Bold.ttf",
+      "git_blob": "791db53b2aa308baf78b9cc07416a41a869b8d27",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansGurmukhi-Regular.ttf",
+      "bytes": 53000,
+      "sha256": "bbde4d85fdfb998eff6921cb2c7a9a7924a1c95560a6aa9a06172530e4f596da",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansGurmukhi/NotoSansGurmukhi-Regular.ttf",
+      "git_blob": "196ae9fc62eb64ee05e981498d0f361fa7f782f5",
+      "external_preobserved_SHA256": null
+    },
+    {
+      "path": "NotoSansGurmukhi-Bold.ttf",
+      "bytes": 53004,
+      "sha256": "3330d107d9756f6d43091a520fcbc0105176fb970fa7e23d5e84e602c968bb75",
+      "official_source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSansGurmukhi/NotoSansGurmukhi-Bold.ttf",
+      "git_blob": "47b7feeaf4654a7863c8a2225b2fa45b9899b78f",
+      "external_preobserved_SHA256": null
     }
   ],
   "noto_sans_acquisition_20261114": {
@@ -90,6 +202,13 @@
     "license": "Repository LICENSE at the same commit is byte-identical to existing OFL-Noto.txt; its exact Git blob is recorded above.",
     "native_shaping_rendering_extraction_tests_executed": false,
     "status": "UNTESTED candidate; metadata inspection is not renderer, image, production or original-draft acceptance."
+  },
+  "noto_indic_acquisition_20261127": {
+    "source": "Official notofonts/noto-fonts raw GitHub files at the existing pinned commit; original Git blobs, not a mirror or generated font.",
+    "checks_before_asset_write": "All fourteen complete font buffers verified against Git blob SHA1 and byte size before copy, then re-hashed in place: static 00010000 TrueType header, head.macStyle upright Regular=0/Bold=1, fsType=0, no fvar, family/PostScript names and OFL name record.",
+    "license": "Same repository LICENSE at the same commit as existing OFL-Noto.txt; no separate licence file added.",
+    "native_shaping_rendering_extraction_tests_executed": true,
+    "status": "HarfBuzz-shaped fpdf2 rendering and PDFium text extraction covered by the API PDF font tests; no raster or native-reader visual review recorded."
   },
   "font_metadata": {
     "NotoSans-Regular.ttf": {
@@ -373,6 +492,244 @@
         "14": "http://scripts.sil.org/OFL"
       },
       "cmap_coverage": "Native FontTools/shaping/extraction checks pending dedicated positive environment; not inferred from filename."
+    },
+    "NotoSansGujarati-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 164,
+      "names": {
+        "0": "Copyright 2019 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Gujarati",
+        "2": "Regular",
+        "4": "Noto Sans Gujarati Regular",
+        "5": "Version 2.101; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D gujr -f none -a qsq -X \"\"",
+        "6": "NotoSansGujarati-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansGujarati-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 164,
+      "names": {
+        "0": "Copyright 2019 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Gujarati",
+        "2": "Bold",
+        "4": "Noto Sans Gujarati Bold",
+        "5": "Version 2.101; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D gujr -f none -a qsq -X \"\"",
+        "6": "NotoSansGujarati-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansTamil-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 147,
+      "names": {
+        "0": "Copyright 2017-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Tamil",
+        "2": "Regular",
+        "4": "Noto Sans Tamil Regular",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D taml -f none -a qsq -X \"\"",
+        "6": "NotoSansTamil-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansTamil-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 147,
+      "names": {
+        "0": "Copyright 2017-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Tamil",
+        "2": "Bold",
+        "4": "Noto Sans Tamil Bold",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D taml -f none -a qsq -X \"\"",
+        "6": "NotoSansTamil-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansTelugu-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 163,
+      "names": {
+        "0": "Copyright 2019-2022 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans Telugu",
+        "2": "Regular",
+        "4": "Noto Sans Telugu Regular",
+        "5": "Version 2.001; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D telu -f none -a qsq -X \"\"",
+        "6": "NotoSansTelugu-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansTelugu-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 163,
+      "names": {
+        "0": "Copyright 2019-2022 Google LLC. All Rights Reserved.",
+        "1": "Noto Sans Telugu",
+        "2": "Bold",
+        "4": "Noto Sans Telugu Bold",
+        "5": "Version 2.001; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D telu -f none -a qsq -X \"\"",
+        "6": "NotoSansTelugu-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansKannada-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 164,
+      "names": {
+        "0": "Copyright 2018-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Kannada",
+        "2": "Regular",
+        "4": "Noto Sans Kannada Regular",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D knda -f none -a qsq -X \"\"",
+        "6": "NotoSansKannada-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansKannada-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 164,
+      "names": {
+        "0": "Copyright 2018-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Kannada",
+        "2": "Bold",
+        "4": "Noto Sans Kannada Bold",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D knda -f none -a qsq -X \"\"",
+        "6": "NotoSansKannada-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansBengali-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 173,
+      "names": {
+        "0": "Copyright 2017-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Bengali",
+        "2": "Regular",
+        "4": "Noto Sans Bengali Regular",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D beng -f none -a qsq -X \"\"",
+        "6": "NotoSansBengali-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansBengali-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 173,
+      "names": {
+        "0": "Copyright 2017-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Bengali",
+        "2": "Bold",
+        "4": "Noto Sans Bengali Bold",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D beng -f none -a qsq -X \"\"",
+        "6": "NotoSansBengali-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansMalayalam-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 187,
+      "names": {
+        "0": "Copyright 2018 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Malayalam",
+        "2": "Regular",
+        "4": "Noto Sans Malayalam Regular",
+        "5": "Version 2.101; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D mlym -f none -a qsq -X \"\"",
+        "6": "NotoSansMalayalam-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansMalayalam-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 187,
+      "names": {
+        "0": "Copyright 2018 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Malayalam",
+        "2": "Bold",
+        "4": "Noto Sans Malayalam Bold",
+        "5": "Version 2.101; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D mlym -f none -a qsq -X \"\"",
+        "6": "NotoSansMalayalam-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansGurmukhi-Regular.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 0,
+      "os2_fsSelection": 320,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 154,
+      "names": {
+        "0": "Copyright 2019-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Gurmukhi",
+        "2": "Regular",
+        "4": "Noto Sans Gurmukhi Regular",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D guru -f none -a qsq -X \"\"",
+        "6": "NotoSansGurmukhi-Regular",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
+    },
+    "NotoSansGurmukhi-Bold.ttf": {
+      "embedding_fsType": 0,
+      "head_macStyle": 1,
+      "os2_fsSelection": 288,
+      "sfnt_header_hex": "00010000",
+      "cmap_count": 154,
+      "names": {
+        "0": "Copyright 2019-2022 Google Inc. All Rights Reserved.",
+        "1": "Noto Sans Gurmukhi",
+        "2": "Bold",
+        "4": "Noto Sans Gurmukhi Bold",
+        "5": "Version 2.002; ttfautohint (v1.8) -l 8 -r 50 -G 200 -x 14 -D guru -f none -a qsq -X \"\"",
+        "6": "NotoSansGurmukhi-Bold",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
+        "14": "http://scripts.sil.org/OFL"
+      }
     }
   },
   "corresponding_liberation_source_SFDs": [
@@ -441,7 +798,7 @@
   "binary_source_limit": "Official publisher-linked release archive; first observed SHA256 retained. Not a claim of deterministic SFD-to-TTF reconstruction.",
   "glyph_shaping_raster_or_positive_tests_executed": false,
   "runtime_manifest_pin": {
-    "bytes": 4604,
-    "sha256": "49eeb7c9d8619e338227eee31738d7ae4e25a621468b2688d9003b786fb4d8e4"
+    "bytes": 7864,
+    "sha256": "9eb801f0a80beffce6e295477566b89dcd817493f405884ef9f6833aa6a903b9"
   }
 }

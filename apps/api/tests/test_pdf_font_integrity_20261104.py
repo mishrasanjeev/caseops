@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,12 +53,40 @@ def document(family: str = "Helvetica", style: str = ""):
     return pdf
 
 
-def test_all_eighteen_packaged_fonts_and_two_original_notices_parse_from_bytes():
+def test_all_thirty_two_packaged_fonts_and_two_original_notices_parse_from_bytes():
     report = pdf_fonts.verify_package()
     assert report["state"] == "verified_packaged_pdf_fonts"
-    assert report["font_files"] == 18
+    assert report["font_files"] == 32
     assert report["notices"] == 2
     assert report["parser_input"] == "verified immutable bytes"
+
+
+@pytest.mark.parametrize(
+    "family,sample",
+    (
+        ("CaseOpsGujarati", "ଓଡ଼ିଆ"),  # no approved face has Odia
+        ("CaseOpsGujarati", "நீதிமன்றம்"),  # covered only by the Tamil face
+        ("CaseOpsGurmukhi", "অধিবক্তা"),  # covered only by the Bengali face
+    ),
+)
+def test_build_proof_requires_each_script_sample_in_its_own_upright_faces(
+    monkeypatch, family, sample
+):
+    monkeypatch.setitem(pdf_fonts._INDIC_SAMPLES, family, sample)
+    with pytest.raises(HTTPException) as refused:
+        pdf_fonts.verify_package()
+    assert refused.value.status_code == 503
+
+
+def test_document_without_added_scripts_loads_no_added_indic_face():
+    pdf = document()
+    pdf.multi_cell(0, 6, "Counsel’s fees — ₹ 250; अधिवक्ता की फीस", new_x="LMARGIN", new_y="NEXT")
+    pdf.output()
+    assert {key.rstrip("BI") for key in pdf.fonts} == {
+        "caseopssans",
+        "caseopsdevanagari",
+        "caseopslatin",
+    }
 
 
 @pytest.mark.parametrize("family", ("Helvetica", "Times", "Courier"))
@@ -100,6 +129,122 @@ def test_indic_fallback_is_honest_upright_and_keeps_bold(requested, actual):
     assert selected == "caseopsdevanagari" + actual
     assert "caseopsdevanagariI" not in pdf.fonts
     assert "caseopsdevanagariBI" not in pdf.fonts
+
+
+# One real legal phrase ("order of the court") per added script, with the
+# HarfBuzz script tag its shaped buffer must carry.
+NEW_INDIC_SCRIPTS = {
+    "gujarati": ("ન્યાયાલયનો આદેશ", "Gujr"),
+    "tamil": ("நீதிமன்ற உத்தரவு", "Taml"),
+    "telugu": ("న్యాయస్థానం ఉత్తర్వు", "Telu"),
+    "kannada": ("ನ್ಯಾಯಾಲಯದ ಆದೇಶ", "Knda"),
+    "bengali": ("আদালতের আদেশ", "Beng"),
+    "malayalam": ("കോടതി ഉത്തരവ്", "Mlym"),
+    "gurmukhi": ("ਅਦਾਲਤ ਦਾ ਹੁਕਮ", "Guru"),
+}
+
+
+@pytest.mark.parametrize("script", NEW_INDIC_SCRIPTS)
+@pytest.mark.parametrize("requested,actual", (("", ""), ("B", "B"), ("I", ""), ("BI", "B")))
+def test_each_added_indic_script_uses_its_own_honest_upright_face_and_keeps_bold(
+    script, requested, actual
+):
+    pdf = document(style=requested)
+    letter = NEW_INDIC_SCRIPTS[script][0][0]
+    selected = pdf.get_fallback_font(letter, requested)
+    assert selected == f"caseops{script}" + actual
+    face = pdf.fonts[selected]
+    assert face.ttfont["head"].macStyle & 3 == (1 if actual else 0)
+    assert face.ttfont["OS/2"].fsType == 0
+    assert face.ttfont.getGlyphID(face.cmap[ord(letter)]) > 0
+    assert type(face.ttffile) is BytesIO
+    assert f"caseops{script}I" not in pdf.fonts
+    assert f"caseops{script}BI" not in pdf.fonts
+
+
+@pytest.mark.parametrize("script", NEW_INDIC_SCRIPTS)
+def test_each_added_script_paragraph_renders_in_translation_pdf_and_extracts_as_source(
+    script, monkeypatch
+):
+    import uharfbuzz as hb
+
+    from caseops_api.services.rendition_pdf import render_translation_pdf
+
+    source, tag = NEW_INDIC_SCRIPTS[script]
+    real_shape = hb.shape
+    shaped = []
+
+    def shape(font, buffer, *args, **kwargs):
+        result = real_shape(font, buffer, *args, **kwargs)
+        if buffer.script == tag:
+            shaped.append([info.codepoint for info in buffer.glyph_infos])
+        return result
+
+    monkeypatch.setattr(hb, "shape", shape)
+    body = render_translation_pdf(
+        title="Order",
+        source_language="en",
+        target_language=script,
+        model="test-model",
+        version=1,
+        generated_at=datetime(2026, 11, 27, tzinfo=UTC),
+        pages=[
+            {
+                "page": 1,
+                "paragraphs": [
+                    {"kind": "heading", "translated": source},
+                    {"kind": "paragraph", "translated": f"{source}; Section 138 ₹ 250."},
+                ],
+            }
+        ],
+    )
+    text = compact(extracted(body))
+    assert text.count(compact(source)) == 2
+    assert compact(f"{source}; Section 138 ₹ 250.") in text
+    # Real shaping in the script's own face: no glyph ID 0 (tofu) anywhere.
+    assert shaped and all(glyph > 0 for segment in shaped for glyph in segment)
+
+
+# Marks that shaping draws left of an earlier glyph (Gurmukhi tippi after uu)
+# keep unique ordered clusters, yet a positional extractor reads them swapped.
+MARK_HEAVY_WORDS = (
+    "ਨੂੰ",
+    "ਕੀਤਾ",
+    "ਹੁਕਮ ਨੂੰ ਜਾਰੀ ਕੀਤਾ ਗਿਆ",
+    "கொடு",
+    "കോടതി",
+    "কোর্ট",
+    "ಕೋರ್ಟ್",
+    "కోర్టు",
+    "કોર્ટ",
+)
+
+
+def test_glyph_drawn_left_of_an_earlier_glyph_is_not_logical_visual_order():
+    # HarfBuzz advances/offsets for "ਨੂੰ" in NotoSansGurmukhi-Regular.
+    assert not pdf_fonts._logical_visual_order([(648, 0), (0, -19), (0, -195)])
+    assert pdf_fonts._logical_visual_order([(648, 0), (0, -19)])
+    assert pdf_fonts._logical_visual_order([(576, 0), (0, 0), (622, 0)])
+
+
+@pytest.mark.parametrize("style", ("", "B"))
+@pytest.mark.parametrize("source", MARK_HEAVY_WORDS)
+def test_mark_heavy_words_extract_exactly_in_each_added_script(source, style):
+    pdf = document(style=style)
+    pdf.multi_cell(0, 7, source, new_x="LMARGIN", new_y="NEXT")
+    assert compact(extracted(bytes(pdf.output()))) == compact(source)
+
+
+def test_every_supported_script_in_one_styled_paragraph_extracts_unchanged():
+    source = " ".join(
+        ["Counsel’s fees — ₹ 250; अधिवक्ता की फीस"]
+        + [phrase for phrase, _ in NEW_INDIC_SCRIPTS.values()]
+    )
+    for style in ("", "B", "I", "BI"):
+        pdf = document("Times", style)
+        pdf.multi_cell(0, 7, source, new_x="LMARGIN", new_y="NEXT")
+        assert compact(source) in compact(extracted(bytes(pdf.output())))
+        assert all(not font.missing_glyphs for font in pdf.fonts.values())
 
 
 @pytest.mark.parametrize("family", ("Helvetica", "Times", "Courier"))
@@ -274,7 +419,7 @@ def test_unqualified_sdk_identity_refuses_instead_of_using_an_unknown_adapter(
     assert refused.value.status_code == 503
 
 
-@pytest.mark.parametrize("unsupported", ("漢", "বাংলা", "தமிழ்", "\U0001f600"))
+@pytest.mark.parametrize("unsupported", ("漢", "ଓଡ଼ିଆ", "සිංහල", "اردو", "\U0001f600"))
 def test_uncovered_script_is_an_actionable_error_without_partial_pdf(unsupported):
     pdf = document()
     output = None
@@ -313,8 +458,24 @@ def test_original_notice_bytes_and_asset_membership_are_exact():
     names = set(manifest["assets"]) | set(manifest["notices"]) | {"manifest.json", "NOTICE.txt"}
     actual = {p.name for p in pdf_fonts._ROOT.iterdir()}
     assert actual == names
-    assert len(manifest["assets"]) == 18
+    assert len(manifest["assets"]) == 32
     assert set(manifest["families"]) == {"helvetica", "times", "courier"}
+    assert [(row["family"], row["files"]) for row in manifest["indic_fallbacks"]] == [
+        (
+            f"CaseOps{script}",
+            {"": f"NotoSans{script}-Regular.ttf", "B": f"NotoSans{script}-Bold.ttf"},
+        )
+        for script in (
+            "Devanagari",
+            "Gujarati",
+            "Tamil",
+            "Telugu",
+            "Kannada",
+            "Bengali",
+            "Malayalam",
+            "Gurmukhi",
+        )
+    ]
     for name, expected in manifest["notices"].items():
         raw = pdf_fonts._read_pinned(name, expected)
         assert b"SIL OPEN FONT LICENSE Version 1.1" in raw
