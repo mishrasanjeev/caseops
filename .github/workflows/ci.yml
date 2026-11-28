@@ -80,11 +80,6 @@ jobs:
       - name: Validate pinned Temporal fixture acquisition without network
         run: python -m unittest discover -s scripts/tests -p test_prepare_temporal_test_server.py -v
 
-      - name: Reproduce every official statute provision from pinned PDF evidence
-        run: |
-          uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python -m unittest discover -s scripts/tests -p test_statute_bundle_compiler.py -v
-          uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python scripts/build_verified_statute_bundle.py --check
-
       - name: Enforce offline AI safety release gate (IPLF-065)
         run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
 
@@ -109,6 +104,87 @@ jobs:
       - name: Ruff
         working-directory: apps/api
         run: uv run ruff check src tests
+
+  statute-evidence:
+    name: Official statute evidence
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push'
+    # Reproduces every pinned official edition from verified bytes, including
+    # the 1,117-page Income-tax Act release asset. It runs beside API ruff with
+    # its own budget and gates the required API (ruff + pytest) check.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        timeout-minutes: 5
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      # Official editions too large for the repository (the 179 MB Income-tax
+      # Act, 1961) are pinned as release assets. They are cached by their
+      # SHA-256, kept outside the checkout, and verified before any use.
+      - name: Resolve pinned release-asset statute evidence
+        id: statute-evidence
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          path = "apps/api/src/caseops_api/scripts/seed_data/verified_statute_documents.json"
+          documents = json.load(open(path, encoding="utf-8"))["documents"]
+          assets = [document for document in documents if "release_asset" in document]
+          print("key=statute-evidence-" + "-".join(document["sha256"] for document in assets))
+          PY
+
+      - name: Restore pinned release-asset statute evidence
+        id: statute-evidence-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/statute-evidence
+          key: ${{ steps.statute-evidence.outputs.key }}
+
+      - name: Download and verify pinned release-asset statute evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_DIR: ${{ runner.temp }}/statute-evidence
+          CACHE_HIT: ${{ steps.statute-evidence-cache.outputs.cache-hit }}
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess, sys
+          from pathlib import Path
+          path = "apps/api/src/caseops_api/scripts/seed_data/verified_statute_documents.json"
+          root = Path(os.environ["EVIDENCE_DIR"])
+          for document in json.load(open(path, encoding="utf-8"))["documents"]:
+              asset = document.get("release_asset")
+              if not asset:
+                  continue
+              target = root / asset["name"]
+              if os.environ.get("CACHE_HIT") != "true":
+                  subprocess.run(
+                      ["gh", "release", "download", asset["tag"], "--repo", asset["repository"],
+                       "--pattern", asset["name"], "--dir", str(root), "--clobber"],
+                      check=True,
+                  )
+              digest = hashlib.sha256()
+              with target.open("rb") as handle:
+                  for block in iter(lambda: handle.read(1 << 20), b""):
+                      digest.update(block)
+              if target.stat().st_size != asset["size"] or digest.hexdigest() != document["sha256"]:
+                  sys.exit(f"Release-asset evidence mismatch: {asset['name']}")
+              print(f"verified {asset['name']} {asset['size']} bytes sha256 {document['sha256']}")
+          PY
+
+      - name: Reproduce every official statute provision from pinned PDF evidence
+        timeout-minutes: 15
+        env:
+          CASEOPS_STATUTE_EVIDENCE_DIR: ${{ runner.temp }}/statute-evidence
+        run: |
+          uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python -m unittest discover -s scripts/tests -p test_statute_bundle_compiler.py -v
+          uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python scripts/build_verified_statute_bundle.py --check
 
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
@@ -272,15 +348,16 @@ jobs:
   api:
     name: API (ruff + pytest)
     runs-on: ubuntu-latest
-    needs: [api-ruff, api-test-shards]
+    needs: [api-ruff, api-test-shards, statute-evidence]
     if: github.event_name != 'push' && always() && !cancelled()
     timeout-minutes: 15
     steps:
       - name: Fail if API prerequisites failed
-        if: needs['api-ruff'].result != 'success' || needs['api-test-shards'].result != 'success'
+        if: needs['api-ruff'].result != 'success' || needs['api-test-shards'].result != 'success' || needs['statute-evidence'].result != 'success'
         run: |
           echo "API ruff result: ${{ needs['api-ruff'].result }}"
           echo "API pytest shard result: ${{ needs['api-test-shards'].result }}"
+          echo "Official statute evidence result: ${{ needs['statute-evidence'].result }}"
           exit 1
 
       - uses: actions/checkout@v4

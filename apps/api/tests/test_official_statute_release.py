@@ -43,7 +43,13 @@ VERIFIED = {
     "ipc-1860": 554,
     "motor-vehicles-1988": 250,
     "constitution-india": 481,
+    "income-tax-1961": 820,
 }
+INCOME_TAX_URL = (
+    "https://www.incometaxindia.gov.in/documents/20117/43006/"
+    "Income-tax-Act-1961_2026_2026-06-18_02-47-37_b9326c_en.pdf/"
+    "f596386d-b8fa-4fdf-2618-77d628ee2200?version=2.0"
+)
 
 
 @pytest.mark.parametrize(
@@ -72,6 +78,7 @@ MIGRATED_MOTOR_VEHICLES_URL = (
         "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
         "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2065/1/aa2005.pdf",
         MIGRATED_MOTOR_VEHICLES_URL,
+        INCOME_TAX_URL,
     ],
 )
 def test_reviewed_official_download_contract_accepts_live_and_retained_editions(url):
@@ -98,6 +105,13 @@ def test_reviewed_official_download_contract_accepts_live_and_retained_editions(
         MIGRATED_MOTOR_VEHICLES_URL + "?download=true",
         MIGRATED_MOTOR_VEHICLES_URL + "#",
         MIGRATED_MOTOR_VEHICLES_URL + "#page=8",
+        INCOME_TAX_URL.replace("https://", "http://"),
+        INCOME_TAX_URL.replace("www.incometaxindia.gov.in", "incometaxindia.gov.in.example.com"),
+        INCOME_TAX_URL.replace("?version=2.0", ""),
+        INCOME_TAX_URL + "&redirect=evil",
+        INCOME_TAX_URL.replace("/documents/20117/43006/", "/documents/../43006/"),
+        INCOME_TAX_URL.replace("f596386d-", "wrong-"),
+        INCOME_TAX_URL + "#page=8",
     ],
 )
 def test_download_contract_does_not_allow_arbitrary_query_or_publisher(url):
@@ -180,9 +194,18 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
     documents, sources = release.load_release_bundle()
     root = Path(__file__).resolve().parents[3] / "tests/fixtures/statutes/official"
     for act_id, document in documents.items():
-        assert (
-            hashlib.sha256((root / document["file"]).read_bytes()).hexdigest() == document["sha256"]
-        )
+        asset = document.get("release_asset")
+        if asset:
+            # Oversize editions are pinned release assets, never repository files;
+            # CI's statute compiler step verifies their bytes against this digest.
+            assert not (root / document["file"]).exists()
+            assert asset["name"] == document["file"] and asset["size"] > 10_000_000
+            assert asset["url"].startswith("https://github.com/mishrasanjeev/caseops/releases/")
+        else:
+            assert (
+                hashlib.sha256((root / document["file"]).read_bytes()).hexdigest()
+                == document["sha256"]
+            )
         for evidence in document.get("treatment_evidence", {}).values():
             assert (
                 hashlib.sha256((root / evidence["file"]).read_bytes()).hexdigest()
@@ -219,8 +242,39 @@ def test_official_documents_and_every_provision_have_complete_pinned_evidence():
             "ipc-1860": 511,
             "motor-vehicles-1988": 217,
             "constitution-india": 395,
+            "income-tax-1961": 298,
         }[act_id]
-        assert {f"{prefix} {number}" for number in range(1, last + 1)} <= numbers
+        assert {f"{prefix} {number}" for number in range(1, last + 1)} - set(
+            document.get("retained_legacy_placeholders", [])
+        ) <= numbers
+        if document.get("layout") == "section_files":
+            # Per-provision files are printed out of order: prove each body is a
+            # disjoint page region instead of requiring page order.
+            spans = set()
+            for row in rows:
+                policy = row["source_policy"]
+                fragments = policy["body_fragments"]
+                parts = row["section_text"].split("\n\n")
+                assert len(parts) == len(fragments)
+                assert fragments[0]["page"] == policy["official_pdf_page"]
+                assert fragments[-1]["page"] == policy["official_pdf_end_page"]
+                assert row["source_url"].endswith(f"#page={fragments[0]['page']}")
+                for fragment, part in zip(fragments, parts, strict=True):
+                    assert hashlib.sha256(part.encode()).hexdigest() == fragment["text_sha256"]
+                    if fragment.get("region") == "publisher_notes":
+                        evidence = document["omission_evidence"][
+                            row["section_number"].removeprefix(f"{prefix} ")
+                        ]
+                        assert row["verification_status"] == "retired"
+                        assert part == evidence["text"]
+                        continue
+                    assert fragment["first_line"] < fragment["end_line"]
+                    spans.add((fragment["page"], fragment["first_line"], fragment["end_line"]))
+                assert row["effective_from"] is None
+            ordered = sorted(spans)
+            for before, after in zip(ordered, ordered[1:], strict=False):
+                assert before[0] < after[0] or before[2] <= after[1]
+            continue
         previous = None
         prior_row = None
         for row in rows:
@@ -341,6 +395,93 @@ def test_constitution_edition_admits_every_article_from_the_pinned_official_pdf(
     assert rows["Seventh Schedule"]["verification_status"] == "verified_official"
     assert "LIST I-UNION LIST" in rows["Seventh Schedule"]["section_text"]
     assert "APPENDIX I" not in rows["Twelfth Schedule"]["section_text"]
+
+
+def test_income_tax_edition_is_a_labelled_repealed_edition_from_the_pinned_release_asset():
+    documents, sources = release.load_release_bundle()
+    act = "income-tax-1961"
+    document = documents[act]
+    rows = {number: row for (key, number), row in sources.items() if key == act}
+    assert document["source_url"] == INCOME_TAX_URL
+    assert document["sha256"] == (
+        "73d264fd05bc3b19ee003f399aeb50faf7ea36a42f345fa94ebb9b3a2ad0cb93"
+    )
+    assert document["release_asset"]["size"] == 179_141_656
+    assert document["release_asset"]["tag"] == "statute-evidence-income-tax-1961-fa2026"
+    states = Counter(row["verification_status"] for row in rows.values())
+    assert states == {"verified_official": 820, "retired": 133, "quarantined": 13}
+    # Out-of-order source files still yield the Act's own numbering order.
+    order = list(rows)
+    assert order[:4] == ["Section 1", "Section 2", "Section 3", "Section 4"]
+    for earlier, later in [
+        ("Section 10", "Section 10A"), ("Section 10A", "Section 10AA"),
+        ("Section 80HHF", "Section 80-I"), ("Section 80-I", "Section 80-IA"),
+        ("Section 80-IA", "Section 80J"), ("Section 298", "First Schedule"),
+    ]:
+        assert order.index(earlier) < order.index(later)
+    for number, start, page in [
+        ("80C", "80C. (1) In computing the total income of an assessee", 283),
+        ("148A", "148A. (1) Where the Assessing Officer has information", 626),
+        ("194-I", "194-I. Any person, not being an individual or a Hindu undivided", 728),
+        ("292A", "292A. Nothing contained in section 360 of the Code of Criminal", 1068),
+        ("115V-I", "115V-I. (1) For the purposes of this Chapter", 518),
+    ]:
+        row = rows[f"Section {number}"]
+        assert row["verification_status"] == "verified_official", number
+        assert row["section_text"].startswith(start), number
+        assert row["source_url"] == f"{INCOME_TAX_URL}#page={page}"
+        # Never current law: repealed, historical scope and the repeal note. No
+        # blanket end date: saved law keeps applying to earlier assessment years.
+        assert row["legal_status"] == "repealed"
+        assert row["source_policy"]["edition_scope"] == "historical_repealed_law"
+        assert "effective_to" not in row
+        assert "Income-tax Act, 2025" in row["editorial_notes"]
+        assert row["exact_source_version"].startswith("ITD edition as amended by Finance Act, 2026")
+    rent = rows["Section 194-I"]
+    assert rent["section_label"] == "Rent"
+    assert "Sub. by Act No. 7 of 2025" not in rent["section_text"]
+    assert "Sub. by Act No. 7 of 2025" in rent["editorial_notes"]
+    returns = rows["Section 139"]
+    assert returns["verification_status"] == "quarantined"
+    assert returns["section_text"].startswith("139. (1) Every person,")
+    assert returns["source_policy"]["official_pdf_end_page"] == 5
+    assert "multi-column table" in returns["quarantine_reason"]
+    assert rows["Section 282B"]["quarantine_reason"].startswith("Retained transcription;")
+    for number in ("18", "19", "20", "21"):
+        assert rows[f"Section {number}"]["verification_status"] == "retired"
+        assert rows[f"Section {number}"]["source_policy"]["arrangement_identity"] == "18-21"
+    # Omission and repeal notices are never attachable, however they are printed:
+    # 80VV is followed by an omitted chapter's heading, 281A was repealed.
+    for number in ("80VV", "281A"):
+        assert rows[f"Section {number}"]["verification_status"] == "retired", number
+        assert rows[f"Section {number}"]["legal_status"] == "repealed", number
+    assert rows["Section 80VV"]["section_text"].startswith(
+        "80VV. [Omitted by the Finance Act, 1985"
+    )
+    assert "CHAPTER VI-B" not in rows["Section 80VV"]["section_text"]
+    assert rows["Section 281A"]["section_text"].startswith("281A. [Repealed by the Benami")
+    assert rows["Section 80VVA"]["verification_status"] == "retired"
+    assert rows["Section 80VVA"]["source_policy"]["omission_evidence"]["page"] == 374
+    assert document["chapter_blocks"] == [[374, 2], [375, 0]]
+    # A stacked fraction formula loses its layout in line extraction.
+    assert rows["Section 44DB"]["verification_status"] == "quarantined"
+    assert "stacked fraction" in rows["Section 44DB"]["quarantine_reason"]
+    assert rows["Section 103"]["source_policy"]["omission_evidence"]["page"] == 419
+    assert "95 to 103" in rows["Section 103"]["section_text"]
+    assert rows["Section 280E"]["verification_status"] == "retired"
+    # The 2016 Special Courts provisions reuse 280A-280D; they are not the old chapter.
+    assert rows["Section 280A"]["verification_status"] == "verified_official"
+    assert "Section 186" not in rows
+    assert document["retained_legacy_placeholders"] == ["Section 186"]
+    schedules = [number for number in rows if number.endswith("Schedule")]
+    assert len(schedules) == 14 and "Eleventh Schedule" in schedules
+    assert {number for number in schedules if rows[number]["verification_status"] == "retired"} == {
+        "Sixth Schedule", "Ninth Schedule", "Tenth Schedule",
+    }
+    assert {
+        number for number in schedules if rows[number]["verification_status"] == "quarantined"
+    } == {"Thirteenth Schedule", "Fourteenth Schedule"}
+    assert rows["Fifth Schedule"]["section_text"].startswith("THE FIFTH SCHEDULE\n")
 
 
 def test_motor_vehicles_edition_withholds_illustrated_and_omitted_schedules():
@@ -493,6 +634,8 @@ def test_arbitration_all_schedules_and_appendix_are_distinct_complete_sources():
         "historical_scope",
         "table_cell",
         "table_missing",
+        "section_file_omission_enabled",
+        "section_file_notice_only_text",
     ],
 )
 def test_release_admission_rejects_tampered_or_incomplete_evidence(tmp_path, monkeypatch, defect):
@@ -528,6 +671,18 @@ def test_release_admission_rejects_tampered_or_incomplete_evidence(tmp_path, mon
             if row["statute_id"] == "ipc-1860" and row["verification_status"] == "verified_official"
         )
         historical["source_policy"]["edition_scope"] = True
+    elif defect.startswith("section_file_"):
+        income_tax = {
+            row["section_number"]: row for row in rows if row["statute_id"] == "income-tax-1961"
+        }
+        if defect == "section_file_omission_enabled":
+            # A chapter-note omission must never become attachable text.
+            income_tax["Section 103"]["verification_status"] = "verified_official"
+        else:
+            # Any Act: a verified row whose body is only a repeal notice is refused.
+            row = income_tax["Section 80C"]
+            row["section_text"] = "80C. [Repealed by the Synthetic Repeal Act, 2026.]"
+            row["source_sha256"] = hashlib.sha256(row["section_text"].encode()).hexdigest()
     elif defect.startswith("table_"):
         schedule = next(
             row

@@ -275,14 +275,14 @@ def test_ft_s2_6_get_section_detail_returns_section_url_fallback(
     level smoke too)."""
     token = _bootstrap_with_seed(client)
     resp = client.get(
-        "/api/statutes/income-tax-1961/sections/Section 4",
+        "/api/statutes/income-tax-1961/sections/Section 186",
         headers=auth_headers(token),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["section"]["section_number"] == "Section 4"
-    assert body["section"]["section_url"]
-    assert "indiacode" in body["section"]["section_url"]
+    # Section 186 is the one catalogue identity the pinned edition does not print.
+    assert body["section"]["section_number"] == "Section 186"
+    assert body["section"]["section_url"] == "https://www.incometaxindia.gov.in/income-tax-act"
     assert body["section"]["source_action"]["target_type"] == "statute_section"
     assert body["section"]["source_action"]["target_id"] == body["section"]["id"]
     assert body["section"]["source_action"]["state"] == "missing"

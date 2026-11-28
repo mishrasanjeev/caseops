@@ -3332,6 +3332,465 @@
           "kind": "schedules_appendices_and_glossary"
         }
       ]
+    },
+    {
+      "statute_id": "income-tax-1961",
+      "layout": "section_files",
+      "file": "income-tax-1961-fa2026.pdf",
+      "sha256": "73d264fd05bc3b19ee003f399aeb50faf7ea36a42f345fa94ebb9b3a2ad0cb93",
+      "release_asset": {
+        "repository": "mishrasanjeev/caseops",
+        "tag": "statute-evidence-income-tax-1961-fa2026",
+        "name": "income-tax-1961-fa2026.pdf",
+        "size": 179141656,
+        "url": "https://github.com/mishrasanjeev/caseops/releases/download/statute-evidence-income-tax-1961-fa2026/income-tax-1961-fa2026.pdf"
+      },
+      "retrieved_at": "2026-11-26T10:17:14+00:00",
+      "source_url": "https://www.incometaxindia.gov.in/documents/20117/43006/Income-tax-Act-1961_2026_2026-06-18_02-47-37_b9326c_en.pdf/f596386d-b8fa-4fdf-2618-77d628ee2200?version=2.0",
+      "act_url": "https://www.incometaxindia.gov.in/income-tax-act",
+      "source_publisher": "Income Tax Department, Central Board of Direct Taxes, Department of Revenue, Ministry of Finance",
+      "issuing_body": "Ministry of Finance, Government of India",
+      "source_version": "ITD edition as amended by Finance Act, 2026; retained repealed-law edition",
+      "legal_status": "repealed",
+      "historical_context": "Retained repealed-law edition. India Code lists the Income-tax Act, 1961 as repealed by the Income-tax Act, 2025 (30 of 2025), which replaced it from 1 April 2026 subject to its repeal, savings and transition provisions. This Income Tax Department consolidation, as amended by the Finance Act, 2026, is source verification for earlier assessment years and saved proceedings, not a determination of present applicability. The publisher prints Finance Act, 2026 amendments in italics within square brackets; italics are not preserved in the extracted text, and amendment markers such as \"54[\" are printed footnote references to the endnotes.",
+      "page_count": 1117,
+      "body_pages": [
+        1,
+        1117
+      ],
+      "non_provision_pages": [],
+      "page_header": [
+        "Income Tax Department",
+        "Ministry of Finance, Government of India"
+      ],
+      "page_footer": "Downloaded/Printed on \\d{1,2}/\\d{1,2}/\\d{2}, \\d{1,2}:\\d{2} [AP]M from www\\.incometaxindia\\.gov\\.in",
+      "note_rule": {
+        "x0_range": [
+          25,
+          26
+        ],
+        "width_range": [
+          158.5,
+          159.5
+        ]
+      },
+      "section_start": {
+        "font": "LiberationSerif-Bold",
+        "x_range": [
+          27.5,
+          27.75
+        ]
+      },
+      "schedule_heading": "THE (?:FIRST|SECOND|THIRD|FOURTH|FIFTH|SIXTH|SEVENTH|EIGHTH|NINTH|TENTH|ELEVENTH|TWELFTH|THIRTEENTH|FOURTEENTH) SCHEDULE",
+      "column_gap": 7.0,
+      "note_min_x": 29,
+      "preamble_lines": [
+        "BE it enacted by Parliament in the Twelfth Year of the Republic of India as follows :—"
+      ],
+      "section_count": 941,
+      "identity_ranges": {
+        "18-21": [
+          "18",
+          "19",
+          "20",
+          "21"
+        ],
+        "76-77": [
+          "76",
+          "77"
+        ],
+        "81-85C": [
+          "81",
+          "82",
+          "83",
+          "84",
+          "85",
+          "85A",
+          "85B",
+          "85C"
+        ]
+      },
+      "omitted_provisions": [
+        "18-21",
+        "35B",
+        "35C",
+        "35CC",
+        "39",
+        "44AC",
+        "52",
+        "53",
+        "54A",
+        "54C",
+        "67",
+        "76-77",
+        "80AA",
+        "80CC",
+        "80F",
+        "80FF",
+        "80H",
+        "80J",
+        "80JJ",
+        "80K",
+        "80L",
+        "80MM",
+        "80N",
+        "80QQ",
+        "80S",
+        "80T",
+        "80TT",
+        "80V",
+        "81-85C",
+        "86A",
+        "88",
+        "88A",
+        "88B",
+        "88C",
+        "88D",
+        "104",
+        "105",
+        "106",
+        "107",
+        "107A",
+        "108",
+        "109",
+        "114",
+        "115",
+        "115K",
+        "115L",
+        "115M",
+        "115N",
+        "121",
+        "121A",
+        "122",
+        "123",
+        "125",
+        "125A",
+        "126",
+        "128",
+        "130A",
+        "137",
+        "141",
+        "141A",
+        "146",
+        "158BI",
+        "181",
+        "182",
+        "183",
+        "194F",
+        "194L",
+        "203AA",
+        "206AB",
+        "206B",
+        "206CCA",
+        "209A",
+        "212",
+        "213",
+        "228",
+        "230A",
+        "233",
+        "234",
+        "235",
+        "241",
+        "247",
+        "269S",
+        "270",
+        "271BB",
+        "272",
+        "276AA",
+        "276DD",
+        "276E",
+        "280Y",
+        "280Z",
+        "280ZA",
+        "280ZB",
+        "280ZC",
+        "280ZD",
+        "280ZE",
+        "sixth-schedule",
+        "ninth-schedule",
+        "tenth-schedule",
+        "80VV",
+        "281A"
+      ],
+      "omission_evidence": {
+        "103": {
+          "page": 419,
+          "first_line": 2,
+          "end_line": 4,
+          "text": "[Chapter XI omitted by the Finance Act, 1987, w.e.f. 1-4-1988. While sections 95 to 103 were omitted by the Finance Act, 1965, w.e.f. 1-4-1965, sections\n104 to 109 were omitted by the Finance Act, 1987, w.e.f. 1-4-1988.]"
+        },
+        "280E": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280F": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280G": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280H": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280-I": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280J": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280K": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280L": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280M": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280N": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280-O": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280P": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280Q": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280R": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280S": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280T": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280U": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280V": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280W": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "280X": {
+          "page": 1035,
+          "first_line": 2,
+          "end_line": 6,
+          "text": "[Chapter XXII-A, consisting of sections 280A, 280B , 280C , 280D , 280E, 280F, 280G, 280H, 280-I, 280J, 280K, 280L, 280M, 280N, 280-O, 280P, 280Q,\n280R, 280S, 280T, 280U, 280V, 280W and 280X, omitted by the Finance Act, 1988, w.e.f. 1-4-1988. The Chapter was inserted by the Finance Act, 1964,\nw.e.f. 1-4-1964 and has not been in operation since 1-4-1969 when the requirement as to annuity deposit was discontinued by the Finance Act, 1968, w.e.f.\n1-4-1968 through an amendment made in section 280C.]"
+        },
+        "80VVA": {
+          "page": 374,
+          "first_line": 4,
+          "end_line": 6,
+          "text": "[Chapter VI-B, consisting of section 80VVA, omitted by the Finance Act, 1987, w.e.f. 1-4-1988. Original Chapter was inserted by the Finance Act, 1983,\nw.e.f. 1-4-1984 and amended by the Finance Act, 1985, w.e.f. 1-4-1986 and Finance Act, 1986, w.e.f. 1-4-1987.]"
+        }
+      },
+      "chapter_blocks": [
+        [
+          374,
+          2
+        ],
+        [
+          375,
+          0
+        ]
+      ],
+      "blocked_sections": {
+        "40": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "40A": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "80-ID": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "115BAC": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "115VG": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "115WJ": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "139": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "206C": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "211": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "282B": "Retained transcription; the edition prints only an elision mark ([***]) under this heading, with no operative text and no omission authority.",
+        "44DB": "Retained transcription; the body contains stacked fraction formulas drawn with a rule, and line extraction does not keep the numerator and denominator in reading order."
+      },
+      "blocked_supplements": {
+        "thirteenth-schedule": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order.",
+        "fourteenth-schedule": "Retained transcription; the body contains a multi-column table and line extraction does not reconcile its cell reading order."
+      },
+      "supplements": [
+        {
+          "key": "first-schedule",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "First Schedule",
+          "heading": "THE FIRST SCHEDULE",
+          "page": 1086
+        },
+        {
+          "key": "second-schedule",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "Second Schedule",
+          "heading": "THE SECOND SCHEDULE",
+          "page": 1088
+        },
+        {
+          "key": "third-schedule",
+          "kind": "schedule",
+          "section_number": "Third Schedule",
+          "label": "Third Schedule",
+          "heading": "THE THIRD SCHEDULE",
+          "page": 1099
+        },
+        {
+          "key": "fourth-schedule",
+          "kind": "schedule",
+          "section_number": "Fourth Schedule",
+          "label": "Fourth Schedule",
+          "heading": "THE FOURTH SCHEDULE",
+          "page": 1100
+        },
+        {
+          "key": "fifth-schedule",
+          "kind": "schedule",
+          "section_number": "Fifth Schedule",
+          "label": "Fifth Schedule",
+          "heading": "THE FIFTH SCHEDULE",
+          "page": 1106
+        },
+        {
+          "key": "sixth-schedule",
+          "kind": "schedule",
+          "section_number": "Sixth Schedule",
+          "label": "Sixth Schedule",
+          "heading": "THE SIXTH SCHEDULE",
+          "page": 1107
+        },
+        {
+          "key": "seventh-schedule",
+          "kind": "schedule",
+          "section_number": "Seventh Schedule",
+          "label": "Seventh Schedule",
+          "heading": "THE SEVENTH SCHEDULE",
+          "page": 1108
+        },
+        {
+          "key": "eighth-schedule",
+          "kind": "schedule",
+          "section_number": "Eighth Schedule",
+          "label": "Eighth Schedule",
+          "heading": "THE EIGHTH SCHEDULE",
+          "page": 1109
+        },
+        {
+          "key": "ninth-schedule",
+          "kind": "schedule",
+          "section_number": "Ninth Schedule",
+          "label": "Ninth Schedule",
+          "heading": "THE NINTH SCHEDULE",
+          "page": 1110
+        },
+        {
+          "key": "tenth-schedule",
+          "kind": "schedule",
+          "section_number": "Tenth Schedule",
+          "label": "Tenth Schedule",
+          "heading": "THE TENTH SCHEDULE",
+          "page": 1111
+        },
+        {
+          "key": "eleventh-schedule",
+          "kind": "schedule",
+          "section_number": "Eleventh Schedule",
+          "label": "Eleventh Schedule",
+          "heading": "THE ELEVENTH SCHEDULE",
+          "page": 1112
+        },
+        {
+          "key": "twelfth-schedule",
+          "kind": "schedule",
+          "section_number": "Twelfth Schedule",
+          "label": "Twelfth Schedule",
+          "heading": "THE TWELFTH SCHEDULE",
+          "page": 1113
+        },
+        {
+          "key": "thirteenth-schedule",
+          "kind": "schedule",
+          "section_number": "Thirteenth Schedule",
+          "label": "Thirteenth Schedule",
+          "heading": "THE THIRTEENTH SCHEDULE",
+          "page": 1114
+        },
+        {
+          "key": "fourteenth-schedule",
+          "kind": "schedule",
+          "section_number": "Fourteenth Schedule",
+          "label": "Fourteenth Schedule",
+          "heading": "THE FOURTEENTH SCHEDULE",
+          "page": 1116
+        }
+      ],
+      "retained_legacy_placeholders": [
+        "Section 186"
+      ],
+      "legacy_placeholder_evidence": "The retained seed lists Section 186, but the pinned edition prints no body, heading or omission note for it. It remains an unverified catalogue placeholder, never a source row."
     }
   ]
 }

@@ -86,8 +86,9 @@ def test_unverified_catalog_section_cannot_bypass_picker_through_api(
     with get_session_factory()() as session:
         section_id = session.scalar(
             select(StatuteSection.id).where(
+                # The pinned edition prints no Section 186; it stays a catalogue placeholder.
                 StatuteSection.statute_id == "income-tax-1961",
-                StatuteSection.section_number == "Section 4",
+                StatuteSection.section_number == "Section 186",
             )
         )
     assert section_id is not None

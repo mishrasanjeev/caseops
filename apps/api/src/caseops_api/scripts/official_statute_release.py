@@ -37,7 +37,20 @@ EXPECTED_COUNTS = {
     "consumer-protection-2019": 107,
     "motor-vehicles-1988": 259,
     "constitution-india": 519,
+    "income-tax-1961": 966,
 }
+ARRANGEMENT_METHOD = "pinned_pdf_arrangement_body_reconciliation_v1"
+# Editions printed as concatenated per-provision files have no arrangement;
+# their identities are reconciled from the printed section numbers instead.
+SECTION_FILE_METHOD = "pinned_pdf_section_inventory_reconciliation_v1"
+RELEASE_ASSET_URL = "https://github.com/{repository}/releases/download/{tag}/{name}"
+RELEASE_ASSET_REPOSITORY = "mishrasanjeev/caseops"
+# A provision whose whole printed body is a bracketed omission or repeal notice
+# ("104. [Omitted by ...]", "281A. [Repealed by ...]") is never attachable text.
+NOTICE_ONLY_BODY = re.compile(
+    r"(?s)\S+?\s?\.(?:\s(?:to|&)\s\S+?\.)?\s*(?:\d+\s?)?"
+    r"\[(?:Omitted|Repealed)\b[^\[\]]*\]\.?\s*"
+)
 
 
 def is_omitted_arrangement(label: str) -> bool:
@@ -50,6 +63,17 @@ def _official_document_url(url: str) -> bool:
     if parsed.scheme != "https" or "#" in url:
         return False
     authority = parsed.netloc.lower()
+    if authority == "www.incometaxindia.gov.in":
+        # The Income Tax Department (CBDT) publishes its consolidated Income-tax Act.
+        return (
+            re.fullmatch(r"version=\d+\.\d+", parsed.query) is not None
+            and re.fullmatch(
+                r"/documents/\d+/\d+/[A-Za-z0-9._-]+\.pdf/"
+                r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",
+                parsed.path,
+            )
+            is not None
+        )
     if authority == "www.legislative.gov.in":
         # The Legislative Department publishes the Constitution of India.
         return not parsed.query and (
@@ -117,6 +141,16 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             raise ValueError("Official document URL is outside the reviewed publisher contract")
         if not document.get("act_url"):
             raise ValueError("Official document requires its retained Act URL")
+        asset = document.get("release_asset")
+        if asset is not None and (
+            document.get("layout") != "section_files"
+            or asset["repository"] != RELEASE_ASSET_REPOSITORY
+            or asset["name"] != document["file"]
+            or asset["url"] != RELEASE_ASSET_URL.format(**asset)
+            or not isinstance(asset["size"], int)
+            or asset["size"] <= 0
+        ):
+            raise ValueError("Release-asset evidence contract mismatch")
         supplement_keys = {item["key"] for item in document.get("supplements", [])}
         if not set(document.get("blocked_supplements", {})) <= supplement_keys:
             raise ValueError("Blocked supplement is outside the official inventory")
@@ -154,8 +188,11 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
         key = act_id, source["section_number"]
         supplements = inventories[act_id]
         prefix = document.get("provision_prefix", "Section")
+        # Two suffix groups ("115V-I") occur only in the section-file edition.
+        suffixes = "{0,2}" if document.get("layout") == "section_files" else "?"
         if key in sources or not (
-            re.fullmatch(re.escape(prefix) + r" \d+(?:-?[A-Z]+)?", key[1]) or key[1] in supplements
+            re.fullmatch(re.escape(prefix) + r" \d+(?:-?[A-Z]+)" + suffixes, key[1])
+            or key[1] in supplements
         ):
             raise ValueError("Invalid or duplicate official provision identity")
         policy = source["source_policy"]
@@ -206,7 +243,12 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             or source["source_status"] != "official"
             or source["source_category"] != "consolidated_statute"
             or source["section_text_source"] != "official_release_manifest"
-            or policy["verification_method"] != "pinned_pdf_arrangement_body_reconciliation_v1"
+            or policy["verification_method"]
+            != (
+                SECTION_FILE_METHOD
+                if document.get("layout") == "section_files"
+                else ARRANGEMENT_METHOD
+            )
             or not policy["release_manifest_verified"]
             or not source["source_publisher"]
             or source["issuing_body"] != document["issuing_body"]
@@ -231,7 +273,15 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
         reason = document.get("blocked_sections", {}).get(number) or document.get(
             "blocked_supplements", {}
         ).get(supplement_key)
-        omitted = is_omitted_arrangement(policy["arrangement_label"])
+        if document.get("layout") == "section_files":
+            # No arrangement exists; omission is the declared, compiler-checked inventory.
+            omitted = (
+                (supplement_key or policy.get("arrangement_identity", number))
+                in document.get("omitted_provisions", [])
+                or number in document.get("omission_evidence", {})
+            )
+        else:
+            omitted = is_omitted_arrangement(policy["arrangement_label"])
         expected_state = "quarantined" if reason else "retired" if omitted else "verified_official"
         if source["verification_status"] != expected_state or source["quarantine_reason"] != reason:
             raise ValueError(f"Official provision availability mismatch: {key}")
@@ -239,6 +289,10 @@ def load_release_bundle() -> tuple[dict[str, dict], dict[tuple[str, str], dict]]
             "repealed" if omitted else document.get("legal_status", "enacted")
         ):
             raise ValueError(f"Official provision legal status mismatch: {key}")
+        if source["verification_status"] == "verified_official" and NOTICE_ONLY_BODY.fullmatch(
+            source["section_text"]
+        ):
+            raise ValueError(f"Omission or repeal notice admitted as provision text: {key}")
         omission = document.get("omission_evidence", {}).get(number)
         if omission is not None and (
             not omitted

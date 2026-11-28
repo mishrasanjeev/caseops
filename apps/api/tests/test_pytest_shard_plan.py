@@ -448,7 +448,7 @@ def test_ci_workflow_keeps_coverage_shards_and_aggregation_fail_closed() -> None
     assert upload["if"] == "always()"
     assert upload["with"]["name"] == "api-coverage-shard-${{ matrix.shard }}"
 
-    assert aggregate_job["needs"] == ["api-ruff", "api-test-shards"]
+    assert aggregate_job["needs"] == ["api-ruff", "api-test-shards", "statute-evidence"]
     assert aggregate_job["if"] == "github.event_name != 'push' && always() && !cancelled()"
     prerequisite = aggregate_job["steps"][0]
     assert prerequisite["name"] == "Fail if API prerequisites failed"

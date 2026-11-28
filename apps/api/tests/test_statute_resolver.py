@@ -89,6 +89,27 @@ def test_ft_s3_3_parser_returns_none_for_unresolvable_input() -> None:
     assert parse_section_string(None) is None  # type: ignore[arg-type]
 
 
+def test_income_tax_act_2025_never_resolves_to_the_1961_act() -> None:
+    """The 1961 Act's sections are attachable; the 2025 Act is not catalogued.
+
+    A reference to the Income-tax Act, 2025 must not be cited as 1961 text.
+    """
+    for raw in (
+        "Section 80C of the Income-tax Act, 2025",
+        "Income-tax Act 2025 section 139",
+        "s. 139 Income Tax Act, 2025",
+        "IT Act, 2025 section 10",
+        "section 4 of the Income-tax Act of 2025",
+    ):
+        assert parse_section_string(raw) is None, raw
+    for raw, expected in (
+        ("Section 80C of the Income-tax Act, 1961", ("income-tax-1961", "Section 80C")),
+        ("s. 139 Income Tax Act", ("income-tax-1961", "Section 139")),
+        ("IT-1961 section 148A", ("income-tax-1961", "Section 148A")),
+    ):
+        assert parse_section_string(raw) == expected, raw
+
+
 def test_act_enactment_year_is_never_a_section_number() -> None:
     """Nov 25 nova-legal row 3: "Hindu Marriage Act, 1955" parsed as Section
     1955, so the research hand-off looked up a section that does not exist."""
