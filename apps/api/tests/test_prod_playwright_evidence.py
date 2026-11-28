@@ -2775,7 +2775,7 @@ def _assert_native_manifest(workflow):
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester", "prod-batch5-tester",
-        "scheduled-statute-verification",
+        "prod-nov27-tester", "scheduled-statute-verification",
     ):
         job = workflow["jobs"][job_name]
         steps = {step.get("name"): step for step in job["steps"]}
@@ -2843,6 +2843,7 @@ def test_all_production_invocations_have_native_capture_and_success_artifacts():
         "batch4-governance-mobile",
         "batch5-desktop",
         "batch5-mobile",
+        *NOV27_REVIEWED_ROLES,
         "legacy",
         "test-legal-readonly",
         "ip-a0",

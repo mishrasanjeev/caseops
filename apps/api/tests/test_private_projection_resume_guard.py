@@ -38,6 +38,8 @@ REQUIRED_JOBS = (
     "Prod Playwright (batch3)",
     "Prod Playwright (batch4)",
     "Prod Playwright (batch5)",
+    "Prod Playwright (nov27-a)",
+    "Prod Playwright (nov27-b)",
     "Prod Playwright (test-legal-readonly)",
     "Prod Playwright (legacy)",
     "Prod Playwright (supporting)",
@@ -302,7 +304,7 @@ def assert_no_resume(state):
 def test_private_resume_accepts_two_later_serial_clean_runs_after_historical_breach(monkeypatch):
     inventory, state = evidence(monkeypatch)
     original = copy.deepcopy(inventory)
-    assert len(REQUIRED_JOBS) == 15
+    assert len(REQUIRED_JOBS) == 17
 
     result = resume(inventory)
 
@@ -357,7 +359,7 @@ def _regular_dispatch_inventory(jobs):
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester",
-        "prod-batch5-tester",
+        "prod-batch5-tester", "prod-nov27-tester",
     ], "Complete regular QA partition inventory changed"
     regular = {"Resolve exact production release", "Record exact-release evidence"}
     for key in partitions:
@@ -370,7 +372,7 @@ def test_private_resume_required_jobs_are_exactly_the_regular_dispatch_inventory
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
     regular = _regular_dispatch_inventory(jobs)
-    assert len(regular) == 15 and set(REQUIRED_JOBS) == regular
+    assert len(regular) == 17 and set(REQUIRED_JOBS) == regular
     assert "prod-test-legal-write-oct13" not in jobs
     assert "Prod Playwright (test-legal-write-oct13)" not in regular
     assert "Scheduled read-only statute verification" not in regular
@@ -476,6 +478,39 @@ def test_private_resume_native_width_is_not_a_github_batch5_job_alias(monkeypatc
     assert_no_resume(state)
 
 
+def test_private_resume_nov27_job_is_two_required_serial_partitions():
+    workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
+    jobs = yaml.safe_load(workflow_path.read_text())["jobs"]
+    nov27 = jobs["prod-nov27-tester"]
+    assert nov27["strategy"]["matrix"]["suite"] == ["nov27-a", "nov27-b"]
+    assert nov27["strategy"]["max-parallel"] == 1
+    assert {"Prod Playwright (nov27-a)", "Prod Playwright (nov27-b)"} <= set(REQUIRED_JOBS)
+    record = jobs["record-release-evidence"]
+    assert "prod-nov27-tester" in record["needs"]
+    assert "needs.prod-nov27-tester.result == 'success'" in record["if"]
+
+
+@pytest.mark.parametrize("name", [
+    "Prod Playwright (nov27-a) (nov27-a)", "Prod Playwright (nov27-ocr)",
+    "Prod Playwright (nov27)", "Prod Playwright (nov27-a) (nov27-b)",
+])
+def test_private_resume_nov27_partition_has_no_alias_or_role_substitute(monkeypatch, name):
+    inventory, state = evidence(monkeypatch)
+    original_gh = guard._run_gh
+
+    def changed_qa(arguments):
+        result = original_gh(arguments)
+        if arguments[:2] == ["run", "view"]:
+            job = next(row for row in result["jobs"] if row["name"] == "Prod Playwright (nov27-a)")
+            job["name"] = name
+        return result
+
+    monkeypatch.setattr(guard, "_run_gh", changed_qa)
+    with pytest.raises(guard.InventoryError, match="job name is unknown"):
+        resume(inventory)
+    assert_no_resume(state)
+
+
 @pytest.mark.parametrize("job_id", ["scheduled-statute-verification", "record-release-evidence"])
 @pytest.mark.parametrize("suite", ["tester", "unreviewed-extra"])
 def test_private_resume_inventory_rejects_existing_non_qa_job_repurposed_as_matrix(job_id, suite):
@@ -486,7 +521,7 @@ def test_private_resume_inventory_rejects_existing_non_qa_job_repurposed_as_matr
     workflow_path = INVENTORY_PATH.parents[2] / ".github/workflows/prod-verify.yml"
     jobs = copy.deepcopy(yaml.safe_load(workflow_path.read_text())["jobs"])
     regular = _regular_dispatch_inventory(jobs)
-    assert regular == set(REQUIRED_JOBS) and len(regular) == 15
+    assert regular == set(REQUIRED_JOBS) and len(regular) == 17
     original_ids = set(jobs)
     original_steps = copy.deepcopy(jobs[job_id]["steps"])
     assert jobs[job_id]["name"] != "Prod Playwright (${{ matrix.suite }})"
@@ -546,7 +581,7 @@ def test_private_resume_requires_each_current_matrix_alias_to_complete(
         result = original_gh(arguments)
         if arguments[:2] != ["run", "view"]:
             return result
-        assert len(result["jobs"]) == 15
+        assert len(result["jobs"]) == 17
         job = next(row for row in result["jobs"]
                    if row["name"] == f"Prod Playwright ({suite})")
         job["name"] += f" ({suite})"

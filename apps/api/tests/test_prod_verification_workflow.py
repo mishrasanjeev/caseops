@@ -812,10 +812,12 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
         "resolve-release", "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester", "prod-batch5-tester",
+        "prod-nov27-tester",
     ]
     assert "needs.prod-tester-index.result == 'success'" in job["if"]
     for name in ("prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
-                 "prod-batch3-tester", "prod-batch4-tester", "prod-batch5-tester"):
+                 "prod-batch3-tester", "prod-batch4-tester", "prod-batch5-tester",
+                 "prod-nov27-tester"):
         assert f"needs.{name}.result == 'success'" in job["if"]
     assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer["env"]
     assert "needs.resolve-release.outputs.release_sha" in writer["env"]["SERVING_RELEASE_SHA"]
@@ -862,7 +864,7 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         assert job["steps"] == original["steps"]
     for name in ("prod-playwright-shards", "prod-tester-index", "prod-test-legal-write-oct13-a",
                  "prod-test-legal-write-oct13-b", "prod-batch3-tester", "prod-batch4-tester",
-                 "prod-batch5-tester"):
+                 "prod-batch5-tester", "prod-nov27-tester"):
         job = jobs[name]
         assert job["timeout-minutes"] == 38
         assert job["strategy"]["max-parallel"] == 1
@@ -893,6 +895,7 @@ def test_tester_capacity_partitions_have_explicit_serial_dependencies_and_union_
         "prod-playwright-report-test-legal-write-oct13-b",
         "prod-playwright-report-batch3", "prod-playwright-report-batch4",
         "prod-playwright-report-batch5",
+        "prod-playwright-report-nov27-a", "prod-playwright-report-nov27-b",
     }
 
 
@@ -1446,7 +1449,7 @@ BROWSER_WORKFLOW_JOBS = {
         "prod-playwright-shards", "prod-tester-index",
         "prod-test-legal-write-oct13-a", "prod-test-legal-write-oct13-b",
         "prod-batch3-tester", "prod-batch4-tester", "prod-batch5-tester",
-        "scheduled-statute-verification",
+        "prod-nov27-tester", "scheduled-statute-verification",
     ),
     "release-verify.yml": ("release-playwright",),
     "mobile-source.yml": ("source", "browser-handoff"),
@@ -1571,7 +1574,8 @@ def test_browser_runner_inventory_rejects_unreviewed_direct_or_script_callers(co
 
 @pytest.mark.parametrize("job", ["prod-tester-index", "prod-test-legal-write-oct13-a",
                                  "prod-test-legal-write-oct13-b", "prod-batch3-tester",
-                                 "prod-batch4-tester", "prod-batch5-tester"])
+                                 "prod-batch4-tester", "prod-batch5-tester",
+                                 "prod-nov27-tester"])
 def test_browser_runner_inventory_keeps_both_yaml_anchor_consumers(job: str) -> None:
     workflows, scripts = _browser_workflows()
     del workflows["prod-verify.yml"]["jobs"][job]
@@ -1764,6 +1768,7 @@ LATE_SPLIT_LINKS = (
     ("prod-test-legal-write-oct13-b", "prod-test-legal-write-oct13-a"),
     ("prod-batch3-tester", "prod-test-legal-write-oct13-b"),
     ("prod-batch4-tester", "prod-batch3-tester"),
+    ("prod-nov27-tester", "prod-batch5-tester"),
 )
 HISTORICAL_BATCH4_CLASSIFIER = (
     "Reject historical Batch4 markers before current-release certification"
@@ -2333,3 +2338,376 @@ def test_supporting_suite_owes_the_research_receipt_exactly_when_it_ran(
     )
     assert result.returncode == 0 and invoked == []
     assert required == expected
+
+# November 27 workbook journeys: exact-release only, serial, as the test-legal tester.
+NOV27_ANCHOR = "48ba3235565e0433e28acb166152a83d4a7d2e1e"
+NOV27_SPECS = (
+    "ram-2026-11-27-ocr-images.spec.ts", "bugs7-2026-11-27-bench-statutes.spec.ts",
+    "ram-2026-11-27-case-tracking.spec.ts", "notice-validation-2026-11-27.spec.ts",
+    "ram-2026-11-27-invoice-branding.spec.ts", "nova-2026-11-27-matter.spec.ts",
+    "ram-2026-11-27-kyc-documents.spec.ts",
+)
+NOV27_ROLES = {
+    "nov27-a": (
+        ("nov27-tracking", "nov27-tracking-prod-chromium"),
+        ("nov27-ocr", "nov27-ocr-prod-chromium"),
+    ),
+    "nov27-b": (
+        ("nov27-statutes-desktop", "nov27-statutes-prod-chromium"),
+        ("nov27-statutes-mobile", "nov27-statutes-prod-mobile"),
+        ("nov27-notices", "nov27-notices-prod-chromium"),
+        ("nov27-invoice-desktop", "nov27-invoice-prod-chromium"),
+        ("nov27-invoice-mobile", "nov27-invoice-prod-mobile"),
+        ("nov27-matter-desktop", "nov27-matter-prod-chromium"),
+        ("nov27-matter-mobile", "nov27-matter-prod-mobile"),
+        ("nov27-kyc", "nov27-kyc-prod-chromium"),
+    ),
+}
+NOV27_ALL_ROLES = [label for roles in NOV27_ROLES.values() for label, _ in roles]
+NOV27_RUN_STEP = "Run release-owned Nov27 tester acceptance"
+NOV27_PREREQUISITES = "Require release-owned Nov27 configuration"
+NOV27_CERTIFICATION = "Require current release-owned Nov27 evidence before certification"
+NOV27_TESTER_ENV = {
+    "NOV27_SUITE": "nov27-a", "CASEOPS_RAM_PROD_SLUG": "test-legal",
+    "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com", "CASEOPS_RAM_PROD_PASSWORD": "offline-not-used",
+    "CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40,
+}
+
+
+def _nov27_jobs() -> dict:
+    import yaml
+
+    return yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
+    )["jobs"]
+
+
+def _nov27_command(label: str, project: str) -> str:
+    return (
+        f'bash "$RUNNER_TEMP/caseops-prod-playwright" {label} '
+        f"--config=playwright.prod-ram.config.ts --project={project} --workers=1 --retries=0 "
+        f"--reporter=list --output=test-results/{label} || failed+=({label})"
+    )
+
+
+def test_nov27_journeys_are_exact_release_serial_test_legal_roles() -> None:
+    jobs = _nov27_jobs()
+    job = jobs["prod-nov27-tester"]
+    assert job["name"] == "Prod Playwright (${{ matrix.suite }})"
+    assert job["needs"] == ["resolve-release", "prod-batch5-tester"]
+    assert job["if"] == (
+        "always() && !cancelled() && github.event_name == 'workflow_dispatch' && "
+        "needs.resolve-release.result == 'success' && "
+        "(needs.prod-batch5-tester.result == 'success' || "
+        "needs.prod-batch5-tester.result == 'failure' || "
+        "needs.prod-batch5-tester.result == 'cancelled')"
+    )
+    assert job["runs-on"] == "ubuntu-24.04" and job["timeout-minutes"] == 38
+    assert job["env"] == {
+        "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+    }
+    assert job["strategy"] == {
+        "fail-fast": False, "max-parallel": 1, "matrix": {"suite": ["nov27-a", "nov27-b"]},
+    }
+    assert job["steps"] == jobs["prod-playwright-shards"]["steps"]
+    # Write journeys never run on the 6-hourly schedule or in any other job.
+    assert jobs["scheduled-statute-verification"]["if"] == "github.event_name == 'schedule'"
+    assert "nov27" not in json.dumps(jobs["scheduled-statute-verification"])
+    for name, other in jobs.items():
+        suites = other.get("strategy", {}).get("matrix", {}).get("suite", [])
+        assert (name == "prod-nov27-tester") is any(str(s).startswith("nov27") for s in suites)
+
+    steps = job["steps"]
+    names = [step.get("name") for step in steps]
+    by_name = {step.get("name"): step for step in steps}
+    prerequisites, run = by_name[NOV27_PREREQUISITES], by_name[NOV27_RUN_STEP]
+    reconcile = by_name["Reconcile required native Playwright evidence"]
+    assert (
+        names.index("Prepare release-owned native Playwright evidence")
+        < names.index(NOV27_PREREQUISITES) < names.index(NOV27_RUN_STEP)
+        < names.index(reconcile["name"])
+    )
+    assert prerequisites["id"] == "nov27-prerequisites"
+    assert prerequisites["if"] == "matrix.suite == 'nov27-a' || matrix.suite == 'nov27-b'"
+    assert prerequisites["env"] == {"NOV27_SUITE": "${{ matrix.suite }}"}
+    assert f"git merge-base --is-ancestor HEAD {NOV27_ANCHOR}" in prerequisites["run"]
+    assert all(f"tests/e2e/{spec}" in prerequisites["run"] for spec in NOV27_SPECS)
+    assert run["if"] == (
+        "(matrix.suite == 'nov27-a' || matrix.suite == 'nov27-b') && "
+        "steps.nov27-prerequisites.outputs.state == 'current'"
+    )
+    assert not run.get("continue-on-error", False)
+    env = run["env"]
+    assert {key: env[key] for key in (
+        "NOV27_SUITE", "CASEOPS_RAM_PROD_SLUG", "CASEOPS_RAM_PROD_EMAIL",
+        "CASEOPS_RAM_PROD_PASSWORD", "CASEOPS_EXPECTED_RELEASE_SHA",
+        "PROD_BASE_URL", "PROD_API_BASE_URL",
+    )} == {
+        "NOV27_SUITE": "${{ matrix.suite }}",
+        "CASEOPS_RAM_PROD_SLUG": "test-legal",
+        "CASEOPS_RAM_PROD_EMAIL": "ram@testfirm.com",
+        "CASEOPS_RAM_PROD_PASSWORD": "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}",
+        "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+        "PROD_BASE_URL": "${{ vars.PROD_BASE_URL }}",
+        "PROD_API_BASE_URL": "${{ vars.PROD_API_BASE_URL }}",
+    }
+    # The test-legal password is the only secret; no other tenant's credentials leak in.
+    assert [value for value in env.values() if "secrets." in value] == [
+        "${{ secrets.CASEOPS_TEST_LEGAL_PROD_PASSWORD }}"
+    ]
+    assert not any(key.startswith(("CASEOPS_QA_", "CASEOPS_IP_")) for key in env)
+    lines = [line.strip() for line in run["run"].splitlines()
+             if line.strip().startswith('bash "$RUNNER_TEMP/caseops-prod-playwright" ')]
+    assert lines == [_nov27_command(label, project)
+                     for roles in NOV27_ROLES.values() for label, project in roles]
+    assert reconcile["env"]["NOV27_STATE"] == "${{ steps.nov27-prerequisites.outputs.state }}"
+
+
+def test_nov27_receipts_gate_release_certification() -> None:
+    jobs = _nov27_jobs()
+    record = jobs["record-release-evidence"]
+    assert record["needs"][-1] == "prod-nov27-tester"
+    assert record["if"].endswith("&& needs.prod-nov27-tester.result == 'success'")
+    names = [step.get("name") for step in record["steps"]]
+    by_name = {step.get("name"): step for step in record["steps"]}
+    for suffix, part in (("A", "nov27-a"), ("B", "nov27-b")):
+        download = by_name[f"Retain Nov27 {suffix} partition evidence"]
+        assert download["uses"] == "actions/download-artifact@v4"
+        assert download["with"] == {
+            "name": f"prod-playwright-report-{part}", "path": "test-results/prod-native-evidence",
+        }
+        assert names.index(download["name"]) < names.index(NOV27_CERTIFICATION)
+    certification = by_name[NOV27_CERTIFICATION]
+    assert certification["env"] == {
+        "CASEOPS_EXPECTED_RELEASE_SHA": "${{ needs.resolve-release.outputs.release_sha }}",
+    }
+    assert certification["run"].rstrip().endswith(
+        "validate --required " + " ".join(NOV27_ALL_ROLES)
+    )
+    assert names.index(NOV27_CERTIFICATION) < names.index(
+        "Record exact-release public-claims evidence"
+    )
+
+
+def _run_nov27_script(
+    tmp_path: Path, script: str, env: dict[str, str], *, fail: tuple[str, ...] = (),
+    head_sha: str = "a" * 40, root: Path | None = None,
+) -> tuple[subprocess.CompletedProcess[str], list[list[str]], list[str]]:
+    """Run one Nov27 step body with shell shims: no browser, network or real history."""
+    runner = tmp_path / "runner"
+    runner.mkdir()
+    calls, validated = tmp_path / "calls.log", tmp_path / "validated.log"
+    (runner / "caseops-prod-playwright").write_text(
+        'printf \'%s\\n\' "$*" >> "$CASEOPS_TEST_CALLS"\n'
+        'case " $CASEOPS_TEST_FAIL " in *" $1 "*) exit 9 ;; esac\n',
+        encoding="utf-8", newline="\n",
+    )
+    shims = (
+        'git() { [[ "$*" == "rev-parse HEAD" ]] || return 97; '
+        'printf \'%s\\n\' "$CASEOPS_TEST_HEAD_SHA"; }\n'
+        'python() { if [[ "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == validate && "${3:-}" == --required ]]; then '
+        'printf \'%s\\n\' "${@:4}" > "$CASEOPS_TEST_VALIDATED"; return 0; fi; '
+        'if [[ "$#" == 2 && "${1:-}" == scripts/prod_playwright_evidence.py '
+        '&& "${2:-}" == nov27-contract ]]; then return 0; fi; return 98; }\n'
+    )
+    root = root or tmp_path / "checkout"
+    (root / "scripts").mkdir(parents=True, exist_ok=True)
+    shutil.copy(REPO_ROOT / "scripts/prod_playwright_evidence.py", root / "scripts")
+    environment = {
+        key: value for key, value in os.environ.items()
+        if not key.startswith(("CASEOPS_", "PROD_", "NOV27_"))
+    }
+    environment.update({
+        "RUNNER_TEMP": runner.as_posix(), "CASEOPS_TEST_CALLS": calls.as_posix(),
+        "CASEOPS_TEST_VALIDATED": validated.as_posix(), "CASEOPS_TEST_FAIL": " ".join(fail),
+        "CASEOPS_TEST_HEAD_SHA": head_sha, **env,
+    })
+    result = subprocess.run(
+        [_git_bash(), "-c", shims + script], cwd=root, env=environment,
+        capture_output=True, text=True, timeout=60, check=False,
+    )
+    invoked = [line.split() for line in calls.read_text(encoding="utf-8").splitlines()
+               ] if calls.exists() else []
+    required = validated.read_text(encoding="utf-8").split() if validated.exists() else []
+    return result, invoked, required
+
+
+@pytest.mark.parametrize("suite", ["nov27-a", "nov27-b"])
+def test_nov27_step_runs_exactly_its_partition_roles_serially(tmp_path, suite):
+    script = _shard_step(NOV27_RUN_STEP)["run"]
+    result, invoked, required = _run_nov27_script(
+        tmp_path, script, {**NOV27_TESTER_ENV, "NOV27_SUITE": suite},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert required == []
+    assert invoked == [[
+        label, "--config=playwright.prod-ram.config.ts", f"--project={project}",
+        "--workers=1", "--retries=0", "--reporter=list", f"--output=test-results/{label}",
+    ] for label, project in NOV27_ROLES[suite]]
+
+
+def test_nov27_failed_role_keeps_later_verdicts_and_fails_the_step(tmp_path):
+    script = _shard_step(NOV27_RUN_STEP)["run"]
+    result, invoked, _ = _run_nov27_script(
+        tmp_path, script, {**NOV27_TESTER_ENV, "NOV27_SUITE": "nov27-b"},
+        fail=("nov27-statutes-mobile", "nov27-matter-desktop"),
+    )
+    assert result.returncode == 1
+    assert [row[0] for row in invoked] == [label for label, _ in NOV27_ROLES["nov27-b"]]
+    assert (
+        "::error::Nov27 production journeys failed: nov27-statutes-mobile nov27-matter-desktop"
+        in result.stdout
+    )
+
+
+@pytest.mark.parametrize("suite", ["nov27-c", "", "batch5"])
+def test_nov27_step_has_no_unknown_partition_fallback(tmp_path, suite):
+    script = _shard_step(NOV27_RUN_STEP)["run"]
+    result, invoked, _ = _run_nov27_script(
+        tmp_path, script, {**NOV27_TESTER_ENV, "NOV27_SUITE": suite},
+    )
+    assert result.returncode == 1 and invoked == []
+    assert "::error::Unreviewed Nov27 partition." in result.stdout
+
+
+@pytest.mark.parametrize("key", [key for key in NOV27_TESTER_ENV if key != "NOV27_SUITE"])
+@pytest.mark.parametrize("value", [None, "", " \t"])
+def test_nov27_step_fails_before_any_browser_without_tester_setup(tmp_path, key, value):
+    env = {**NOV27_TESTER_ENV}
+    if value is None:
+        del env[key]
+    else:
+        env[key] = value
+    result, invoked, _ = _run_nov27_script(tmp_path, _shard_step(NOV27_RUN_STEP)["run"], env)
+    assert result.returncode == 1 and invoked == []
+    assert f"Missing Nov27 fixture key: {key}" in result.stderr
+    assert "offline-not-used" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(("state", "suite", "marker", "code", "expected"), [
+    ("current", "nov27-a", False, 0, ["nov27-tracking", "nov27-ocr"]),
+    ("current", "nov27-b", False, 0, [label for label, _ in NOV27_ROLES["nov27-b"]]),
+    ("historical", "nov27-a", True, 0, []),
+    ("historical", "nov27-b", False, 1, []),
+    ("", "nov27-a", False, 1, []),
+    ("unknown", "nov27-b", False, 1, []),
+])
+def test_nov27_partition_owes_exactly_its_native_receipts(
+    tmp_path, state, suite, marker, code, expected,
+):
+    root = tmp_path / "checkout"
+    if marker:
+        (root / "test-results/prod-native-evidence").mkdir(parents=True)
+        (root / f"test-results/prod-native-evidence/{suite}-predates.json").write_text("{}")
+    result, invoked, required = _run_nov27_script(
+        tmp_path, _shard_step("Reconcile required native Playwright evidence")["run"],
+        {"SUITE": suite, "NOV27_STATE": state}, root=root,
+    )
+    assert result.returncode == code, result.stdout + result.stderr
+    assert invoked == [] and required == expected
+
+
+@pytest.mark.parametrize("marker", [None, "nov27-a", "nov27-b"])
+@pytest.mark.parametrize("head", ["a" * 40, "b" * 40])
+def test_nov27_certification_refuses_historical_markers_and_requires_every_role(
+    tmp_path, marker, head,
+):
+    certification = next(step for step in _nov27_jobs()["record-release-evidence"]["steps"]
+                         if step.get("name") == NOV27_CERTIFICATION)
+    root = tmp_path / "checkout"
+    if marker:
+        (root / "test-results/prod-native-evidence").mkdir(parents=True)
+        (root / f"test-results/prod-native-evidence/{marker}-predates.json").write_text("{}")
+    result, invoked, required = _run_nov27_script(
+        tmp_path, certification["run"], {"CASEOPS_EXPECTED_RELEASE_SHA": "a" * 40},
+        head_sha=head, root=root,
+    )
+    assert invoked == []
+    if marker is None and head == "a" * 40:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert required == NOV27_ALL_ROLES
+    else:
+        assert result.returncode == 1 and required == []
+
+
+@pytest.mark.parametrize(
+    "mode", ["older", "newer-missing", "partial", "current", "dirty", "wrong-sha"]
+)
+def test_nov27_guard_never_runs_new_journeys_on_old_source_or_skips_new_ones(tmp_path, mode):
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=tmp_path, capture_output=True, check=True, encoding="utf-8"
+        ).stdout.strip()
+
+    def commit(message):
+        git("add", ".")
+        git("-c", "user.name=Offline", "-c", "user.email=offline@example.invalid",
+            "commit", "--allow-empty", "-m", message)
+
+    git("init")
+    helper = tmp_path / "scripts/prod_playwright_evidence.py"
+    helper.parent.mkdir()
+    helper.write_text("raise RuntimeError('Old helper must not run the new contract')\n")
+    (tmp_path / "playwright.prod-ram.config.ts").write_text("// older release\n")
+    commit("independent pre-Nov27 boundary")
+    boundary = git("rev-parse", "HEAD")
+    if mode in {"partial", "current", "dirty"}:
+        shutil.copy(REPO_ROOT / "scripts/prod_playwright_evidence.py", helper)
+        shutil.copy(REPO_ROOT / "playwright.prod-ram.config.ts", tmp_path)
+        if mode != "partial":
+            for file in NOV27_SPECS:
+                path = tmp_path / "tests/e2e" / file
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+        else:
+            # The serving source carries the projects but not this evidence contract.
+            helper.write_text("# predates the Nov27 contract\n")
+    if mode != "older":
+        commit("independent later release")
+    if mode == "dirty":
+        helper.write_text(helper.read_text() + "# changed after checkout\n")
+    guard = _shard_step(NOV27_PREREQUISITES)["run"].replace(NOV27_ANCHOR, boundary)
+    script = tmp_path / "guard.sh"
+    script.write_text(guard, newline="\n")
+    output = tmp_path / "guard-output"
+    env = {
+        **{key: value for key, value in os.environ.items()
+           if not key.startswith(("CASEOPS_", "PROD_", "NOV27_"))},
+        "GITHUB_OUTPUT": str(output), "NOV27_SUITE": "nov27-a", "PYTHONUTF8": "1",
+        "CASEOPS_EXPECTED_RELEASE_SHA": "f" * 40 if mode == "wrong-sha" else git(
+            "rev-parse", "HEAD"),
+    }
+    env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env["PATH"]
+    result = subprocess.run([_git_bash(), str(script)], cwd=tmp_path, env=env,
+                            capture_output=True, encoding="utf-8", timeout=60, check=False)
+    recorded = output.read_text().split() if output.exists() else []
+    marker = tmp_path / "test-results/prod-native-evidence/nov27-a-predates.json"
+    if mode in {"older", "current"}:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert recorded == ["state=historical" if mode == "older" else "state=current"]
+        assert marker.exists() is (mode == "older")
+        if mode == "older":
+            assert json.loads(marker.read_text()) == {
+                "release_sha": env["CASEOPS_EXPECTED_RELEASE_SHA"], "completed": False,
+                "reason": "serving_release_predates_nov27_acceptance",
+            }
+        else:
+            assert '"nov27_contract": 1' in result.stdout
+    else:
+        assert result.returncode != 0 and recorded == [] and not marker.exists()
+        if mode == "partial":
+            assert "::error::Partial Nov27 release-owned configuration." in result.stdout
+        if mode == "newer-missing":
+            assert "::error::Newer serving release is missing Nov27 acceptance." in result.stdout
+
+
+def test_nov27_predates_anchor_is_a_main_first_parent_commit_without_nov27_specs() -> None:
+    if _git("rev-parse", "--is-shallow-repository").stdout.strip() != "false":
+        pytest.skip("Shallow or absent Git history; the anchor needs the full repository history.")
+    assert _git("cat-file", "-e", f"{NOV27_ANCHOR}^{{commit}}").returncode == 0
+    for spec in NOV27_SPECS:
+        assert _git("cat-file", "-e", f"{NOV27_ANCHOR}:tests/e2e/{spec}").returncode != 0
+    main = "refs/remotes/origin/main"
+    assert _git("rev-parse", "--verify", "--quiet", main).returncode == 0
+    assert NOV27_ANCHOR in _git("rev-list", "--first-parent", main).stdout.split()
